@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: theravoca
+    runtime: python
+    buildCommand: python bootstrap.py && pip install -r requirements.txt && python seed_data.py
+    startCommand: gunicorn wsgi_app:app --bind 0.0.0.0:$PORT --workers 2
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.10.12"
