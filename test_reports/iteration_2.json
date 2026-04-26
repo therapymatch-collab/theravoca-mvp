@@ -1,0 +1,63 @@
+{
+  "summary": "Iteration 2: full backend + frontend coverage of new features (therapist self-signup, admin approve/reject, sweep loop, matching filter for pending therapists). 16/16 backend tests pass; all targeted UI flows pass.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/therapists/signup", "issue": "Returns 200 (not 201) on create. Spec accepts either; consider 201 for REST consistency."},
+      {"endpoint": "startup hooks", "issue": "Still uses deprecated @app.on_event('startup'/'shutdown'); migrate to lifespan context (DeprecationWarning)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin dashboard", "issues": ["7 stat tiles render in a single row at 1920px which is fine; below ~1280px they may wrap awkwardly. Not tested at smaller breakpoints."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration2_signup.py",
+    "/app/test_reports/pytest/iteration2_results.xml",
+    "/app/backend/tests/backend_test.py"
+  ],
+  "action_items": [
+    "(Optional) Migrate FastAPI startup/shutdown to lifespan context manager.",
+    "(Optional) Return HTTP 201 on POST /api/therapists/signup."
+  ],
+  "critical_code_review_comments": [
+    "Matching engine correctly excludes pending_approval=true and is_active=false therapists via {is_active: {$ne: false}, pending_approval: {$ne: true}} — verified end-to-end.",
+    "Sweep loop runs every SWEEP_INTERVAL_SECONDS (default 300s); _sweep_overdue_results query correctly uses verified=true, results_sent_at=null, verified_at <= cutoff (ISO string compare works because ISO format is lexicographically sortable).",
+    "Backfill on startup sets is_active=True / pending_approval=False / source='seed' for legacy docs, ensuring seed therapists are eligible for matching after deploy of new feature.",
+    "Approve emits send_therapist_approved task; reject does NOT email the rejected therapist (intentional per UX, but consider documenting).",
+    "Admin endpoints still rely on a single static header password without rate limiting (carryover from iter 1)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration2_signup.py"],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "100% on tested flows (signup happy path, nav link, admin dashboard tabs, approve, reject, regression to requests tab)"},
+  "test_credentials": "Admin password: admin123! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Tests created and then cleaned up TEST_-prefixed therapists/requests/applications. Final DB state: 100 seed therapists, 0 test requests/apps.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Public URL: REACT_APP_BACKEND_URL from /app/frontend/.env. Iteration2 test file is /app/backend/tests/test_iteration2_signup.py — uses motor for direct MongoDB token retrieval (verification_token still not exposed via API). Age option testids on /therapists/join use slug values like 'adult-18-64' (not 'Adult'). Admin dashboard tabs: data-testid='tab-requests' / 'tab-therapists'. Approve/reject buttons: data-testid='approve-{id}' / 'reject-{id}'. Pending review stat tile is highlighted with terracotta border when count > 0.",
+  "verified_features": [
+    "POST /api/therapists/signup happy path (200, returns id+status=pending_approval, persists is_active=true, pending_approval=true, source=signup)",
+    "POST /api/therapists/signup duplicate email -> 409",
+    "POST /api/therapists/signup missing fields -> 422",
+    "POST /api/therapists/signup invalid email -> 422",
+    "GET /api/admin/therapists?pending=true returns only pending",
+    "GET /api/admin/therapists?pending=false returns only approved (>= 100 seed)",
+    "POST /api/admin/therapists/{id}/approve flips pending_approval=false, is_active=true, sets approved_at",
+    "POST /api/admin/therapists/{id}/reject sets is_active=false, pending_approval=false",
+    "POST /api/admin/therapists/unknown/approve -> 404",
+    "POST /api/admin/therapists/.../approve without admin header -> 401",
+    "GET /api/admin/stats includes pending_therapists integer",
+    "CRITICAL: pending therapist with broad specialties NOT included in notified_therapist_ids after request verify+match; AFTER approval and resend-notifications they DO appear",
+    "_sweep_overdue_results function executes without error against current DB",
+    "Backend logs contain 'Started results sweep loop'",
+    "Regression: /api/, /api/admin/stats, /api/admin/requests, /api/admin/therapists all 200",
+    "FRONTEND /therapists/join: page loads with multi-section form, submit disabled until name(>=3)+email+>=1 specialty+>=1 age+>=1 modality, shows 'Profile received' confirmation on success",
+    "FRONTEND header: 'For therapists' link navigates to /therapists/join",
+    "FRONTEND admin dashboard: 7 stat tiles including highlighted 'Pending review', tabs 'Patient requests' and 'Therapist signups' both work",
+    "FRONTEND admin: approve removes therapist from list with success toast; reject removes therapist with 'Therapist rejected' toast",
+    "FRONTEND admin: switching back to requests tab still shows requests-table"
+  ],
+  "rca_of_the_issue": "N/A — no critical bugs found. The most-important regression check (pending therapists must not be matched) is verified passing end-to-end."
+}

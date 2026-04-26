@@ -8,6 +8,10 @@ import {
   Sliders,
   ChevronRight,
   X,
+  CheckCircle2,
+  XCircle,
+  Inbox,
+  Users,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
@@ -25,18 +29,22 @@ export default function AdminDashboard() {
   const client = adminClient(pwd);
   const [stats, setStats] = useState(null);
   const [requests, setRequests] = useState([]);
+  const [pendingTherapists, setPendingTherapists] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState("requests");
   const [openId, setOpenId] = useState(null);
   const [detail, setDetail] = useState(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [s, r] = await Promise.all([
+      const [s, r, pt] = await Promise.all([
         client.get("/admin/stats"),
         client.get("/admin/requests"),
+        client.get("/admin/therapists?pending=true"),
       ]);
       setStats(s.data);
       setRequests(r.data);
+      setPendingTherapists(pt.data);
     } catch (e) {
       if (e?.response?.status === 401) {
         sessionStorage.removeItem("tv_admin_pwd");
@@ -101,6 +109,26 @@ export default function AdminDashboard() {
     }
   };
 
+  const approveTherapist = async (id) => {
+    try {
+      await client.post(`/admin/therapists/${id}/approve`);
+      toast.success("Therapist approved");
+      refresh();
+    } catch (e) {
+      toast.error("Failed to approve");
+    }
+  };
+
+  const rejectTherapist = async (id) => {
+    try {
+      await client.post(`/admin/therapists/${id}/reject`);
+      toast.success("Therapist rejected");
+      refresh();
+    } catch (e) {
+      toast.error("Failed to reject");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
       <Header minimal />
@@ -130,16 +158,42 @@ export default function AdminDashboard() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mt-8">
+              <div className="grid grid-cols-2 md:grid-cols-7 gap-4 mt-8">
                 <StatBox label="Requests" value={stats?.total_requests} />
                 <StatBox label="Pending" value={stats?.pending} />
                 <StatBox label="Open" value={stats?.open} />
                 <StatBox label="Completed" value={stats?.completed} />
                 <StatBox label="Therapists" value={stats?.therapists} />
+                <StatBox
+                  label="Pending review"
+                  value={stats?.pending_therapists}
+                  highlight={stats?.pending_therapists > 0}
+                />
                 <StatBox label="Applications" value={stats?.applications} />
               </div>
 
-              <div className="mt-10 bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
+              <div className="mt-10 flex gap-2 border-b border-[#E8E5DF]">
+                <TabBtn
+                  active={tab === "requests"}
+                  onClick={() => setTab("requests")}
+                  icon={<Inbox size={14} />}
+                  label="Patient requests"
+                  count={requests.length}
+                  testid="tab-requests"
+                />
+                <TabBtn
+                  active={tab === "therapists"}
+                  onClick={() => setTab("therapists")}
+                  icon={<Users size={14} />}
+                  label="Therapist signups"
+                  count={pendingTherapists.length}
+                  testid="tab-therapists"
+                  highlight={pendingTherapists.length > 0}
+                />
+              </div>
+
+              {tab === "requests" && (
+              <div className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
                 <table className="w-full text-sm" data-testid="requests-table">
                   <thead className="bg-[#FDFBF7] text-[#6D6A65]">
                     <tr className="text-left">
@@ -196,6 +250,65 @@ export default function AdminDashboard() {
                   </tbody>
                 </table>
               </div>
+              )}
+
+              {tab === "therapists" && (
+                <div className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
+                  {pendingTherapists.length === 0 ? (
+                    <div className="p-12 text-center text-[#6D6A65]">
+                      <Users className="mx-auto mb-3 text-[#C87965]" size={28} strokeWidth={1.5} />
+                      No therapist signups awaiting review.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-[#E8E5DF]" data-testid="pending-therapists-list">
+                      {pendingTherapists.map((t) => (
+                        <div key={t.id} className="p-5 flex items-start gap-5 hover:bg-[#FDFBF7]">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <h4 className="font-medium text-[#2B2A29]">{t.name}</h4>
+                              <span className="text-xs text-[#6D6A65]">{t.email}</span>
+                              {t.phone && (
+                                <span className="text-xs text-[#6D6A65]">• {t.phone}</span>
+                              )}
+                            </div>
+                            <div className="text-xs text-[#6D6A65] mt-1">
+                              {t.years_experience} yrs • ${t.cash_rate}/session •{" "}
+                              {t.modalities?.join(", ")} •{" "}
+                              {(t.specialties || []).map((s) => `${s.name} (${s.weight})`).join(", ")}
+                            </div>
+                            {t.bio && (
+                              <p className="text-sm text-[#2B2A29] mt-2 leading-relaxed">
+                                {t.bio}
+                              </p>
+                            )}
+                            <div className="text-xs text-[#6D6A65] mt-2">
+                              Cities: {t.office_locations?.join(", ") || "telehealth only"} •
+                              Insurance: {t.insurance_accepted?.length ? t.insurance_accepted.join(", ") : "—"} •
+                              Ages: {t.ages_served?.join(", ")}
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-2 shrink-0">
+                            <button
+                              className="tv-btn-primary !py-1.5 !px-4 text-sm"
+                              onClick={() => approveTherapist(t.id)}
+                              data-testid={`approve-${t.id}`}
+                            >
+                              <CheckCircle2 size={14} className="inline mr-1.5" /> Approve
+                            </button>
+                            <button
+                              className="text-sm text-[#D45D5D] hover:underline"
+                              onClick={() => rejectTherapist(t.id)}
+                              data-testid={`reject-${t.id}`}
+                            >
+                              <XCircle size={14} className="inline mr-1.5" /> Reject
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -310,14 +423,52 @@ export default function AdminDashboard() {
   );
 }
 
-function StatBox({ label, value }) {
+function StatBox({ label, value, highlight }) {
   return (
-    <div className="bg-white border border-[#E8E5DF] rounded-2xl p-4">
+    <div
+      className={`bg-white border rounded-2xl p-4 ${
+        highlight ? "border-[#C87965] shadow-sm" : "border-[#E8E5DF]"
+      }`}
+    >
       <div className="text-xs uppercase tracking-wider text-[#6D6A65]">{label}</div>
-      <div className="font-serif-display text-3xl text-[#2D4A3E] mt-1">
+      <div
+        className={`font-serif-display text-3xl mt-1 ${
+          highlight ? "text-[#C87965]" : "text-[#2D4A3E]"
+        }`}
+      >
         {value ?? "—"}
       </div>
     </div>
+  );
+}
+
+function TabBtn({ active, onClick, icon, label, count, testid, highlight }) {
+  return (
+    <button
+      onClick={onClick}
+      data-testid={testid}
+      className={`flex items-center gap-2 px-4 py-3 text-sm border-b-2 transition -mb-px ${
+        active
+          ? "border-[#2D4A3E] text-[#2D4A3E] font-semibold"
+          : "border-transparent text-[#6D6A65] hover:text-[#2D4A3E]"
+      }`}
+    >
+      {icon}
+      {label}
+      {count != null && (
+        <span
+          className={`text-xs rounded-full px-2 py-0.5 ${
+            highlight
+              ? "bg-[#C87965] text-white"
+              : active
+              ? "bg-[#2D4A3E]/10 text-[#2D4A3E]"
+              : "bg-[#E8E5DF] text-[#6D6A65]"
+          }`}
+        >
+          {count}
+        </span>
+      )}
+    </button>
   );
 }
 

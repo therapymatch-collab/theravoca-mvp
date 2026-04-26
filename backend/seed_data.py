@@ -107,6 +107,9 @@ def generate_therapist(idx: int) -> dict[str, Any]:
         "years_experience": years_experience,
         "free_consult": free_consult,
         "bio": bio,
+        "source": "seed",
+        "is_active": True,
+        "pending_approval": False,
         "created_at": "2026-02-01T00:00:00+00:00",
     }
 

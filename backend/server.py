@@ -18,7 +18,9 @@ from starlette.middleware.cors import CORSMiddleware
 
 from email_service import (
     send_patient_results,
+    send_therapist_approved,
     send_therapist_notification,
+    send_therapist_signup_received,
     send_verification_email,
 )
 from matching import rank_therapists
@@ -66,6 +68,23 @@ class TherapistOut(BaseModel):
     years_experience: int
     free_consult: bool
     bio: Optional[str] = None
+
+
+class TherapistSignup(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    email: EmailStr
+    phone: Optional[str] = ""
+    licensed_states: list[str] = Field(default_factory=lambda: ["ID"])
+    office_locations: list[str] = Field(default_factory=list)
+    telehealth: bool = True
+    specialties: list[Specialty] = Field(default_factory=list, max_length=8)
+    modalities: list[str] = Field(default_factory=list, max_length=6)
+    ages_served: list[str] = Field(default_factory=list)
+    insurance_accepted: list[str] = Field(default_factory=list)
+    cash_rate: int = Field(ge=0, le=1000, default=150)
+    years_experience: int = Field(ge=0, le=70, default=1)
+    free_consult: bool = False
+    bio: Optional[str] = ""
 
 
 class RequestCreate(BaseModel):
@@ -166,7 +185,10 @@ async def _trigger_matching(request_id: str) -> dict[str, Any]:
     if not req:
         raise HTTPException(404, "Request not found")
     threshold = req.get("threshold", DEFAULT_THRESHOLD)
-    therapists_cursor = db.therapists.find({}, {"_id": 0})
+    # Only consider active, approved therapists
+    therapists_cursor = db.therapists.find(
+        {"is_active": {"$ne": False}, "pending_approval": {"$ne": True}}, {"_id": 0}
+    )
     therapists = await therapists_cursor.to_list(2000)
     matches = rank_therapists(therapists, req, threshold=threshold, min_results=5)
 
@@ -223,14 +245,33 @@ async def _deliver_results(request_id: str) -> dict[str, Any]:
     return {"sent_to": req["email"], "count": len(enriched)}
 
 
-async def _schedule_auto_results(request_id: str, delay_seconds: float) -> None:
-    try:
-        await asyncio.sleep(delay_seconds)
-        req = await db.requests.find_one({"id": request_id}, {"_id": 0})
-        if req and not req.get("results_sent_at"):
-            await _deliver_results(request_id)
-    except Exception as e:
-        logger.exception("Auto results delivery failed for %s: %s", request_id, e)
+async def _sweep_overdue_results() -> None:
+    """Periodic sweep: deliver results for requests verified >= AUTO_DELAY_HOURS ago."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=AUTO_DELAY_HOURS)
+    cutoff_iso = cutoff.isoformat()
+    overdue = await db.requests.find(
+        {
+            "verified": True,
+            "results_sent_at": None,
+            "verified_at": {"$lte": cutoff_iso},
+        },
+        {"_id": 0, "id": 1, "email": 1},
+    ).to_list(200)
+    for req in overdue:
+        try:
+            logger.info("Sweep: delivering overdue results for %s", req["id"])
+            await _deliver_results(req["id"])
+        except Exception as e:
+            logger.exception("Sweep failed for %s: %s", req["id"], e)
+
+
+async def _sweep_loop(interval_seconds: int = 300) -> None:
+    while True:
+        try:
+            await _sweep_overdue_results()
+        except Exception as e:
+            logger.exception("Sweep loop error: %s", e)
+        await asyncio.sleep(interval_seconds)
 
 
 # ─── Public Routes ────────────────────────────────────────────────────────────
@@ -273,8 +314,7 @@ async def verify_request(token: str):
         )
         # trigger matching in background
         asyncio.create_task(_trigger_matching(req["id"]))
-        # schedule auto results delivery
-        asyncio.create_task(_schedule_auto_results(req["id"], AUTO_DELAY_HOURS * 3600))
+        # auto delivery of results is handled by the periodic sweep
     return {"id": req["id"], "verified": True}
 
 
@@ -304,6 +344,28 @@ async def public_request_results(request_id: str):
 
 
 # ─── Therapist Routes ─────────────────────────────────────────────────────────
+
+@api.post("/therapists/signup", response_model=dict)
+async def therapist_signup(payload: TherapistSignup):
+    """Public therapist self-signup. Goes into pending_approval queue."""
+    existing = await db.therapists.find_one({"email": payload.email}, {"_id": 0, "id": 1})
+    if existing:
+        raise HTTPException(409, "A therapist with this email already exists.")
+    tid = str(uuid.uuid4())
+    doc = {
+        "id": tid,
+        **payload.model_dump(),
+        "source": "signup",
+        "is_active": True,
+        "pending_approval": True,
+        "created_at": _now_iso(),
+    }
+    await db.therapists.insert_one(doc.copy())
+    # Best-effort confirmation email (won't crash on Resend test-mode)
+    asyncio.create_task(send_therapist_signup_received(payload.email, payload.name))
+    logger.info("New therapist signup: %s (%s)", payload.email, tid)
+    return {"id": tid, "status": "pending_approval"}
+
 
 @api.get("/therapist/apply/{request_id}/{therapist_id}", response_model=dict)
 async def therapist_view(request_id: str, therapist_id: str):
@@ -432,8 +494,40 @@ async def admin_update_threshold(request_id: str, payload: dict, _: bool = Depen
 
 
 @api.get("/admin/therapists", response_model=list)
-async def admin_list_therapists(_: bool = Depends(require_admin)):
-    return await db.therapists.find({}, {"_id": 0}).sort("name", 1).to_list(500)
+async def admin_list_therapists(
+    pending: Optional[bool] = None, _: bool = Depends(require_admin)
+):
+    query: dict[str, Any] = {}
+    if pending is True:
+        query["pending_approval"] = True
+    elif pending is False:
+        query["pending_approval"] = {"$ne": True}
+    return await db.therapists.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+
+@api.post("/admin/therapists/{therapist_id}/approve")
+async def admin_approve_therapist(therapist_id: str, _: bool = Depends(require_admin)):
+    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(404)
+    await db.therapists.update_one(
+        {"id": therapist_id},
+        {"$set": {"pending_approval": False, "is_active": True, "approved_at": _now_iso()}},
+    )
+    asyncio.create_task(send_therapist_approved(t["email"], t["name"]))
+    return {"id": therapist_id, "status": "approved"}
+
+
+@api.post("/admin/therapists/{therapist_id}/reject")
+async def admin_reject_therapist(therapist_id: str, _: bool = Depends(require_admin)):
+    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(404)
+    await db.therapists.update_one(
+        {"id": therapist_id},
+        {"$set": {"pending_approval": False, "is_active": False, "rejected_at": _now_iso()}},
+    )
+    return {"id": therapist_id, "status": "rejected"}
 
 
 @api.post("/admin/seed")
@@ -453,6 +547,7 @@ async def admin_stats(_: bool = Depends(require_admin)):
     open_ = await db.requests.count_documents({"status": {"$in": ["open", "matched"]}})
     completed = await db.requests.count_documents({"status": "completed"})
     therapists = await db.therapists.count_documents({})
+    pending_therapists = await db.therapists.count_documents({"pending_approval": True})
     apps = await db.applications.count_documents({})
     return {
         "total_requests": total_requests,
@@ -460,24 +555,39 @@ async def admin_stats(_: bool = Depends(require_admin)):
         "open": open_,
         "completed": completed,
         "therapists": therapists,
+        "pending_therapists": pending_therapists,
         "applications": apps,
         "default_threshold": DEFAULT_THRESHOLD,
     }
 
 
-# ─── Startup: auto-seed if empty ──────────────────────────────────────────────
+# ─── Startup: auto-seed + start sweep loop ────────────────────────────────────
+
+_sweep_task: Optional[asyncio.Task] = None
+
 
 @app.on_event("startup")
 async def startup_seed():
+    global _sweep_task
     count = await db.therapists.count_documents({})
     if count == 0:
         therapists = generate_seed_therapists(100)
         await db.therapists.insert_many([t.copy() for t in therapists])
         logger.info("Auto-seeded %d Idaho therapists", len(therapists))
+    # Backfill flags for legacy seed docs (idempotent)
+    await db.therapists.update_many(
+        {"is_active": {"$exists": False}},
+        {"$set": {"is_active": True, "pending_approval": False, "source": "seed"}},
+    )
+    sweep_interval = int(os.environ.get("SWEEP_INTERVAL_SECONDS", "300"))
+    _sweep_task = asyncio.create_task(_sweep_loop(sweep_interval))
+    logger.info("Started results sweep loop (every %ds)", sweep_interval)
 
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    if _sweep_task:
+        _sweep_task.cancel()
     client.close()
 
 

@@ -154,3 +154,39 @@ async def send_patient_results(to: str, request_id: str, applications: list[dict
     </p>
     """
     await _send(to, f"Your {len(applications[:5])} therapist matches are ready", _wrap("Your matches are here", inner))
+
+
+async def send_therapist_signup_received(to: str, name: str) -> None:
+    inner = f"""
+    <p style="font-size:16px;line-height:1.6;">Hi {name.split(',')[0]},</p>
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      Thank you for joining the TheraVoca network. We've received your profile and our team
+      will review it shortly. Most profiles are approved within 1–2 business days.
+    </p>
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      Once approved, you'll start receiving anonymous referral notifications matched to your
+      specialties — no logins, no marketing fluff. Just real patients who need your help.
+    </p>
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">
+      Questions? Just reply to this email.
+    </p>
+    """
+    await _send(to, "Welcome to TheraVoca — profile under review", _wrap("Profile received", inner))
+
+
+async def send_therapist_approved(to: str, name: str) -> None:
+    inner = f"""
+    <p style="font-size:16px;line-height:1.6;">Hi {name.split(',')[0]},</p>
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      Great news — your TheraVoca profile is <strong style="color:{BRAND['primary']}">live</strong>. You're now eligible
+      to receive anonymous referral notifications matched to your specialties.
+    </p>
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      When a patient request matches your practice (60%+ by default), we'll email you a
+      summary and a one-click link to express interest. No dashboards to log into.
+    </p>
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">
+      Welcome aboard.
+    </p>
+    """
+    await _send(to, "You're live on TheraVoca", _wrap("You're approved", inner))

@@ -27,6 +27,13 @@ export function Header({ minimal = false }) {
             <a href="/#faq" className="hover:text-[#2D4A3E] transition" data-testid="nav-faq">
               FAQs
             </a>
+            <Link
+              to="/therapists/join"
+              className="hover:text-[#2D4A3E] transition"
+              data-testid="nav-therapists"
+            >
+              For therapists
+            </Link>
             <a
               href="/#start"
               className="tv-btn-primary !py-2 !px-5 text-sm"
