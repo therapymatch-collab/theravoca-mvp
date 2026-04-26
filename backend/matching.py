@@ -1,207 +1,307 @@
-"""Therapist matching engine for TheraVoca.
+"""TheraVoca matching engine v2 — per the MVP spec.
 
-Scoring is split into small, testable helpers. Total max = 100.
-- State match (REQUIRED, hard filter)
-- Issue/specialty match (40 pts)
-- Age match (15 pts)
-- Insurance/payment match (20 pts)
-- Location proximity (15 pts; only if in-person)
-- Modality match (10 pts; from preferences)
+Total max = 100 across 8 weighted axes:
+  Presenting issues 35, Availability 20, Modality 15, Urgency 10,
+  Prior therapy 10, Experience 5, Gender 3, Style 2.
+
+Hard filters (return total=-1):
+  state license, client type, age group, payment fit,
+  modality (when patient says telehealth-only or in-person-only),
+  gender (when patient marks gender preference as required).
 """
 from __future__ import annotations
 
-import re
 from typing import Any
 
-
 # ─── Constants ────────────────────────────────────────────────────────────────
+MAX_ISSUES = 35.0
+MAX_AVAILABILITY = 20.0
+MAX_MODALITY = 15.0
+MAX_URGENCY = 10.0
+MAX_PRIOR = 10.0
+MAX_EXPERIENCE = 5.0
+MAX_GENDER = 3.0
+MAX_STYLE = 2.0
 
-ISSUE_KEYWORDS: dict[str, list[str]] = {
-    "anxiety": ["anxiety", "anxious", "panic", "worry", "phobia"],
-    "depression": ["depression", "depressed", "sad", "mood", "low mood"],
-    "trauma": ["trauma", "ptsd", "abuse", "assault"],
-    "couples": ["couple", "couples", "marriage", "marital", "relationship"],
-    "family": ["family", "parent", "parenting", "child", "teen", "adolescent"],
-    "grief": ["grief", "loss", "bereavement", "mourning"],
-    "addiction": ["addict", "substance", "alcohol", "drug", "recovery"],
-    "lgbtq": ["lgbtq", "lgbt", "queer", "gay", "lesbian", "trans", "nonbinary"],
-    "eating": ["eating", "anorexia", "bulimia", "body image"],
-    "ocd": ["ocd", "obsessive", "compulsive"],
-    "adhd": ["adhd", "attention", "focus"],
-    "stress": ["stress", "burnout", "overwhelm"],
-    "self-esteem": ["self-esteem", "confidence", "self worth"],
-    "career": ["career", "work", "job", "professional"],
-    "identity": ["identity", "self-discovery"],
+# Maps experience preference label -> (lo, hi) years
+EXPERIENCE_RANGES = {
+    "0-3": (0, 3),
+    "3-7": (3, 7),
+    "7-15": (7, 15),
+    "15+": (15, 100),
 }
 
-MAX_ISSUE = 40.0
-MAX_AGE = 15.0
-MAX_PAYMENT = 20.0
-MAX_LOCATION = 15.0
-MAX_MODALITY = 10.0
+URGENCY_ORDER = ["asap", "within_2_3_weeks", "within_month", "flexible"]
+THERAPIST_URGENCY_ORDER = ["asap", "within_2_3_weeks", "within_month", "full"]
 
 
-# ─── Helpers ──────────────────────────────────────────────────────────────────
+# ─── Hard filter helpers ──────────────────────────────────────────────────────
 
-def _extract_issues(presenting_issues: str) -> set[str]:
-    text = re.sub(r"\s+", " ", presenting_issues.lower()).strip()
-    found: set[str] = set()
-    for canonical, aliases in ISSUE_KEYWORDS.items():
-        if any(alias in text for alias in aliases):
-            found.add(canonical)
-    return found
+def _state_pass(t: dict, r: dict) -> bool:
+    licensed = [s.upper() for s in t.get("licensed_states") or []]
+    return (r.get("location_state") or "").upper() in licensed
 
 
-def _age_in_band(age: int, band: str) -> bool:
-    """band examples: 'children-5-12', 'teen-13-17', 'adult-18-64', 'older-65+'"""
-    band = band.lower()
-    nums = re.findall(r"\d+", band)
-    if "+" in band and nums:
-        return age >= int(nums[-1])
-    if len(nums) >= 2:
-        return int(nums[0]) <= age <= int(nums[1])
-    return False
+def _client_type_pass(t: dict, r: dict) -> bool:
+    needed = (r.get("client_type") or "").lower()
+    if not needed:
+        return True
+    types = [c.lower() for c in t.get("client_types") or []]
+    return needed in types
 
 
-def _state_passes(therapist: dict[str, Any], request: dict[str, Any]) -> bool:
-    licensed = [s.upper() for s in therapist.get("licensed_states", [])]
-    req_state = (request.get("location_state") or "").upper()
-    return not req_state or req_state in licensed
+def _age_group_pass(t: dict, r: dict) -> bool:
+    needed = (r.get("age_group") or "").lower()
+    if not needed:
+        return True
+    served = [a.lower() for a in t.get("age_groups") or []]
+    return needed in served
 
 
-def _score_issue(therapist: dict[str, Any], request: dict[str, Any]) -> float:
-    requested = _extract_issues(request.get("presenting_issues", ""))
-    if not requested:
-        return MAX_ISSUE / 2  # neutral if no issues parsed
-    weights = {s.get("name", "").lower(): s.get("weight", 0) for s in therapist.get("specialties", [])}
-    matched = requested & set(weights.keys())
-    if not matched:
-        return 0.0
-    raw = min(sum(weights.get(m, 20) for m in matched), 100)
-    return round(MAX_ISSUE * (raw / 100), 1)
+def _payment_pass(t: dict, r: dict) -> bool:
+    pay = (r.get("payment_type") or "either").lower()
+    if pay == "either":
+        return True
+    if pay == "insurance":
+        plan = (r.get("insurance_name") or "").lower().strip()
+        accepted = [i.lower() for i in t.get("insurance_accepted") or []]
+        # If patient named a specific plan, require it; else any insurance is OK
+        if plan and accepted:
+            return plan in accepted
+        # No plan specified — therapist must accept some insurance
+        return bool(accepted)
+    if pay == "cash":
+        budget = r.get("budget")
+        rate = t.get("cash_rate")
+        if not budget or not rate:
+            return True  # missing data — don't filter out
+        try:
+            return int(rate) <= int(budget) * 1.2  # 20% tolerance
+        except (TypeError, ValueError):
+            return True
+    return True
 
 
-def _score_age(therapist: dict[str, Any], request: dict[str, Any]) -> float:
-    client_age = request.get("client_age")
-    bands = therapist.get("ages_served", [])
-    if not client_age or not bands:
-        return MAX_AGE / 2
-    return MAX_AGE if any(_age_in_band(int(client_age), b) for b in bands) else 0.0
+def _modality_pass(t: dict, r: dict) -> bool:
+    pref = (r.get("modality_preference") or "").lower()
+    offering = (t.get("modality_offering") or "both").lower()
+    if pref == "telehealth_only":
+        return offering in ("telehealth", "both")
+    if pref == "in_person_only":
+        return offering in ("in_person", "both")
+    return True
 
 
-def _score_payment(therapist: dict[str, Any], request: dict[str, Any]) -> float:
-    payment_type = (request.get("payment_type") or "").lower()
-    if payment_type == "insurance":
-        return _score_insurance(therapist, request)
-    if payment_type == "cash":
-        return _score_cash(therapist, request)
-    return MAX_PAYMENT / 2
+def _gender_pass(t: dict, r: dict) -> bool:
+    if not r.get("gender_required"):
+        return True
+    pref = (r.get("gender_preference") or "").lower()
+    if not pref or pref == "no_pref":
+        return True
+    return (t.get("gender") or "").lower() == pref
 
 
-def _score_insurance(therapist: dict[str, Any], request: dict[str, Any]) -> float:
-    req_ins = (request.get("insurance_name") or "").lower().strip()
-    accepted = [i.lower() for i in therapist.get("insurance_accepted", [])]
-    if req_ins and req_ins in accepted:
-        return MAX_PAYMENT
-    if accepted:
-        return 8.0
+# ─── Weighted scoring helpers ─────────────────────────────────────────────────
+
+def _score_issue_one(t: dict, issue: str) -> float:
+    issue = issue.lower()
+    if issue in [s.lower() for s in t.get("primary_specialties") or []]:
+        return 35.0
+    if issue in [s.lower() for s in t.get("secondary_specialties") or []]:
+        return 25.0
+    if issue in [s.lower() for s in t.get("general_treats") or []]:
+        return 15.0
     return 0.0
 
 
-def _score_cash(therapist: dict[str, Any], request: dict[str, Any]) -> float:
-    budget = request.get("budget")
-    cash_rate = therapist.get("cash_rate")
-    if not budget or not cash_rate:
-        return MAX_PAYMENT / 2
-    try:
-        rate = int(cash_rate)
-        cap = int(budget)
-    except (TypeError, ValueError):
-        return MAX_PAYMENT / 2
-    if rate <= cap:
-        return MAX_PAYMENT
-    if rate <= cap * 1.2:
+def _score_issues(t: dict, r: dict) -> float:
+    issues = [i for i in (r.get("presenting_issues") or []) if i and i != "other"]
+    if not issues:
+        return MAX_ISSUES / 2  # neutral if none parsed
+    # Top issue gets 60% weight, the rest split the other 40%
+    primary_score = _score_issue_one(t, issues[0])
+    if len(issues) == 1:
+        return round(primary_score, 1)
+    rest_scores = [_score_issue_one(t, i) for i in issues[1:]]
+    rest_avg = sum(rest_scores) / len(rest_scores)
+    blended = primary_score * 0.6 + rest_avg * 0.4
+    return round(min(blended, MAX_ISSUES), 1)
+
+
+def _score_availability(t: dict, r: dict) -> float:
+    patient = set([w for w in (r.get("availability_windows") or []) if w])
+    if not patient:
+        return MAX_AVAILABILITY / 2
+    if "flexible" in patient:
+        return MAX_AVAILABILITY
+    therapist = set([w for w in (t.get("availability_windows") or []) if w])
+    if not therapist:
+        return 5.0  # unknown
+    overlap = patient & therapist
+    if len(overlap) >= 2 or (overlap and len(patient) <= 2):
+        return MAX_AVAILABILITY
+    if overlap:
         return 10.0
-    return 4.0
+    return 0.0
 
 
-def _score_location(therapist: dict[str, Any], request: dict[str, Any]) -> float:
-    """Distance-banded location score.
-
-    If we have geocoded patient + office data, use real miles:
-      ≤10mi=15, ≤25mi=12, ≤50mi=7, ≤75mi=3, >75mi=0 (telehealth fallback if available).
-    If we don't have geo data, fall back to case-insensitive city substring match.
-    """
-    fmt = (request.get("session_format") or "virtual").lower()
-    needs_in_person = "person" in fmt or "hybrid" in fmt
-
-    if not needs_in_person:
-        return MAX_LOCATION if therapist.get("telehealth") else 0.0
-
-    # Try geo-based scoring first
-    patient_geo = request.get("patient_geo")  # {"lat":.., "lng":..}
-    office_geos = therapist.get("office_geos") or []
-    if patient_geo and office_geos:
-        from geocoding import haversine_miles
-        miles_list = [
-            haversine_miles(patient_geo["lat"], patient_geo["lng"], o["lat"], o["lng"])
-            for o in office_geos if "lat" in o and "lng" in o
-        ]
-        if miles_list:
-            best = min(miles_list)
-            if best <= 10:
-                return MAX_LOCATION
-            if best <= 25:
-                return 12.0
-            if best <= 50:
-                return 7.0
-            if best <= 75:
-                return 3.0
-            return 6.0 if therapist.get("telehealth") else 0.0
-
-    # Fallback: case-insensitive city substring match (legacy behavior)
-    req_city = (request.get("location_city") or "").lower().strip()
-    offices = [o.lower() for o in therapist.get("office_locations", [])]
-    if req_city and any(req_city in o or o in req_city for o in offices):
-        return MAX_LOCATION
-    return 6.0 if therapist.get("telehealth") else 0.0
-
-
-def _score_modality(therapist: dict[str, Any], request: dict[str, Any]) -> float:
-    pref = (request.get("preferred_modality") or "").lower().strip()
+def _score_modality(t: dict, r: dict) -> float:
+    pref = (r.get("modality_preference") or "").lower()
+    offering = (t.get("modality_offering") or "both").lower()
     if not pref:
         return MAX_MODALITY / 2
-    modalities = [m.lower() for m in therapist.get("modalities", [])]
-    if any(pref in m or m in pref for m in modalities):
+    # Exact match
+    if pref == "telehealth_only" and offering == "telehealth":
         return MAX_MODALITY
-    return 2.0
+    if pref == "in_person_only" and offering == "in_person":
+        return MAX_MODALITY
+    if pref == "hybrid" and offering == "both":
+        return MAX_MODALITY
+    # Acceptable alternatives
+    if pref == "prefer_inperson" and offering == "in_person":
+        return MAX_MODALITY
+    if pref == "prefer_inperson" and offering == "both":
+        return 10.0
+    if pref == "prefer_inperson" and offering == "telehealth":
+        return 5.0
+    if pref == "prefer_telehealth" and offering == "telehealth":
+        return MAX_MODALITY
+    if pref == "prefer_telehealth" and offering == "both":
+        return 10.0
+    if pref == "prefer_telehealth" and offering == "in_person":
+        return 5.0
+    if pref == "telehealth_only" and offering == "both":
+        return 10.0
+    if pref == "in_person_only" and offering == "both":
+        return 10.0
+    if pref == "hybrid":
+        return 10.0
+    return 0.0
+
+
+def _score_urgency(t: dict, r: dict) -> float:
+    patient = (r.get("urgency") or "flexible").lower()
+    therapist = (t.get("urgency_capacity") or "within_month").lower()
+    if patient == "flexible":
+        return MAX_URGENCY
+    if therapist == "full":
+        return 0.0
+    p_idx = URGENCY_ORDER.index(patient) if patient in URGENCY_ORDER else 3
+    t_idx = THERAPIST_URGENCY_ORDER.index(therapist) if therapist in THERAPIST_URGENCY_ORDER else 2
+    if t_idx <= p_idx:
+        return MAX_URGENCY
+    if t_idx == p_idx + 1:
+        return 6.0
+    return 3.0
+
+
+def _score_prior_therapy(t: dict, r: dict) -> float:
+    prior = (r.get("prior_therapy") or "not_sure").lower()
+    years = t.get("years_experience") or 0
+    style_tags = [s.lower() for s in t.get("style_tags") or []]
+    if prior == "no":
+        # Beginner-friendly therapists score higher
+        if "warm_supportive" in style_tags or "structured" in style_tags:
+            return MAX_PRIOR
+        return 6.0
+    if prior == "yes_helped":
+        return 6.0
+    if prior == "yes_not_helped":
+        # Patient wants something different — favor experienced therapists with deeper specialty
+        if years >= 7 and len(t.get("primary_specialties") or []) >= 1:
+            return MAX_PRIOR
+        return 6.0
+    return 3.0  # not_sure
+
+
+def _score_experience(t: dict, r: dict) -> float:
+    pref = r.get("experience_preference") or "no_pref"
+    if pref == "no_pref":
+        return 0.0
+    rng = EXPERIENCE_RANGES.get(pref)
+    if not rng:
+        return 0.0
+    years = t.get("years_experience") or 0
+    if rng[0] <= years <= rng[1]:
+        return MAX_EXPERIENCE
+    # Adjacent range
+    keys = list(EXPERIENCE_RANGES.keys())
+    if pref in keys:
+        i = keys.index(pref)
+        adjacent = []
+        if i - 1 >= 0:
+            adjacent.append(EXPERIENCE_RANGES[keys[i - 1]])
+        if i + 1 < len(keys):
+            adjacent.append(EXPERIENCE_RANGES[keys[i + 1]])
+        for lo, hi in adjacent:
+            if lo <= years <= hi:
+                return 3.0
+    return 0.0
+
+
+def _score_gender(t: dict, r: dict) -> float:
+    pref = (r.get("gender_preference") or "no_pref").lower()
+    if pref == "no_pref":
+        return 0.0
+    return MAX_GENDER if (t.get("gender") or "").lower() == pref else 0.0
+
+
+def _score_style(t: dict, r: dict) -> float:
+    prefs = [s.lower() for s in (r.get("style_preference") or []) if s and s != "no_pref"]
+    if not prefs:
+        return 0.0
+    therapist = [s.lower() for s in (t.get("style_tags") or [])]
+    overlap = set(prefs) & set(therapist)
+    if len(overlap) >= 2 or (overlap and len(prefs) == 1):
+        return MAX_STYLE
+    if overlap:
+        return 1.0
+    return 0.0
 
 
 # ─── Public API ───────────────────────────────────────────────────────────────
 
-def score_therapist(therapist: dict[str, Any], request: dict[str, Any]) -> dict[str, Any]:
-    """Return scoring breakdown and total. total=-1 indicates filtered out."""
-    if not _state_passes(therapist, request):
-        return {"total": -1, "breakdown": {"state": "no match"}, "filtered": True}
+def score_therapist(t: dict, r: dict) -> dict[str, Any]:
+    """Return scoring breakdown + total. total=-1 indicates filtered out."""
+    if not _state_pass(t, r):
+        return {"total": -1, "filter_failed": "state", "filtered": True}
+    if not _client_type_pass(t, r):
+        return {"total": -1, "filter_failed": "client_type", "filtered": True}
+    if not _age_group_pass(t, r):
+        return {"total": -1, "filter_failed": "age_group", "filtered": True}
+    if not _payment_pass(t, r):
+        return {"total": -1, "filter_failed": "payment", "filtered": True}
+    if not _modality_pass(t, r):
+        return {"total": -1, "filter_failed": "modality", "filtered": True}
+    if not _gender_pass(t, r):
+        return {"total": -1, "filter_failed": "gender", "filtered": True}
 
     breakdown = {
-        "issue": _score_issue(therapist, request),
-        "age": _score_age(therapist, request),
-        "payment": _score_payment(therapist, request),
-        "location": _score_location(therapist, request),
-        "modality": _score_modality(therapist, request),
+        "issues": _score_issues(t, r),
+        "availability": _score_availability(t, r),
+        "modality": _score_modality(t, r),
+        "urgency": _score_urgency(t, r),
+        "prior_therapy": _score_prior_therapy(t, r),
+        "experience": _score_experience(t, r),
+        "gender": _score_gender(t, r),
+        "style": _score_style(t, r),
     }
     total = round(sum(breakdown.values()), 1)
     return {"total": total, "breakdown": breakdown, "filtered": False}
 
 
 def rank_therapists(
-    therapists: list[dict[str, Any]],
-    request: dict[str, Any],
-    threshold: float = 60.0,
-    min_results: int = 5,
-) -> list[dict[str, Any]]:
-    """Score and filter. Auto-lower threshold if too few matches."""
+    therapists: list[dict],
+    request: dict,
+    threshold: float = 71.0,
+    top_n: int = 30,
+    min_results: int = 3,
+) -> list[dict]:
+    """Score and filter per spec:
+       - send to top N where score >= threshold
+       - if fewer than min_results above threshold, lower stepwise (60, 50)
+       - return up to top_n therapists
+    """
     scored = []
     for t in therapists:
         result = score_therapist(t, request)
@@ -210,13 +310,16 @@ def rank_therapists(
         scored.append({**t, "match_score": result["total"], "match_breakdown": result["breakdown"]})
 
     scored.sort(key=lambda x: x["match_score"], reverse=True)
-
     above = [s for s in scored if s["match_score"] >= threshold]
     if len(above) >= min_results:
-        return above
+        return above[:top_n]
 
-    cur = threshold
-    while cur > 20 and len(above) < min_results:
-        cur -= 10
+    # Auto-lower threshold per spec: try 60, then 50
+    for cur in (60.0, 50.0):
+        if cur >= threshold:
+            continue
         above = [s for s in scored if s["match_score"] >= cur]
-    return above if above else scored[:min_results]
+        if len(above) >= min_results:
+            return above[:top_n]
+
+    return scored[:top_n]

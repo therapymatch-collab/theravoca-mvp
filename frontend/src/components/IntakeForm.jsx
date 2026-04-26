@@ -5,41 +5,101 @@ import { ArrowRight, Check } from "lucide-react";
 import { api } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 
 const STEPS = [
-  { key: "what", label: "What brings you here?" },
-  { key: "who", label: "Who is therapy for?" },
-  { key: "format", label: "Format & location" },
-  { key: "payment", label: "Payment" },
-  { key: "preferences", label: "Therapist preferences" },
-  { key: "contact", label: "Where to reach you" },
+  "Who is this for?",
+  "What's going on?",
+  "Format & location",
+  "Payment",
+  "Logistics",
+  "Therapist preferences",
+  "Where to reach you",
 ];
 
-const ISSUE_CHIPS = [
-  { key: "anxiety", label: "Anxiety" },
-  { key: "depression", label: "Depression" },
-  { key: "trauma", label: "Trauma / PTSD" },
-  { key: "couples", label: "Couples / relationship" },
-  { key: "family", label: "Family / parenting" },
-  { key: "grief", label: "Grief / loss" },
-  { key: "addiction", label: "Addiction / recovery" },
-  { key: "lgbtq", label: "LGBTQ+" },
-  { key: "eating", label: "Eating / body image" },
-  { key: "ocd", label: "OCD" },
-  { key: "adhd", label: "ADHD / focus" },
-  { key: "stress", label: "Stress / burnout" },
-  { key: "self-esteem", label: "Self-esteem" },
-  { key: "career", label: "Career / work" },
-  { key: "identity", label: "Identity" },
+const CLIENT_TYPES = [
+  { v: "individual", l: "Individual" },
+  { v: "couples", l: "Couples" },
+  { v: "family", l: "Family" },
+  { v: "group", l: "Group" },
+];
+const AGE_GROUPS = [
+  { v: "child", l: "Child (under 13)" },
+  { v: "teen", l: "Teen (13–17)" },
+  { v: "young_adult", l: "Young adult (18–25)" },
+  { v: "adult", l: "Adult (26–64)" },
+  { v: "older_adult", l: "Older adult (65+)" },
+];
+const ISSUES = [
+  { v: "anxiety", l: "Anxiety" },
+  { v: "depression", l: "Depression" },
+  { v: "ocd", l: "OCD" },
+  { v: "adhd", l: "ADHD" },
+  { v: "trauma_ptsd", l: "Trauma / PTSD" },
+  { v: "relationship_issues", l: "Relationship issues" },
+  { v: "life_transitions", l: "Life transitions" },
+  { v: "parenting_family", l: "Parenting / family conflict" },
+  { v: "substance_use", l: "Substance use" },
+  { v: "eating_concerns", l: "Eating concerns" },
+  { v: "autism_neurodivergence", l: "Autism / neurodivergence" },
+  { v: "school_academic_stress", l: "School / academic stress" },
+];
+const MODALITY = [
+  { v: "telehealth_only", l: "Telehealth only" },
+  { v: "in_person_only", l: "In-person only" },
+  { v: "hybrid", l: "Hybrid / either" },
+  { v: "prefer_inperson", l: "Prefer in-person, open to telehealth" },
+  { v: "prefer_telehealth", l: "Prefer telehealth, open to in-person" },
+];
+const PAYMENT = [
+  { v: "insurance", l: "Insurance" },
+  { v: "cash", l: "Cash / private pay" },
+  { v: "either", l: "Either" },
+];
+const AVAILABILITY = [
+  { v: "weekday_morning", l: "Weekday mornings" },
+  { v: "weekday_afternoon", l: "Weekday afternoons" },
+  { v: "weekday_evening", l: "Weekday evenings" },
+  { v: "weekend_morning", l: "Weekend mornings" },
+  { v: "weekend_afternoon", l: "Weekend afternoons" },
+  { v: "flexible", l: "Flexible" },
+];
+const URGENCY = [
+  { v: "asap", l: "ASAP / this week" },
+  { v: "within_2_3_weeks", l: "Within 2–3 weeks" },
+  { v: "within_month", l: "Within a month" },
+  { v: "flexible", l: "Flexible / just exploring" },
+];
+const PRIOR_THERAPY = [
+  { v: "no", l: "No, this is the first time" },
+  { v: "yes_helped", l: "Yes, and it helped" },
+  { v: "yes_not_helped", l: "Yes, but it didn't help" },
+  { v: "not_sure", l: "Not sure" },
+];
+const EXPERIENCE = [
+  { v: "no_pref", l: "No preference" },
+  { v: "0-3", l: "0–3 years" },
+  { v: "3-7", l: "3–7 years" },
+  { v: "7-15", l: "7–15 years" },
+  { v: "15+", l: "15+ years" },
+];
+const GENDERS = [
+  { v: "no_pref", l: "No preference" },
+  { v: "female", l: "Female" },
+  { v: "male", l: "Male" },
+  { v: "nonbinary", l: "Nonbinary" },
+];
+const STYLES = [
+  { v: "structured", l: "Structured / skills-based" },
+  { v: "warm_supportive", l: "Warm and supportive" },
+  { v: "direct_practical", l: "Direct and practical" },
+  { v: "trauma_informed", l: "Trauma-informed" },
+  { v: "insight_oriented", l: "Insight-oriented" },
+  { v: "faith_informed", l: "Faith-informed" },
+  { v: "culturally_responsive", l: "Culturally responsive" },
+  { v: "lgbtq_affirming", l: "LGBTQ+ affirming" },
 ];
 
 export default function IntakeForm() {
@@ -50,69 +110,78 @@ export default function IntakeForm() {
   const [confirmAdult, setConfirmAdult] = useState(false);
   const [confirmNotEmergency, setConfirmNotEmergency] = useState(false);
   const [data, setData] = useState({
-    selected_issues: [],
-    issue_context: "",
-    client_age: "",
+    client_type: "",
+    age_group: "",
     location_state: "ID",
     location_city: "",
     location_zip: "",
-    session_format: "virtual",
-    payment_type: "cash",
+    presenting_issues: [],
+    other_issue: "",
+    modality_preference: "",
+    payment_type: "",
     insurance_name: "",
     budget: "",
-    preferred_gender: "",
-    preferred_modality: "",
-    other_notes: "",
+    availability_windows: [],
+    urgency: "",
+    prior_therapy: "",
+    prior_therapy_notes: "",
+    experience_preference: "no_pref",
+    gender_preference: "no_pref",
+    gender_required: false,
+    style_preference: [],
     referral_source: "",
     email: "",
   });
   const set = (k, v) => setData((d) => ({ ...d, [k]: v }));
-  const toggleIssue = (k) =>
-    setData((d) => ({
-      ...d,
-      selected_issues: d.selected_issues.includes(k)
-        ? d.selected_issues.filter((x) => x !== k)
-        : [...d.selected_issues, k],
-    }));
+  const toggleArr = (k, v, max) =>
+    setData((d) => {
+      const arr = d[k];
+      if (arr.includes(v)) return { ...d, [k]: arr.filter((x) => x !== v) };
+      if (max && arr.length >= max) return d;
+      return { ...d, [k]: [...arr, v] };
+    });
 
   const canNext = () => {
-    if (step === 0) return data.selected_issues.length >= 1;
-    if (step === 1) return data.client_age && Number(data.client_age) >= 1;
-    if (step === 2) return !!data.session_format && !!data.location_state;
-    if (step === 3) {
-      if (data.payment_type === "cash") return !!data.budget;
-      return data.payment_type === "insurance";
+    if (step === 0) return data.client_type && data.age_group && data.location_state;
+    if (step === 1) return data.presenting_issues.length >= 1;
+    if (step === 2) {
+      if (!data.modality_preference) return false;
+      if (
+        ["in_person_only", "prefer_inperson", "hybrid"].includes(
+          data.modality_preference,
+        )
+      ) {
+        return !!(data.location_city || data.location_zip);
+      }
+      return true;
     }
-    if (step === 4) return true;
-    if (step === 5)
+    if (step === 3) {
+      if (!data.payment_type) return false;
+      if (data.payment_type === "cash") return !!data.budget;
+      return true;
+    }
+    if (step === 4)
       return (
-        data.email &&
-        agreed &&
-        confirmAdult &&
-        confirmNotEmergency
+        data.availability_windows.length >= 1 && data.urgency && data.prior_therapy
       );
+    if (step === 5) return true;
+    if (step === 6)
+      return data.email && agreed && confirmAdult && confirmNotEmergency;
     return false;
   };
 
   const submit = async () => {
     setSubmitting(true);
     try {
-      const issuesLabel = data.selected_issues.join(", ");
-      const presenting_issues =
-        issuesLabel +
-        (data.issue_context.trim() ? `. ${data.issue_context.trim()}` : "");
-      const { selected_issues: _si, issue_context: _ic, ...rest } = data;
       const payload = {
-        ...rest,
-        presenting_issues,
-        client_age: parseInt(data.client_age, 10),
+        ...data,
         budget: data.budget ? parseInt(data.budget, 10) : null,
       };
       const res = await api.post("/requests", payload);
       toast.success("Request received — please check your email to confirm.");
       navigate(`/verify/pending?id=${res.data.id}`, { replace: true });
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Something went wrong. Please try again.");
+      toast.error(e?.response?.data?.detail || "Something went wrong.");
     } finally {
       setSubmitting(false);
     }
@@ -135,7 +204,7 @@ export default function IntakeForm() {
             Get your personalized list of <em>pre-qualified</em> therapists
           </h2>
           <p className="mt-4 text-[#6D6A65]">
-            Free during our pilot. No account required.
+            Free during our pilot. Under 2 minutes. No account required.
           </p>
         </div>
 
@@ -143,7 +212,7 @@ export default function IntakeForm() {
           <div className="mb-6">
             <div className="flex justify-between text-xs text-[#6D6A65] mb-2">
               <span data-testid="step-label">
-                Step {step + 1} of {STEPS.length}: {STEPS[step].label}
+                Step {step + 1} of {STEPS.length}: {STEPS[step]}
               </span>
               <span>{Math.round(progressPct)}%</span>
             </div>
@@ -155,117 +224,73 @@ export default function IntakeForm() {
 
           <div className="min-h-[280px] tv-fade-up" key={step}>
             {step === 0 && (
-              <div>
-                <label className="block text-sm font-semibold text-[#2B2A29] mb-2">
-                  What brings you here today?
-                </label>
-                <p className="text-sm text-[#6D6A65] mb-4">
-                  Select everything that resonates. Pick at least one.
-                </p>
-                <div
-                  className="flex flex-wrap gap-2"
-                  data-testid="issue-chips"
-                >
-                  {ISSUE_CHIPS.map((c) => {
-                    const active = data.selected_issues.includes(c.key);
-                    return (
-                      <button
-                        type="button"
-                        key={c.key}
-                        onClick={() => toggleIssue(c.key)}
-                        data-testid={`issue-chip-${c.key}`}
-                        className={`text-sm px-4 py-2 rounded-full border transition ${
-                          active
-                            ? "bg-[#2D4A3E] text-white border-[#2D4A3E] shadow-sm"
-                            : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
-                        }`}
-                      >
-                        {c.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="mt-7">
-                  <label className="block text-xs font-semibold text-[#6D6A65] uppercase tracking-wider mb-2">
-                    Anything else? (optional)
-                  </label>
-                  <Textarea
-                    value={data.issue_context}
-                    onChange={(e) => set("issue_context", e.target.value)}
-                    rows={4}
-                    placeholder="e.g. post-divorce, perinatal, after a recent loss, prefer evening sessions… (Avoid sharing personally identifiable information.)"
-                    className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl text-[#2B2A29] focus-visible:ring-[#2D4A3E]/30"
-                    data-testid="issue-context-input"
+              <div className="space-y-6">
+                <Group label="What type of therapy is needed?">
+                  <PillRow
+                    items={CLIENT_TYPES}
+                    selected={[data.client_type]}
+                    onSelect={(v) => set("client_type", v)}
+                    testid="client-type"
                   />
-                </div>
-                <p className="text-xs text-[#6D6A65] mt-2">
-                  {data.selected_issues.length === 0
-                    ? "Pick at least one to continue."
-                    : `${data.selected_issues.length} selected — the more, the better the match.`}
+                </Group>
+                <Group label="What age group is the client?">
+                  <PillRow
+                    items={AGE_GROUPS}
+                    selected={[data.age_group]}
+                    onSelect={(v) => set("age_group", v)}
+                    testid="age-group"
+                  />
+                </Group>
+                <p className="text-xs text-[#6D6A65]">
+                  We're currently licensed in <strong>Idaho</strong>.
                 </p>
               </div>
             )}
 
             {step === 1 && (
-              <div className="space-y-5">
-                <Field label="Client age">
-                  <Input
-                    type="number"
-                    min="1"
-                    max="120"
-                    value={data.client_age}
-                    onChange={(e) => set("client_age", e.target.value)}
-                    placeholder="e.g. 28"
-                    className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                    data-testid="client-age-input"
+              <div>
+                <Group
+                  label="Main concerns the client wants help with"
+                  hint={`Pick up to 3, in priority order. Top of list = highest priority. (${data.presenting_issues.length}/3)`}
+                >
+                  <PillRow
+                    items={ISSUES}
+                    selected={data.presenting_issues}
+                    onSelect={(v) => toggleArr("presenting_issues", v, 3)}
+                    testid="issue"
                   />
-                </Field>
-                <Field label="Therapist license state (where the patient lives)">
-                  <Select
-                    value={data.location_state}
-                    onValueChange={(v) => set("location_state", v)}
-                  >
-                    <SelectTrigger
-                      className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                      data-testid="state-select"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ID">Idaho</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-[#6D6A65] mt-1">
-                    We're launching state by state. Currently live in Idaho.
-                  </p>
-                </Field>
+                </Group>
+                <div className="mt-6">
+                  <label className="block text-xs font-semibold text-[#6D6A65] uppercase tracking-wider mb-2">
+                    Anything else? (optional, no PII)
+                  </label>
+                  <Textarea
+                    rows={3}
+                    value={data.other_issue}
+                    onChange={(e) => set("other_issue", e.target.value)}
+                    placeholder="e.g. recent loss, perinatal, prefer culturally-responsive provider"
+                    className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                    data-testid="other-issue"
+                  />
+                </div>
               </div>
             )}
 
             {step === 2 && (
-              <div className="space-y-5">
-                <Field label="Session format">
-                  <Select
-                    value={data.session_format}
-                    onValueChange={(v) => set("session_format", v)}
-                  >
-                    <SelectTrigger
-                      className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                      data-testid="format-select"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="virtual">Telehealth (virtual)</SelectItem>
-                      <SelectItem value="in-person">In-person</SelectItem>
-                      <SelectItem value="hybrid">Hybrid</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                {(data.session_format === "in-person" ||
-                  data.session_format === "hybrid") && (
-                  <>
-                    <Field label="City preference">
+              <div className="space-y-6">
+                <Group label="How would the client prefer to meet?">
+                  <PillCol
+                    items={MODALITY}
+                    selected={[data.modality_preference]}
+                    onSelect={(v) => set("modality_preference", v)}
+                    testid="modality"
+                  />
+                </Group>
+                {["in_person_only", "prefer_inperson", "hybrid"].includes(
+                  data.modality_preference,
+                ) && (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <Field label="City">
                       <Input
                         value={data.location_city}
                         onChange={(e) => set("location_city", e.target.value)}
@@ -274,57 +299,39 @@ export default function IntakeForm() {
                         data-testid="city-input"
                       />
                     </Field>
-                    <Field label="ZIP code (recommended — gives more accurate distance matches)">
+                    <Field label="ZIP code (recommended)">
                       <Input
                         inputMode="numeric"
                         maxLength={5}
                         value={data.location_zip}
                         onChange={(e) =>
-                          set("location_zip", e.target.value.replace(/\D/g, "").slice(0, 5))
+                          set(
+                            "location_zip",
+                            e.target.value.replace(/\D/g, "").slice(0, 5),
+                          )
                         }
-                        placeholder="e.g. 83702"
+                        placeholder="83702"
                         className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                         data-testid="zip-input"
                       />
                     </Field>
-                  </>
+                  </div>
                 )}
               </div>
             )}
 
             {step === 3 && (
               <div className="space-y-5">
-                <Field label="Payment method">
-                  <Select
-                    value={data.payment_type}
-                    onValueChange={(v) => set("payment_type", v)}
-                  >
-                    <SelectTrigger
-                      className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                      data-testid="payment-select"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cash">Cash / out-of-pocket</SelectItem>
-                      <SelectItem value="insurance">Insurance</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                {data.payment_type === "cash" && (
-                  <Field label="Per-session budget (USD)">
-                    <Input
-                      type="number"
-                      value={data.budget}
-                      onChange={(e) => set("budget", e.target.value)}
-                      placeholder="e.g. 150"
-                      className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                      data-testid="budget-input"
-                    />
-                  </Field>
-                )}
+                <Group label="How would the client like to pay?">
+                  <PillRow
+                    items={PAYMENT}
+                    selected={[data.payment_type]}
+                    onSelect={(v) => set("payment_type", v)}
+                    testid="payment"
+                  />
+                </Group>
                 {data.payment_type === "insurance" && (
-                  <Field label="Insurance carrier">
+                  <Field label="Insurance plan">
                     <Input
                       value={data.insurance_name}
                       onChange={(e) => set("insurance_name", e.target.value)}
@@ -334,55 +341,111 @@ export default function IntakeForm() {
                     />
                   </Field>
                 )}
+                {data.payment_type === "cash" && (
+                  <Field label="Maximum budget per session (USD)">
+                    <Input
+                      type="number"
+                      value={data.budget}
+                      onChange={(e) => set("budget", e.target.value)}
+                      placeholder="e.g. 175"
+                      className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                      data-testid="budget-input"
+                    />
+                  </Field>
+                )}
               </div>
             )}
 
             {step === 4 && (
-              <div className="space-y-5">
-                <Field label="Therapist gender preference (optional)">
-                  <Select
-                    value={data.preferred_gender || "any"}
-                    onValueChange={(v) =>
-                      set("preferred_gender", v === "any" ? "" : v)
-                    }
-                  >
-                    <SelectTrigger
+              <div className="space-y-6">
+                <Group
+                  label="When is the client generally available?"
+                  hint="Select all that apply"
+                >
+                  <PillRow
+                    items={AVAILABILITY}
+                    selected={data.availability_windows}
+                    onSelect={(v) => toggleArr("availability_windows", v)}
+                    testid="availability"
+                  />
+                </Group>
+                <Group label="How soon to start?">
+                  <PillRow
+                    items={URGENCY}
+                    selected={[data.urgency]}
+                    onSelect={(v) => set("urgency", v)}
+                    testid="urgency"
+                  />
+                </Group>
+                <Group label="Has the client been in therapy before?">
+                  <PillCol
+                    items={PRIOR_THERAPY}
+                    selected={[data.prior_therapy]}
+                    onSelect={(v) => set("prior_therapy", v)}
+                    testid="prior-therapy"
+                  />
+                </Group>
+                {data.prior_therapy === "yes_not_helped" && (
+                  <Field label="What didn't work last time? (optional)">
+                    <Textarea
+                      rows={3}
+                      value={data.prior_therapy_notes}
+                      onChange={(e) =>
+                        set("prior_therapy_notes", e.target.value)
+                      }
                       className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                      data-testid="gender-select"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="any">No preference</SelectItem>
-                      <SelectItem value="female">Female</SelectItem>
-                      <SelectItem value="male">Male</SelectItem>
-                      <SelectItem value="nonbinary">Non-binary</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label="Modality preference (optional)">
-                  <Input
-                    value={data.preferred_modality}
-                    onChange={(e) => set("preferred_modality", e.target.value)}
-                    placeholder="e.g. CBT, EMDR, Mindfulness"
-                    className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                    data-testid="modality-input"
-                  />
-                </Field>
-                <Field label="Anything else? (optional)">
-                  <Textarea
-                    value={data.other_notes}
-                    onChange={(e) => set("other_notes", e.target.value)}
-                    rows={3}
-                    placeholder="Scheduling, identity considerations, prior therapy experience, etc."
-                    className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                    data-testid="notes-input"
-                  />
-                </Field>
+                      data-testid="prior-notes"
+                    />
+                  </Field>
+                )}
               </div>
             )}
 
             {step === 5 && (
+              <div className="space-y-6">
+                <Group label="Therapist experience preference">
+                  <PillRow
+                    items={EXPERIENCE}
+                    selected={[data.experience_preference]}
+                    onSelect={(v) => set("experience_preference", v)}
+                    testid="experience"
+                  />
+                </Group>
+                <Group label="Therapist gender preference">
+                  <PillRow
+                    items={GENDERS}
+                    selected={[data.gender_preference]}
+                    onSelect={(v) => set("gender_preference", v)}
+                    testid="gender"
+                  />
+                  {data.gender_preference !== "no_pref" && (
+                    <label className="flex items-center gap-3 mt-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5 cursor-pointer">
+                      <Switch
+                        checked={data.gender_required}
+                        onCheckedChange={(v) => set("gender_required", v)}
+                        data-testid="gender-required"
+                      />
+                      <span className="text-sm text-[#2B2A29]">
+                        Required (only show therapists matching this gender)
+                      </span>
+                    </label>
+                  )}
+                </Group>
+                <Group
+                  label="Therapist style (optional)"
+                  hint="Pick any that resonate"
+                >
+                  <PillRow
+                    items={STYLES}
+                    selected={data.style_preference}
+                    onSelect={(v) => toggleArr("style_preference", v)}
+                    testid="style"
+                  />
+                </Group>
+              </div>
+            )}
+
+            {step === 6 && (
               <div className="space-y-5">
                 <Field label="Your email (we'll send your matches here)">
                   <Input
@@ -393,29 +456,6 @@ export default function IntakeForm() {
                     className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                     data-testid="email-input"
                   />
-                </Field>
-                <Field label="How did you find us? (optional)">
-                  <Select
-                    value={data.referral_source || "none"}
-                    onValueChange={(v) =>
-                      set("referral_source", v === "none" ? "" : v)
-                    }
-                  >
-                    <SelectTrigger
-                      className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                      data-testid="referral-source"
-                    >
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">—</SelectItem>
-                      <SelectItem value="google">Google search</SelectItem>
-                      <SelectItem value="friend">Friend / family</SelectItem>
-                      <SelectItem value="physician">Physician referral</SelectItem>
-                      <SelectItem value="social">Social media</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </Field>
                 <div className="space-y-3 pt-2">
                   <CheckRow
@@ -436,7 +476,7 @@ export default function IntakeForm() {
                     id="emergency"
                     checked={confirmNotEmergency}
                     onChange={setConfirmNotEmergency}
-                    label="I confirm this request is not an emergency."
+                    label="I confirm this is not an emergency."
                     testid="confirm-emergency"
                   />
                 </div>
@@ -483,13 +523,76 @@ export default function IntakeForm() {
   );
 }
 
+function Group({ label, hint, children }) {
+  return (
+    <div>
+      <label className="block text-sm font-semibold text-[#2B2A29] mb-1">
+        {label}
+      </label>
+      {hint && <p className="text-xs text-[#6D6A65] mb-3">{hint}</p>}
+      {!hint && <div className="mb-3" />}
+      {children}
+    </div>
+  );
+}
+
 function Field({ label, children }) {
   return (
     <div>
-      <label className="block text-sm font-semibold text-[#2B2A29] mb-2">
+      <label className="block text-xs font-semibold text-[#6D6A65] uppercase tracking-wider mb-1.5">
         {label}
       </label>
       {children}
+    </div>
+  );
+}
+
+function PillRow({ items, selected, onSelect, testid }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map((it) => {
+        const active = selected.includes(it.v);
+        return (
+          <button
+            key={it.v}
+            type="button"
+            onClick={() => onSelect(it.v)}
+            data-testid={`${testid}-${it.v}`}
+            className={`text-sm px-4 py-2 rounded-full border transition ${
+              active
+                ? "bg-[#2D4A3E] text-white border-[#2D4A3E] shadow-sm"
+                : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+            }`}
+          >
+            {it.l}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function PillCol({ items, selected, onSelect, testid }) {
+  return (
+    <div className="grid gap-2">
+      {items.map((it) => {
+        const active = selected.includes(it.v);
+        return (
+          <button
+            key={it.v}
+            type="button"
+            onClick={() => onSelect(it.v)}
+            data-testid={`${testid}-${it.v}`}
+            className={`text-left text-sm px-4 py-3 rounded-xl border transition ${
+              active
+                ? "bg-[#2D4A3E] text-white border-[#2D4A3E] shadow-sm"
+                : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+            }`}
+          >
+            {it.l}
+          </button>
+        );
+      })}
     </div>
   );
 }

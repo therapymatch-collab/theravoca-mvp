@@ -42,7 +42,7 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123!")
-DEFAULT_THRESHOLD = float(os.environ.get("DEFAULT_MATCH_THRESHOLD", "60"))
+DEFAULT_THRESHOLD = float(os.environ.get("DEFAULT_MATCH_THRESHOLD", "71"))
 AUTO_DELAY_HOURS = float(os.environ.get("AUTO_RESULTS_DELAY_HOURS", "24"))
 PATIENT_DEMO_EMAIL = os.environ.get("PATIENT_DEMO_EMAIL", "")
 
@@ -101,18 +101,14 @@ _sweep_task: Optional[asyncio.Task] = None
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     global _sweep_task
-    # Startup
-    count = await db.therapists.count_documents({})
-    if count == 0:
+    # Startup: re-seed if no v2 therapists exist
+    has_v2 = await db.therapists.count_documents({"source": "seed_v2"})
+    if has_v2 == 0:
+        await db.therapists.delete_many({"source": {"$in": ["seed", None]}})
         therapists = generate_seed_therapists(100)
         await db.therapists.insert_many([t.copy() for t in therapists])
-        logger.info("Auto-seeded %d Idaho therapists", len(therapists))
-    # Backfill flags for legacy seed docs (idempotent)
-    await db.therapists.update_many(
-        {"is_active": {"$exists": False}},
-        {"$set": {"is_active": True, "pending_approval": False, "source": "seed"}},
-    )
-    # Backfill geo coords for therapists missing them (idempotent, uses known-cities map for Idaho seed)
+        logger.info("Re-seeded %d Idaho therapists with v2 schema", len(therapists))
+    # Backfill geo coords for therapists missing them (idempotent)
     asyncio.create_task(_backfill_therapist_geo())
     sweep_interval = int(os.environ.get("SWEEP_INTERVAL_SECONDS", "300"))
     _sweep_task = asyncio.create_task(_sweep_loop(sweep_interval))
@@ -120,7 +116,6 @@ async def lifespan(_app: FastAPI):
     try:
         yield
     finally:
-        # Shutdown
         if _sweep_task:
             _sweep_task.cancel()
             try:
@@ -175,33 +170,48 @@ class TherapistSignup(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     email: EmailStr
     phone: Optional[str] = ""
+    gender: Optional[str] = ""  # female | male | nonbinary
     licensed_states: list[str] = Field(default_factory=lambda: ["ID"])
-    office_locations: list[str] = Field(default_factory=list)
-    telehealth: bool = True
-    specialties: list[Specialty] = Field(default_factory=list, max_length=8)
+    client_types: list[str] = Field(default_factory=lambda: ["individual"])
+    age_groups: list[str] = Field(default_factory=list)
+    primary_specialties: list[str] = Field(default_factory=list, max_length=2)
+    secondary_specialties: list[str] = Field(default_factory=list, max_length=3)
+    general_treats: list[str] = Field(default_factory=list, max_length=5)
     modalities: list[str] = Field(default_factory=list, max_length=6)
-    ages_served: list[str] = Field(default_factory=list)
+    modality_offering: str = "both"  # telehealth | in_person | both
+    office_locations: list[str] = Field(default_factory=list)
     insurance_accepted: list[str] = Field(default_factory=list)
     cash_rate: int = Field(ge=0, le=1000, default=150)
     years_experience: int = Field(ge=0, le=70, default=1)
+    availability_windows: list[str] = Field(default_factory=list)
+    urgency_capacity: str = "within_month"
+    style_tags: list[str] = Field(default_factory=list)
     free_consult: bool = False
     bio: Optional[str] = ""
 
 
 class RequestCreate(BaseModel):
     email: EmailStr
-    client_age: int = Field(ge=1, le=120)
     location_state: str
     location_city: Optional[str] = ""
     location_zip: Optional[str] = ""
-    session_format: str = "virtual"  # virtual | in-person | hybrid
-    payment_type: str = "cash"  # cash | insurance
+    client_type: str  # individual | couples | family | group
+    age_group: str  # child | teen | young_adult | adult | older_adult
+    client_age: Optional[int] = None  # legacy / optional
+    payment_type: str = "either"  # insurance | cash | either
     insurance_name: Optional[str] = ""
     budget: Optional[int] = None
-    presenting_issues: str
-    preferred_gender: Optional[str] = ""
-    preferred_modality: Optional[str] = ""
-    other_notes: Optional[str] = ""
+    presenting_issues: list[str] = Field(default_factory=list, max_length=5)
+    other_issue: Optional[str] = ""
+    availability_windows: list[str] = Field(default_factory=list)
+    modality_preference: str = "hybrid"
+    urgency: str = "flexible"
+    prior_therapy: str = "not_sure"
+    prior_therapy_notes: Optional[str] = ""
+    experience_preference: str = "no_pref"
+    gender_preference: str = "no_pref"
+    gender_required: bool = False
+    style_preference: list[str] = Field(default_factory=list)
     referral_source: Optional[str] = ""
 
 
@@ -270,62 +280,81 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
     if req.get("location_zip"):
         location_bits.append(req["location_zip"])
     location_str = ", ".join(location_bits) or "—"
-    return {
-        "Client age": req.get("client_age"),
+    issues = req.get("presenting_issues") or []
+    if isinstance(issues, list):
+        issues_display = ", ".join(i.replace("_", " ").title() for i in issues if i)
+    else:
+        issues_display = str(issues)
+    if req.get("other_issue"):
+        issues_display = (issues_display + " · " if issues_display else "") + req["other_issue"]
+    payment_label = (req.get("payment_type") or "either").title()
+    if req.get("payment_type") == "insurance" and req.get("insurance_name"):
+        payment_label += f" ({req['insurance_name']})"
+    elif req.get("payment_type") == "cash" and req.get("budget"):
+        payment_label += f" — up to ${req['budget']}/session"
+    avail = req.get("availability_windows") or []
+    avail_display = ", ".join(a.replace("_", " ") for a in avail) or "—"
+    style = req.get("style_preference") or []
+    style_display = ", ".join(s.replace("_", " ") for s in style if s and s != "no_pref") or "—"
+
+    summary = {
+        "Client type": (req.get("client_type") or "").title(),
+        "Age group": (req.get("age_group") or "").replace("_", " ").title(),
         "State": req.get("location_state"),
-        "Format": req.get("session_format", "virtual"),
         "Location": location_str,
-        "Payment": req.get("payment_type", "cash").title()
-        + (f" ({req.get('insurance_name')})" if req.get("payment_type") == "insurance" and req.get("insurance_name") else ""),
-        "Budget": (f"${req.get('budget')}/session" if req.get("budget") else "—"),
-        "Presenting issues": req.get("presenting_issues", ""),
-        "Preferences": ", ".join(
-            x for x in [
-                f"gender: {req.get('preferred_gender')}" if req.get("preferred_gender") else "",
-                f"modality: {req.get('preferred_modality')}" if req.get("preferred_modality") else "",
-                req.get("other_notes") or "",
-            ] if x
-        ) or "—",
+        "Modality preference": (req.get("modality_preference") or "").replace("_", " ").title(),
+        "Payment": payment_label,
+        "Presenting issues": issues_display or "—",
+        "Availability": avail_display,
+        "Urgency": (req.get("urgency") or "flexible").replace("_", " ").title(),
+        "Prior therapy": (req.get("prior_therapy") or "").replace("_", " ").title(),
+        "Style preference": style_display,
     }
+    if req.get("prior_therapy") == "yes_not_helped" and req.get("prior_therapy_notes"):
+        summary["What didn't work last time"] = req["prior_therapy_notes"]
+    return summary
 
 
-async def _trigger_matching(request_id: str) -> dict[str, Any]:
+async def _trigger_matching(request_id: str, threshold: Optional[float] = None) -> dict[str, Any]:
     req = await db.requests.find_one({"id": request_id}, {"_id": 0})
     if not req:
         raise HTTPException(404, "Request not found")
-    threshold = req.get("threshold", DEFAULT_THRESHOLD)
-    # Only consider active, approved therapists
+    if threshold is None:
+        threshold = req.get("threshold", DEFAULT_THRESHOLD)
     therapists_cursor = db.therapists.find(
         {"is_active": {"$ne": False}, "pending_approval": {"$ne": True}}, {"_id": 0}
     )
     therapists = await therapists_cursor.to_list(2000)
-    matches = rank_therapists(therapists, req, threshold=threshold, min_results=5)
+    matches = rank_therapists(therapists, req, threshold=threshold, top_n=30, min_results=3)
 
-    notified_ids = [match["id"] for match in matches]
-    notified_scores = {match["id"]: match["match_score"] for match in matches}
-    # Compute & store distance for in-person/hybrid requests with patient_geo
-    notified_distances: dict[str, float] = {}
+    # Skip already-notified therapists (idempotent expand)
+    already = set(req.get("notified_therapist_ids") or [])
+    new_matches = [m for m in matches if m["id"] not in already]
+
+    notified_ids = list(already) + [m["id"] for m in new_matches]
+    notified_scores = req.get("notified_scores") or {}
+    notified_scores.update({m["id"]: m["match_score"] for m in new_matches})
+    notified_distances: dict[str, float] = req.get("notified_distances") or {}
     patient_geo = req.get("patient_geo")
     if patient_geo:
-        for match in matches:
-            offices = match.get("office_geos") or []
+        for m in new_matches:
+            offices = m.get("office_geos") or []
             if offices:
                 dists = [
                     haversine_miles(patient_geo["lat"], patient_geo["lng"], o["lat"], o["lng"])
                     for o in offices if "lat" in o and "lng" in o
                 ]
                 if dists:
-                    notified_distances[match["id"]] = round(min(dists), 1)
+                    notified_distances[m["id"]] = round(min(dists), 1)
 
-    # Send notification emails (best-effort, logged on failure)
     summary = _safe_summary_for_therapist(req)
-    for match in matches:
+    for m in new_matches:
         await send_therapist_notification(
-            to=match["email"],
-            therapist_name=match["name"].split(",")[0],
+            to=m["email"],
+            therapist_name=m["name"].split(",")[0],
             request_id=req["id"],
-            therapist_id=match["id"],
-            match_score=match["match_score"],
+            therapist_id=m["id"],
+            match_score=m["match_score"],
             summary=summary,
         )
 
@@ -339,12 +368,16 @@ async def _trigger_matching(request_id: str) -> dict[str, Any]:
             "status": "matched",
         }},
     )
-    logger.info("Matched request %s -> notified %d therapists", request_id, len(notified_ids))
+    logger.info(
+        "Matched request %s -> notified %d new (total %d) at threshold>=%s",
+        request_id, len(new_matches), len(notified_ids), threshold,
+    )
     return {
-        "notified": len(notified_ids),
+        "notified_new": len(new_matches),
+        "notified_total": len(notified_ids),
         "matches": [
-            {"id": match["id"], "name": match["name"], "match_score": match["match_score"]}
-            for match in matches
+            {"id": m["id"], "name": m["name"], "match_score": m["match_score"]}
+            for m in new_matches
         ],
     }
 
@@ -354,7 +387,24 @@ async def _deliver_results(request_id: str) -> dict[str, Any]:
     if not req:
         raise HTTPException(404, "Request not found")
     apps = await db.applications.find({"request_id": request_id}, {"_id": 0}).to_list(50)
-    apps.sort(key=lambda a: (a["match_score"], a["created_at"]), reverse=True)
+    # Re-rank for patient view: blend match_score with response speed and message thoughtfulness
+    matched_at = req.get("matched_at") or req.get("created_at")
+    matched_dt = _parse_iso(matched_at) if matched_at else None
+    for a in apps:
+        ms = float(a.get("match_score") or 0)
+        # Response speed bonus: 0–30 pts (the faster after notification, the better)
+        speed_bonus = 0.0
+        if matched_dt:
+            applied_dt = _parse_iso(a.get("created_at") or "")
+            if applied_dt:
+                hours = max(0.0, (applied_dt - matched_dt).total_seconds() / 3600.0)
+                speed_bonus = max(0.0, min(30.0, 30.0 * (24.0 - hours) / 24.0))
+        # Message-quality bonus: 0–10 pts based on length (cap at 300 chars)
+        msg_len = len(a.get("message") or "")
+        quality_bonus = min(10.0, msg_len / 300.0 * 10.0)
+        a["patient_rank_score"] = round(min(100.0, ms * 0.6 + speed_bonus + quality_bonus), 1)
+
+    apps.sort(key=lambda a: (a.get("patient_rank_score", 0), a.get("created_at", "")), reverse=True)
 
     enriched = []
     for a in apps:
@@ -362,7 +412,8 @@ async def _deliver_results(request_id: str) -> dict[str, Any]:
         if t:
             t_view = {
                 **t,
-                "specialties_display": [s["name"] for s in t.get("specialties", [])],
+                "specialties_display": (t.get("primary_specialties") or [])
+                + (t.get("secondary_specialties") or []),
             }
             enriched.append({**a, "therapist": t_view})
 
@@ -374,8 +425,18 @@ async def _deliver_results(request_id: str) -> dict[str, Any]:
     return {"sent_to": req["email"], "count": len(enriched)}
 
 
+def _parse_iso(s: str) -> Optional[datetime]:
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
+
+
 async def _sweep_overdue_results() -> None:
-    """Periodic sweep: deliver results for requests verified >= AUTO_DELAY_HOURS ago."""
+    """Periodic sweep:
+    - For requests verified ≥ AUTO_DELAY_HOURS ago with <3 applications, expand pool.
+    - For requests verified ≥ AUTO_DELAY_HOURS ago, deliver results to patient.
+    """
     cutoff = datetime.now(timezone.utc) - timedelta(hours=AUTO_DELAY_HOURS)
     cutoff_iso = cutoff.isoformat()
     overdue = await db.requests.find(
@@ -388,7 +449,12 @@ async def _sweep_overdue_results() -> None:
     ).to_list(200)
     for req in overdue:
         try:
-            logger.info("Sweep: delivering overdue results for %s", req["id"])
+            # Check application count; if <3, expand pool first (lower threshold)
+            app_count = await db.applications.count_documents({"request_id": req["id"]})
+            if app_count < 3:
+                logger.info("Sweep: expanding pool for %s (apps=%d)", req["id"], app_count)
+                await _trigger_matching(req["id"], threshold=60.0)
+            logger.info("Sweep: delivering results for %s", req["id"])
             await _deliver_results(req["id"])
         except Exception as e:
             logger.exception("Sweep failed for %s: %s", req["id"], e)
@@ -495,9 +561,12 @@ async def therapist_signup(payload: TherapistSignup):
         raise HTTPException(409, "A therapist with this email already exists.")
     tid = str(uuid.uuid4())
     office_geos = await geocode_offices(db, payload.office_locations or [], "ID")
+    data = payload.model_dump()
+    data["telehealth"] = data["modality_offering"] in ("telehealth", "both")
+    data["offers_in_person"] = data["modality_offering"] in ("in_person", "both")
     doc = {
         "id": tid,
-        **payload.model_dump(),
+        **data,
         "office_geos": office_geos,
         "source": "signup",
         "is_active": True,
