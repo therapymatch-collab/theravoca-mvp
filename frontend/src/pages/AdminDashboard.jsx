@@ -45,6 +45,10 @@ export default function AdminDashboard() {
   const [detail, setDetail] = useState(null);
   const [editTherapist, setEditTherapist] = useState(null);
   const [savingTherapist, setSavingTherapist] = useState(false);
+  const [emailTemplates, setEmailTemplates] = useState([]);
+  const [editingTplKey, setEditingTplKey] = useState(null);
+  const [tplFields, setTplFields] = useState({});
+  const [savingTpl, setSavingTpl] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -171,6 +175,44 @@ export default function AdminDashboard() {
     }
   };
 
+  const loadEmailTemplates = async () => {
+    try {
+      const res = await client.get("/admin/email-templates");
+      setEmailTemplates(res.data);
+    } catch (e) {
+      toast.error("Failed to load email templates");
+    }
+  };
+
+  const startEditTpl = (key) => {
+    const t = emailTemplates.find((x) => x.key === key);
+    if (!t) return;
+    setEditingTplKey(key);
+    setTplFields({
+      subject: t.subject || "",
+      heading: t.heading || "",
+      greeting: t.greeting || "",
+      intro: t.intro || "",
+      cta_label: t.cta_label || "",
+      footer_note: t.footer_note || "",
+    });
+  };
+
+  const saveTpl = async () => {
+    if (!editingTplKey) return;
+    setSavingTpl(true);
+    try {
+      await client.put(`/admin/email-templates/${editingTplKey}`, tplFields);
+      toast.success("Template saved");
+      setEditingTplKey(null);
+      await loadEmailTemplates();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Save failed");
+    } finally {
+      setSavingTpl(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
       <Header minimal />
@@ -249,6 +291,17 @@ export default function AdminDashboard() {
                   label="All providers"
                   count={allTherapists.length}
                   testid="tab-all-therapists"
+                />
+                <TabBtn
+                  active={tab === "email_templates"}
+                  onClick={() => {
+                    setTab("email_templates");
+                    if (emailTemplates.length === 0) loadEmailTemplates();
+                  }}
+                  icon={<Mail size={14} />}
+                  label="Email templates"
+                  count={emailTemplates.length || null}
+                  testid="tab-email-templates"
                 />
               </div>
 
@@ -439,6 +492,58 @@ export default function AdminDashboard() {
                   </table>
                 </div>
               )}
+              {tab === "email_templates" && (
+                <div className="mt-6 space-y-3" data-testid="email-templates-list">
+                  {emailTemplates.length === 0 ? (
+                    <div className="bg-white border border-[#E8E5DF] rounded-2xl p-12 text-center text-[#6D6A65]">
+                      <Loader2 className="animate-spin mx-auto mb-3 text-[#2D4A3E]" />
+                      Loading templates…
+                    </div>
+                  ) : (
+                    emailTemplates.map((t) => (
+                      <div
+                        key={t.key}
+                        className="bg-white border border-[#E8E5DF] rounded-2xl p-5"
+                        data-testid={`template-row-${t.key}`}
+                      >
+                        <div className="flex items-start justify-between gap-4 flex-wrap">
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-medium text-[#2B2A29]">{t.title}</h4>
+                            <p className="text-xs text-[#6D6A65] mt-1">{t.description}</p>
+                            <div className="text-sm text-[#2B2A29] mt-3 break-words">
+                              <span className="text-xs uppercase tracking-wider text-[#6D6A65] mr-2">
+                                Subject
+                              </span>
+                              {t.subject}
+                            </div>
+                            {t.greeting && (
+                              <div className="text-sm text-[#6D6A65] mt-1">
+                                <span className="text-xs uppercase tracking-wider mr-2">
+                                  Greeting
+                                </span>
+                                {t.greeting}
+                              </div>
+                            )}
+                            <div className="text-xs text-[#6D6A65] mt-2">
+                              Variables:{" "}
+                              <code className="bg-[#FDFBF7] border border-[#E8E5DF] rounded px-1.5 py-0.5">
+                                {t.available_vars || "—"}
+                              </code>
+                            </div>
+                          </div>
+                          <button
+                            className="text-[#2D4A3E] hover:underline text-sm inline-flex items-center gap-1.5"
+                            onClick={() => startEditTpl(t.key)}
+                            data-testid={`edit-template-${t.key}`}
+                          >
+                            <Pencil size={14} /> Edit
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -462,6 +567,57 @@ export default function AdminDashboard() {
           </DialogHeader>
           {editTherapist && (
             <div className="space-y-4 mt-2">
+              <FieldRow label="Profile photo">
+                <div className="flex items-center gap-4">
+                  <div className="w-20 h-20 rounded-full bg-[#FDFBF7] border border-[#E8E5DF] overflow-hidden flex items-center justify-center">
+                    {editTherapist.profile_picture ? (
+                      <img
+                        src={editTherapist.profile_picture}
+                        alt="preview"
+                        className="w-full h-full object-cover"
+                        data-testid="edit-photo-preview"
+                      />
+                    ) : (
+                      <span className="text-xs text-[#6D6A65]">No photo</span>
+                    )}
+                  </div>
+                  <label
+                    className="tv-btn-secondary !py-2 !px-4 text-sm cursor-pointer inline-flex"
+                    data-testid="edit-photo-label"
+                  >
+                    {editTherapist.profile_picture ? "Replace" : "Upload"}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      data-testid="edit-photo-input"
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        try {
+                          const url = await imageToDataUrl(f);
+                          setEditTherapist({ ...editTherapist, profile_picture: url });
+                        } catch (err) {
+                          toast.error(err.message || "Couldn't process image");
+                        }
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                  {editTherapist.profile_picture && (
+                    <button
+                      type="button"
+                      className="text-sm text-[#D45D5D] hover:underline"
+                      onClick={() =>
+                        setEditTherapist({ ...editTherapist, profile_picture: null })
+                      }
+                      data-testid="edit-photo-remove"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </FieldRow>
               <FieldRow label="Name + license">
                 <Input
                   value={editTherapist.name || ""}
@@ -635,6 +791,100 @@ export default function AdminDashboard() {
               data-testid="edit-save"
             >
               {savingTherapist ? "Saving..." : "Save changes"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!editingTplKey}
+        onOpenChange={(o) => !o && setEditingTplKey(null)}
+      >
+        <DialogContent
+          className="max-w-2xl max-h-[85vh] overflow-y-auto bg-white border-[#E8E5DF]"
+          data-testid="edit-template-dialog"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-serif-display text-2xl text-[#2D4A3E]">
+              Edit email template
+            </DialogTitle>
+            <DialogDescription className="text-sm text-[#6D6A65]">
+              Wording changes apply to all future emails. Use {"{var}"} placeholders for
+              dynamic data — see "Available variables" below the form.
+            </DialogDescription>
+          </DialogHeader>
+          {editingTplKey && (
+            <div className="space-y-4 mt-2">
+              <FieldRow label="Subject">
+                <Input
+                  value={tplFields.subject}
+                  onChange={(e) => setTplFields({ ...tplFields, subject: e.target.value })}
+                  data-testid="tpl-subject"
+                />
+              </FieldRow>
+              <FieldRow label="Heading (large text at top of email)">
+                <Input
+                  value={tplFields.heading}
+                  onChange={(e) => setTplFields({ ...tplFields, heading: e.target.value })}
+                  data-testid="tpl-heading"
+                />
+              </FieldRow>
+              <FieldRow label="Greeting (e.g. 'Hi {first_name},')">
+                <Input
+                  value={tplFields.greeting}
+                  onChange={(e) => setTplFields({ ...tplFields, greeting: e.target.value })}
+                  data-testid="tpl-greeting"
+                />
+              </FieldRow>
+              <FieldRow label="Intro paragraph">
+                <Textarea
+                  rows={3}
+                  value={tplFields.intro}
+                  onChange={(e) => setTplFields({ ...tplFields, intro: e.target.value })}
+                  data-testid="tpl-intro"
+                />
+              </FieldRow>
+              <FieldRow label="Call-to-action button label (leave blank for no button)">
+                <Input
+                  value={tplFields.cta_label}
+                  onChange={(e) => setTplFields({ ...tplFields, cta_label: e.target.value })}
+                  data-testid="tpl-cta"
+                />
+              </FieldRow>
+              <FieldRow label="Footer note (small text below the body)">
+                <Textarea
+                  rows={2}
+                  value={tplFields.footer_note}
+                  onChange={(e) =>
+                    setTplFields({ ...tplFields, footer_note: e.target.value })
+                  }
+                  data-testid="tpl-footer"
+                />
+              </FieldRow>
+              <div className="text-xs text-[#6D6A65] bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg p-3">
+                <strong className="text-[#2D4A3E]">Available variables:</strong>{" "}
+                <code>
+                  {emailTemplates.find((t) => t.key === editingTplKey)?.available_vars ||
+                    "—"}
+                </code>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="mt-4 flex gap-2 justify-end">
+            <button
+              className="tv-btn-secondary !py-2 !px-4 text-sm"
+              onClick={() => setEditingTplKey(null)}
+              data-testid="tpl-cancel"
+            >
+              Cancel
+            </button>
+            <button
+              className="tv-btn-primary !py-2 !px-4 text-sm disabled:opacity-50"
+              onClick={saveTpl}
+              disabled={savingTpl}
+              data-testid="tpl-save"
+            >
+              {savingTpl ? "Saving..." : "Save template"}
             </button>
           </DialogFooter>
         </DialogContent>

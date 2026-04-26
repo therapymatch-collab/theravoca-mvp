@@ -27,6 +27,7 @@ from email_service import (
     send_therapist_signup_received,
     send_verification_email,
 )
+from email_templates import DEFAULTS as EMAIL_TEMPLATE_DEFAULTS, list_templates, upsert_template
 from geocoding import geocode_city, geocode_offices, geocode_zip, haversine_miles
 from matching import rank_therapists
 from seed_data import generate_seed_therapists
@@ -190,6 +191,7 @@ class TherapistSignup(BaseModel):
     style_tags: list[str] = Field(default_factory=list)
     free_consult: bool = False
     bio: Optional[str] = ""
+    profile_picture: Optional[str] = None  # base64 data URL, max ~500KB
 
 
 class RequestCreate(BaseModel):
@@ -208,6 +210,7 @@ class RequestCreate(BaseModel):
     other_issue: Optional[str] = ""
     availability_windows: list[str] = Field(default_factory=list)
     modality_preference: str = "hybrid"
+    modality_preferences: list[str] = Field(default_factory=list)  # CBT, DBT, EMDR, etc.
     urgency: str = "flexible"
     prior_therapy: str = "not_sure"
     prior_therapy_notes: Optional[str] = ""
@@ -243,7 +246,12 @@ class RequestOut(BaseModel):
 
 
 class TherapistApplyIn(BaseModel):
-    message: str = Field(min_length=10, max_length=1500)
+    message: str = Field(default="", max_length=1500)
+
+
+class TherapistDeclineIn(BaseModel):
+    reason_codes: list[str] = Field(default_factory=list, max_length=6)
+    notes: str = Field(default="", max_length=500)
 
 
 class ApplicationOut(BaseModel):
@@ -692,6 +700,36 @@ async def therapist_apply(request_id: str, therapist_id: str, payload: Therapist
     return ApplicationOut(**app_doc)
 
 
+@api.post("/therapist/decline/{request_id}/{therapist_id}", response_model=dict)
+async def therapist_decline(
+    request_id: str, therapist_id: str, payload: TherapistDeclineIn
+):
+    """Therapist declines a referral. Stored separately from applications,
+    used to learn matching weaknesses + suppress this pair from re-notification."""
+    req = await db.requests.find_one({"id": request_id}, {"_id": 0, "id": 1})
+    therapist = await db.therapists.find_one({"id": therapist_id}, {"_id": 0, "id": 1, "email": 1})
+    if not req or not therapist:
+        raise HTTPException(404)
+    score = (req.get("notified_scores") or {}).get(therapist_id) if req else None
+    # Allow even if not in notified_scores — admin may be testing
+    doc = {
+        "id": str(uuid.uuid4()),
+        "request_id": request_id,
+        "therapist_id": therapist_id,
+        "therapist_email": therapist.get("email", ""),
+        "match_score": score,
+        "reason_codes": payload.reason_codes,
+        "notes": payload.notes,
+        "created_at": _now_iso(),
+    }
+    await db.declines.update_one(
+        {"request_id": request_id, "therapist_id": therapist_id},
+        {"$set": doc},
+        upsert=True,
+    )
+    return {"id": doc["id"], "status": "declined"}
+
+
 # ─── Magic-link Auth + Portal Routes ──────────────────────────────────────────
 
 class MagicCodeRequest(BaseModel):
@@ -980,6 +1018,7 @@ async def admin_update_therapist(
         "insurance_accepted", "cash_rate", "sliding_scale", "free_consult",
         "years_experience", "availability_windows", "urgency_capacity",
         "style_tags", "bio", "is_active", "pending_approval",
+        "profile_picture",
     }
     update = {k: v for k, v in (payload or {}).items() if k in allowed}
     if not update:
@@ -1003,6 +1042,32 @@ async def admin_test_sms(payload: dict, _: bool = Depends(require_admin)):
     if not result:
         return {"ok": False, "detail": "SMS send returned no result (check TWILIO_ENABLED + creds + logs)"}
     return {"ok": True, **result}
+
+
+@api.get("/admin/email-templates")
+async def admin_list_email_templates(_: bool = Depends(require_admin)):
+    return await list_templates(db)
+
+
+@api.put("/admin/email-templates/{key}")
+async def admin_update_email_template(
+    key: str, payload: dict, _: bool = Depends(require_admin)
+):
+    if key not in EMAIL_TEMPLATE_DEFAULTS:
+        raise HTTPException(404, f"Unknown template key: {key}")
+    return await upsert_template(db, key, payload or {})
+
+
+@api.get("/admin/declines")
+async def admin_list_declines(_: bool = Depends(require_admin)):
+    """Recent therapist declines + reason aggregation (for matching algo tuning)."""
+    declines = await db.declines.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    # aggregate reason_code counts
+    counts: dict[str, int] = {}
+    for d in declines:
+        for code in d.get("reason_codes") or []:
+            counts[code] = counts.get(code, 0) + 1
+    return {"declines": declines, "reason_counts": counts}
 
 
 @api.post("/admin/seed")

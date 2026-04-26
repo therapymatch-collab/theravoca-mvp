@@ -23,6 +23,7 @@ MAX_EXPERIENCE = 5.0
 MAX_GENDER = 3.0
 MAX_STYLE = 2.0
 MAX_PAYMENT_FIT = 3.0  # bonus when patient accepts sliding scale AND therapist offers it
+MAX_MODALITY_PREF = 4.0  # bonus when patient's preferred modalities (CBT/DBT/etc.) match therapist's
 
 # Maps experience preference label -> (lo, hi) years
 EXPERIENCE_RANGES = {
@@ -283,6 +284,22 @@ def _score_payment_fit(t: dict, r: dict) -> float:
     return 0.0
 
 
+def _score_modality_pref(t: dict, r: dict) -> float:
+    """Bonus axis: patient lists preferred therapy modalities (CBT/DBT/EMDR/etc.)
+    that overlap with the therapist's modalities. Up to MAX_MODALITY_PREF.
+    """
+    prefs = [m.lower().strip() for m in (r.get("modality_preferences") or []) if m]
+    if not prefs:
+        return 0.0
+    therapist = [m.lower().strip() for m in (t.get("modalities") or [])]
+    overlap = set(prefs) & set(therapist)
+    if not overlap:
+        return 0.0
+    if len(overlap) >= 2 or len(prefs) == 1:
+        return MAX_MODALITY_PREF
+    return MAX_MODALITY_PREF * 0.6
+
+
 # ─── Public API ───────────────────────────────────────────────────────────────
 
 def score_therapist(t: dict, r: dict) -> dict[str, Any]:
@@ -310,6 +327,7 @@ def score_therapist(t: dict, r: dict) -> dict[str, Any]:
         "gender": _score_gender(t, r),
         "style": _score_style(t, r),
         "payment_fit": _score_payment_fit(t, r),
+        "modality_pref": _score_modality_pref(t, r),
     }
     total = round(min(100.0, sum(breakdown.values())), 1)
     return {"total": total, "breakdown": breakdown, "filtered": False}

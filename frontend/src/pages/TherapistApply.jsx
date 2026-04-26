@@ -1,10 +1,28 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, ThumbsDown } from "lucide-react";
 import { toast } from "sonner";
 import { Header, Footer } from "@/components/SiteShell";
 import { api } from "@/lib/api";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+const DECLINE_REASONS = [
+  { v: "wrong_specialty", l: "Outside my specialty area" },
+  { v: "schedule_mismatch", l: "Schedule mismatch" },
+  { v: "fee_mismatch", l: "Fee outside my range" },
+  { v: "caseload_full", l: "Caseload currently full" },
+  { v: "location_mismatch", l: "Location/format mismatch" },
+  { v: "other", l: "Other" },
+];
 
 export default function TherapistApply() {
   const { requestId, therapistId } = useParams();
@@ -13,6 +31,11 @@ export default function TherapistApply() {
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [declineOpen, setDeclineOpen] = useState(false);
+  const [declineReasons, setDeclineReasons] = useState([]);
+  const [declineNotes, setDeclineNotes] = useState("");
+  const [declineSubmitting, setDeclineSubmitting] = useState(false);
+  const [declined, setDeclined] = useState(false);
 
   useEffect(() => {
     api
@@ -28,10 +51,6 @@ export default function TherapistApply() {
   }, [requestId, therapistId]);
 
   const submit = async () => {
-    if (message.trim().length < 10) {
-      toast.error("Please write at least 10 characters.");
-      return;
-    }
     setSubmitting(true);
     try {
       await api.post(`/therapist/apply/${requestId}/${therapistId}`, { message });
@@ -42,6 +61,33 @@ export default function TherapistApply() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const submitDecline = async () => {
+    if (declineReasons.length === 0) {
+      toast.error("Please pick at least one reason — it helps us match better next time.");
+      return;
+    }
+    setDeclineSubmitting(true);
+    try {
+      await api.post(`/therapist/decline/${requestId}/${therapistId}`, {
+        reason_codes: declineReasons,
+        notes: declineNotes,
+      });
+      toast.success("Thanks — we'll factor this into future matches.");
+      setDeclined(true);
+      setDeclineOpen(false);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Couldn't record decline.");
+    } finally {
+      setDeclineSubmitting(false);
+    }
+  };
+
+  const toggleReason = (v) => {
+    setDeclineReasons((arr) =>
+      arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v],
+    );
   };
 
   if (error) {
@@ -79,12 +125,12 @@ export default function TherapistApply() {
             Anonymous referral
           </p>
           <h1 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] mt-2 leading-tight">
-            Hi, {data.therapist.name.split(",")[0]}.
+            Hi {data.therapist.name.split(",")[0].split(" ")[0]},
           </h1>
           <p className="text-[#6D6A65] mt-3 max-w-2xl">
             Below is an anonymous referral matched to your practice. If it feels like a
-            fit, write a brief note — it'll be shared with the patient alongside your
-            profile.
+            fit, write a short note (optional) and submit interest. If it isn't,
+            tell us why so we can match you better next time.
           </p>
 
           <div className="mt-8 grid md:grid-cols-3 gap-5">
@@ -120,23 +166,25 @@ export default function TherapistApply() {
 
           <div className="mt-8 bg-white border border-[#E8E5DF] rounded-2xl p-6 md:p-8">
             <h3 className="font-semibold text-[#2B2A29] text-lg">
-              Write a short note to the patient
+              Write a short note to the patient (optional)
             </h3>
             <p className="text-sm text-[#6D6A65] mt-1">
-              Introduce yourself and how you'd approach this work. Keep it warm and brief.
+              Introduce yourself and how you'd approach this work. Patients respond
+              meaningfully more often when there's a personal note — but you can
+              submit interest without one.
             </p>
             <Textarea
               rows={6}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              disabled={submitted}
+              disabled={submitted || declined}
               placeholder="I specialize in working with young adults navigating anxiety and depression. I integrate CBT and mindfulness-based approaches and offer evening telehealth slots. I'd love to set up a free 15-minute consult to see if we're a fit."
               className="mt-4 bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
               data-testid="therapist-message"
             />
             <div className="mt-6 flex items-center justify-between flex-wrap gap-4">
-              <p className="text-xs text-[#6D6A65]">
-                The patient will see your message + profile only. Your contact info is
+              <p className="text-xs text-[#6D6A65] max-w-md">
+                The patient will see your name, profile and message only. Your contact info is
                 shared only with patients you're matched with.
               </p>
               {submitted ? (
@@ -146,20 +194,94 @@ export default function TherapistApply() {
                 >
                   <CheckCircle2 size={18} /> Interest submitted
                 </div>
-              ) : (
-                <button
-                  className="tv-btn-primary disabled:opacity-50"
-                  disabled={submitting}
-                  onClick={submit}
-                  data-testid="apply-submit-btn"
+              ) : declined ? (
+                <div
+                  className="flex items-center gap-2 text-[#6D6A65] font-medium"
+                  data-testid="decline-success"
                 >
-                  {submitting ? "Sending..." : "Submit interest"}
-                </button>
+                  <ThumbsDown size={18} /> Declined — thanks for the feedback
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button
+                    className="text-sm text-[#6D6A65] hover:text-[#D45D5D] inline-flex items-center gap-1.5 transition"
+                    onClick={() => setDeclineOpen(true)}
+                    data-testid="not-interested-btn"
+                  >
+                    <ThumbsDown size={14} /> Not interested
+                  </button>
+                  <button
+                    className="tv-btn-primary disabled:opacity-50"
+                    disabled={submitting}
+                    onClick={submit}
+                    data-testid="apply-submit-btn"
+                  >
+                    {submitting ? "Sending..." : "Submit interest"}
+                  </button>
+                </div>
               )}
             </div>
           </div>
         </div>
       </main>
+
+      <Dialog open={declineOpen} onOpenChange={setDeclineOpen}>
+        <DialogContent
+          className="max-w-lg bg-white border-[#E8E5DF]"
+          data-testid="decline-dialog"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-serif-display text-2xl text-[#2D4A3E]">
+              Why isn't this a fit?
+            </DialogTitle>
+            <DialogDescription className="text-sm text-[#6D6A65]">
+              Pick one or more reasons — your answer helps us route better referrals next
+              time. Anonymous to the patient.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 mt-3">
+            {DECLINE_REASONS.map((r) => (
+              <label
+                key={r.v}
+                className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5 cursor-pointer hover:border-[#2D4A3E] transition"
+              >
+                <Checkbox
+                  checked={declineReasons.includes(r.v)}
+                  onCheckedChange={() => toggleReason(r.v)}
+                  className="mt-0.5 border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
+                  data-testid={`decline-reason-${r.v}`}
+                />
+                <span className="text-sm text-[#2B2A29]">{r.l}</span>
+              </label>
+            ))}
+          </div>
+          <Textarea
+            rows={3}
+            value={declineNotes}
+            onChange={(e) => setDeclineNotes(e.target.value)}
+            placeholder="Anything else (optional, no PII)"
+            className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl mt-3"
+            data-testid="decline-notes"
+          />
+          <DialogFooter className="flex gap-2 justify-end mt-3">
+            <button
+              className="tv-btn-secondary !py-2 !px-4 text-sm"
+              onClick={() => setDeclineOpen(false)}
+              data-testid="decline-cancel"
+            >
+              Cancel
+            </button>
+            <button
+              className="tv-btn-primary !py-2 !px-4 text-sm disabled:opacity-50"
+              onClick={submitDecline}
+              disabled={declineSubmitting || declineReasons.length === 0}
+              data-testid="decline-submit"
+            >
+              {declineSubmitting ? "Sending..." : "Send feedback"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Footer />
     </div>
   );

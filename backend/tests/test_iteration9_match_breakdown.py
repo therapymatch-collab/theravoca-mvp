@@ -26,7 +26,8 @@ ADMIN_PASSWORD = "admin123!"
 ADMIN_HEADERS = {"X-Admin-Password": ADMIN_PASSWORD, "Content-Type": "application/json"}
 
 AXIS_KEYS = {"issues", "availability", "modality", "urgency",
-             "prior_therapy", "experience", "gender", "style", "payment_fit"}
+             "prior_therapy", "experience", "gender", "style", "payment_fit",
+             "modality_pref"}
 
 
 @pytest.fixture(scope="module")

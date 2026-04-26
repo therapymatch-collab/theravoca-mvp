@@ -232,7 +232,7 @@ class TestScoring:
         bd = result["breakdown"]
         assert set(bd.keys()) == {"issues", "availability", "modality", "urgency",
                                   "prior_therapy", "experience", "gender", "style",
-                                  "payment_fit"}
+                                  "payment_fit", "modality_pref"}
 
 
 # ─── Module: Send-logic (top 30, threshold>=71, fallback) ────────────────────

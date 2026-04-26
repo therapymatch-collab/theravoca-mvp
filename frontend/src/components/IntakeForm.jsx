@@ -109,6 +109,10 @@ const STYLES = [
   { v: "culturally_responsive", l: "Culturally responsive" },
   { v: "lgbtq_affirming", l: "LGBTQ+ affirming" },
 ];
+const MODALITY_PREFS = [
+  "CBT", "DBT", "EMDR", "Mindfulness-Based", "Psychodynamic", "ACT",
+  "Solution-Focused", "Gottman", "IFS", "Somatic Experiencing", "Person-Centered",
+];
 
 export default function IntakeForm() {
   const navigate = useNavigate();
@@ -126,6 +130,7 @@ export default function IntakeForm() {
     presenting_issues: [],
     other_issue: "",
     modality_preference: "",
+    modality_preferences: [],
     payment_type: "",
     insurance_name: "",
     budget: "",
@@ -274,7 +279,7 @@ export default function IntakeForm() {
                 </Group>
                 <div className="mt-6">
                   <label className="block text-xs font-semibold text-[#6D6A65] uppercase tracking-wider mb-2">
-                    Anything else? (optional, no PII)
+                    Anything else? (optional — no contact or personally identifiable info)
                   </label>
                   <Textarea
                     rows={3}
@@ -481,6 +486,31 @@ export default function IntakeForm() {
                     onSelect={(v) => toggleArr("style_preference", v)}
                     testid="style"
                   />
+                </Group>
+                <Group
+                  label="Preferred therapy approach (optional)"
+                  hint="If you have specific evidence-based modalities in mind"
+                >
+                  <div className="flex flex-wrap gap-2">
+                    {MODALITY_PREFS.map((m) => {
+                      const active = data.modality_preferences.includes(m);
+                      return (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => toggleArr("modality_preferences", m)}
+                          data-testid={`modality-pref-${m}`}
+                          className={`text-sm px-3.5 py-1.5 rounded-full border transition ${
+                            active
+                              ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
+                              : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+                          }`}
+                        >
+                          {m}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </Group>
               </div>
             )}

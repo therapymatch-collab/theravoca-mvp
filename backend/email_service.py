@@ -10,10 +10,23 @@ from typing import Any
 import resend
 from dotenv import load_dotenv
 
+from email_templates import get_template, render
+
 # Ensure .env is loaded even if this module is imported before server.py calls load_dotenv()
 load_dotenv(Path(__file__).parent / ".env")
 
 logger = logging.getLogger(__name__)
+
+
+def _db():
+    """Lazy import to avoid circular dependency with server.py."""
+    from server import db  # noqa: WPS433
+    return db
+
+
+def _first_name(name: str) -> str:
+    """Strip license suffix and last name. 'Sarah Anderson, LCSW' -> 'Sarah'."""
+    return (name or "").split(",")[0].split(" ")[0] or "there"
 
 
 def _get_api_key() -> str:
@@ -85,19 +98,25 @@ async def _send(to: str, subject: str, html: str) -> dict[str, Any] | None:
 # ─── Templates ─────────────────────────────────────────────────────────────────
 
 async def send_verification_email(to: str, request_id: str, token: str) -> None:
+    tpl = await get_template(_db(), "verification")
     verify_url = f"{_get_app_url()}/verify/{token}"
+    intro = render(tpl["intro"], verify_url=verify_url)
+    cta_label = render(tpl["cta_label"], verify_url=verify_url)
+    footer_note = render(tpl["footer_note"], verify_url=verify_url)
+    cta_html = (
+        f'<p style="margin:28px 0;">'
+        f'<a href="{verify_url}" style="display:inline-block;background:{BRAND["primary"]};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">{cta_label}</a>'
+        f'</p>'
+    ) if cta_label else ""
     inner = f"""
-    <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">
-      Thank you for trusting TheraVoca to help you find the right therapist. Please confirm your email so we can begin matching you.
-    </p>
-    <p style="margin:28px 0;">
-      <a href="{verify_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">Confirm my request</a>
-    </p>
-    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">If the button doesn't work, paste this link into your browser:<br/>
+    <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">{intro}</p>
+    {cta_html}
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">{footer_note}<br/>
       <span style="word-break:break-all;color:{BRAND['primary']};">{verify_url}</span>
     </p>
     """
-    await _send(to, "Confirm your TheraVoca request", _wrap("Almost there", inner))
+    subject = render(tpl["subject"], verify_url=verify_url)
+    await _send(to, subject, _wrap(tpl["heading"], inner))
 
 
 async def send_therapist_notification(
@@ -108,17 +127,22 @@ async def send_therapist_notification(
     match_score: float,
     summary: dict[str, Any],
 ) -> None:
+    tpl = await get_template(_db(), "therapist_notification")
+    first_name = _first_name(therapist_name)
     apply_url = f"{_get_app_url()}/therapist/apply/{request_id}/{therapist_id}"
     summary_rows = "".join(
         f'<tr><td style="padding:6px 0;color:{BRAND["muted"]};font-size:13px;width:140px;">{k}</td>'
         f'<td style="padding:6px 0;color:{BRAND["text"]};font-size:14px;">{v}</td></tr>'
         for k, v in summary.items()
     )
+    vars_ = {"first_name": first_name, "match_score": int(match_score), "apply_url": apply_url}
+    greeting = render(tpl["greeting"], **vars_)
+    intro = render(tpl["intro"], **vars_)
+    cta_label = render(tpl["cta_label"], **vars_)
+    footer_note = render(tpl["footer_note"], **vars_)
     inner = f"""
-    <p style="font-size:16px;line-height:1.6;">Hi {therapist_name},</p>
-    <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">
-      We have an anonymous referral that looks like a strong fit for your practice.
-    </p>
+    {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
+    <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">{intro}</p>
     <div style="background:{BRAND['bg']};border:1px solid {BRAND['border']};border-radius:12px;padding:18px 22px;margin:20px 0;">
       <div style="font-size:13px;color:{BRAND['muted']};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Match Score</div>
       <div style="font-family:Georgia,serif;font-size:34px;color:{BRAND['primary']};">{match_score}%</div>
@@ -126,25 +150,22 @@ async def send_therapist_notification(
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:8px 0 24px;">
       {summary_rows}
     </table>
-    <p style="margin:28px 0;">
-      <a href="{apply_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">I'm interested</a>
-    </p>
-    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">Click above to view the full anonymous referral and write a short note to the patient. No action is needed if this isn't a fit.</p>
+    {f'<p style="margin:28px 0;"><a href="{apply_url}" style="display:inline-block;background:{BRAND["primary"]};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">{cta_label}</a></p>' if cta_label else ''}
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">{footer_note}</p>
     """
-    await _send(to, f"New referral match ({int(match_score)}%) — TheraVoca", _wrap("New referral matched to you", inner))
+    subject = render(tpl["subject"], **vars_)
+    await _send(to, subject, _wrap(tpl["heading"], inner))
 
 
 async def send_patient_results(to: str, request_id: str, applications: list[dict[str, Any]]) -> None:
     if not applications:
-        inner = f"""
-        <p style="font-size:16px;line-height:1.6;">Thank you for your patience.</p>
-        <p style="color:{BRAND['text']};font-size:15px;line-height:1.7;">
-          We weren't able to confirm a match within the first 24 hours. Don't worry — we're still reaching out to additional therapists on your behalf and will follow up soon.
-        </p>
-        """
-        await _send(to, "TheraVoca update on your matches", _wrap("We're still working on it", inner))
+        tpl_e = await get_template(_db(), "patient_results_empty")
+        intro = render(tpl_e["intro"])
+        inner = f'<p style="font-size:16px;line-height:1.6;color:{BRAND["text"]};">{intro}</p>'
+        await _send(to, render(tpl_e["subject"]), _wrap(tpl_e["heading"], inner))
         return
 
+    tpl = await get_template(_db(), "patient_results")
     cards = ""
     axis_meta = {
         "issues": (35, "Specializes in your concerns"),
@@ -155,6 +176,8 @@ async def send_patient_results(to: str, request_id: str, applications: list[dict
         "experience": (5, "Matches your experience preference"),
         "gender": (3, "Matches your gender preference"),
         "style": (2, "Aligns with your style preference"),
+        "payment_fit": (3, "Open to your budget on a sliding scale"),
+        "modality_pref": (4, "Practices your preferred therapy approach"),
     }
     for i, app in enumerate(applications[:5], 1):
         t = app["therapist"]
@@ -196,69 +219,68 @@ async def send_patient_results(to: str, request_id: str, applications: list[dict
         </div>
         """
     results_url = f"{_get_app_url()}/results/{request_id}"
+    count = len(applications[:5])
+    vars_ = {"count": count, "results_url": results_url}
+    intro = render(tpl["intro"], **vars_)
+    cta_label = render(tpl["cta_label"], **vars_)
+    cta_html = (
+        f'<p style="margin:28px 0;">'
+        f'<a href="{results_url}" style="display:inline-block;background:{BRAND["primary"]};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">{cta_label}</a>'
+        f'</p>'
+    ) if cta_label else ""
     inner = f"""
-    <p style="font-size:16px;line-height:1.6;">Your personalized therapist matches are ready.</p>
-    <p style="color:{BRAND['text']};font-size:15px;line-height:1.7;">
-      These therapists read your anonymous referral and want to work with you. Reach out directly to whoever feels right — many offer a free consult to see if it's a fit.
-    </p>
+    <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">{intro}</p>
     <div style="margin:24px 0;">{cards}</div>
-    <p style="margin:28px 0;">
-      <a href="{results_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">View full matches</a>
-    </p>
+    {cta_html}
     """
-    await _send(to, f"Your {len(applications[:5])} therapist matches are ready", _wrap("Your matches are here", inner))
+    subject = render(tpl["subject"], **vars_)
+    await _send(to, subject, _wrap(tpl["heading"], inner))
 
 
 async def send_therapist_signup_received(to: str, name: str) -> None:
+    tpl = await get_template(_db(), "therapist_signup_received")
+    first_name = _first_name(name)
+    vars_ = {"first_name": first_name}
+    greeting = render(tpl["greeting"], **vars_)
+    intro = render(tpl["intro"], **vars_)
+    footer_note = render(tpl["footer_note"], **vars_)
     inner = f"""
-    <p style="font-size:16px;line-height:1.6;">Hi {name.split(',')[0]},</p>
-    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-      Thank you for joining the TheraVoca network. We've received your profile and our team
-      will review it shortly. Most profiles are approved within 1–2 business days.
-    </p>
-    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-      Once approved, you'll start receiving anonymous referral notifications matched to your
-      specialties — no logins, no marketing fluff. Just real patients who need your help.
-    </p>
-    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">
-      Questions? Just reply to this email.
-    </p>
+    {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">{intro}</p>
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">{footer_note}</p>
     """
-    await _send(to, "Welcome to TheraVoca — profile under review", _wrap("Profile received", inner))
+    await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner))
 
 
 async def send_therapist_approved(to: str, name: str) -> None:
+    tpl = await get_template(_db(), "therapist_approved")
+    first_name = _first_name(name)
+    vars_ = {"first_name": first_name}
+    greeting = render(tpl["greeting"], **vars_)
+    intro = render(tpl["intro"], **vars_)
+    footer_note = render(tpl["footer_note"], **vars_)
     inner = f"""
-    <p style="font-size:16px;line-height:1.6;">Hi {name.split(',')[0]},</p>
-    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-      Great news — your TheraVoca profile is <strong style="color:{BRAND['primary']}">live</strong>. You're now eligible
-      to receive anonymous referral notifications matched to your specialties.
-    </p>
-    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-      When a patient request matches your practice (60%+ by default), we'll email you a
-      summary and a one-click link to express interest. No dashboards to log into.
-    </p>
-    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">
-      Welcome aboard.
-    </p>
+    {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">{intro}</p>
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">{footer_note}</p>
     """
-    await _send(to, "You're live on TheraVoca", _wrap("You're approved", inner))
+    await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner))
 
 
 async def send_magic_code(to: str, code: str, role: str) -> None:
-    role_label = "patient portal" if role == "patient" else "therapist portal"
+    tpl = await get_template(_db(), "magic_code")
+    ttl = int(os.environ.get("MAGIC_CODE_TTL_MINUTES", "30"))
+    vars_ = {"code": code, "ttl_minutes": ttl, "role": role}
+    intro = render(tpl["intro"], **vars_)
+    footer_note = render(tpl["footer_note"], **vars_)
     inner = f"""
-    <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">
-      Use the code below to sign in to your TheraVoca {role_label}.
-    </p>
+    <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">{intro}</p>
     <div style="margin:32px 0;text-align:center;">
       <div style="display:inline-block;background:{BRAND['bg']};border:1px solid {BRAND['border']};border-radius:14px;padding:22px 36px;">
         <div style="font-family:Georgia,serif;font-size:38px;letter-spacing:0.4em;color:{BRAND['primary']};font-weight:600;">{code}</div>
-        <div style="font-size:11px;color:{BRAND['muted']};margin-top:8px;text-transform:uppercase;letter-spacing:0.15em;">Expires in 30 minutes</div>
+        <div style="font-size:11px;color:{BRAND['muted']};margin-top:8px;text-transform:uppercase;letter-spacing:0.15em;">Expires in {ttl} minutes</div>
       </div>
     </div>
-    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">
-      If you didn't request this code, you can safely ignore this email.
-    </p>
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">{footer_note}</p>
     """
-    await _send(to, f"Your TheraVoca sign-in code: {code}", _wrap("Your sign-in code", inner))
+    await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner))

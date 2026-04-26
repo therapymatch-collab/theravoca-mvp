@@ -144,17 +144,42 @@ export default function PatientResults() {
                   data-testid={`result-card-${i}`}
                 >
                   <div className="flex items-start justify-between flex-wrap gap-3">
-                    <div>
-                      <div className="inline-flex items-center gap-1.5 bg-[#2D4A3E] text-white text-xs font-semibold px-3 py-1 rounded-full">
-                        <Star size={12} fill="currentColor" />
-                        {Math.round(app.match_score)}% match
+                    <div className="flex items-start gap-4 min-w-0 flex-1">
+                      <div
+                        className="w-16 h-16 rounded-full bg-[#FDFBF7] border border-[#E8E5DF] overflow-hidden flex items-center justify-center shrink-0"
+                        data-testid={`avatar-${i}`}
+                      >
+                        {app.therapist.profile_picture ? (
+                          <img
+                            src={app.therapist.profile_picture}
+                            alt={app.therapist.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span className="font-serif-display text-xl text-[#2D4A3E]">
+                            {(app.therapist.name || "")
+                              .split(",")[0]
+                              .split(" ")
+                              .filter(Boolean)
+                              .map((p) => p[0])
+                              .slice(0, 2)
+                              .join("")
+                              .toUpperCase() || "T"}
+                          </span>
+                        )}
                       </div>
-                      <h3 className="font-serif-display text-2xl text-[#2D4A3E] mt-3">
-                        {app.therapist.name}
-                      </h3>
-                      <div className="text-sm text-[#6D6A65] mt-1">
-                        {app.therapist.years_experience} yrs experience •{" "}
-                        {app.therapist.modalities?.slice(0, 3).join(", ")}
+                      <div className="min-w-0">
+                        <div className="inline-flex items-center gap-1.5 bg-[#2D4A3E] text-white text-xs font-semibold px-3 py-1 rounded-full">
+                          <Star size={12} fill="currentColor" />
+                          {Math.round(app.match_score)}% match
+                        </div>
+                        <h3 className="font-serif-display text-2xl text-[#2D4A3E] mt-3">
+                          {app.therapist.name}
+                        </h3>
+                        <div className="text-sm text-[#6D6A65] mt-1">
+                          {app.therapist.years_experience} yrs experience •{" "}
+                          {app.therapist.modalities?.slice(0, 3).join(", ")}
+                        </div>
                       </div>
                     </div>
                     <div className="text-right">
@@ -169,9 +194,17 @@ export default function PatientResults() {
                     </div>
                   </div>
 
-                  <p className="mt-5 text-[#2B2A29] leading-relaxed border-l-4 border-[#C87965] pl-4 italic">
-                    "{app.message}"
-                  </p>
+                  {app.message && app.message.trim().length > 0 ? (
+                    <p className="mt-5 text-[#2B2A29] leading-relaxed border-l-4 border-[#C87965] pl-4 italic">
+                      "{app.message}"
+                    </p>
+                  ) : (
+                    <p className="mt-5 text-[#6D6A65] leading-relaxed border-l-4 border-[#E8E5DF] pl-4 italic text-sm">
+                      This therapist submitted interest without a personal note.
+                      Reach out below — many offer a free 15-minute consult to see
+                      if you're a fit.
+                    </p>
+                  )}
 
                   {topReasons(app.match_breakdown).length > 0 && (
                     <div

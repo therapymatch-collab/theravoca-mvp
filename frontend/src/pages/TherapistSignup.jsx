@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { CheckCircle2, ArrowRight, X, Plus } from "lucide-react";
+import { CheckCircle2, ArrowRight, X, Plus, Camera } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { api } from "@/lib/api";
 import { IDAHO_INSURERS } from "@/lib/insurers";
+import { imageToDataUrl } from "@/lib/image";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -101,6 +102,7 @@ export default function TherapistSignup() {
     style_tags: [],
     free_consult: false,
     bio: "",
+    profile_picture: null,
   });
   const [office, setOffice] = useState("");
   const set = (k, v) => setData((d) => ({ ...d, [k]: v }));
@@ -246,6 +248,60 @@ export default function TherapistSignup() {
 
               <div className="mt-8 space-y-7">
                 <Group title="Basics">
+                  <Field label="Profile photo (optional)">
+                    <div className="flex items-center gap-4">
+                      <div className="relative w-20 h-20 rounded-full bg-[#FDFBF7] border border-[#E8E5DF] overflow-hidden flex items-center justify-center">
+                        {data.profile_picture ? (
+                          <img
+                            src={data.profile_picture}
+                            alt="Profile preview"
+                            className="w-full h-full object-cover"
+                            data-testid="signup-photo-preview"
+                          />
+                        ) : (
+                          <Camera size={22} className="text-[#6D6A65]" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <label
+                          className="tv-btn-secondary !py-2 !px-4 text-sm cursor-pointer inline-flex"
+                          data-testid="signup-photo-label"
+                        >
+                          {data.profile_picture ? "Replace" : "Upload"}
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            className="hidden"
+                            data-testid="signup-photo-input"
+                            onChange={async (e) => {
+                              const f = e.target.files?.[0];
+                              if (!f) return;
+                              try {
+                                const url = await imageToDataUrl(f);
+                                set("profile_picture", url);
+                              } catch (err) {
+                                toast.error(err.message || "Couldn't process image");
+                              }
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                        {data.profile_picture && (
+                          <button
+                            type="button"
+                            className="ml-3 text-sm text-[#D45D5D] hover:underline"
+                            onClick={() => set("profile_picture", null)}
+                            data-testid="signup-photo-remove"
+                          >
+                            Remove
+                          </button>
+                        )}
+                        <p className="text-xs text-[#6D6A65] mt-1.5">
+                          A square headshot works best. Resized to 256×256, &lt;500KB.
+                        </p>
+                      </div>
+                    </div>
+                  </Field>
                   <Field label="Full name + license (e.g. Sarah Anderson, LCSW)">
                     <Input
                       value={data.name}
