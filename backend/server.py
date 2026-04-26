@@ -336,6 +336,8 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
     notified_ids = list(already) + [m["id"] for m in new_matches]
     notified_scores = req.get("notified_scores") or {}
     notified_scores.update({m["id"]: m["match_score"] for m in new_matches})
+    notified_breakdowns: dict[str, dict] = req.get("notified_breakdowns") or {}
+    notified_breakdowns.update({m["id"]: m.get("match_breakdown") or {} for m in new_matches})
     notified_distances: dict[str, float] = req.get("notified_distances") or {}
     patient_geo = req.get("patient_geo")
     if patient_geo:
@@ -365,6 +367,7 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
         {"$set": {
             "notified_therapist_ids": notified_ids,
             "notified_scores": notified_scores,
+            "notified_breakdowns": notified_breakdowns,
             "notified_distances": notified_distances,
             "matched_at": _now_iso(),
             "status": "matched",
@@ -409,6 +412,7 @@ async def _deliver_results(request_id: str) -> dict[str, Any]:
     apps.sort(key=lambda a: (a.get("patient_rank_score", 0), a.get("created_at", "")), reverse=True)
 
     enriched = []
+    breakdowns = req.get("notified_breakdowns") or {}
     for a in apps:
         t = await db.therapists.find_one({"id": a["therapist_id"]}, {"_id": 0})
         if t:
@@ -417,7 +421,11 @@ async def _deliver_results(request_id: str) -> dict[str, Any]:
                 "specialties_display": (t.get("primary_specialties") or [])
                 + (t.get("secondary_specialties") or []),
             }
-            enriched.append({**a, "therapist": t_view})
+            enriched.append({
+                **a,
+                "therapist": t_view,
+                "match_breakdown": breakdowns.get(a["therapist_id"]) or {},
+            })
 
     await send_patient_results(req["email"], request_id, enriched)
     await db.requests.update_one(
@@ -562,10 +570,15 @@ async def public_request_results(request_id: str):
     apps.sort(key=lambda a: (a.get("patient_rank_score", 0), a.get("created_at", "")), reverse=True)
 
     enriched = []
+    breakdowns = req.get("notified_breakdowns") or {}
     for a in apps:
         t = await db.therapists.find_one({"id": a["therapist_id"]}, {"_id": 0})
         if t:
-            enriched.append({**a, "therapist": t})
+            enriched.append({
+                **a,
+                "therapist": t,
+                "match_breakdown": breakdowns.get(a["therapist_id"]) or {},
+            })
     return {"request": req, "applications": enriched}
 
 

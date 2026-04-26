@@ -1,9 +1,36 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Loader2, Phone, Mail, Star } from "lucide-react";
+import { Loader2, Phone, Mail, Star, Sparkles } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { api } from "@/lib/api";
 import { RESULTS_POLL_INTERVAL_MS } from "@/lib/constants";
+
+// Friendly labels for each scoring axis. Each entry maps axis -> { max, label }.
+// We surface the top 3 axes (where score > 30% of max) on the patient result card.
+const AXIS_META = {
+  issues: { max: 35, label: "Specializes in your concerns" },
+  availability: { max: 20, label: "Matches your schedule" },
+  modality: { max: 15, label: "Offers your preferred format" },
+  urgency: { max: 10, label: "Can take you on quickly" },
+  prior_therapy: { max: 10, label: "Right fit for your therapy history" },
+  experience: { max: 5, label: "Matches your experience preference" },
+  gender: { max: 3, label: "Matches your gender preference" },
+  style: { max: 2, label: "Aligns with your style preference" },
+};
+
+function topReasons(breakdown) {
+  if (!breakdown) return [];
+  const entries = Object.entries(breakdown)
+    .map(([k, v]) => {
+      const meta = AXIS_META[k];
+      if (!meta) return null;
+      const pct = meta.max > 0 ? v / meta.max : 0;
+      return { key: k, score: v, max: meta.max, pct, label: meta.label };
+    })
+    .filter((x) => x && x.pct >= 0.5) // only surface meaningful matches
+    .sort((a, b) => b.pct - a.pct);
+  return entries.slice(0, 3);
+}
 
 export default function PatientResults() {
   const { requestId } = useParams();
@@ -103,6 +130,29 @@ export default function PatientResults() {
                   <p className="mt-5 text-[#2B2A29] leading-relaxed border-l-4 border-[#C87965] pl-4 italic">
                     "{app.message}"
                   </p>
+
+                  {topReasons(app.match_breakdown).length > 0 && (
+                    <div
+                      className="mt-5 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl p-4"
+                      data-testid={`why-match-${i}`}
+                    >
+                      <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[#6D6A65] mb-2.5">
+                        <Sparkles size={14} className="text-[#C87965]" />
+                        Why we matched
+                      </div>
+                      <ul className="flex flex-wrap gap-2">
+                        {topReasons(app.match_breakdown).map((r) => (
+                          <li
+                            key={r.key}
+                            className="text-xs sm:text-sm bg-white border border-[#E8E5DF] text-[#2B2A29] px-3 py-1.5 rounded-full"
+                            data-testid={`why-match-${i}-${r.key}`}
+                          >
+                            {r.label}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
                   <div className="mt-5 grid sm:grid-cols-2 gap-3">
                     <a

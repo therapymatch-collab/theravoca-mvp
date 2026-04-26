@@ -142,14 +142,47 @@ async def send_patient_results(to: str, request_id: str, applications: list[dict
         return
 
     cards = ""
+    axis_meta = {
+        "issues": (35, "Specializes in your concerns"),
+        "availability": (20, "Matches your schedule"),
+        "modality": (15, "Offers your preferred format"),
+        "urgency": (10, "Can take you on quickly"),
+        "prior_therapy": (10, "Right fit for your therapy history"),
+        "experience": (5, "Matches your experience preference"),
+        "gender": (3, "Matches your gender preference"),
+        "style": (2, "Aligns with your style preference"),
+    }
     for i, app in enumerate(applications[:5], 1):
         t = app["therapist"]
+        bd = app.get("match_breakdown") or {}
+        reasons = sorted(
+            (
+                (k, v / axis_meta[k][0], axis_meta[k][1])
+                for k, v in bd.items()
+                if k in axis_meta and axis_meta[k][0] > 0 and v / axis_meta[k][0] >= 0.5
+            ),
+            key=lambda x: x[1],
+            reverse=True,
+        )[:3]
+        reasons_html = ""
+        if reasons:
+            chips = "".join(
+                f'<span style="display:inline-block;background:#ffffff;border:1px solid {BRAND["border"]};color:{BRAND["text"]};font-size:12px;padding:5px 10px;border-radius:999px;margin:2px 4px 2px 0;">{label}</span>'
+                for _, _, label in reasons
+            )
+            reasons_html = (
+                f'<div style="background:{BRAND["bg"]};border:1px solid {BRAND["border"]};border-radius:10px;padding:10px 12px;margin-top:10px;">'
+                f'<div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:{BRAND["muted"]};margin-bottom:6px;">Why we matched</div>'
+                f'<div>{chips}</div>'
+                f'</div>'
+            )
         cards += f"""
         <div style="background:#ffffff;border:1px solid {BRAND['border']};border-radius:14px;padding:22px;margin-bottom:14px;">
           <div style="display:inline-block;background:{BRAND['primary']};color:#ffffff;font-size:12px;padding:4px 10px;border-radius:999px;letter-spacing:0.05em;margin-bottom:10px;">{int(app['match_score'])}% MATCH</div>
           <h3 style="margin:6px 0 4px;font-family:Georgia,serif;font-size:22px;color:{BRAND['primary']};">{i}. {t['name']}</h3>
           <div style="color:{BRAND['muted']};font-size:13px;margin-bottom:10px;">{', '.join(t.get('specialties_display', [])[:3])} • {t.get('years_experience', '?')} yrs experience</div>
           <p style="margin:10px 0;color:{BRAND['text']};font-size:14px;line-height:1.6;font-style:italic;border-left:3px solid {BRAND['secondary']};padding-left:12px;">"{app.get('message', '')}"</p>
+          {reasons_html}
           <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:12px;font-size:13px;color:{BRAND['text']};">
             <tr><td style="padding:3px 14px 3px 0;color:{BRAND['muted']};">Email</td><td style="padding:3px 0;">{t['email']}</td></tr>
             <tr><td style="padding:3px 14px 3px 0;color:{BRAND['muted']};">Phone</td><td style="padding:3px 0;">{t.get('phone', '—')}</td></tr>
