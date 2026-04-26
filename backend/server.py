@@ -201,7 +201,7 @@ class RequestCreate(BaseModel):
     payment_type: str = "either"  # insurance | cash | either
     insurance_name: Optional[str] = ""
     budget: Optional[int] = None
-    presenting_issues: list[str] = Field(default_factory=list, max_length=5)
+    presenting_issues: list[str] = Field(default_factory=list, max_length=3)
     other_issue: Optional[str] = ""
     availability_windows: list[str] = Field(default_factory=list)
     modality_preference: str = "hybrid"
@@ -537,12 +537,28 @@ async def public_request_view(request_id: str):
 
 @api.get("/requests/{request_id}/results", response_model=dict)
 async def public_request_results(request_id: str):
-    """Patient view of ranked therapist applications."""
+    """Patient view of ranked therapist applications (uses same re-rank as email)."""
     req = await db.requests.find_one({"id": request_id}, {"_id": 0, "verification_token": 0})
     if not req:
         raise HTTPException(404)
     apps = await db.applications.find({"request_id": request_id}, {"_id": 0}).to_list(50)
-    apps.sort(key=lambda a: (a["match_score"], a["created_at"]), reverse=True)
+
+    matched_at = req.get("matched_at") or req.get("created_at")
+    matched_dt = _parse_iso(matched_at) if matched_at else None
+    for a in apps:
+        ms = float(a.get("match_score") or 0)
+        speed_bonus = 0.0
+        if matched_dt:
+            applied_dt = _parse_iso(a.get("created_at") or "")
+            if applied_dt:
+                hours = max(0.0, (applied_dt - matched_dt).total_seconds() / 3600.0)
+                speed_bonus = max(0.0, min(30.0, 30.0 * (24.0 - hours) / 24.0))
+        msg_len = len(a.get("message") or "")
+        quality_bonus = min(10.0, msg_len / 300.0 * 10.0)
+        a["patient_rank_score"] = round(min(100.0, ms * 0.6 + speed_bonus + quality_bonus), 1)
+
+    apps.sort(key=lambda a: (a.get("patient_rank_score", 0), a.get("created_at", "")), reverse=True)
+
     enriched = []
     for a in apps:
         t = await db.therapists.find_one({"id": a["therapist_id"]}, {"_id": 0})
