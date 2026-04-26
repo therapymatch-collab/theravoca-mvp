@@ -1,0 +1,75 @@
+{
+  "theme": "Light",
+  "archetype": "1 (Organic & Earthy)",
+  "vibe": "Warm, trust-building, calming, professional, human.",
+  "colors": {
+    "background": "#FDFBF7",
+    "surface": "#FFFFFF",
+    "primary": "#2D4A3E",
+    "primary_hover": "#3A5E50",
+    "secondary": "#C87965",
+    "secondary_hover": "#B86A56",
+    "text_main": "#2B2A29",
+    "text_muted": "#6D6A65",
+    "border": "#E8E5DF",
+    "success": "#4A6B5D",
+    "error": "#D45D5D"
+  },
+  "typography": {
+    "heading_font": "Cormorant Garamond",
+    "body_font": "Manrope",
+    "strategies": {
+      "h1": "text-5xl sm:text-6xl tracking-tight leading-none text-primary font-serif",
+      "h2": "text-3xl sm:text-4xl tracking-tight leading-tight text-text_main font-serif",
+      "h3": "text-xl sm:text-2xl font-medium text-text_main font-sans",
+      "body": "text-base leading-relaxed text-text_muted font-sans",
+      "labels": "text-sm uppercase tracking-[0.1em] text-text_muted font-semibold"
+    }
+  },
+  "spacing_and_layout": {
+    "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+    "section_padding": "py-20 md:py-32",
+    "card_padding": "p-8 md:p-12",
+    "radius": "rounded-2xl"
+  },
+  "surface_strategy": {
+    "cards": "bg-white border border-[#E8E5DF] shadow-sm rounded-2xl",
+    "header": "bg-[#FDFBF7]/90 backdrop-blur-md border-b border-[#E8E5DF]",
+    "form_container": "bg-white border border-[#E8E5DF] shadow-lg rounded-3xl p-6 md:p-10 max-w-2xl mx-auto"
+  },
+  "components": {
+    "button_primary": "bg-[#2D4A3E] text-white hover:bg-[#3A5E50] rounded-full px-8 py-4 transition-all duration-200 font-medium",
+    "button_secondary": "bg-transparent text-[#2D4A3E] border border-[#2D4A3E] hover:bg-[#FDFBF7] rounded-full px-8 py-4 transition-all duration-200 font-medium",
+    "input": "w-full bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 text-[#2B2A29] placeholder:text-[#6D6A65] focus:outline-none focus:ring-2 focus:ring-[#2D4A3E]/30 focus:border-[#2D4A3E] transition-all",
+    "progress_bar": "h-2 bg-[#E8E5DF] rounded-full overflow-hidden",
+    "progress_fill": "h-full bg-[#C87965] transition-all duration-500 ease-out"
+  },
+  "media": {
+    "hero_background": {
+      "url": "https://images.unsplash.com/photo-1760702591586-a46969be7de9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzB8MHwxfHNlYXJjaHwzfHxjYWxtJTIwbmF0dXJlJTIwZm9yZXN0JTIwc3Vuc2V0fGVufDB8fHx8MTc3NzIwNjYzM3ww&ixlib=rb-4.1.0&q=85",
+      "description": "Sunlight streams through a dense, green forest.",
+      "usage": "Hero section background (with warm gradient overlay for text legibility) or standalone visual."
+    },
+    "feature_image": {
+      "url": "https://images.pexels.com/photos/9064328/pexels-photo-9064328.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Two women in a relaxed therapy session in a modern office setting.",
+      "usage": "Use in 'How it works' or Testimonial sections to show human connection."
+    }
+  },
+  "animation": {
+    "hover": "transform transition-transform duration-200 hover:-translate-y-1",
+    "form_transition": "opacity-0 animate-in fade-in slide-in-from-bottom-4 duration-500",
+    "page_load": "staggered fade-in for hero elements"
+  },
+  "instructions_to_main_agent": [
+    "Use a pure light theme. Strictly no dark mode for this mental health platform. Avoid pure black and pure white where possible; use the tinted earthy variants provided.",
+    "Do NOT use 'Inter', 'Roboto', or generic sans for headings. Use the designated serif font (Cormorant Garamond).",
+    "Ensure all interactive elements have data-testid attributes for testing.",
+    "The multi-step form is the core UX. Use clear progress indicators and split long forms into single conceptual steps. Keep the 'Talk or type' text area prominent and distinct.",
+    "Forms must use Shadcn customized to match the 'Organic & Earthy' roundness and colors. Override default Shadcn borders and focus rings to use the earthy palette.",
+    "Implement the layout with high asymmetry and generous negative space (p-12 to p-24) to reduce anxiety and convey calm.",
+    "Do NOT use heavy overlays on the hero image; use a soft gradient or off-center layout to maintain image clarity while ensuring text contrast (minimum 4.5:1 ratio).",
+    "For the admin dashboard, stick to functional clarity but keep the earthy color accents for buttons/badges instead of generic blue.",
+    "Use Lucide-react for icons, with a light stroke-width (1.5) to maintain the soft aesthetic."
+  ]
+}
