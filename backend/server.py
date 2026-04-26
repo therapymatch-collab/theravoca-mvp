@@ -265,18 +265,18 @@ async def _trigger_matching(request_id: str) -> dict[str, Any]:
     therapists = await therapists_cursor.to_list(2000)
     matches = rank_therapists(therapists, req, threshold=threshold, min_results=5)
 
-    # Persist match snapshot
-    notified_ids: list[str] = []
-    for m in matches:
-        notified_ids.append(m["id"])
-        # Send email (don't block on failures)
-        summary = _safe_summary_for_therapist(req)
+    notified_ids = [match["id"] for match in matches]
+    notified_scores = {match["id"]: match["match_score"] for match in matches}
+
+    # Send notification emails (best-effort, logged on failure)
+    summary = _safe_summary_for_therapist(req)
+    for match in matches:
         await send_therapist_notification(
-            to=m["email"],
-            therapist_name=m["name"].split(",")[0],
+            to=match["email"],
+            therapist_name=match["name"].split(",")[0],
             request_id=req["id"],
-            therapist_id=m["id"],
-            match_score=m["match_score"],
+            therapist_id=match["id"],
+            match_score=match["match_score"],
             summary=summary,
         )
 
@@ -284,13 +284,19 @@ async def _trigger_matching(request_id: str) -> dict[str, Any]:
         {"id": request_id},
         {"$set": {
             "notified_therapist_ids": notified_ids,
-            "notified_scores": {m["id"]: m["match_score"] for m in matches},
+            "notified_scores": notified_scores,
             "matched_at": _now_iso(),
             "status": "matched",
         }},
     )
     logger.info("Matched request %s -> notified %d therapists", request_id, len(notified_ids))
-    return {"notified": len(notified_ids), "matches": [{"id": m["id"], "name": m["name"], "match_score": m["match_score"]} for m in matches]}
+    return {
+        "notified": len(notified_ids),
+        "matches": [
+            {"id": match["id"], "name": match["name"], "match_score": match["match_score"]}
+            for match in matches
+        ],
+    }
 
 
 async def _deliver_results(request_id: str) -> dict[str, Any]:

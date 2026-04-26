@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { Loader2, Phone, Mail, Star } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { api } from "@/lib/api";
+import { RESULTS_POLL_INTERVAL_MS } from "@/lib/constants";
 
 export default function PatientResults() {
   const { requestId } = useParams();
@@ -15,10 +16,10 @@ export default function PatientResults() {
         if (active) setData(res.data);
       });
     load();
-    const id = setInterval(load, 8000);
+    const intervalId = setInterval(load, RESULTS_POLL_INTERVAL_MS);
     return () => {
       active = false;
-      clearInterval(id);
+      clearInterval(intervalId);
     };
   }, [requestId]);
 

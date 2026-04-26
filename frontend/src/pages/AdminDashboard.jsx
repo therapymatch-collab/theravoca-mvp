@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
+import { ADMIN_POLL_INTERVAL_MS, STATUS_UNAUTHORIZED } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -46,7 +47,7 @@ export default function AdminDashboard() {
       setRequests(r.data);
       setPendingTherapists(pt.data);
     } catch (e) {
-      if (e?.response?.status === 401) {
+      if (e?.response?.status === STATUS_UNAUTHORIZED) {
         sessionStorage.removeItem("tv_admin_pwd");
         navigate("/admin");
       }
@@ -61,8 +62,8 @@ export default function AdminDashboard() {
       return;
     }
     refresh();
-    const id = setInterval(refresh, 10000);
-    return () => clearInterval(id);
+    const intervalId = setInterval(refresh, ADMIN_POLL_INTERVAL_MS);
+    return () => clearInterval(intervalId);
   }, [pwd, navigate, refresh]);
 
   const openDetail = async (id) => {

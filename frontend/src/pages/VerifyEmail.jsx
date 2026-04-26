@@ -3,6 +3,7 @@ import { useParams, useSearchParams, Link } from "react-router-dom";
 import { CheckCircle2, Loader2, Mail } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { api } from "@/lib/api";
+import { ICON_SIZE_LG } from "@/lib/constants";
 
 export default function VerifyEmail() {
   const { token } = useParams();
@@ -31,7 +32,7 @@ export default function VerifyEmail() {
           {state === "pending" && (
             <>
               <div className="mx-auto w-14 h-14 rounded-full bg-[#C87965]/15 text-[#C87965] flex items-center justify-center">
-                <Mail size={26} strokeWidth={1.6} />
+                <Mail size={ICON_SIZE_LG} strokeWidth={1.6} />
               </div>
               <h1 className="font-serif-display text-4xl text-[#2D4A3E] mt-5">
                 Check your inbox

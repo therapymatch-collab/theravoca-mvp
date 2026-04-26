@@ -1,0 +1,64 @@
+{
+  "summary": "Iteration 4 (code-quality refactor regression): matching.py split into helpers (_state_passes, _score_issue, _score_age, _score_payment, _score_insurance, _score_cash, _score_location, _score_modality) and frontend magic numbers extracted to /app/frontend/src/lib/constants.js. NO BEHAVIORAL CHANGE confirmed. 21/21 backend tests pass (10 new iter-4 + 11 iter-3 regression). Frontend FAQ stable-key testids work, AdminLogin rate-limit toast still surfaces 'Invalid password. 4 attempt(s) left before lockout.' via STATUS_RATE_LIMITED constant, AdminDashboard loads via ADMIN_POLL_INTERVAL_MS constant.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "matching._score_issue", "issue": "Score formula caps the sum of matched specialty weights at 100 then scales to MAX_ISSUE=40. So a therapist with two matched specialties weighted 40 each only earns 40*80/100=32, not 40. This is unchanged from before the refactor (the test expectation in the review request 'specialties weighted should still total ~100' is only achievable when the matched specialty weights sum to ≥100). Behavior preserved; flag for product review only."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration4_matching.py",
+    "/app/backend/tests/test_iteration3_rate_limit.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/iteration4_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Document in README/inline that score_therapist's issue axis caps total matched specialty weight at 100 before scaling to MAX_ISSUE — so to award the full 40, matched specialties' weights must sum to ≥100. The review-request example used weights of 40+40=80 expecting 40, but the actual score is 32. No code change needed if this is the intended design.",
+    "(Carryover from iter-3, optional) Hard-delete TEST_-prefixed therapists/requests created during regression runs to keep admin dashboard counts stable."
+  ],
+  "critical_code_review_comments": [
+    "matching.py refactor is clean: each helper has a single responsibility and is independently testable. score_therapist is now a thin orchestrator. Constants (MAX_ISSUE=40, MAX_AGE=15, MAX_PAYMENT=20, MAX_LOCATION=15, MAX_MODALITY=10) sum to 100 — matches docstring.",
+    "_state_passes returns True when req_state is empty (no-state request) — still licensed-states-only filter, behavior preserved. score_therapist short-circuits to total=-1 / filtered=True before computing other axes — efficient.",
+    "_score_payment correctly dispatches to _score_insurance / _score_cash by payment_type; unknown payment_type returns half-credit (10/20) which is the previous behavior.",
+    "_score_location: telehealth-only request gets full 15 if therapist has telehealth, else 0; in-person request gets 15 if any office matches (substring either way), else 6 if telehealth fallback, else 0. All branches preserved.",
+    "_score_issue uses _extract_issues canonical mapping; if no recognizable issues parsed from free-text, returns MAX_ISSUE/2 = 20 (neutral) — same as before. No regression.",
+    "rank_therapists logic preserved: filter by score_therapist's filtered flag, sort desc, then auto-lower threshold in 10-pt steps (until 20) when fewer than min_results above. Final fallback returns top min_results.",
+    "Frontend constants.js is a small, focused module. STATUS_UNAUTHORIZED/STATUS_RATE_LIMITED used in AdminLogin and AdminDashboard. RESULTS_POLL_INTERVAL_MS=8000 in PatientResults, ADMIN_POLL_INTERVAL_MS=10000 in AdminDashboard — values match prior literals.",
+    "Landing FAQ now uses `value=item-${f.q}` and `data-testid=faq-item-${f.q.slice(0,20)}` for stable identity; if two FAQ questions ever start with the same 20 chars, testids collide — currently fine (all 6 FAQs have distinct first-20-chars), but a future copy edit could introduce collision. Consider a slug helper or full-question hash for safety.",
+    "_trigger_matching iteration variable rename to 'match' is purely cosmetic; no behavior change. Verified via e2e (POST /api/requests -> verify -> notified_therapist_ids populated, notified_scores has match scores)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration4_matching.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (21/21: 10 iter-4 matching + 11 iter-3 regression)",
+    "frontend": "100% on tested flows (FAQ accordion stable-testid expand/collapse, AdminLogin wrong-pwd toast via STATUS_RATE_LIMITED, AdminDashboard load via ADMIN_POLL_INTERVAL_MS)"
+  },
+  "test_credentials": "Admin password: admin123! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created 1 TEST_iter4_<random>@example.com patient request via e2e flow (verified, matched). Iter-3 regression also created 1 TEST_iter3_ patient request and 1 TEST_iter3_ therapist (rejected). Lockout tests used synthetic X-Forwarded-For 10.0.x.x IPs to avoid affecting real-IP buckets. Backend was restarted before and after rate-limit tests.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Public URL: REACT_APP_BACKEND_URL=https://care-matcher-1.preview.emergentagent.com. Admin pwd admin123!. To run pytest: `export REACT_APP_BACKEND_URL=https://care-matcher-1.preview.emergentagent.com MONGO_URL=mongodb://localhost:27017 DB_NAME=test_database && pytest /app/backend/tests/`. matching.py is now in /app/backend/matching.py with helpers _state_passes, _score_issue, _score_age, _score_payment, _score_insurance, _score_cash, _score_location, _score_modality; total max=100 unchanged. score_therapist returns {total, breakdown:{issue,age,payment,location,modality}, filtered}. State mismatch -> total=-1, filtered=True. Frontend constants in /app/frontend/src/lib/constants.js: STATUS_UNAUTHORIZED=401, STATUS_RATE_LIMITED=429, RESULTS_POLL_INTERVAL_MS=8000, ADMIN_POLL_INTERVAL_MS=10000. FAQ testid format: faq-item-${first 20 chars of question} (NOT index any more). Iter-3 lockout test pattern (synthetic X-Forwarded-For, restart backend after) still applies.",
+  "verified_features": [
+    "score_therapist: state mismatch returns total=-1, filtered=True",
+    "score_therapist: perfect cash fit (Boise in-person, age 28, $150 budget, anxiety+depression weights summing to 100, CBT, telehealth+Boise office) -> total=100.0, breakdown={issue:40,age:15,payment:20,location:15,modality:10}",
+    "score_therapist: insurance match (Aetna in accepted) -> payment=20.0",
+    "score_therapist: no-issue-match -> issue=0.0, other axes still pass",
+    "score_therapist: breakdown keys unchanged: {issue,age,payment,location,modality}; result keys: {total,breakdown,filtered}",
+    "rank_therapists: still hard-filters wrong-state therapists",
+    "rank_therapists: auto-lowers threshold (in 10-pt steps) when too few matches",
+    "rank_therapists: returns top min_results when zero above any threshold",
+    "POST /api/requests + GET /api/requests/verify/{token} -> notified >=5, every notified has match_score > 0",
+    "Regression smoke: /api/, /api/admin/stats, /api/admin/requests, /api/admin/therapists all 200",
+    "Iter-3 rate-limit suite still 11/11 green",
+    "FRONTEND Landing: 6 FAQ items present with stable testid faq-item-{first 20 chars}, click expand+collapse works",
+    "FRONTEND /admin: wrong password shows toast 'Invalid password. 4 attempt(s) left before lockout.' via STATUS_RATE_LIMITED constant",
+    "FRONTEND /admin/dashboard: navigates after correct password (ADMIN_POLL_INTERVAL_MS imported correctly)"
+  ],
+  "rca_of_the_issue": "N/A — pure refactor, behavior preserved across all assertions."
+}

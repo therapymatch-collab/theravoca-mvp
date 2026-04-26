@@ -237,12 +237,12 @@ export default function Landing() {
             Things people ask
           </h2>
           <Accordion type="single" collapsible className="mt-10" data-testid="faq">
-            {FAQS.map((f, i) => (
+            {FAQS.map((f) => (
               <AccordionItem
-                key={i}
-                value={`item-${i}`}
+                key={f.q}
+                value={`item-${f.q}`}
                 className="border-[#E8E5DF]"
-                data-testid={`faq-item-${i}`}
+                data-testid={`faq-item-${f.q.slice(0, 20)}`}
               >
                 <AccordionTrigger className="text-left text-[#2B2A29] hover:text-[#2D4A3E] hover:no-underline py-5">
                   {f.q}

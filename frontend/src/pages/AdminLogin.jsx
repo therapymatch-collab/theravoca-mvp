@@ -4,6 +4,7 @@ import { Lock } from "lucide-react";
 import { toast } from "sonner";
 import { Header, Footer } from "@/components/SiteShell";
 import { api } from "@/lib/api";
+import { STATUS_RATE_LIMITED } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
 
 export default function AdminLogin() {
@@ -21,7 +22,7 @@ export default function AdminLogin() {
     } catch (e) {
       const detail = e?.response?.data?.detail;
       const code = e?.response?.status;
-      if (code === 429) {
+      if (code === STATUS_RATE_LIMITED) {
         toast.error(detail || "Too many attempts. Locked out.");
       } else {
         toast.error(detail || "Invalid password");
