@@ -16,7 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 
 const STEPS = [
-  { key: "what", label: "Tell us what's happening" },
+  { key: "what", label: "What brings you here?" },
   { key: "who", label: "Who is therapy for?" },
   { key: "format", label: "Format & location" },
   { key: "payment", label: "Payment" },
@@ -24,7 +24,23 @@ const STEPS = [
   { key: "contact", label: "Where to reach you" },
 ];
 
-const EXAMPLE_TEXT = `Looking for an individual therapist licensed in Idaho for a young adult experiencing depression and anxiety. Preference for providers who incorporate CBT and mindfulness-based approaches. Hoping for evening telehealth sessions.`;
+const ISSUE_CHIPS = [
+  { key: "anxiety", label: "Anxiety" },
+  { key: "depression", label: "Depression" },
+  { key: "trauma", label: "Trauma / PTSD" },
+  { key: "couples", label: "Couples / relationship" },
+  { key: "family", label: "Family / parenting" },
+  { key: "grief", label: "Grief / loss" },
+  { key: "addiction", label: "Addiction / recovery" },
+  { key: "lgbtq", label: "LGBTQ+" },
+  { key: "eating", label: "Eating / body image" },
+  { key: "ocd", label: "OCD" },
+  { key: "adhd", label: "ADHD / focus" },
+  { key: "stress", label: "Stress / burnout" },
+  { key: "self-esteem", label: "Self-esteem" },
+  { key: "career", label: "Career / work" },
+  { key: "identity", label: "Identity" },
+];
 
 export default function IntakeForm() {
   const navigate = useNavigate();
@@ -34,7 +50,8 @@ export default function IntakeForm() {
   const [confirmAdult, setConfirmAdult] = useState(false);
   const [confirmNotEmergency, setConfirmNotEmergency] = useState(false);
   const [data, setData] = useState({
-    presenting_issues: "",
+    selected_issues: [],
+    issue_context: "",
     client_age: "",
     location_state: "ID",
     location_city: "",
@@ -50,9 +67,16 @@ export default function IntakeForm() {
     email: "",
   });
   const set = (k, v) => setData((d) => ({ ...d, [k]: v }));
+  const toggleIssue = (k) =>
+    setData((d) => ({
+      ...d,
+      selected_issues: d.selected_issues.includes(k)
+        ? d.selected_issues.filter((x) => x !== k)
+        : [...d.selected_issues, k],
+    }));
 
   const canNext = () => {
-    if (step === 0) return data.presenting_issues.trim().length >= 20;
+    if (step === 0) return data.selected_issues.length >= 1;
     if (step === 1) return data.client_age && Number(data.client_age) >= 1;
     if (step === 2) return !!data.session_format && !!data.location_state;
     if (step === 3) {
@@ -73,8 +97,14 @@ export default function IntakeForm() {
   const submit = async () => {
     setSubmitting(true);
     try {
+      const issuesLabel = data.selected_issues.join(", ");
+      const presenting_issues =
+        issuesLabel +
+        (data.issue_context.trim() ? `. ${data.issue_context.trim()}` : "");
+      const { selected_issues: _si, issue_context: _ic, ...rest } = data;
       const payload = {
-        ...data,
+        ...rest,
+        presenting_issues,
         client_age: parseInt(data.client_age, 10),
         budget: data.budget ? parseInt(data.budget, 10) : null,
       };
@@ -127,21 +157,51 @@ export default function IntakeForm() {
             {step === 0 && (
               <div>
                 <label className="block text-sm font-semibold text-[#2B2A29] mb-2">
-                  Talk or type all the specifics that matter to you in finding a therapist
+                  What brings you here today?
                 </label>
-                <p className="text-sm text-[#6D6A65] mb-3">
-                  Avoid sharing any contact or personally identifiable information.
+                <p className="text-sm text-[#6D6A65] mb-4">
+                  Select everything that resonates. Pick at least one.
                 </p>
-                <Textarea
-                  value={data.presenting_issues}
-                  onChange={(e) => set("presenting_issues", e.target.value)}
-                  placeholder={EXAMPLE_TEXT}
-                  rows={9}
-                  className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl text-[#2B2A29] focus-visible:ring-[#2D4A3E]/30"
-                  data-testid="presenting-issues-input"
-                />
+                <div
+                  className="flex flex-wrap gap-2"
+                  data-testid="issue-chips"
+                >
+                  {ISSUE_CHIPS.map((c) => {
+                    const active = data.selected_issues.includes(c.key);
+                    return (
+                      <button
+                        type="button"
+                        key={c.key}
+                        onClick={() => toggleIssue(c.key)}
+                        data-testid={`issue-chip-${c.key}`}
+                        className={`text-sm px-4 py-2 rounded-full border transition ${
+                          active
+                            ? "bg-[#2D4A3E] text-white border-[#2D4A3E] shadow-sm"
+                            : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+                        }`}
+                      >
+                        {c.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="mt-7">
+                  <label className="block text-xs font-semibold text-[#6D6A65] uppercase tracking-wider mb-2">
+                    Anything else? (optional)
+                  </label>
+                  <Textarea
+                    value={data.issue_context}
+                    onChange={(e) => set("issue_context", e.target.value)}
+                    rows={4}
+                    placeholder="e.g. post-divorce, perinatal, after a recent loss, prefer evening sessions… (Avoid sharing personally identifiable information.)"
+                    className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl text-[#2B2A29] focus-visible:ring-[#2D4A3E]/30"
+                    data-testid="issue-context-input"
+                  />
+                </div>
                 <p className="text-xs text-[#6D6A65] mt-2">
-                  Min 20 characters. The more detail, the better the match.
+                  {data.selected_issues.length === 0
+                    ? "Pick at least one to continue."
+                    : `${data.selected_issues.length} selected — the more, the better the match.`}
                 </p>
               </div>
             )}
