@@ -1,0 +1,57 @@
+{
+  "summary": "Iteration 3: admin login rate limit (5 fails / 15 min lockout per IP) and FastAPI lifespan migration. 11/11 backend tests pass. Frontend admin login shows new helpful 'N attempt(s) left' toast and a 429 'Too many failed attempts. Try again in 15 minutes.' toast on lockout. Correct password still navigates to /admin/dashboard after backend restart. Lifespan startup banner present, no on_event DeprecationWarning in supervisor logs.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/admin/login", "issue": "On the 5th failure the response is 401 with 'Invalid password. 0 attempt(s) left before lockout.' (the bucket is then locked, so the *next* request returns 429). UX is acceptable; if desired, the 5th failure could itself return 429 or include a 'now locked' suffix in the 401 detail."},
+      {"endpoint": "POST /api/admin/login", "issue": "x-forwarded-for is taken as-is from the request — left-most token wins. Behind the K8s ingress this is fine, but if the app is ever exposed without that ingress, a malicious client could spoof this header to bypass per-IP lockouts. Document the deployment assumption."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration3_rate_limit.py",
+    "/app/test_reports/pytest/iteration3_results.xml",
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_iteration2_signup.py"
+  ],
+  "action_items": [
+    "(Optional polish) On the 5th failed login, return 429 immediately or append 'Account is now locked.' to the 401 detail so users aren't confused by a borderline message saying '0 attempt(s) left'.",
+    "(Optional cleanup) Test data leakage: regression run created 1 TEST_ patient request and 1 TEST_ therapist (rejected, not deleted) — total therapists now reads 102 in dashboard. Consider a dev-only DELETE endpoint, or have the test harness call mongo directly to remove TEST_-prefixed docs."
+  ],
+  "critical_code_review_comments": [
+    "Lifespan migration in server.py is clean: @asynccontextmanager with try/finally, sweep task is created on startup and cancelled on shutdown, mongo client is closed. No deprecated @app.on_event hooks remain. Supervisor logs no longer show DeprecationWarning.",
+    "_login_attempts is a module-level dict — single-process and process-local. Acceptable for MVP per problem statement, but if this backend is ever scaled horizontally the lockout becomes per-replica. Mention in README/runbook.",
+    "Lockout precedence is correct: _check_lockout is consulted *before* password comparison, so a locked attacker cannot bypass with a guessed correct password.",
+    "_reset_failures is called only on successful login — verified end-to-end (4 wrong → 1 correct → 1 wrong returns 'Invalid password. 4 attempt(s) left').",
+    "Detail string format 'Invalid password. {N} attempt(s) left before lockout.' matches what the frontend AdminLogin.jsx surfaces via toast (it shows server-provided detail directly, with a fallback). Toast for 429 also surfaces server detail.",
+    "Sweep loop now lives in a long-running task; it correctly handles asyncio.CancelledError on shutdown and continues across exceptions (try/except around _sweep_overdue_results).",
+    "Carryover: admin endpoints use single-static-header password; rate limiting only added to /api/admin/login. Other admin endpoints (e.g., /api/admin/stats) are not rate limited, so an attacker could enumerate them with a guessed header without ever hitting the login throttle. Consider applying the same per-IP throttle to require_admin for full hardening."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration3_rate_limit.py"
+  ],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100% on tested flows (wrong-password helpful toast, 5-fail lockout 429 toast, post-restart correct-password navigation to /admin/dashboard)"},
+  "test_credentials": "Admin password: admin123! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Backend regression created 1 TEST_ patient request + 1 TEST_ therapist (rejected, not hard-deleted). Lockout tests used synthetic X-Forwarded-For IPs (10.0.x.x) so they did not affect real-IP buckets. Backend was restarted twice during testing (after rate-limit tests and again after UI lockout test) to clear in-memory _login_attempts.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Public URL: REACT_APP_BACKEND_URL=https://care-matcher-1.preview.emergentagent.com. Admin password admin123!. Lockout state is per-IP, in-memory. Use a unique X-Forwarded-For per test to isolate buckets. Always restart backend after triggering lockout via the real browser path or you'll keep yourself locked for 15 min. Iter-3 test file: /app/backend/tests/test_iteration3_rate_limit.py (11 tests). Iter-2 file still passes. Frontend testid for admin login: admin-login-form / admin-password-input / admin-login-btn. Toast text after wrong password: 'Invalid password. N attempt(s) left before lockout.'; toast after lockout: 'Too many failed attempts. Try again in 15 minutes.'",
+  "verified_features": [
+    "POST /api/admin/login correct password -> 200 {ok:true}",
+    "POST /api/admin/login wrong password -> 401 with detail 'Invalid password. N attempt(s) left before lockout.' decrementing 4,3,2,1,0",
+    "POST /api/admin/login 6th attempt (any password) -> 429 with detail containing 'Too many failed attempts'",
+    "Lockout takes precedence: even correct password returns 429 while locked",
+    "Successful login resets failure counter (4 wrong -> success -> wrong returns '4 attempt(s) left')",
+    "Lifespan: backend log shows 'Started results sweep loop (every 300s)' and contains no DeprecationWarning for on_event",
+    "Sweep task is created at startup and the function _sweep_overdue_results runs without error",
+    "Regression: /api/, /api/admin/stats, /api/admin/requests, /api/admin/therapists, /api/therapists/signup, /api/admin/therapists/{id}/approve, /api/requests, /api/requests/verify/{token} all 200",
+    "FRONTEND /admin: wrong password shows toast with server-provided 'Invalid password. 4 attempt(s) left before lockout.'",
+    "FRONTEND /admin: after 5 failures the next attempt (with correct password) shows 429 toast 'Too many failed attempts. Try again in 15 minutes.'",
+    "FRONTEND /admin: after backend restart, correct password navigates to /admin/dashboard and dashboard renders stats + tabs"
+  ],
+  "rca_of_the_issue": "N/A — feature works as designed."
+}

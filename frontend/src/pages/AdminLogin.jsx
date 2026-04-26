@@ -18,8 +18,14 @@ export default function AdminLogin() {
       await api.post("/admin/login", { password: pwd });
       sessionStorage.setItem("tv_admin_pwd", pwd);
       navigate("/admin/dashboard");
-    } catch {
-      toast.error("Invalid password");
+    } catch (e) {
+      const detail = e?.response?.data?.detail;
+      const code = e?.response?.status;
+      if (code === 429) {
+        toast.error(detail || "Too many attempts. Locked out.");
+      } else {
+        toast.error(detail || "Invalid password");
+      }
     } finally {
       setBusy(false);
     }

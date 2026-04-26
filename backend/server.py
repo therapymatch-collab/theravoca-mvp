@@ -6,12 +6,13 @@ import logging
 import os
 import secrets
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, status
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, status
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
 from starlette.middleware.cors import CORSMiddleware
@@ -41,7 +42,79 @@ DEFAULT_THRESHOLD = float(os.environ.get("DEFAULT_MATCH_THRESHOLD", "60"))
 AUTO_DELAY_HOURS = float(os.environ.get("AUTO_RESULTS_DELAY_HOURS", "24"))
 PATIENT_DEMO_EMAIL = os.environ.get("PATIENT_DEMO_EMAIL", "")
 
-app = FastAPI(title="TheraVoca API")
+# Admin login rate limit
+LOGIN_MAX_FAILURES = int(os.environ.get("LOGIN_MAX_FAILURES", "5"))
+LOGIN_LOCKOUT_MINUTES = int(os.environ.get("LOGIN_LOCKOUT_MINUTES", "15"))
+_login_attempts: dict[str, dict[str, Any]] = {}  # ip -> {"failures": int, "locked_until": datetime|None}
+
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _check_lockout(ip: str) -> Optional[int]:
+    """Return seconds remaining in lockout, or None if not locked."""
+    rec = _login_attempts.get(ip)
+    if not rec or not rec.get("locked_until"):
+        return None
+    now = datetime.now(timezone.utc)
+    if rec["locked_until"] > now:
+        return int((rec["locked_until"] - now).total_seconds())
+    # lockout expired — reset
+    _login_attempts.pop(ip, None)
+    return None
+
+
+def _record_failure(ip: str) -> None:
+    rec = _login_attempts.setdefault(ip, {"failures": 0, "locked_until": None})
+    rec["failures"] += 1
+    if rec["failures"] >= LOGIN_MAX_FAILURES:
+        rec["locked_until"] = datetime.now(timezone.utc) + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
+        logger.warning("Admin login locked for ip=%s after %d failures", ip, rec["failures"])
+
+
+def _reset_failures(ip: str) -> None:
+    _login_attempts.pop(ip, None)
+
+
+# Sweep loop task handle (set in lifespan)
+_sweep_task: Optional[asyncio.Task] = None
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    global _sweep_task
+    # Startup
+    count = await db.therapists.count_documents({})
+    if count == 0:
+        therapists = generate_seed_therapists(100)
+        await db.therapists.insert_many([t.copy() for t in therapists])
+        logger.info("Auto-seeded %d Idaho therapists", len(therapists))
+    # Backfill flags for legacy seed docs (idempotent)
+    await db.therapists.update_many(
+        {"is_active": {"$exists": False}},
+        {"$set": {"is_active": True, "pending_approval": False, "source": "seed"}},
+    )
+    sweep_interval = int(os.environ.get("SWEEP_INTERVAL_SECONDS", "300"))
+    _sweep_task = asyncio.create_task(_sweep_loop(sweep_interval))
+    logger.info("Started results sweep loop (every %ds)", sweep_interval)
+    try:
+        yield
+    finally:
+        # Shutdown
+        if _sweep_task:
+            _sweep_task.cancel()
+            try:
+                await _sweep_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        client.close()
+
+
+app = FastAPI(title="TheraVoca API", lifespan=lifespan)
 api = APIRouter(prefix="/api")
 
 
@@ -436,9 +509,23 @@ async def therapist_apply(request_id: str, therapist_id: str, payload: Therapist
 # ─── Admin Routes ─────────────────────────────────────────────────────────────
 
 @api.post("/admin/login")
-async def admin_login(payload: dict):
+async def admin_login(payload: dict, request: Request):
+    ip = _client_ip(request)
+    remaining = _check_lockout(ip)
+    if remaining is not None:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many failed attempts. Try again in {remaining // 60 + 1} minutes.",
+        )
     if payload.get("password") != ADMIN_PASSWORD:
-        raise HTTPException(401, "Invalid password")
+        _record_failure(ip)
+        rec = _login_attempts.get(ip, {})
+        attempts_left = max(0, LOGIN_MAX_FAILURES - rec.get("failures", 0))
+        raise HTTPException(
+            status_code=401,
+            detail=f"Invalid password. {attempts_left} attempt(s) left before lockout.",
+        )
+    _reset_failures(ip)
     return {"ok": True}
 
 
@@ -561,35 +648,7 @@ async def admin_stats(_: bool = Depends(require_admin)):
     }
 
 
-# ─── Startup: auto-seed + start sweep loop ────────────────────────────────────
-
-_sweep_task: Optional[asyncio.Task] = None
-
-
-@app.on_event("startup")
-async def startup_seed():
-    global _sweep_task
-    count = await db.therapists.count_documents({})
-    if count == 0:
-        therapists = generate_seed_therapists(100)
-        await db.therapists.insert_many([t.copy() for t in therapists])
-        logger.info("Auto-seeded %d Idaho therapists", len(therapists))
-    # Backfill flags for legacy seed docs (idempotent)
-    await db.therapists.update_many(
-        {"is_active": {"$exists": False}},
-        {"$set": {"is_active": True, "pending_approval": False, "source": "seed"}},
-    )
-    sweep_interval = int(os.environ.get("SWEEP_INTERVAL_SECONDS", "300"))
-    _sweep_task = asyncio.create_task(_sweep_loop(sweep_interval))
-    logger.info("Started results sweep loop (every %ds)", sweep_interval)
-
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    if _sweep_task:
-        _sweep_task.cancel()
-    client.close()
-
+# ─── Lifespan registered above; routes follow ────────────────────────────────
 
 app.include_router(api)
 
