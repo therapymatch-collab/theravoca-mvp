@@ -24,6 +24,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -431,6 +432,9 @@ export default function AdminDashboard() {
             <DialogTitle className="font-serif-display text-2xl text-[#2D4A3E]">
               Edit provider
             </DialogTitle>
+            <DialogDescription className="text-sm text-[#6D6A65]">
+              Update this therapist's profile. Changes apply immediately for matching.
+            </DialogDescription>
           </DialogHeader>
           {editTherapist && (
             <div className="space-y-4 mt-2">

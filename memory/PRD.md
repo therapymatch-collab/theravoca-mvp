@@ -54,6 +54,14 @@ Tech: FastAPI + MongoDB + React. Email via Resend. ~100 seeded Idaho therapists.
 - **`/app/frontend/src/lib/insurers.js`** — single source of truth for Idaho insurer lists (`IDAHO_INSURERS`, `PATIENT_INSURER_OPTIONS`).
 - 10/10 backend pytest pass, frontend Playwright validated. Test file: `/app/backend/tests/test_iteration8_payment_insurance.py`.
 
+## Iteration 10 (2026-04-26) — Consult CTA + Admin provider directory + Sliding-scale scoring + Email override
+- **Patient Results "Schedule a free 15-min consult" CTA** — prominent green button on every result card (`data-testid="consult-btn-{i}"`) that opens a `mailto:` pre-filled with subject "Free 15-min consult — TheraVoca match" and body containing patient's first 2 presenting issues mapped to friendly labels.
+- **Sliding-scale scoring (P1)** — new `payment_fit` axis (max 3 pts) added to matching breakdown: scores 3.0 when `request.sliding_scale_ok=true AND therapist.sliding_scale=true`. Total clamped at 100. Breakdown now has 9 keys.
+- **"Other / not listed" insurer no-op (P1)** — `_insurance_match` cleanly skips the entire hard filter when patient picks `Other / not listed` or `other`, so therapists without insurance lists still pass.
+- **Admin "All providers" tab** — new third tab in `/admin/dashboard` lists every therapist (active + pending + rejected) with status badges. Edit button opens a dialog with editable name, email, phone, cash_rate, sliding_scale, free_consult, modality_offering, urgency_capacity, is_active, pending_approval, bio. Backed by new `PUT /api/admin/therapists/{id}` whitelist-only endpoint.
+- **Email override (`EMAIL_OVERRIDE_TO` env)** — when set, `_send` reroutes every outbound email to that single inbox and prepends `[was: <original>]` to the subject. Currently set to `therapymatch@gmail.com` so user sees every transactional email during dev. Unset in production.
+- 20/20 new iter-10 tests + 38/38 regression all pass. Test file: `/app/backend/tests/test_iteration10_consult_admin_payment.py`.
+
 ## Iteration 9 (2026-04-26) — Match-breakdown transparency
 - **Backend** persists `notified_breakdowns` (axis-by-axis score map) on the request doc when matching runs; exposed via `GET /api/requests/{id}/results` per application.
 - **PatientResults.jsx** renders a "Why we matched" chip block (max 3 chips, only axes scoring ≥50% of max) below each therapist's message — `data-testid="why-match-{i}"`, `data-testid="why-match-{i}-{axisKey}"`.
@@ -66,17 +74,15 @@ Tech: FastAPI + MongoDB + React. Email via Resend. ~100 seeded Idaho therapists.
 - **Note**: rate-limit state is in-memory (per-process). Adequate for single-replica MVP; if horizontally scaled, move to Redis.
 
 ## Backlog (P1 / P2)
-- **P1** Score `sliding_scale_ok × therapist.sliding_scale` in matching engine (currently captured & persisted but not scored — see iter-8 reviewer note).
-- **P1** Treat patient insurer choice "Other / not listed" as a no-op for the insurance hard filter (else patient matches zero therapists).
-- **P1** Verified domain for Resend (so emails actually reach all patients/therapists, not just verified address).
+- **P1** Verified domain for Resend (so emails reach all patients/therapists in production — currently `EMAIL_OVERRIDE_TO=therapymatch@gmail.com` for dev). User must verify a domain on resend.com and update `SENDER_EMAIL` + unset `EMAIL_OVERRIDE_TO`.
 - **P2** Sort "Why we matched" reasons by raw score (not % of max) so the heaviest-weighted axes (issues=35) surface first when tied at 100%.
 - **P2** Extract AXIS_META into a single source of truth shared between FE + email_service to prevent drift.
-- **P2** Persist scheduled auto-trigger in DB (already done via cron sweep — keep monitoring).
-- **P2** Therapist self-onboarding portal (already shipped — track signup conversion).
 - **P2** Multi-state expansion (currently Idaho only).
 - **P2** Patient inline status page (already partially built — extend with timeline).
 - **P2** "Try again" button if patient unhappy with matches.
 - **P2** Optional $15 fee + Stripe (mentioned on inspiration site).
+- **P2** Replace URLSearchParams in `buildConsultMailto` with manual `%20` encoding (RFC 6068 compliant) — currently functional in Gmail/Apple Mail.
+- **P3** A11y polish: ensure all dialogs have DialogDescription (done for edit-provider; verify others).
 
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
