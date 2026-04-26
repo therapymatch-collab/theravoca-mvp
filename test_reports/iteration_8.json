@@ -1,0 +1,33 @@
+{
+  "summary": "TheraVoca iter-8: Payment & Insurance UI/data-model sync fully validated. Backend: 10/10 pytest tests pass — patient request persists insurance_name/budget/sliding_scale_ok across all 3 payment_type modes (insurance/cash/either), all 15 PATIENT_INSURER_OPTIONS accepted (incl. 'Other / not listed'), therapist signup persists insurance_accepted/cash_rate/sliding_scale (defaults to false correctly), Blue Cross of Idaho hard filter still works on matching engine. Frontend: IntakeForm Step 4 'Payment' (zero-indexed step 3) renders insurance-select dropdown (15 options), budget-input, sliding-scale-ok checkbox; conditional rendering correct in all three payment_type modes; TherapistSignup /therapists/join shows all 14 Idaho insurer pills + cash-rate + sliding-scale + submit. Admin login + dashboard endpoints regression all pass.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration8_payment_insurance.py",
+    "/app/test_reports/pytest/iteration8_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "matching.py _payment_pass: passthrough behavior when therapist has no cash_rate field is unchanged — still returns True if patient pays cash and therapist cash_rate is missing. Acceptable per spec (don't filter on missing data) but worth flagging if seed therapists drift.",
+    "RequestCreate model: budget is Optional[int] but FE sends string '175' from <Input type=number>. Pydantic coerces successfully, but consider explicit conversion or pattern validation. Currently passes.",
+    "TherapistSignup payload's sliding_scale field is plumbed through model & persisted, but matching.py does NOT yet score on sliding_scale_ok x sliding_scale (no scoring boost when patient checks 'Sliding-scale ok' AND therapist offers sliding_scale). Iter-8 scope was UI-only sync, but worth revisiting in iter-9 for actual matching influence.",
+    "PATIENT_INSURER_OPTIONS includes 'Other / not listed' — the matching engine's insurance hard filter is a strict string match on insurance_accepted list, so a patient choosing 'Other / not listed' will likely match zero therapists. Consider treating 'Other / not listed' as a no-op (skip insurance hard filter) similar to payment_type='either'."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration8_payment_insurance.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin password: admin123! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "No persistent seed data. Created ~7 transient TEST patient requests + 2 transient TEST therapists (rejected after test for cleanup).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests for iter-8 live at /app/backend/tests/test_iteration8_payment_insurance.py. Run with: REACT_APP_BACKEND_URL=https://care-matcher-1.preview.emergentagent.com pytest /app/backend/tests/test_iteration8_payment_insurance.py -v. Iter-7 tests at test_iteration7_intake_matching.py still pass (regression sample run). Frontend testid map: Patient intake step 4 (Payment) uses payment-{insurance,cash,either}, insurance-select, budget-input, sliding-scale-ok. Therapist signup uses signup-insurance-{insurer-name}, signup-cash-rate, signup-sliding-scale, signup-submit. Step navigation uses next-btn / back-btn and step-label shows 'Step N of 7: ...'. Note Step 4 in UI label = step index 3 in code.",
+  "rca of the issue": "N/A — no issues found in iter-8 UI/data-model sync."
+}

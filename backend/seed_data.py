@@ -44,8 +44,9 @@ ALL_MODALITIES = [
     "Solution-Focused", "Gottman", "IFS", "Somatic Experiencing", "Person-Centered",
 ]
 INSURERS = [
-    "Blue Cross Blue Shield", "Aetna", "Cigna", "United Healthcare", "Regence",
-    "Mountain Health Co-op", "PacificSource", "Medicaid",
+    "Blue Cross of Idaho", "Regence BlueShield of Idaho", "Mountain Health Co-op",
+    "PacificSource Health Plans", "SelectHealth", "Aetna", "Cigna", "UnitedHealthcare",
+    "Humana", "Idaho Medicaid", "Medicare", "Tricare West", "Optum", "Magellan Health",
 ]
 CLIENT_TYPES = ["individual", "couples", "family", "group"]
 AGE_GROUPS = ["child", "teen", "young_adult", "adult", "older_adult"]
@@ -129,6 +130,7 @@ def generate_therapist(idx: int) -> dict:
         insurance = []
 
     cash_rate = random.choice([100, 120, 130, 140, 150, 160, 175, 185, 200, 225])
+    sliding_scale = random.random() < 0.4
     years_experience = random.randint(2, 30)
     free_consult = random.random() < 0.6
 
@@ -164,6 +166,7 @@ def generate_therapist(idx: int) -> dict:
         "office_locations": office_locations,
         "insurance_accepted": insurance,
         "cash_rate": cash_rate,
+        "sliding_scale": sliding_scale,
         "years_experience": years_experience,
         "availability_windows": availability_windows,
         "urgency_capacity": urgency_capacity,

@@ -61,25 +61,38 @@ def _age_group_pass(t: dict, r: dict) -> bool:
 def _payment_pass(t: dict, r: dict) -> bool:
     pay = (r.get("payment_type") or "either").lower()
     if pay == "either":
-        return True
+        return _insurance_match(t, r) or _cash_match(t, r)
     if pay == "insurance":
-        plan = (r.get("insurance_name") or "").lower().strip()
-        accepted = [i.lower() for i in t.get("insurance_accepted") or []]
-        # If patient named a specific plan, require it; else any insurance is OK
-        if plan and accepted:
-            return plan in accepted
-        # No plan specified — therapist must accept some insurance
-        return bool(accepted)
+        return _insurance_match(t, r)
     if pay == "cash":
-        budget = r.get("budget")
-        rate = t.get("cash_rate")
-        if not budget or not rate:
-            return True  # missing data — don't filter out
-        try:
-            return int(rate) <= int(budget) * 1.2  # 20% tolerance
-        except (TypeError, ValueError):
-            return True
+        return _cash_match(t, r)
     return True
+
+
+def _insurance_match(t: dict, r: dict) -> bool:
+    plan = (r.get("insurance_name") or "").lower().strip()
+    accepted = [i.lower() for i in t.get("insurance_accepted") or []]
+    if not accepted:
+        return False
+    if plan and plan not in ("other", "other / not listed"):
+        return plan in accepted
+    return True
+
+
+def _cash_match(t: dict, r: dict) -> bool:
+    budget = r.get("budget")
+    rate = t.get("cash_rate")
+    if not budget or not rate:
+        return True
+    try:
+        budget_n = int(budget)
+        rate_n = int(rate)
+    except (TypeError, ValueError):
+        return True
+    if r.get("sliding_scale_ok") and t.get("sliding_scale"):
+        # Sliding-scale therapist + patient open to it: accept up to 2x budget
+        return rate_n <= budget_n * 2
+    return rate_n <= budget_n * 1.2  # 20% tolerance
 
 
 def _modality_pass(t: dict, r: dict) -> bool:

@@ -8,6 +8,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { PATIENT_INSURER_OPTIONS } from "@/lib/insurers";
 
 const STEPS = [
   "Who is this for?",
@@ -121,6 +129,7 @@ export default function IntakeForm() {
     payment_type: "",
     insurance_name: "",
     budget: "",
+    sliding_scale_ok: false,
     availability_windows: [],
     urgency: "",
     prior_therapy: "",
@@ -158,6 +167,9 @@ export default function IntakeForm() {
     if (step === 3) {
       if (!data.payment_type) return false;
       if (data.payment_type === "cash") return !!data.budget;
+      if (data.payment_type === "insurance") return !!data.insurance_name;
+      if (data.payment_type === "either")
+        return !!data.insurance_name && !!data.budget;
       return true;
     }
     if (step === 4)
@@ -330,28 +342,56 @@ export default function IntakeForm() {
                     testid="payment"
                   />
                 </Group>
-                {data.payment_type === "insurance" && (
+                {(data.payment_type === "insurance" ||
+                  data.payment_type === "either") && (
                   <Field label="Insurance plan">
-                    <Input
+                    <Select
                       value={data.insurance_name}
-                      onChange={(e) => set("insurance_name", e.target.value)}
-                      placeholder="e.g. Blue Cross Blue Shield"
-                      className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                      data-testid="insurance-input"
-                    />
+                      onValueChange={(v) => set("insurance_name", v)}
+                    >
+                      <SelectTrigger
+                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                        data-testid="insurance-select"
+                      >
+                        <SelectValue placeholder="Select your insurance" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PATIENT_INSURER_OPTIONS.map((ins) => (
+                          <SelectItem key={ins} value={ins}>
+                            {ins}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </Field>
                 )}
-                {data.payment_type === "cash" && (
-                  <Field label="Maximum budget per session (USD)">
-                    <Input
-                      type="number"
-                      value={data.budget}
-                      onChange={(e) => set("budget", e.target.value)}
-                      placeholder="e.g. 175"
-                      className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                      data-testid="budget-input"
-                    />
-                  </Field>
+                {(data.payment_type === "cash" ||
+                  data.payment_type === "either") && (
+                  <>
+                    <Field label="Maximum budget per session (USD)">
+                      <Input
+                        type="number"
+                        value={data.budget}
+                        onChange={(e) => set("budget", e.target.value)}
+                        placeholder="e.g. 175"
+                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                        data-testid="budget-input"
+                      />
+                    </Field>
+                    <label className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer hover:border-[#2D4A3E] transition">
+                      <Checkbox
+                        checked={data.sliding_scale_ok}
+                        onCheckedChange={(v) => set("sliding_scale_ok", v)}
+                        className="mt-0.5 border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
+                        data-testid="sliding-scale-ok"
+                      />
+                      <span className="text-sm text-[#2B2A29] leading-relaxed">
+                        Open to sliding-scale fees — show me therapists who offer
+                        rate flexibility, even if their standard rate is above my
+                        budget.
+                      </span>
+                    </label>
+                  </>
                 )}
               </div>
             )}

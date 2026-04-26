@@ -4,28 +4,75 @@ import { toast } from "sonner";
 import { CheckCircle2, ArrowRight, X, Plus } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { api } from "@/lib/api";
+import { IDAHO_INSURERS } from "@/lib/insurers";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 
-const ALL_SPECIALTIES = [
-  "anxiety", "depression", "trauma", "couples", "family", "grief", "addiction",
-  "lgbtq", "eating", "ocd", "adhd", "stress", "self-esteem", "career", "identity",
+const CLIENT_TYPES = [
+  { v: "individual", l: "Individual" },
+  { v: "couples", l: "Couples" },
+  { v: "family", l: "Family" },
+  { v: "group", l: "Group" },
 ];
-const ALL_MODALITIES = [
+const AGE_GROUPS = [
+  { v: "child", l: "Child (under 13)" },
+  { v: "teen", l: "Teen (13–17)" },
+  { v: "young_adult", l: "Young adult (18–25)" },
+  { v: "adult", l: "Adult (26–64)" },
+  { v: "older_adult", l: "Older adult (65+)" },
+];
+const ISSUES = [
+  { v: "anxiety", l: "Anxiety" },
+  { v: "depression", l: "Depression" },
+  { v: "ocd", l: "OCD" },
+  { v: "adhd", l: "ADHD" },
+  { v: "trauma_ptsd", l: "Trauma / PTSD" },
+  { v: "relationship_issues", l: "Relationship issues" },
+  { v: "life_transitions", l: "Life transitions" },
+  { v: "parenting_family", l: "Parenting / family conflict" },
+  { v: "substance_use", l: "Substance use" },
+  { v: "eating_concerns", l: "Eating concerns" },
+  { v: "autism_neurodivergence", l: "Autism / neurodivergence" },
+  { v: "school_academic_stress", l: "School / academic stress" },
+];
+const MODALITIES = [
   "CBT", "DBT", "EMDR", "Mindfulness-Based", "Psychodynamic", "ACT",
   "Solution-Focused", "Gottman", "IFS", "Somatic Experiencing", "Person-Centered",
 ];
-const ALL_AGES = [
-  { v: "children-5-12", l: "Children (5–12)" },
-  { v: "teen-13-17", l: "Teens (13–17)" },
-  { v: "adult-18-64", l: "Adults (18–64)" },
-  { v: "older-65+", l: "Older adults (65+)" },
+const AVAILABILITY = [
+  { v: "weekday_morning", l: "Weekday mornings" },
+  { v: "weekday_afternoon", l: "Weekday afternoons" },
+  { v: "weekday_evening", l: "Weekday evenings" },
+  { v: "weekend_morning", l: "Weekend mornings" },
+  { v: "weekend_afternoon", l: "Weekend afternoons" },
 ];
-const COMMON_INSURERS = [
-  "Blue Cross Blue Shield", "Aetna", "Cigna", "United Healthcare", "Regence",
-  "Mountain Health Co-op", "PacificSource", "Medicaid",
+const URGENCY_CAPACITIES = [
+  { v: "asap", l: "ASAP — I can take new clients this week" },
+  { v: "within_2_3_weeks", l: "Within 2–3 weeks" },
+  { v: "within_month", l: "Within a month" },
+  { v: "full", l: "Currently full" },
+];
+const STYLE_TAGS = [
+  { v: "structured", l: "Structured / skills-based" },
+  { v: "warm_supportive", l: "Warm & supportive" },
+  { v: "direct_practical", l: "Direct & practical" },
+  { v: "trauma_informed", l: "Trauma-informed" },
+  { v: "insight_oriented", l: "Insight-oriented" },
+  { v: "faith_informed", l: "Faith-informed" },
+  { v: "culturally_responsive", l: "Culturally responsive" },
+  { v: "lgbtq_affirming", l: "LGBTQ+ affirming" },
+];
+const MODALITY_OFFERINGS = [
+  { v: "telehealth", l: "Telehealth only" },
+  { v: "in_person", l: "In-person only" },
+  { v: "both", l: "Both telehealth and in-person" },
+];
+const GENDERS = [
+  { v: "female", l: "Female" },
+  { v: "male", l: "Male" },
+  { v: "nonbinary", l: "Nonbinary" },
 ];
 
 export default function TherapistSignup() {
@@ -35,54 +82,74 @@ export default function TherapistSignup() {
     name: "",
     email: "",
     phone: "",
+    gender: "",
     licensed_states: ["ID"],
-    office_locations: [],
-    telehealth: true,
-    specialties: [],
+    client_types: ["individual"],
+    age_groups: [],
+    primary_specialties: [],
+    secondary_specialties: [],
+    general_treats: [],
     modalities: [],
-    ages_served: [],
+    modality_offering: "both",
+    office_locations: [],
     insurance_accepted: [],
     cash_rate: 150,
+    sliding_scale: false,
     years_experience: 1,
+    availability_windows: [],
+    urgency_capacity: "within_2_3_weeks",
+    style_tags: [],
     free_consult: false,
     bio: "",
   });
   const [office, setOffice] = useState("");
   const set = (k, v) => setData((d) => ({ ...d, [k]: v }));
+  const toggleArr = (k, v, max) =>
+    setData((d) => {
+      const arr = d[k];
+      if (arr.includes(v)) return { ...d, [k]: arr.filter((x) => x !== v) };
+      if (max && arr.length >= max) return d;
+      return { ...d, [k]: [...arr, v] };
+    });
 
-  const toggleArr = (key, val) => {
-    setData((d) => ({
-      ...d,
-      [key]: d[key].includes(val) ? d[key].filter((x) => x !== val) : [...d[key], val],
-    }));
+  // Specialty tier helper: ensure each issue lives in exactly ONE tier
+  const issueTier = (issue) => {
+    if (data.primary_specialties.includes(issue)) return "primary";
+    if (data.secondary_specialties.includes(issue)) return "secondary";
+    if (data.general_treats.includes(issue)) return "general";
+    return null;
   };
-
-  const addSpecialty = (name) => {
-    if (data.specialties.find((s) => s.name === name)) {
-      set(
-        "specialties",
-        data.specialties.filter((s) => s.name !== name),
-      );
-    } else if (data.specialties.length < 5) {
-      const remaining = 100 - data.specialties.reduce((s, sp) => s + sp.weight, 0);
-      const w = data.specialties.length === 0 ? 100 : Math.max(10, Math.floor(remaining / 2));
-      set("specialties", [...data.specialties, { name, weight: w }]);
-    }
-  };
-
-  const updateWeight = (name, weight) => {
-    set(
-      "specialties",
-      data.specialties.map((s) => (s.name === name ? { ...s, weight } : s)),
-    );
+  const setIssueTier = (issue, tier) => {
+    setData((d) => {
+      const stripped = {
+        primary_specialties: d.primary_specialties.filter((x) => x !== issue),
+        secondary_specialties: d.secondary_specialties.filter((x) => x !== issue),
+        general_treats: d.general_treats.filter((x) => x !== issue),
+      };
+      if (tier === "primary") {
+        if (stripped.primary_specialties.length >= 2) return d;
+        stripped.primary_specialties = [...stripped.primary_specialties, issue];
+      } else if (tier === "secondary") {
+        if (stripped.secondary_specialties.length >= 3) return d;
+        stripped.secondary_specialties = [...stripped.secondary_specialties, issue];
+      } else if (tier === "general") {
+        if (stripped.general_treats.length >= 5) return d;
+        stripped.general_treats = [...stripped.general_treats, issue];
+      }
+      return { ...d, ...stripped };
+    });
   };
 
   const valid =
     data.name.trim().length >= 3 &&
     data.email.includes("@") &&
-    data.specialties.length >= 1 &&
-    data.ages_served.length >= 1 &&
-    data.modalities.length >= 1;
+    !!data.gender &&
+    data.client_types.length >= 1 &&
+    data.age_groups.length >= 1 &&
+    data.primary_specialties.length >= 1 &&
+    data.modalities.length >= 1 &&
+    data.availability_windows.length >= 1 &&
+    (data.modality_offering === "telehealth" || data.office_locations.length >= 1);
 
   const submit = async () => {
     setSubmitting(true);
@@ -133,7 +200,7 @@ export default function TherapistSignup() {
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
       <Header />
       <main className="flex-1" data-testid="therapist-signup-page">
-        <section className="border-b border-[#E8E5DF] py-16 md:py-20">
+        <section className="border-b border-[#E8E5DF] py-16">
           <div className="max-w-4xl mx-auto px-5 sm:px-8 grid md:grid-cols-2 gap-10 items-center">
             <div>
               <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] mb-3">
@@ -151,7 +218,7 @@ export default function TherapistSignup() {
             <ul className="space-y-3 text-sm text-[#2B2A29]">
               {[
                 "Free to join during our pilot",
-                "Only get notified when match score ≥ 60%",
+                "Only get notified when match score ≥ 71%",
                 "One-click apply with a personal note",
                 "Patient sees only your name, message, and rate until they reach out",
               ].map((b) => (
@@ -167,12 +234,14 @@ export default function TherapistSignup() {
           </div>
         </section>
 
-        <section className="py-16">
+        <section className="py-14">
           <div className="max-w-3xl mx-auto px-5 sm:px-8">
             <div className="bg-white border border-[#E8E5DF] rounded-3xl p-6 sm:p-10">
-              <h2 className="font-serif-display text-3xl text-[#2D4A3E]">Tell us about your practice</h2>
+              <h2 className="font-serif-display text-3xl text-[#2D4A3E]">
+                Tell us about your practice
+              </h2>
               <p className="text-sm text-[#6D6A65] mt-1">
-                All fields below help us route the right referrals to you.
+                The more accurate your profile, the better the matches we'll route to you.
               </p>
 
               <div className="mt-8 space-y-7">
@@ -204,135 +273,211 @@ export default function TherapistSignup() {
                       data-testid="signup-phone"
                     />
                   </Field>
-                </Group>
-
-                <Group title="Practice format">
-                  <div className="flex items-center justify-between bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3">
-                    <div>
-                      <div className="text-sm font-medium text-[#2B2A29]">Telehealth</div>
-                      <div className="text-xs text-[#6D6A65]">I see patients virtually</div>
-                    </div>
-                    <Switch
-                      checked={data.telehealth}
-                      onCheckedChange={(v) => set("telehealth", v)}
-                      data-testid="signup-telehealth"
-                    />
-                  </div>
-                  <Field label="Office cities (Idaho)">
-                    <div className="flex gap-2">
-                      <Input
-                        value={office}
-                        onChange={(e) => setOffice(e.target.value)}
-                        placeholder="e.g. Boise"
-                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                        data-testid="signup-office-input"
-                      />
-                      <button
-                        type="button"
-                        className="tv-btn-secondary !py-2 !px-4 text-sm"
-                        onClick={() => {
-                          if (office.trim()) {
-                            set("office_locations", [
-                              ...data.office_locations,
-                              office.trim(),
-                            ]);
-                            setOffice("");
-                          }
-                        }}
-                        data-testid="signup-office-add"
-                      >
-                        <Plus size={14} className="inline mr-1" /> Add
-                      </button>
-                    </div>
-                    <Tags
-                      items={data.office_locations}
-                      onRemove={(c) =>
-                        set(
-                          "office_locations",
-                          data.office_locations.filter((x) => x !== c),
-                        )
-                      }
+                  <Field label="Gender (used only when patients have a stated preference)">
+                    <PillRow
+                      items={GENDERS}
+                      selected={[data.gender]}
+                      onSelect={(v) => set("gender", v)}
+                      testid="signup-gender"
                     />
                   </Field>
                 </Group>
 
                 <Group
-                  title="Specialties (top 5, with weight)"
-                  hint="Pick up to 5 — adjust weights to reflect your top focus areas. Weights inform match scoring."
+                  title="Who do you see?"
+                  hint="Required — patients are pre-filtered by these"
                 >
-                  <Pills
-                    items={ALL_SPECIALTIES}
-                    selected={data.specialties.map((s) => s.name)}
-                    onToggle={addSpecialty}
-                    testid="signup-specialty"
-                  />
-                  {data.specialties.length > 0 && (
-                    <div className="mt-4 space-y-2.5">
-                      {data.specialties.map((s) => (
+                  <Field label="Client types">
+                    <PillRow
+                      items={CLIENT_TYPES}
+                      selected={data.client_types}
+                      onSelect={(v) => toggleArr("client_types", v)}
+                      testid="signup-client-type"
+                    />
+                  </Field>
+                  <Field label="Age groups">
+                    <PillRow
+                      items={AGE_GROUPS}
+                      selected={data.age_groups}
+                      onSelect={(v) => toggleArr("age_groups", v)}
+                      testid="signup-age-group"
+                    />
+                  </Field>
+                </Group>
+
+                <Group
+                  title="Specialties"
+                  hint="Tap an issue, then choose its tier. Higher tier = stronger match score."
+                >
+                  <div className="space-y-2.5">
+                    {ISSUES.map((iss) => {
+                      const tier = issueTier(iss.v);
+                      const tiersAvail = {
+                        primary: data.primary_specialties.length < 2 || tier === "primary",
+                        secondary:
+                          data.secondary_specialties.length < 3 || tier === "secondary",
+                        general:
+                          data.general_treats.length < 5 || tier === "general",
+                      };
+                      return (
                         <div
-                          key={s.name}
-                          className="flex items-center gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2"
+                          key={iss.v}
+                          className="flex items-center justify-between gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2"
+                          data-testid={`signup-issue-${iss.v}`}
                         >
-                          <span className="text-sm capitalize w-32 text-[#2B2A29]">
-                            {s.name}
+                          <span className="text-sm text-[#2B2A29] flex-1">
+                            {iss.l}
                           </span>
-                          <input
-                            type="range"
-                            min="5"
-                            max="100"
-                            value={s.weight}
-                            onChange={(e) =>
-                              updateWeight(s.name, parseInt(e.target.value, 10))
-                            }
-                            className="flex-1 accent-[#2D4A3E]"
-                          />
-                          <span className="text-sm font-mono text-[#2D4A3E] w-10 text-right">
-                            {s.weight}
-                          </span>
+                          <div className="flex gap-1">
+                            {[
+                              ["primary", "Primary", "#2D4A3E"],
+                              ["secondary", "Secondary", "#3A5E50"],
+                              ["general", "General", "#6D6A65"],
+                              [null, "—", "#E8E5DF"],
+                            ].map(([t, lbl, color]) => {
+                              const active = tier === t;
+                              const disabled = t && !tiersAvail[t];
+                              return (
+                                <button
+                                  key={lbl}
+                                  type="button"
+                                  disabled={disabled}
+                                  onClick={() => setIssueTier(iss.v, t)}
+                                  data-testid={`signup-issue-${iss.v}-${t || "none"}`}
+                                  className={`text-xs px-2.5 py-1 rounded-md border transition ${
+                                    active
+                                      ? "text-white border-transparent"
+                                      : disabled
+                                        ? "text-[#6D6A65]/40 border-[#E8E5DF] cursor-not-allowed"
+                                        : "text-[#6D6A65] border-[#E8E5DF] hover:border-[#2D4A3E]"
+                                  }`}
+                                  style={active ? { background: color } : {}}
+                                >
+                                  {lbl}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-[#6D6A65] mt-3">
+                    Primary: {data.primary_specialties.length}/2 · Secondary:{" "}
+                    {data.secondary_specialties.length}/3 · General:{" "}
+                    {data.general_treats.length}/5
+                  </p>
                 </Group>
 
-                <Group title="Modalities (top 3)">
-                  <Pills
-                    items={ALL_MODALITIES}
-                    selected={data.modalities}
-                    onToggle={(m) => {
-                      if (data.modalities.includes(m)) toggleArr("modalities", m);
-                      else if (data.modalities.length < 6) toggleArr("modalities", m);
-                    }}
-                    testid="signup-modality"
-                  />
-                </Group>
-
-                <Group title="Ages served">
-                  <div className="grid grid-cols-2 gap-2.5">
-                    {ALL_AGES.map((a) => (
-                      <label
-                        key={a.v}
-                        className="flex items-center gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5 cursor-pointer hover:border-[#2D4A3E] transition"
-                      >
-                        <Checkbox
-                          checked={data.ages_served.includes(a.v)}
-                          onCheckedChange={() => toggleArr("ages_served", a.v)}
-                          className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
-                          data-testid={`signup-age-${a.v}`}
-                        />
-                        <span className="text-sm text-[#2B2A29]">{a.l}</span>
-                      </label>
-                    ))}
+                <Group title="Modalities you practice (pick 1–6)">
+                  <div className="flex flex-wrap gap-2">
+                    {MODALITIES.map((m) => {
+                      const active = data.modalities.includes(m);
+                      return (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => toggleArr("modalities", m, 6)}
+                          data-testid={`signup-modality-${m}`}
+                          className={`text-sm px-3.5 py-1.5 rounded-full border transition ${
+                            active
+                              ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
+                              : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+                          }`}
+                        >
+                          {m}
+                        </button>
+                      );
+                    })}
                   </div>
                 </Group>
 
+                <Group title="Practice format & availability">
+                  <Field label="Where do you see clients?">
+                    <PillRow
+                      items={MODALITY_OFFERINGS}
+                      selected={[data.modality_offering]}
+                      onSelect={(v) => set("modality_offering", v)}
+                      testid="signup-modality-offering"
+                    />
+                  </Field>
+                  {data.modality_offering !== "telehealth" && (
+                    <Field label="Office cities (Idaho)">
+                      <div className="flex gap-2">
+                        <Input
+                          value={office}
+                          onChange={(e) => setOffice(e.target.value)}
+                          placeholder="e.g. Boise"
+                          className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                          data-testid="signup-office-input"
+                        />
+                        <button
+                          type="button"
+                          className="tv-btn-secondary !py-2 !px-4 text-sm"
+                          onClick={() => {
+                            if (office.trim()) {
+                              set("office_locations", [
+                                ...data.office_locations,
+                                office.trim(),
+                              ]);
+                              setOffice("");
+                            }
+                          }}
+                          data-testid="signup-office-add"
+                        >
+                          <Plus size={14} className="inline mr-1" /> Add
+                        </button>
+                      </div>
+                      <Tags
+                        items={data.office_locations}
+                        onRemove={(c) =>
+                          set(
+                            "office_locations",
+                            data.office_locations.filter((x) => x !== c),
+                          )
+                        }
+                      />
+                    </Field>
+                  )}
+                  <Field label="Sessions you can offer">
+                    <PillRow
+                      items={AVAILABILITY}
+                      selected={data.availability_windows}
+                      onSelect={(v) => toggleArr("availability_windows", v)}
+                      testid="signup-availability"
+                    />
+                  </Field>
+                  <Field label="Current caseload">
+                    <PillRow
+                      items={URGENCY_CAPACITIES}
+                      selected={[data.urgency_capacity]}
+                      onSelect={(v) => set("urgency_capacity", v)}
+                      testid="signup-urgency"
+                    />
+                  </Field>
+                </Group>
+
                 <Group title="Insurance accepted (optional)">
-                  <Pills
-                    items={COMMON_INSURERS}
-                    selected={data.insurance_accepted}
-                    onToggle={(i) => toggleArr("insurance_accepted", i)}
-                    testid="signup-insurance"
-                  />
+                  <div className="flex flex-wrap gap-2">
+                    {IDAHO_INSURERS.map((i) => {
+                      const active = data.insurance_accepted.includes(i);
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => toggleArr("insurance_accepted", i)}
+                          data-testid={`signup-insurance-${i}`}
+                          className={`text-sm px-3.5 py-1.5 rounded-full border transition ${
+                            active
+                              ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
+                              : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+                          }`}
+                        >
+                          {i}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </Group>
 
                 <Group title="Rates & experience">
@@ -341,7 +486,9 @@ export default function TherapistSignup() {
                       <Input
                         type="number"
                         value={data.cash_rate}
-                        onChange={(e) => set("cash_rate", parseInt(e.target.value, 10) || 0)}
+                        onChange={(e) =>
+                          set("cash_rate", parseInt(e.target.value, 10) || 0)
+                        }
                         className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                         data-testid="signup-cash-rate"
                       />
@@ -358,17 +505,49 @@ export default function TherapistSignup() {
                       />
                     </Field>
                   </div>
-                  <label className="flex items-center gap-3 mt-2 cursor-pointer">
-                    <Checkbox
-                      checked={data.free_consult}
-                      onCheckedChange={(v) => set("free_consult", v)}
-                      className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
-                      data-testid="signup-free-consult"
-                    />
-                    <span className="text-sm text-[#2B2A29]">
-                      I offer a free initial consult (recommended — increases match-rate)
-                    </span>
-                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-3 cursor-pointer hover:border-[#2D4A3E] transition">
+                      <Checkbox
+                        checked={data.free_consult}
+                        onCheckedChange={(v) => set("free_consult", v)}
+                        className="mt-0.5 border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
+                        data-testid="signup-free-consult"
+                      />
+                      <div>
+                        <div className="text-sm font-medium text-[#2B2A29]">
+                          Free initial consult
+                        </div>
+                        <div className="text-xs text-[#6D6A65]">
+                          Increases match-rate notably
+                        </div>
+                      </div>
+                    </label>
+                    <label className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-3 cursor-pointer hover:border-[#2D4A3E] transition">
+                      <Checkbox
+                        checked={data.sliding_scale}
+                        onCheckedChange={(v) => set("sliding_scale", v)}
+                        className="mt-0.5 border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
+                        data-testid="signup-sliding-scale"
+                      />
+                      <div>
+                        <div className="text-sm font-medium text-[#2B2A29]">
+                          Sliding-scale rates available
+                        </div>
+                        <div className="text-xs text-[#6D6A65]">
+                          Patients with budget constraints will see you
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                </Group>
+
+                <Group title="How would you describe your style?">
+                  <PillRow
+                    items={STYLE_TAGS}
+                    selected={data.style_tags}
+                    onSelect={(v) => toggleArr("style_tags", v)}
+                    testid="signup-style"
+                  />
                 </Group>
 
                 <Group title="Short bio (optional)" hint="2–3 sentences. Patients see this on their results page.">
@@ -385,8 +564,8 @@ export default function TherapistSignup() {
 
               <div className="mt-10 pt-6 border-t border-[#E8E5DF] flex items-center justify-between flex-wrap gap-4">
                 <p className="text-xs text-[#6D6A65] max-w-md">
-                  By submitting, you agree to receive anonymous referral notifications. Your
-                  profile is reviewed before going live.
+                  By submitting, you agree to receive anonymous referral notifications.
+                  Your profile is reviewed before going live.
                 </p>
                 <button
                   className="tv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
@@ -430,24 +609,24 @@ function Field({ label, children }) {
   );
 }
 
-function Pills({ items, selected, onToggle, testid }) {
+function PillRow({ items, selected, onSelect, testid }) {
   return (
     <div className="flex flex-wrap gap-2">
-      {items.map((item) => {
-        const active = selected.includes(item);
+      {items.map((it) => {
+        const active = selected.includes(it.v);
         return (
           <button
             type="button"
-            key={item}
-            onClick={() => onToggle(item)}
-            data-testid={`${testid}-${item}`}
-            className={`text-sm px-3.5 py-1.5 rounded-full border transition capitalize ${
+            key={it.v}
+            onClick={() => onSelect(it.v)}
+            data-testid={`${testid}-${it.v}`}
+            className={`text-sm px-3.5 py-1.5 rounded-full border transition ${
               active
                 ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
                 : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
             }`}
           >
-            {item}
+            {it.l}
           </button>
         );
       })}

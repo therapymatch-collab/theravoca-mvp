@@ -182,6 +182,7 @@ class TherapistSignup(BaseModel):
     office_locations: list[str] = Field(default_factory=list)
     insurance_accepted: list[str] = Field(default_factory=list)
     cash_rate: int = Field(ge=0, le=1000, default=150)
+    sliding_scale: bool = False
     years_experience: int = Field(ge=0, le=70, default=1)
     availability_windows: list[str] = Field(default_factory=list)
     urgency_capacity: str = "within_month"
@@ -201,6 +202,7 @@ class RequestCreate(BaseModel):
     payment_type: str = "either"  # insurance | cash | either
     insurance_name: Optional[str] = ""
     budget: Optional[int] = None
+    sliding_scale_ok: bool = False
     presenting_issues: list[str] = Field(default_factory=list, max_length=3)
     other_issue: Optional[str] = ""
     availability_windows: list[str] = Field(default_factory=list)
