@@ -54,6 +54,13 @@ Tech: FastAPI + MongoDB + React. Email via Resend. ~100 seeded Idaho therapists.
 - **`/app/frontend/src/lib/insurers.js`** — single source of truth for Idaho insurer lists (`IDAHO_INSURERS`, `PATIENT_INSURER_OPTIONS`).
 - 10/10 backend pytest pass, frontend Playwright validated. Test file: `/app/backend/tests/test_iteration8_payment_insurance.py`.
 
+## Iteration 11 (2026-04-26) — Twilio SMS notifications for therapists
+- **`/app/backend/sms_service.py`** — new module with `send_sms`, `send_therapist_referral_sms`, US phone E.164 normalizer. Honors `TWILIO_ENABLED` kill-switch and `TWILIO_DEV_OVERRIDE_TO` (mirrors email override pattern).
+- **Matching flow** — `_trigger_matching` now sends a 1-line SMS to every newly notified therapist alongside the email. Best-effort (try/except wrapped) so SMS failure never breaks matching.
+- **Admin UI** — new "Test SMS" button (data-testid=`test-sms-btn`) + `POST /api/admin/test-sms` endpoint sends a smoke-test SMS to the configured override.
+- **Verified live**: 1 test SMS + 7 referral SMS landed in the user's verified phone (+12036237529); each carries `[was: <intended-therapist-number>]` prefix so admin can trace which therapist would have received it in production.
+- **Env**: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` (+16467606274), `TWILIO_DEV_OVERRIDE_TO` (+12036237529), `TWILIO_ENABLED=true`.
+
 ## Iteration 10 (2026-04-26) — Consult CTA + Admin provider directory + Sliding-scale scoring + Email override
 - **Patient Results "Schedule a free 15-min consult" CTA** — prominent green button on every result card (`data-testid="consult-btn-{i}"`) that opens a `mailto:` pre-filled with subject "Free 15-min consult — TheraVoca match" and body containing patient's first 2 presenting issues mapped to friendly labels.
 - **Sliding-scale scoring (P1)** — new `payment_fit` axis (max 3 pts) added to matching breakdown: scores 3.0 when `request.sliding_scale_ok=true AND therapist.sliding_scale=true`. Total clamped at 100. Breakdown now has 9 keys.

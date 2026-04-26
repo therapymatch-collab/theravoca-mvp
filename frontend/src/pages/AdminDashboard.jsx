@@ -14,6 +14,7 @@ import {
   Users,
   UserCheck,
   Pencil,
+  MessageSquare,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
@@ -157,6 +158,19 @@ export default function AdminDashboard() {
     }
   };
 
+  const sendTestSms = async () => {
+    try {
+      const res = await client.post("/admin/test-sms", {});
+      if (res.data?.ok) {
+        toast.success(`SMS queued — sid ${res.data.sid?.slice(0, 12)}…`);
+      } else {
+        toast.error(res.data?.detail || "SMS not sent — check Twilio config");
+      }
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "SMS send failed");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
       <Header minimal />
@@ -171,13 +185,23 @@ export default function AdminDashboard() {
                 Operations
               </h1>
             </div>
-            <button
-              className="tv-btn-secondary !py-2 !px-4 text-sm"
-              onClick={refresh}
-              data-testid="refresh-btn"
-            >
-              <RotateCw size={14} className="inline mr-1.5" /> Refresh
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                className="tv-btn-secondary !py-2 !px-4 text-sm"
+                onClick={sendTestSms}
+                data-testid="test-sms-btn"
+                title="Send a test SMS to the configured Twilio dev override number"
+              >
+                <MessageSquare size={14} className="inline mr-1.5" /> Test SMS
+              </button>
+              <button
+                className="tv-btn-secondary !py-2 !px-4 text-sm"
+                onClick={refresh}
+                data-testid="refresh-btn"
+              >
+                <RotateCw size={14} className="inline mr-1.5" /> Refresh
+              </button>
+            </div>
           </div>
 
           {loading ? (

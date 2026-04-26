@@ -30,6 +30,7 @@ from email_service import (
 from geocoding import geocode_city, geocode_offices, geocode_zip, haversine_miles
 from matching import rank_therapists
 from seed_data import generate_seed_therapists
+from sms_service import send_sms, send_therapist_referral_sms
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -352,6 +353,7 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
                     notified_distances[m["id"]] = round(min(dists), 1)
 
     summary = _safe_summary_for_therapist(req)
+    public_url = os.environ.get("PUBLIC_APP_URL", "")
     for m in new_matches:
         await send_therapist_notification(
             to=m["email"],
@@ -361,6 +363,19 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
             match_score=m["match_score"],
             summary=summary,
         )
+        # Best-effort SMS — does not block matching if it fails or is disabled
+        phone = m.get("phone") or ""
+        if phone:
+            apply_url = f"{public_url}/therapist/apply/{req['id']}/{m['id']}"
+            try:
+                await send_therapist_referral_sms(
+                    to=phone,
+                    therapist_first_name=m["name"].split(",")[0],
+                    match_score=m["match_score"],
+                    apply_url=apply_url,
+                )
+            except Exception as e:
+                logger.warning("SMS send failed for therapist %s: %s", m["id"], e)
 
     await db.requests.update_one(
         {"id": request_id},
@@ -975,6 +990,19 @@ async def admin_update_therapist(
         raise HTTPException(404, "Therapist not found")
     t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0})
     return {"ok": True, "therapist": t}
+
+
+@api.post("/admin/test-sms")
+async def admin_test_sms(payload: dict, _: bool = Depends(require_admin)):
+    """Send a quick verification SMS to the configured Twilio override (or a custom 'to')."""
+    to = (payload or {}).get("to") or os.environ.get("TWILIO_DEV_OVERRIDE_TO", "")
+    body = (payload or {}).get("body") or "TheraVoca: SMS smoke test — your Twilio integration is wired up."
+    if not to:
+        raise HTTPException(400, "No recipient and no TWILIO_DEV_OVERRIDE_TO env set")
+    result = await send_sms(to, body)
+    if not result:
+        return {"ok": False, "detail": "SMS send returned no result (check TWILIO_ENABLED + creds + logs)"}
+    return {"ok": True, **result}
 
 
 @api.post("/admin/seed")
