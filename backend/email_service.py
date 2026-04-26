@@ -4,15 +4,29 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
 import resend
+from dotenv import load_dotenv
+
+# Ensure .env is loaded even if this module is imported before server.py calls load_dotenv()
+load_dotenv(Path(__file__).parent / ".env")
 
 logger = logging.getLogger(__name__)
 
-resend.api_key = os.environ.get("RESEND_API_KEY", "")
-SENDER = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
-APP_URL = os.environ.get("PUBLIC_APP_URL", "")
+
+def _get_api_key() -> str:
+    return os.environ.get("RESEND_API_KEY", "")
+
+
+def _get_sender() -> str:
+    return os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
+
+
+def _get_app_url() -> str:
+    return os.environ.get("PUBLIC_APP_URL", "")
+
 
 BRAND = {
     "primary": "#2D4A3E",
@@ -49,10 +63,12 @@ def _wrap(title: str, inner_html: str) -> str:
 
 
 async def _send(to: str, subject: str, html: str) -> dict[str, Any] | None:
-    if not resend.api_key:
+    api_key = _get_api_key()
+    if not api_key:
         logger.warning("RESEND_API_KEY not configured, skipping email to %s", to)
         return None
-    params = {"from": SENDER, "to": [to], "subject": subject, "html": html}
+    resend.api_key = api_key
+    params = {"from": _get_sender(), "to": [to], "subject": subject, "html": html}
     try:
         result = await asyncio.to_thread(resend.Emails.send, params)
         logger.info("Sent email to %s id=%s", to, result.get("id"))
@@ -65,7 +81,7 @@ async def _send(to: str, subject: str, html: str) -> dict[str, Any] | None:
 # ─── Templates ─────────────────────────────────────────────────────────────────
 
 async def send_verification_email(to: str, request_id: str, token: str) -> None:
-    verify_url = f"{APP_URL}/verify/{token}"
+    verify_url = f"{_get_app_url()}/verify/{token}"
     inner = f"""
     <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">
       Thank you for trusting TheraVoca to help you find the right therapist. Please confirm your email so we can begin matching you.
@@ -88,7 +104,7 @@ async def send_therapist_notification(
     match_score: float,
     summary: dict[str, Any],
 ) -> None:
-    apply_url = f"{APP_URL}/therapist/apply/{request_id}/{therapist_id}"
+    apply_url = f"{_get_app_url()}/therapist/apply/{request_id}/{therapist_id}"
     summary_rows = "".join(
         f'<tr><td style="padding:6px 0;color:{BRAND["muted"]};font-size:13px;width:140px;">{k}</td>'
         f'<td style="padding:6px 0;color:{BRAND["text"]};font-size:14px;">{v}</td></tr>'
@@ -142,7 +158,7 @@ async def send_patient_results(to: str, request_id: str, applications: list[dict
           </table>
         </div>
         """
-    results_url = f"{APP_URL}/results/{request_id}"
+    results_url = f"{_get_app_url()}/results/{request_id}"
     inner = f"""
     <p style="font-size:16px;line-height:1.6;">Your personalized therapist matches are ready.</p>
     <p style="color:{BRAND['text']};font-size:15px;line-height:1.7;">
