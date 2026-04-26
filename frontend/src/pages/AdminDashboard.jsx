@@ -12,16 +12,21 @@ import {
   XCircle,
   Inbox,
   Users,
+  UserCheck,
+  Pencil,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
 import { ADMIN_POLL_INTERVAL_MS, STATUS_UNAUTHORIZED } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 
 export default function AdminDashboard() {
@@ -31,21 +36,26 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [requests, setRequests] = useState([]);
   const [pendingTherapists, setPendingTherapists] = useState([]);
+  const [allTherapists, setAllTherapists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("requests");
   const [openId, setOpenId] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [editTherapist, setEditTherapist] = useState(null);
+  const [savingTherapist, setSavingTherapist] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const [s, r, pt] = await Promise.all([
+      const [s, r, pt, allT] = await Promise.all([
         client.get("/admin/stats"),
         client.get("/admin/requests"),
         client.get("/admin/therapists?pending=true"),
+        client.get("/admin/therapists"),
       ]);
       setStats(s.data);
       setRequests(r.data);
       setPendingTherapists(pt.data);
+      setAllTherapists(allT.data);
     } catch (e) {
       if (e?.response?.status === STATUS_UNAUTHORIZED) {
         sessionStorage.removeItem("tv_admin_pwd");
@@ -130,6 +140,22 @@ export default function AdminDashboard() {
     }
   };
 
+  const saveTherapist = async () => {
+    if (!editTherapist) return;
+    setSavingTherapist(true);
+    try {
+      const { id, ...payload } = editTherapist;
+      await client.put(`/admin/therapists/${id}`, payload);
+      toast.success("Therapist updated");
+      setEditTherapist(null);
+      refresh();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to update therapist");
+    } finally {
+      setSavingTherapist(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
       <Header minimal />
@@ -190,6 +216,14 @@ export default function AdminDashboard() {
                   count={pendingTherapists.length}
                   testid="tab-therapists"
                   highlight={pendingTherapists.length > 0}
+                />
+                <TabBtn
+                  active={tab === "all_therapists"}
+                  onClick={() => setTab("all_therapists")}
+                  icon={<UserCheck size={14} />}
+                  label="All providers"
+                  count={allTherapists.length}
+                  testid="tab-all-therapists"
                 />
               </div>
 
@@ -310,10 +344,273 @@ export default function AdminDashboard() {
                   )}
                 </div>
               )}
+
+              {tab === "all_therapists" && (
+                <div className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
+                  <table className="w-full text-sm" data-testid="all-therapists-table">
+                    <thead className="bg-[#FDFBF7] text-[#6D6A65]">
+                      <tr className="text-left">
+                        <Th>Name</Th>
+                        <Th>Email</Th>
+                        <Th>Status</Th>
+                        <Th>Rate</Th>
+                        <Th>Specialties</Th>
+                        <Th>Cities</Th>
+                        <Th></Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allTherapists.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="p-10 text-center text-[#6D6A65]">
+                            No providers in the directory yet.
+                          </td>
+                        </tr>
+                      )}
+                      {allTherapists.map((t) => (
+                        <tr
+                          key={t.id}
+                          className="border-t border-[#E8E5DF] hover:bg-[#FDFBF7]"
+                          data-testid={`provider-row-${t.id}`}
+                        >
+                          <td className="p-4">
+                            <div className="font-medium text-[#2B2A29]">{t.name}</div>
+                            <div className="text-xs text-[#6D6A65]">
+                              {t.years_experience ?? "?"} yrs •{" "}
+                              {(t.gender || "—")}
+                            </div>
+                          </td>
+                          <td className="p-4 text-[#2B2A29] text-xs break-all">{t.email}</td>
+                          <td className="p-4">
+                            <ProviderStatus t={t} />
+                          </td>
+                          <td className="p-4 text-[#2B2A29]">
+                            ${t.cash_rate ?? "—"}
+                            {t.sliding_scale ? (
+                              <span className="ml-1 text-[10px] uppercase tracking-wider text-[#C87965]">
+                                + sliding
+                              </span>
+                            ) : null}
+                          </td>
+                          <td className="p-4 text-xs text-[#2B2A29]">
+                            {(t.primary_specialties || []).slice(0, 2).join(", ") || "—"}
+                          </td>
+                          <td className="p-4 text-xs text-[#6D6A65]">
+                            {(t.office_locations || []).slice(0, 2).join(", ") ||
+                              (t.modality_offering === "telehealth" ? "telehealth" : "—")}
+                          </td>
+                          <td className="p-4 text-right">
+                            <button
+                              className="text-[#2D4A3E] hover:underline text-xs inline-flex items-center gap-1"
+                              onClick={() => setEditTherapist({ ...t })}
+                              data-testid={`edit-provider-${t.id}`}
+                            >
+                              <Pencil size={12} /> Edit
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </>
           )}
         </div>
       </main>
+
+      <Dialog
+        open={!!editTherapist}
+        onOpenChange={(o) => !o && setEditTherapist(null)}
+      >
+        <DialogContent
+          className="max-w-2xl max-h-[85vh] overflow-y-auto bg-white border-[#E8E5DF]"
+          data-testid="edit-provider-dialog"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-serif-display text-2xl text-[#2D4A3E]">
+              Edit provider
+            </DialogTitle>
+          </DialogHeader>
+          {editTherapist && (
+            <div className="space-y-4 mt-2">
+              <FieldRow label="Name + license">
+                <Input
+                  value={editTherapist.name || ""}
+                  onChange={(e) =>
+                    setEditTherapist({ ...editTherapist, name: e.target.value })
+                  }
+                  data-testid="edit-name"
+                />
+              </FieldRow>
+              <div className="grid grid-cols-2 gap-3">
+                <FieldRow label="Email">
+                  <Input
+                    type="email"
+                    value={editTherapist.email || ""}
+                    onChange={(e) =>
+                      setEditTherapist({ ...editTherapist, email: e.target.value })
+                    }
+                    data-testid="edit-email"
+                  />
+                </FieldRow>
+                <FieldRow label="Phone">
+                  <Input
+                    value={editTherapist.phone || ""}
+                    onChange={(e) =>
+                      setEditTherapist({ ...editTherapist, phone: e.target.value })
+                    }
+                    data-testid="edit-phone"
+                  />
+                </FieldRow>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <FieldRow label="Cash rate ($)">
+                  <Input
+                    type="number"
+                    value={editTherapist.cash_rate ?? ""}
+                    onChange={(e) =>
+                      setEditTherapist({
+                        ...editTherapist,
+                        cash_rate: parseInt(e.target.value, 10) || 0,
+                      })
+                    }
+                    data-testid="edit-cash-rate"
+                  />
+                </FieldRow>
+                <FieldRow label="Years experience">
+                  <Input
+                    type="number"
+                    value={editTherapist.years_experience ?? ""}
+                    onChange={(e) =>
+                      setEditTherapist({
+                        ...editTherapist,
+                        years_experience: parseInt(e.target.value, 10) || 0,
+                      })
+                    }
+                    data-testid="edit-years"
+                  />
+                </FieldRow>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <FieldRow label="Modality offering">
+                  <select
+                    value={editTherapist.modality_offering || "both"}
+                    onChange={(e) =>
+                      setEditTherapist({
+                        ...editTherapist,
+                        modality_offering: e.target.value,
+                      })
+                    }
+                    className="w-full bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg p-2 text-sm"
+                    data-testid="edit-modality-offering"
+                  >
+                    <option value="both">Both telehealth + in-person</option>
+                    <option value="telehealth">Telehealth only</option>
+                    <option value="in_person">In-person only</option>
+                  </select>
+                </FieldRow>
+                <FieldRow label="Urgency capacity">
+                  <select
+                    value={editTherapist.urgency_capacity || "within_2_3_weeks"}
+                    onChange={(e) =>
+                      setEditTherapist({
+                        ...editTherapist,
+                        urgency_capacity: e.target.value,
+                      })
+                    }
+                    className="w-full bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg p-2 text-sm"
+                    data-testid="edit-urgency"
+                  >
+                    <option value="asap">ASAP — this week</option>
+                    <option value="within_2_3_weeks">Within 2–3 weeks</option>
+                    <option value="within_month">Within a month</option>
+                    <option value="full">Currently full</option>
+                  </select>
+                </FieldRow>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex items-center gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg px-3 py-2.5 cursor-pointer">
+                  <Checkbox
+                    checked={!!editTherapist.sliding_scale}
+                    onCheckedChange={(v) =>
+                      setEditTherapist({ ...editTherapist, sliding_scale: !!v })
+                    }
+                    data-testid="edit-sliding-scale"
+                    className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
+                  />
+                  <span className="text-sm">Sliding scale available</span>
+                </label>
+                <label className="flex items-center gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg px-3 py-2.5 cursor-pointer">
+                  <Checkbox
+                    checked={!!editTherapist.free_consult}
+                    onCheckedChange={(v) =>
+                      setEditTherapist({ ...editTherapist, free_consult: !!v })
+                    }
+                    data-testid="edit-free-consult"
+                    className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
+                  />
+                  <span className="text-sm">Free consult</span>
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex items-center gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg px-3 py-2.5 cursor-pointer">
+                  <Checkbox
+                    checked={editTherapist.is_active !== false}
+                    onCheckedChange={(v) =>
+                      setEditTherapist({ ...editTherapist, is_active: !!v })
+                    }
+                    data-testid="edit-active"
+                    className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
+                  />
+                  <span className="text-sm">Active (eligible for matching)</span>
+                </label>
+                <label className="flex items-center gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg px-3 py-2.5 cursor-pointer">
+                  <Checkbox
+                    checked={!!editTherapist.pending_approval}
+                    onCheckedChange={(v) =>
+                      setEditTherapist({
+                        ...editTherapist,
+                        pending_approval: !!v,
+                      })
+                    }
+                    data-testid="edit-pending"
+                    className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
+                  />
+                  <span className="text-sm">Pending approval</span>
+                </label>
+              </div>
+              <FieldRow label="Bio">
+                <Textarea
+                  rows={3}
+                  value={editTherapist.bio || ""}
+                  onChange={(e) =>
+                    setEditTherapist({ ...editTherapist, bio: e.target.value })
+                  }
+                  data-testid="edit-bio"
+                />
+              </FieldRow>
+            </div>
+          )}
+          <DialogFooter className="mt-4 flex gap-2 justify-end">
+            <button
+              className="tv-btn-secondary !py-2 !px-4 text-sm"
+              onClick={() => setEditTherapist(null)}
+              data-testid="edit-cancel"
+            >
+              Cancel
+            </button>
+            <button
+              className="tv-btn-primary !py-2 !px-4 text-sm disabled:opacity-50"
+              onClick={saveTherapist}
+              disabled={savingTherapist}
+              data-testid="edit-save"
+            >
+              {savingTherapist ? "Saving..." : "Save changes"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!openId} onOpenChange={(o) => !o && setOpenId(null)}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto bg-white border-[#E8E5DF]">
@@ -505,8 +802,7 @@ function StatusBadge({ s, verified }) {
   );
 }
 
-function ThresholdControl({ current, onChange }) {
-  const [open, setOpen] = useState(false);
+function ThresholdControl({ current, onChange }) {  const [open, setOpen] = useState(false);
   const [val, setVal] = useState(current);
   return (
     <div className="relative">
@@ -549,3 +845,32 @@ function ThresholdControl({ current, onChange }) {
     </div>
   );
 }
+
+function FieldRow({ label, children }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-[#6D6A65] mb-1.5 uppercase tracking-wider">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function ProviderStatus({ t }) {
+  let label = "active";
+  let cls = "bg-[#2D4A3E]/10 text-[#2D4A3E]";
+  if (t.pending_approval) {
+    label = "pending";
+    cls = "bg-[#C87965]/15 text-[#C87965]";
+  } else if (t.is_active === false) {
+    label = "rejected";
+    cls = "bg-[#D45D5D]/15 text-[#D45D5D]";
+  }
+  return (
+    <span className={`inline-flex text-xs px-2.5 py-1 rounded-full ${cls}`}>
+      {label}
+    </span>
+  );
+}
+

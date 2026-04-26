@@ -231,7 +231,8 @@ class TestScoring:
         result = score_therapist(ther, req)
         bd = result["breakdown"]
         assert set(bd.keys()) == {"issues", "availability", "modality", "urgency",
-                                  "prior_therapy", "experience", "gender", "style"}
+                                  "prior_therapy", "experience", "gender", "style",
+                                  "payment_fit"}
 
 
 # ─── Module: Send-logic (top 30, threshold>=71, fallback) ────────────────────

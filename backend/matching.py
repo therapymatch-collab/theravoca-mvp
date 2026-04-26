@@ -22,6 +22,7 @@ MAX_PRIOR = 10.0
 MAX_EXPERIENCE = 5.0
 MAX_GENDER = 3.0
 MAX_STYLE = 2.0
+MAX_PAYMENT_FIT = 3.0  # bonus when patient accepts sliding scale AND therapist offers it
 
 # Maps experience preference label -> (lo, hi) years
 EXPERIENCE_RANGES = {
@@ -71,10 +72,13 @@ def _payment_pass(t: dict, r: dict) -> bool:
 
 def _insurance_match(t: dict, r: dict) -> bool:
     plan = (r.get("insurance_name") or "").lower().strip()
+    # "Other / not listed" = patient doesn't know exact carrier — skip the filter entirely
+    if plan in ("other", "other / not listed"):
+        return True
     accepted = [i.lower() for i in t.get("insurance_accepted") or []]
     if not accepted:
         return False
-    if plan and plan not in ("other", "other / not listed"):
+    if plan:
         return plan in accepted
     return True
 
@@ -272,6 +276,13 @@ def _score_style(t: dict, r: dict) -> float:
     return 0.0
 
 
+def _score_payment_fit(t: dict, r: dict) -> float:
+    """Bonus axis: patient accepts sliding scale AND therapist offers it."""
+    if r.get("sliding_scale_ok") and t.get("sliding_scale"):
+        return MAX_PAYMENT_FIT
+    return 0.0
+
+
 # ─── Public API ───────────────────────────────────────────────────────────────
 
 def score_therapist(t: dict, r: dict) -> dict[str, Any]:
@@ -298,8 +309,9 @@ def score_therapist(t: dict, r: dict) -> dict[str, Any]:
         "experience": _score_experience(t, r),
         "gender": _score_gender(t, r),
         "style": _score_style(t, r),
+        "payment_fit": _score_payment_fit(t, r),
     }
-    total = round(sum(breakdown.values()), 1)
+    total = round(min(100.0, sum(breakdown.values())), 1)
     return {"total": total, "breakdown": breakdown, "filtered": False}
 
 

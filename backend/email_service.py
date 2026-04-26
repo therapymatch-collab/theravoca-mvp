@@ -68,13 +68,17 @@ async def _send(to: str, subject: str, html: str) -> dict[str, Any] | None:
         logger.warning("RESEND_API_KEY not configured, skipping email to %s", to)
         return None
     resend.api_key = api_key
-    params = {"from": _get_sender(), "to": [to], "subject": subject, "html": html}
+    # Dev/test mode: redirect every outbound email to a single inbox (e.g. for Resend test mode)
+    override = os.environ.get("EMAIL_OVERRIDE_TO", "").strip()
+    actual_to = override or to
+    actual_subject = f"[was: {to}] {subject}" if override and override != to else subject
+    params = {"from": _get_sender(), "to": [actual_to], "subject": actual_subject, "html": html}
     try:
         result = await asyncio.to_thread(resend.Emails.send, params)
-        logger.info("Sent email to %s id=%s", to, result.get("id"))
+        logger.info("Sent email to %s (intended %s) id=%s", actual_to, to, result.get("id"))
         return result
     except Exception as e:
-        logger.exception("Failed to send email to %s: %s", to, e)
+        logger.exception("Failed to send email to %s: %s", actual_to, e)
         return None
 
 

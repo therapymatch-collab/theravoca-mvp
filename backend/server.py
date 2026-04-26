@@ -952,6 +952,31 @@ async def admin_reject_therapist(therapist_id: str, _: bool = Depends(require_ad
     return {"id": therapist_id, "status": "rejected"}
 
 
+@api.put("/admin/therapists/{therapist_id}")
+async def admin_update_therapist(
+    therapist_id: str, payload: dict, _: bool = Depends(require_admin)
+):
+    """Admin update of a therapist profile. Only whitelisted fields are persisted."""
+    allowed = {
+        "name", "email", "phone", "gender", "licensed_states",
+        "client_types", "age_groups",
+        "primary_specialties", "secondary_specialties", "general_treats",
+        "modalities", "modality_offering", "office_locations",
+        "insurance_accepted", "cash_rate", "sliding_scale", "free_consult",
+        "years_experience", "availability_windows", "urgency_capacity",
+        "style_tags", "bio", "is_active", "pending_approval",
+    }
+    update = {k: v for k, v in (payload or {}).items() if k in allowed}
+    if not update:
+        raise HTTPException(400, "No editable fields provided")
+    update["updated_at"] = _now_iso()
+    res = await db.therapists.update_one({"id": therapist_id}, {"$set": update})
+    if res.matched_count == 0:
+        raise HTTPException(404, "Therapist not found")
+    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0})
+    return {"ok": True, "therapist": t}
+
+
 @api.post("/admin/seed")
 async def admin_seed(_: bool = Depends(require_admin)):
     existing = await db.therapists.count_documents({})

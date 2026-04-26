@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Loader2, Phone, Mail, Star, Sparkles } from "lucide-react";
+import { Loader2, Phone, Mail, Star, Sparkles, CalendarPlus } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { api } from "@/lib/api";
 import { RESULTS_POLL_INTERVAL_MS } from "@/lib/constants";
 
 // Friendly labels for each scoring axis. Each entry maps axis -> { max, label }.
-// We surface the top 3 axes (where score > 30% of max) on the patient result card.
+// We surface the top 3 axes (where score > 50% of max) on the patient result card.
 const AXIS_META = {
   issues: { max: 35, label: "Specializes in your concerns" },
   availability: { max: 20, label: "Matches your schedule" },
@@ -16,6 +16,23 @@ const AXIS_META = {
   experience: { max: 5, label: "Matches your experience preference" },
   gender: { max: 3, label: "Matches your gender preference" },
   style: { max: 2, label: "Aligns with your style preference" },
+  payment_fit: { max: 3, label: "Open to your budget on a sliding scale" },
+};
+
+// Slug -> friendly label. Mirrors IntakeForm/TherapistSignup ISSUES list.
+const ISSUE_LABELS = {
+  anxiety: "anxiety",
+  depression: "depression",
+  ocd: "OCD",
+  adhd: "ADHD",
+  trauma_ptsd: "trauma / PTSD",
+  relationship_issues: "relationship issues",
+  life_transitions: "life transitions",
+  parenting_family: "parenting / family conflict",
+  substance_use: "substance use",
+  eating_concerns: "eating concerns",
+  autism_neurodivergence: "autism / neurodivergence",
+  school_academic_stress: "school / academic stress",
 };
 
 function topReasons(breakdown) {
@@ -30,6 +47,31 @@ function topReasons(breakdown) {
     .filter((x) => x && x.pct >= 0.5) // only surface meaningful matches
     .sort((a, b) => b.pct - a.pct);
   return entries.slice(0, 3);
+}
+
+function buildConsultMailto(therapist, request) {
+  const firstName = (therapist?.name || "").split(",")[0].split(" ")[0] || "there";
+  const issues = (request?.presenting_issues || [])
+    .slice(0, 2)
+    .map((s) => ISSUE_LABELS[s] || s.replace(/_/g, " "))
+    .join(" and ");
+  const issuesLine = issues
+    ? `What I'd like to focus on: ${issues}.`
+    : "I'd love to share more about what I'd like to work on.";
+  const subject = "Free 15-min consult — TheraVoca match";
+  const body = [
+    `Hi ${firstName},`,
+    "",
+    "Thank you for reaching out through TheraVoca — I'd love to set up a free 15-minute consult to see if we're a good fit.",
+    "",
+    issuesLine,
+    "",
+    "Could you share 3 time slots that work for you this week or next?",
+    "",
+    "Looking forward to it,",
+  ].join("\n");
+  const params = new URLSearchParams({ subject, body });
+  return `mailto:${therapist?.email || ""}?${params.toString()}`;
 }
 
 export default function PatientResults() {
@@ -155,6 +197,14 @@ export default function PatientResults() {
                   )}
 
                   <div className="mt-5 grid sm:grid-cols-2 gap-3">
+                    <a
+                      href={buildConsultMailto(app.therapist, request)}
+                      className="flex items-center gap-2 bg-[#2D4A3E] text-white border border-[#2D4A3E] rounded-xl px-4 py-3 text-sm font-medium hover:bg-[#3A5E50] transition col-span-full"
+                      data-testid={`consult-btn-${i}`}
+                    >
+                      <CalendarPlus size={16} />
+                      <span>Schedule a free 15-min consult</span>
+                    </a>
                     <a
                       href={`mailto:${app.therapist.email}`}
                       className="flex items-center gap-2 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 text-sm hover:border-[#2D4A3E] transition"
