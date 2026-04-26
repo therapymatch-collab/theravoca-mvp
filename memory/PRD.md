@@ -29,18 +29,24 @@ Tech: FastAPI + MongoDB + React. Email via Resend. ~100 seeded Idaho therapists.
 
 ## What's Implemented (2026-02-26)
 - FastAPI backend with full REST API (`/app/backend/server.py`)
-- Matching engine (`matching.py`) with hard filter on state + 5-axis scoring
-- Resend email service (`email_service.py`) with branded HTML templates
-- Auto-seed of 100 Idaho therapists on startup (`seed_data.py`)
-- React frontend with 6 routes:
+- Matching engine (`matching.py`) with hard filter on state + 5-axis scoring; excludes `pending_approval` and `is_active=false` therapists
+- Resend email service (`email_service.py`) with branded HTML templates (verification, therapist notify, patient results, signup received, signup approved)
+- Auto-seed of 100 Idaho therapists on startup (`seed_data.py`); legacy backfill on startup ensures seed therapists carry `is_active=true`, `pending_approval=false`
+- React frontend with 7 routes:
   - `/` Landing + multi-step intake
+  - `/therapists/join` Therapist self-signup portal
   - `/verify/:token` Email verification (handles `pending` state too)
   - `/therapist/apply/:requestId/:therapistId` therapist application
   - `/results/:requestId` patient results page (live polling)
   - `/admin` password gate
-  - `/admin/dashboard` operations console
+  - `/admin/dashboard` operations console (tabs: requests, therapist signups)
 - Cormorant Garamond + Manrope typography, earthy palette, tested by testing agent
-- 24h auto-trigger via `asyncio.create_task` (resets on backend restart)
+
+## Iteration 2 (2026-02-26)
+- **Therapist self-signup portal** (`/therapists/join`): public form with specialty weight sliders, modality/age/insurance selectors. New signups land in `pending_approval=true` queue.
+- **Admin approval workflow**: `/admin/dashboard` "Therapist signups" tab with Approve/Reject buttons. Approved therapists immediately become eligible for matching; rejected therapists are deactivated.
+- **Cron sweep loop**: every `SWEEP_INTERVAL_SECONDS` (default 300s), backend scans for requests where `verified=true, results_sent_at=null, verified_at <= now - AUTO_DELAY_HOURS`, and triggers `_deliver_results`. Survives backend restarts (replaces fragile per-request `asyncio.sleep`).
+- **Email templates**: signup received + approval emails added.
 
 ## Backlog (P1 / P2)
 - **P1** Persist scheduled auto-trigger in DB (survive restarts) via cron sweep
