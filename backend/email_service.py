@@ -206,3 +206,22 @@ async def send_therapist_approved(to: str, name: str) -> None:
     </p>
     """
     await _send(to, "You're live on TheraVoca", _wrap("You're approved", inner))
+
+
+async def send_magic_code(to: str, code: str, role: str) -> None:
+    role_label = "patient portal" if role == "patient" else "therapist portal"
+    inner = f"""
+    <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">
+      Use the code below to sign in to your TheraVoca {role_label}.
+    </p>
+    <div style="margin:32px 0;text-align:center;">
+      <div style="display:inline-block;background:{BRAND['bg']};border:1px solid {BRAND['border']};border-radius:14px;padding:22px 36px;">
+        <div style="font-family:Georgia,serif;font-size:38px;letter-spacing:0.4em;color:{BRAND['primary']};font-weight:600;">{code}</div>
+        <div style="font-size:11px;color:{BRAND['muted']};margin-top:8px;text-transform:uppercase;letter-spacing:0.15em;">Expires in 30 minutes</div>
+      </div>
+    </div>
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">
+      If you didn't request this code, you can safely ignore this email.
+    </p>
+    """
+    await _send(to, f"Your TheraVoca sign-in code: {code}", _wrap("Your sign-in code", inner))

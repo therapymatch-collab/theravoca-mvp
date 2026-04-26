@@ -1,0 +1,67 @@
+{
+  "summary": "Iteration 5 (magic-link auth + portal sign-in): 19/19 backend pytest cases pass and full frontend e2e flow passes for both patient (4 requests) and therapist (3 referrals; '+' email regex-escape verified) signed-in flows. Sign-in dropdown in header (Patient/Therapist/Admin), sessionStorage-based session, role-guarded portals, cross-role 403, missing/invalid-token 401, rate-limit 429 on 6th request, single-use codes, and silent-success on unknown therapist email all confirmed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration5_auth.py",
+    "/app/test_reports/pytest/iteration5_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Resend test mode only delivers email to the verified Resend account — magic codes still arrive in DB so verify-code works regardless. Consider adding a banner in PatientPortal/TherapistPortal noting Resend test-mode limitation if real email delivery is expected in this env.",
+    "(Optional, carryover) Hard-delete TEST_-prefixed therapists/requests created during regression runs to keep admin dashboard counts stable."
+  ],
+  "critical_code_review_comments": [
+    "server.py grew to 841 lines — close to the 700-line guideline. Auth/portal block (lines 528-686) is logically separable; consider extracting to /app/backend/auth_portal.py in a future refactor.",
+    "auth_request_code uses `created_at` ISO string compared with $gte to one_hour_ago ISO string — works because format is lexicographically comparable, but a real Date field would be safer. Currently correct.",
+    "Magic-code rate-limit is per (email, role). A user could request 5 patient + 5 therapist codes for the same email in an hour. Probably fine since therapist role already requires existing record, but worth noting.",
+    "auth_verify_code does not check that `role` matches the role on the magic_codes record beyond the find filter — it does (find filter includes role). Correct.",
+    "Single-use enforcement is correct: `used:false` filter + atomic update_one to set used=true. Second use returns 401 (verified by test_second_use_of_same_code_fails).",
+    "require_session correctly distinguishes 401 (missing/invalid/expired) vs 403 (wrong role). Cross-role tests (patient hitting therapist endpoint and vice versa) both return 403 as designed.",
+    "Therapist-referrals endpoint excludes patient `email` field at the projection level AND uses _safe_summary_for_therapist({**r,'email':''}) — double-anonymized. PII guard verified by test.",
+    "re.escape on email in _portal_patient_requests / _portal_therapist_referrals correctly handles '+' character in 'therapymatch+t007@gmail.com' — tested end-to-end with 3 referrals returned.",
+    "Frontend SignIn.jsx: getSession check in useEffect auto-redirects already-signed-in users to their portal — good UX.",
+    "Frontend PatientPortal/TherapistPortal: 401 response correctly clears sessionStorage and redirects to /sign-in?role=... (handler in catch). Confirmed by code inspection.",
+    "Frontend Header dropdown uses Radix DropdownMenu with asChild Link — both keyboard-accessible and routes correctly. data-testids on all 3 items (signin-as-patient/therapist/admin)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration5_auth.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (19/19 iter-5)",
+    "frontend": "100% on all tested flows (header dropdown, both sign-in flows, portal lists, cross-redirects, sign-out, no-session redirects)"
+  },
+  "test_credentials": "Admin: admin123! | Patient: therapymatch@gmail.com (4 requests) | Therapist: therapymatch+t007@gmail.com (3 referrals)",
+  "seed_data_creation": "Created/cleaned magic_codes for therapymatch@gmail.com and therapymatch+t007@gmail.com during tests. One TEST_iter5_smoke@example.com request created via /api/requests regression smoke. One TEST_iter5_rl@example.com used 5 codes (then deleted) for rate-limit test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Public URL: https://care-matcher-1.preview.emergentagent.com. Run iter-5 backend tests: `export REACT_APP_BACKEND_URL=https://care-matcher-1.preview.emergentagent.com MONGO_URL=mongodb://localhost:27017 DB_NAME=test_database ADMIN_PASSWORD='admin123!' && pytest /app/backend/tests/test_iteration5_auth.py -v`. To get the magic code for UI tests, query mongo: `mongosh test_database --eval 'db.magic_codes.find({email:\"...\",role:\"...\",used:false}).sort({created_at:-1}).limit(1)'`. Frontend session keys: tv_session_token, tv_session_role, tv_session_email in sessionStorage. JWT_SECRET in /app/backend/.env; SESSION_TTL_DAYS=30, MAGIC_CODE_TTL_MINUTES=30, MAGIC_CODE_MAX_PER_HOUR=5. Therapist 'pending_approval'=false + is_active=true is required for therapist magic-code; unknown emails get silent {ok:true} with no DB row (verified). Note: `motor` is NOT installed in the playwright sandbox — use `mongosh` via subprocess instead (as done in this iteration).",
+  "verified_features": [
+    "POST /api/auth/request-code patient -> 200 {ok:true} + magic_codes row (used=false, 6-digit code)",
+    "POST /api/auth/request-code therapist (approved+active +-email) -> 200 + code created",
+    "POST /api/auth/request-code therapist (unknown email) -> 200 {ok:true} but NO code created (no enumeration leak)",
+    "POST /api/auth/request-code invalid role -> 400",
+    "POST /api/auth/request-code 6th call within hour -> 429",
+    "POST /api/auth/verify-code correct -> 200 {token, role, email}",
+    "POST /api/auth/verify-code wrong code -> 401",
+    "POST /api/auth/verify-code re-using used code -> 401",
+    "GET /api/portal/me with valid token -> {email, role}; missing token -> 401; invalid token -> 401",
+    "GET /api/portal/patient/requests returns >=4 requests for therapymatch@gmail.com; verification_token excluded; application_count + notified_count present",
+    "GET /api/portal/therapist/referrals returns 3 referrals for therapymatch+t007@gmail.com (regex-escape '+' verified); each has match_score, applied bool, anonymized summary; no patient email leaked",
+    "Cross-role: patient token -> /portal/therapist/referrals = 403; therapist token -> /portal/patient/requests = 403",
+    "Regression: /api/, /api/admin/login (right & wrong), /api/requests POST all OK",
+    "FRONTEND header: Sign-in dropdown shows 3 items; admin item -> /admin",
+    "FRONTEND /sign-in?role=patient: patient tab default; switching to therapist updates blurb to mention 'referrals'",
+    "FRONTEND patient e2e: enter email -> code step -> verify (code from DB) -> /portal/patient -> 4 requests -> click first -> /results/:id",
+    "FRONTEND sessionStorage: tv_session_token + tv_session_role=patient stored; sign-out clears them and navigates away",
+    "FRONTEND therapist e2e: ?role=therapist defaults therapist tab; sign-in -> /portal/therapist -> 3 referrals; first referral href = /therapist/apply/:requestId/:therapistId",
+    "FRONTEND no-session: /portal/patient -> /sign-in?role=patient; /portal/therapist -> /sign-in?role=therapist (both redirected)"
+  ],
+  "rca_of_the_issue": "N/A — feature works end-to-end; no defects observed."
+}

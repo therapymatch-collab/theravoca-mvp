@@ -1,5 +1,12 @@
 import { Link } from "react-router-dom";
-import { Leaf } from "lucide-react";
+import { Leaf, ChevronDown } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export function Header({ minimal = false }) {
   return (
@@ -17,7 +24,7 @@ export function Header({ minimal = false }) {
           </span>
         </Link>
         {!minimal && (
-          <nav className="hidden md:flex items-center gap-8 text-sm text-[#6D6A65]">
+          <nav className="hidden md:flex items-center gap-7 text-sm text-[#6D6A65]">
             <a href="/#how" className="hover:text-[#2D4A3E] transition" data-testid="nav-how">
               How it works
             </a>
@@ -34,6 +41,57 @@ export function Header({ minimal = false }) {
             >
               For therapists
             </Link>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className="inline-flex items-center gap-1.5 hover:text-[#2D4A3E] transition outline-none"
+                data-testid="nav-signin-trigger"
+              >
+                Sign in <ChevronDown size={14} strokeWidth={2} />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="bg-white border-[#E8E5DF] w-56"
+                data-testid="nav-signin-menu"
+              >
+                <DropdownMenuItem asChild>
+                  <Link
+                    to="/sign-in?role=patient"
+                    className="cursor-pointer"
+                    data-testid="signin-as-patient"
+                  >
+                    <div>
+                      <div className="font-medium text-[#2B2A29]">Patient</div>
+                      <div className="text-xs text-[#6D6A65]">Track your matches</div>
+                    </div>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link
+                    to="/sign-in?role=therapist"
+                    className="cursor-pointer"
+                    data-testid="signin-as-therapist"
+                  >
+                    <div>
+                      <div className="font-medium text-[#2B2A29]">Therapist</div>
+                      <div className="text-xs text-[#6D6A65]">View your referrals</div>
+                    </div>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link
+                    to="/admin"
+                    className="cursor-pointer"
+                    data-testid="signin-as-admin"
+                  >
+                    <div>
+                      <div className="font-medium text-[#2B2A29]">Admin</div>
+                      <div className="text-xs text-[#6D6A65]">Operations console</div>
+                    </div>
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <a
               href="/#start"
               className="tv-btn-primary !py-2 !px-5 text-sm"

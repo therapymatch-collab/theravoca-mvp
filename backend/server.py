@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import secrets
 import uuid
 from contextlib import asynccontextmanager
@@ -11,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+import jwt
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, status
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -18,6 +20,7 @@ from pydantic import BaseModel, EmailStr, Field
 from starlette.middleware.cors import CORSMiddleware
 
 from email_service import (
+    send_magic_code,
     send_patient_results,
     send_therapist_approved,
     send_therapist_notification,
@@ -41,6 +44,16 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123!")
 DEFAULT_THRESHOLD = float(os.environ.get("DEFAULT_MATCH_THRESHOLD", "60"))
 AUTO_DELAY_HOURS = float(os.environ.get("AUTO_RESULTS_DELAY_HOURS", "24"))
 PATIENT_DEMO_EMAIL = os.environ.get("PATIENT_DEMO_EMAIL", "")
+
+# Magic-link auth
+JWT_SECRET = os.environ.get("JWT_SECRET", "")
+if not JWT_SECRET:
+    JWT_SECRET = secrets.token_urlsafe(48)
+    logger_name = "theravoca"  # ensure logger created later catches this
+JWT_ALGO = "HS256"
+SESSION_TTL_DAYS = int(os.environ.get("SESSION_TTL_DAYS", "30"))
+MAGIC_CODE_TTL_MINUTES = int(os.environ.get("MAGIC_CODE_TTL_MINUTES", "30"))
+MAGIC_CODE_MAX_PER_HOUR = int(os.environ.get("MAGIC_CODE_MAX_PER_HOUR", "5"))
 
 # Admin login rate limit
 LOGIN_MAX_FAILURES = int(os.environ.get("LOGIN_MAX_FAILURES", "5"))
@@ -510,6 +523,167 @@ async def therapist_apply(request_id: str, therapist_id: str, payload: Therapist
     }
     await db.applications.insert_one(app_doc.copy())
     return ApplicationOut(**app_doc)
+
+
+# ─── Magic-link Auth + Portal Routes ──────────────────────────────────────────
+
+class MagicCodeRequest(BaseModel):
+    email: EmailStr
+    role: str  # "patient" | "therapist"
+
+
+class MagicCodeVerify(BaseModel):
+    email: EmailStr
+    role: str
+    code: str
+
+
+def _create_session_token(email: str, role: str) -> str:
+    payload = {
+        "email": email.lower(),
+        "role": role,
+        "exp": datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS),
+        "iat": datetime.now(timezone.utc),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+
+
+def require_session(allowed_roles: tuple[str, ...]):
+    """Dependency factory that verifies Bearer JWT and matches role."""
+    async def _dep(authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+        if not authorization or not authorization.lower().startswith("bearer "):
+            raise HTTPException(401, "Missing bearer token")
+        token = authorization.split(" ", 1)[1].strip()
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(401, "Session expired")
+        except jwt.InvalidTokenError:
+            raise HTTPException(401, "Invalid session")
+        if payload.get("role") not in allowed_roles:
+            raise HTTPException(403, "Wrong role for this resource")
+        return payload
+    return _dep
+
+
+@api.post("/auth/request-code")
+async def auth_request_code(payload: MagicCodeRequest):
+    if payload.role not in ("patient", "therapist"):
+        raise HTTPException(400, "Invalid role")
+    email = payload.email.lower()
+
+    # Rate limit: max 5 codes per email per hour
+    one_hour_ago = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    recent = await db.magic_codes.count_documents({
+        "email": email, "role": payload.role, "created_at": {"$gte": one_hour_ago}
+    })
+    if recent >= MAGIC_CODE_MAX_PER_HOUR:
+        raise HTTPException(429, "Too many code requests. Try again in an hour.")
+
+    # For therapist role, require an existing approved+active therapist
+    if payload.role == "therapist":
+        therapist = await db.therapists.find_one(
+            {"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"},
+             "is_active": {"$ne": False},
+             "pending_approval": {"$ne": True}},
+            {"_id": 0, "id": 1},
+        )
+        if not therapist:
+            # Don't leak whether email exists; respond as success but skip email
+            logger.info("Magic-code requested for unknown/pending therapist email=%s", email)
+            return {"ok": True}
+
+    code = f"{secrets.randbelow(900000) + 100000:06d}"
+    await db.magic_codes.insert_one({
+        "id": str(uuid.uuid4()),
+        "email": email,
+        "role": payload.role,
+        "code": code,
+        "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=MAGIC_CODE_TTL_MINUTES)).isoformat(),
+        "used": False,
+        "created_at": _now_iso(),
+    })
+    asyncio.create_task(send_magic_code(email, code, payload.role))
+    return {"ok": True}
+
+
+@api.post("/auth/verify-code")
+async def auth_verify_code(payload: MagicCodeVerify):
+    email = payload.email.lower()
+    now_iso = _now_iso()
+    rec = await db.magic_codes.find_one({
+        "email": email,
+        "role": payload.role,
+        "code": payload.code,
+        "used": False,
+        "expires_at": {"$gte": now_iso},
+    }, {"_id": 0})
+    if not rec:
+        raise HTTPException(401, "Invalid or expired code")
+    await db.magic_codes.update_one({"id": rec["id"]}, {"$set": {"used": True, "used_at": now_iso}})
+    token = _create_session_token(email, payload.role)
+    return {"token": token, "role": payload.role, "email": email}
+
+
+@api.get("/portal/me")
+async def portal_me(session: dict[str, Any] = Depends(require_session(("patient", "therapist")))):
+    return {"email": session["email"], "role": session["role"]}
+
+
+@api.get("/portal/patient/requests")
+async def portal_patient_requests(
+    session: dict[str, Any] = Depends(require_session(("patient",))),
+):
+    docs = await db.requests.find(
+        {"email": {"$regex": f"^{re.escape(session['email'])}$", "$options": "i"}},
+        {"_id": 0, "verification_token": 0},
+    ).sort("created_at", -1).to_list(100)
+    out = []
+    for d in docs:
+        app_count = await db.applications.count_documents({"request_id": d["id"]})
+        d["application_count"] = app_count
+        d["notified_count"] = len(d.get("notified_therapist_ids") or [])
+        out.append(d)
+    return out
+
+
+@api.get("/portal/therapist/referrals")
+async def portal_therapist_referrals(
+    session: dict[str, Any] = Depends(require_session(("therapist",))),
+):
+    therapist = await db.therapists.find_one(
+        {"email": {"$regex": f"^{re.escape(session['email'])}$", "$options": "i"}}, {"_id": 0}
+    )
+    if not therapist:
+        raise HTTPException(404, "Therapist profile not found")
+
+    # All requests where this therapist was notified
+    reqs = await db.requests.find(
+        {"notified_therapist_ids": therapist["id"]},
+        {"_id": 0, "email": 0, "verification_token": 0},
+    ).sort("created_at", -1).to_list(100)
+
+    out = []
+    for r in reqs:
+        score = (r.get("notified_scores") or {}).get(therapist["id"])
+        application = await db.applications.find_one(
+            {"request_id": r["id"], "therapist_id": therapist["id"]},
+            {"_id": 0, "id": 1, "message": 1, "created_at": 1},
+        )
+        out.append({
+            "request_id": r["id"],
+            "match_score": score,
+            "created_at": r["created_at"],
+            "status": r.get("status"),
+            "summary": _safe_summary_for_therapist({**r, "email": ""}),
+            "presenting_issues_preview": (r.get("presenting_issues") or "")[:140],
+            "applied": bool(application),
+            "application": application,
+        })
+    return {
+        "therapist": {"id": therapist["id"], "name": therapist["name"], "email": therapist["email"]},
+        "referrals": out,
+    }
 
 
 # ─── Admin Routes ─────────────────────────────────────────────────────────────

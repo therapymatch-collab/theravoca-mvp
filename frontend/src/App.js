@@ -6,6 +6,9 @@ import Landing from "@/pages/Landing";
 import VerifyEmail from "@/pages/VerifyEmail";
 import TherapistApply from "@/pages/TherapistApply";
 import TherapistSignup from "@/pages/TherapistSignup";
+import SignIn from "@/pages/SignIn";
+import PatientPortal from "@/pages/PatientPortal";
+import TherapistPortal from "@/pages/TherapistPortal";
 import PatientResults from "@/pages/PatientResults";
 import AdminLogin from "@/pages/AdminLogin";
 import AdminDashboard from "@/pages/AdminDashboard";
@@ -21,6 +24,9 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Landing />} />
+          <Route path="/sign-in" element={<SignIn />} />
+          <Route path="/portal/patient" element={<PatientPortal />} />
+          <Route path="/portal/therapist" element={<TherapistPortal />} />
           <Route path="/therapists/join" element={<TherapistSignup />} />
           <Route path="/verify/:token" element={<VerifyEmail />} />
           <Route
