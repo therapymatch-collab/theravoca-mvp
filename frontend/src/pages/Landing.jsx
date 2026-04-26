@@ -16,7 +16,7 @@ const FEATURE_IMAGE =
 const FAQS = [
   {
     q: "What is TheraVoca, and how does it work?",
-    a: "TheraVoca listens to what you need in your own words and connects you with therapists who are genuinely interested in helping. No long searching or guesswork on your end.",
+    a: "TheraVoca turns what you need into a structured referral and connects you with therapists who are genuinely interested in helping. No long searching or guesswork on your end.",
   },
   {
     q: "Is there a fee for patients?",
@@ -57,8 +57,9 @@ export default function Landing() {
               Let therapists <em className="not-italic text-[#C87965]">come to you</em>.
             </h1>
             <p className="mt-6 text-lg text-[#2B2A29]/80 leading-relaxed max-w-xl">
-              No more searching, cold-calls, or waiting to hear back. Tell us what matters
-              and we'll match you with pre-qualified therapists who want to work with you.
+              No more searching, cold-calls, or waiting to hear back. Pick what
+              matters, and we'll route your request to therapists in your
+              network who actually want to work with you.
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-4">
               <a href="#start" className="tv-btn-primary" data-testid="hero-cta">
@@ -74,9 +75,9 @@ export default function Landing() {
             </div>
             <ul className="mt-10 space-y-2.5 text-[#2B2A29]/80 text-sm">
               {[
-                "No more cold-calls or hunting through directories",
-                "Smarter matching with pre-qualified therapists",
-                "Commitment to confidentiality and privacy",
+                "Structured intake — no vague free-text guesses",
+                "Smarter matching across 5 weighted axes",
+                "Anonymous referrals, contact info revealed last",
               ].map((item) => (
                 <li key={item} className="flex items-start gap-2.5">
                   <span className="mt-0.5 inline-flex h-5 w-5 rounded-full bg-[#2D4A3E]/10 text-[#2D4A3E] items-center justify-center">
@@ -124,9 +125,9 @@ export default function Landing() {
             {[
               {
                 n: "01",
-                title: "Tell us what you need",
+                title: "Tap what fits",
                 body:
-                  "No dropdown rabbit-holes. Share your needs in your own words and we do the rest.",
+                  "Pick from a curated list of presenting issues, then a few specifics — age, format, payment. Two minutes, no rambling required.",
               },
               {
                 n: "02",
