@@ -27,6 +27,7 @@ from email_service import (
     send_therapist_signup_received,
     send_verification_email,
 )
+from geocoding import geocode_city, geocode_offices, geocode_zip, haversine_miles
 from matching import rank_therapists
 from seed_data import generate_seed_therapists
 
@@ -111,6 +112,8 @@ async def lifespan(_app: FastAPI):
         {"is_active": {"$exists": False}},
         {"$set": {"is_active": True, "pending_approval": False, "source": "seed"}},
     )
+    # Backfill geo coords for therapists missing them (idempotent, uses known-cities map for Idaho seed)
+    asyncio.create_task(_backfill_therapist_geo())
     sweep_interval = int(os.environ.get("SWEEP_INTERVAL_SECONDS", "300"))
     _sweep_task = asyncio.create_task(_sweep_loop(sweep_interval))
     logger.info("Started results sweep loop (every %ds)", sweep_interval)
@@ -125,6 +128,18 @@ async def lifespan(_app: FastAPI):
             except (asyncio.CancelledError, Exception):
                 pass
         client.close()
+
+
+async def _backfill_therapist_geo() -> None:
+    """One-shot backfill: geocode any therapist missing office_geos."""
+    cursor = db.therapists.find({"office_geos": {"$exists": False}}, {"_id": 0, "id": 1, "office_locations": 1})
+    count = 0
+    async for doc in cursor:
+        geos = await geocode_offices(db, doc.get("office_locations") or [], "ID")
+        await db.therapists.update_one({"id": doc["id"]}, {"$set": {"office_geos": geos}})
+        count += 1
+    if count:
+        logger.info("Backfilled office_geos for %d therapists", count)
 
 
 app = FastAPI(title="TheraVoca API", lifespan=lifespan)
@@ -178,6 +193,7 @@ class RequestCreate(BaseModel):
     client_age: int = Field(ge=1, le=120)
     location_state: str
     location_city: Optional[str] = ""
+    location_zip: Optional[str] = ""
     session_format: str = "virtual"  # virtual | in-person | hybrid
     payment_type: str = "cash"  # cash | insurance
     insurance_name: Optional[str] = ""
@@ -195,6 +211,7 @@ class RequestOut(BaseModel):
     client_age: int
     location_state: str
     location_city: Optional[str] = ""
+    location_zip: Optional[str] = ""
     session_format: str
     payment_type: str
     insurance_name: Optional[str] = ""
@@ -247,11 +264,17 @@ def _strip_id(doc: dict[str, Any]) -> dict[str, Any]:
 
 def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
     """Anonymized referral summary for therapists."""
+    location_bits = []
+    if req.get("location_city"):
+        location_bits.append(req["location_city"])
+    if req.get("location_zip"):
+        location_bits.append(req["location_zip"])
+    location_str = ", ".join(location_bits) or "—"
     return {
         "Client age": req.get("client_age"),
         "State": req.get("location_state"),
         "Format": req.get("session_format", "virtual"),
-        "City": req.get("location_city") or "—",
+        "Location": location_str,
         "Payment": req.get("payment_type", "cash").title()
         + (f" ({req.get('insurance_name')})" if req.get("payment_type") == "insurance" and req.get("insurance_name") else ""),
         "Budget": (f"${req.get('budget')}/session" if req.get("budget") else "—"),
@@ -280,6 +303,19 @@ async def _trigger_matching(request_id: str) -> dict[str, Any]:
 
     notified_ids = [match["id"] for match in matches]
     notified_scores = {match["id"]: match["match_score"] for match in matches}
+    # Compute & store distance for in-person/hybrid requests with patient_geo
+    notified_distances: dict[str, float] = {}
+    patient_geo = req.get("patient_geo")
+    if patient_geo:
+        for match in matches:
+            offices = match.get("office_geos") or []
+            if offices:
+                dists = [
+                    haversine_miles(patient_geo["lat"], patient_geo["lng"], o["lat"], o["lng"])
+                    for o in offices if "lat" in o and "lng" in o
+                ]
+                if dists:
+                    notified_distances[match["id"]] = round(min(dists), 1)
 
     # Send notification emails (best-effort, logged on failure)
     summary = _safe_summary_for_therapist(req)
@@ -298,6 +334,7 @@ async def _trigger_matching(request_id: str) -> dict[str, Any]:
         {"$set": {
             "notified_therapist_ids": notified_ids,
             "notified_scores": notified_scores,
+            "notified_distances": notified_distances,
             "matched_at": _now_iso(),
             "status": "matched",
         }},
@@ -377,15 +414,28 @@ async def root():
 async def create_request(payload: RequestCreate):
     rid = str(uuid.uuid4())
     token = secrets.token_urlsafe(24)
+    # Geocode patient location (ZIP preferred, fallback to city)
+    patient_geo = None
+    if payload.location_zip:
+        coords = await geocode_zip(db, payload.location_zip)
+        if coords:
+            patient_geo = {"lat": coords[0], "lng": coords[1], "source": "zip"}
+    if not patient_geo and payload.location_city:
+        coords = await geocode_city(db, payload.location_city, payload.location_state)
+        if coords:
+            patient_geo = {"lat": coords[0], "lng": coords[1], "source": "city"}
+
     doc = {
         "id": rid,
         **payload.model_dump(),
+        "patient_geo": patient_geo,
         "verification_token": token,
         "verified": False,
         "status": "pending_verification",
         "threshold": DEFAULT_THRESHOLD,
         "notified_therapist_ids": [],
         "notified_scores": {},
+        "notified_distances": {},
         "results_sent_at": None,
         "created_at": _now_iso(),
     }
@@ -444,18 +494,20 @@ async def therapist_signup(payload: TherapistSignup):
     if existing:
         raise HTTPException(409, "A therapist with this email already exists.")
     tid = str(uuid.uuid4())
+    office_geos = await geocode_offices(db, payload.office_locations or [], "ID")
     doc = {
         "id": tid,
         **payload.model_dump(),
+        "office_geos": office_geos,
         "source": "signup",
         "is_active": True,
         "pending_approval": True,
         "created_at": _now_iso(),
     }
     await db.therapists.insert_one(doc.copy())
-    # Best-effort confirmation email (won't crash on Resend test-mode)
     asyncio.create_task(send_therapist_signup_received(payload.email, payload.name))
-    logger.info("New therapist signup: %s (%s)", payload.email, tid)
+    logger.info("New therapist signup: %s (%s) with %d geocoded offices",
+                payload.email, tid, len(office_geos))
     return {"id": tid, "status": "pending_approval"}
 
 
@@ -728,6 +780,7 @@ async def admin_request_detail(request_id: str, _: bool = Depends(require_admin)
     if not req:
         raise HTTPException(404)
     notified_ids = req.get("notified_therapist_ids") or []
+    notified_distances = req.get("notified_distances") or {}
     notified = []
     for tid in notified_ids:
         t = await db.therapists.find_one({"id": tid}, {"_id": 0})
@@ -737,6 +790,8 @@ async def admin_request_detail(request_id: str, _: bool = Depends(require_admin)
                 "name": t["name"],
                 "email": t["email"],
                 "match_score": (req.get("notified_scores") or {}).get(tid, 0),
+                "distance_miles": notified_distances.get(tid),
+                "office_locations": t.get("office_locations", []),
             })
     apps = await db.applications.find({"request_id": request_id}, {"_id": 0}).to_list(50)
     apps.sort(key=lambda a: a["match_score"], reverse=True)

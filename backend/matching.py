@@ -126,10 +126,40 @@ def _score_cash(therapist: dict[str, Any], request: dict[str, Any]) -> float:
 
 
 def _score_location(therapist: dict[str, Any], request: dict[str, Any]) -> float:
+    """Distance-banded location score.
+
+    If we have geocoded patient + office data, use real miles:
+      ≤10mi=15, ≤25mi=12, ≤50mi=7, ≤75mi=3, >75mi=0 (telehealth fallback if available).
+    If we don't have geo data, fall back to case-insensitive city substring match.
+    """
     fmt = (request.get("session_format") or "virtual").lower()
     needs_in_person = "person" in fmt or "hybrid" in fmt
+
     if not needs_in_person:
         return MAX_LOCATION if therapist.get("telehealth") else 0.0
+
+    # Try geo-based scoring first
+    patient_geo = request.get("patient_geo")  # {"lat":.., "lng":..}
+    office_geos = therapist.get("office_geos") or []
+    if patient_geo and office_geos:
+        from geocoding import haversine_miles
+        miles_list = [
+            haversine_miles(patient_geo["lat"], patient_geo["lng"], o["lat"], o["lng"])
+            for o in office_geos if "lat" in o and "lng" in o
+        ]
+        if miles_list:
+            best = min(miles_list)
+            if best <= 10:
+                return MAX_LOCATION
+            if best <= 25:
+                return 12.0
+            if best <= 50:
+                return 7.0
+            if best <= 75:
+                return 3.0
+            return 6.0 if therapist.get("telehealth") else 0.0
+
+    # Fallback: case-insensitive city substring match (legacy behavior)
     req_city = (request.get("location_city") or "").lower().strip()
     offices = [o.lower() for o in therapist.get("office_locations", [])]
     if req_city and any(req_city in o or o in req_city for o in offices):

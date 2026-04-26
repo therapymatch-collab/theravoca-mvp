@@ -1,0 +1,63 @@
+{
+  "summary": "Iteration 6 (geocoding + distance-band matching) — 16/16 backend pytest cases pass; full frontend e2e flow for in-person Eagle 83616 intake → verify → admin dashboard distance display verified end-to-end. Haversine math, KNOWN_CITY_GEOS map, ZIP-via-Nominatim, city-via-known-map, therapist signup auto-geocoding, backfill of 100+ seeded office_geos, notified_distances on /api/admin/requests/{id}, distance bands 15/12/7/3/0(+6 telehealth fallback), and graceful substring fallback when geo missing all confirmed. Frontend ZIP input enforces numeric-only and maxLength=5; submitting persists location_zip to DB; admin detail dialog shows 'X.X mi away' (terracotta) + office cities for each notified therapist.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration6_geo.py",
+    "/app/test_reports/pytest/iteration6_results.xml"
+  ],
+  "action_items": [
+    "(Doc nit) Problem statement says 'Intake form step 3' but ZIP/city actually live on step 3 of 6 (index 2 in code) — UI matches the spec, only the iteration note's step numbering is ambiguous. No code change needed.",
+    "(Optional) ZIP input maxLength=5 is enforced at DOM level, so a paste of 'abc12def345xyz9' is browser-clamped to 'abc12' before the regex strips → final value '12'. The regex+maxLength belt-and-suspenders works for typed input but is mildly surprising on paste. Consider stripping non-digits before applying maxLength to make pastes more forgiving (e.g. take input.replace(/\\D/g,'').slice(0,5) without relying on the maxLength attribute). Cosmetic only.",
+    "(Carryover) Hard-delete TEST_-prefixed therapists/requests created during regression runs to keep admin counts stable."
+  ],
+  "critical_code_review_comments": [
+    "geocoding.py is clean and well-bounded: Nominatim serialized via asyncio.Lock + 1.05s sleep, DB cache via geocache collection, KNOWN_CITY_GEOS short-circuits seed cities. Good.",
+    "matching._score_location correctly distinguishes geo-data path vs substring-fallback path; telehealth gives 6pt fallback for >75mi which preserves coverage in rural Idaho. Solid.",
+    "server.create_request: ZIP preferred over city for patient_geo (matches spec). patient_geo always stored even for virtual sessions (harmless, keeps data for future analytics). _trigger_matching computes notified_distances only when patient_geo is present. Correct.",
+    "_backfill_therapist_geo runs as a fire-and-forget task on lifespan startup; idempotent via {office_geos:{$exists:false}} filter. For ~100 Idaho seed therapists this completes near-instantly thanks to KNOWN_CITY_GEOS. Good.",
+    "AdminDashboard.jsx renders distance_miles only when non-null with terracotta color (#C66B4D-ish). office_locations join is joined with a comma. Empty office_locations correctly hide the cities span. Good.",
+    "IntakeForm step 2 (label 'Step 3 of 6: Format & location') correctly shows ZIP only when format ∈ {in-person, hybrid} via the `(data.session_format === 'in-person' || data.session_format === 'hybrid')` guard. data-testid='zip-input' present.",
+    "Edge case OK: requests with patient_geo but a therapist with empty office_geos will fall through to substring; if both are missing the legacy city-substring path runs — verified by reading _score_location. No regression risk.",
+    "Minor: server.py is now ~900 lines — even more reason to extract /api/auth/* and /api/portal/* into a separate module as previously flagged in iter5. Still functional.",
+    "geocache collection is unbounded; for a long-running deployment consider TTL index. Not urgent for MVP.",
+    "Nominatim USER_AGENT is hard-coded; that's fine but moving to env in future is cleaner."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration6_geo.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (16/16 iter-6)",
+    "frontend": "100% on tested flows (intake ZIP/city visibility + numeric/maxLength enforcement + submit→DB persistence + admin dashboard distance display)"
+  },
+  "test_credentials": "Admin: admin123! | Test ZIP 83616=Eagle ID via Nominatim",
+  "seed_data_creation": "Created 4-5 TEST_iter6_* requests during testing (Boise/Eagle/virtual). One TEST_iter6_t_<uuid8>@example.com pending therapist created via signup test (left in pending_approval queue). Geocache populated for 83616 + a few unique ZIPs.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Public URL: https://care-matcher-1.preview.emergentagent.com. To re-run: `export REACT_APP_BACKEND_URL=https://care-matcher-1.preview.emergentagent.com MONGO_URL=mongodb://localhost:27017 DB_NAME=test_database ADMIN_PASSWORD='admin123!' && pytest /app/backend/tests/test_iteration6_geo.py -v`. The fixture `created_inperson_eagle_request` does ONE Nominatim call for ZIP 83616 (~1.05s) — if you create more unique ZIPs, each adds ~1.05s due to asyncio.Lock+sleep. Use cities from KNOWN_CITY_GEOS (boise/meridian/eagle/etc) to avoid Nominatim. Verified Eagle 83616 in-person request notifies 12 therapists with distances 1.0–15.8mi (Boise=10.3, Meridian=6.0, Nampa=14.4, Eagle=1.0). Admin detail dialog shows distance via t.distance_miles && '<X> mi away' selector and t.office_locations cities. Intake ZIP input is on step index 2 (UI shows 'Step 3 of 6: Format & location'). Frontend submit-btn requires 3 consent checkboxes (terms, 18+, not emergency).",
+  "verified_features": [
+    "haversine_miles Boise→Meridian = 9.6mi (passes ≤10mi=15pt band)",
+    "haversine_miles Boise→Idaho Falls ≈ 209mi (great-circle; >75mi=0pt or 6pt telehealth fallback)",
+    "KNOWN_CITY_GEOS contains 15 Idaho cities including boise/meridian/eagle/nampa/idaho falls/twin falls/etc",
+    "POST /api/requests with location_city=Boise (no zip) → patient_geo source='city' from KNOWN_CITY_GEOS in <3.5s (no Nominatim call)",
+    "POST /api/requests with location_zip=83616 → patient_geo source='zip', lat≈43.7, lng≈-116.37 via Nominatim",
+    "POST /api/requests virtual + city → request created, session_format=virtual (matching ignores patient_geo for virtual)",
+    "Therapist signup with office_locations=[Boise, Meridian] → office_geos populated with both cities' coords",
+    "Backfill: ≥80% of seeded therapists have office_geos (verified via /api/admin/therapists?pending=false)",
+    "GET /api/admin/requests/{id}: notified[].distance_miles + notified[].office_locations populated; request.notified_distances dict populated",
+    "Distance bands working: in-person Eagle 83616 → 12 notified, distances 1.0mi (Eagle/Meridian) up to 15.8mi (Nampa); Boise=10.3mi, Meridian=6.0mi",
+    "REGRESSION: /api/, /api/admin/login (correct + wrong), /api/portal/me missing-token=401, /api/auth/request-code invalid-role=400, /api/admin/stats therapists≥100 — all OK",
+    "FRONTEND: Intake step 'Format & location' — selecting 'In-person' reveals both city-input and zip-input",
+    "FRONTEND: zip-input data-testid present; typing 'abc' leaves field empty (numeric-only); typing '1234567' clamps to '12345' (maxLength=5)",
+    "FRONTEND: Submitting intake with zip=83616 returns 200 with rid; admin API confirms location_zip='83616' and patient_geo source='zip' persisted",
+    "FRONTEND: /admin/dashboard request detail dialog shows '10.3 mi away', '6 mi away', '14.4 mi away' (terracotta color) under each notified therapist, plus office cities (Boise/Meridian/Rexburg, Meridian)"
+  ],
+  "rca_of_the_issue": "N/A — feature works end-to-end; no defects observed."
+}

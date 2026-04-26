@@ -38,6 +38,7 @@ export default function IntakeForm() {
     client_age: "",
     location_state: "ID",
     location_city: "",
+    location_zip: "",
     session_format: "virtual",
     payment_type: "cash",
     insurance_name: "",
@@ -203,15 +204,30 @@ export default function IntakeForm() {
                 </Field>
                 {(data.session_format === "in-person" ||
                   data.session_format === "hybrid") && (
-                  <Field label="City preference">
-                    <Input
-                      value={data.location_city}
-                      onChange={(e) => set("location_city", e.target.value)}
-                      placeholder="e.g. Boise"
-                      className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                      data-testid="city-input"
-                    />
-                  </Field>
+                  <>
+                    <Field label="City preference">
+                      <Input
+                        value={data.location_city}
+                        onChange={(e) => set("location_city", e.target.value)}
+                        placeholder="e.g. Boise"
+                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                        data-testid="city-input"
+                      />
+                    </Field>
+                    <Field label="ZIP code (recommended — gives more accurate distance matches)">
+                      <Input
+                        inputMode="numeric"
+                        maxLength={5}
+                        value={data.location_zip}
+                        onChange={(e) =>
+                          set("location_zip", e.target.value.replace(/\D/g, "").slice(0, 5))
+                        }
+                        placeholder="e.g. 83702"
+                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                        data-testid="zip-input"
+                      />
+                    </Field>
+                  </>
                 )}
               </div>
             )}
