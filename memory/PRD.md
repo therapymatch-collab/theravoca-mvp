@@ -48,6 +48,11 @@ Tech: FastAPI + MongoDB + React. Email via Resend. ~100 seeded Idaho therapists.
 - **Cron sweep loop**: every `SWEEP_INTERVAL_SECONDS` (default 300s), backend scans for requests where `verified=true, results_sent_at=null, verified_at <= now - AUTO_DELAY_HOURS`, and triggers `_deliver_results`. Survives backend restarts (replaces fragile per-request `asyncio.sleep`).
 - **Email templates**: signup received + approval emails added.
 
+## Iteration 3 (2026-02-26)
+- **Admin login rate limiting**: 5 failures / 15 min lockout per IP (configurable via `LOGIN_MAX_FAILURES`, `LOGIN_LOCKOUT_MINUTES` env). Returns helpful 401 detail with attempts remaining; 429 once locked. Lockout precedence: even a correct password is rejected during lockout window. Successful login resets the counter for that IP.
+- **FastAPI lifespan migration**: replaced deprecated `@app.on_event` hooks with `@asynccontextmanager lifespan`. No more deprecation warnings; sweep task is properly cancelled and awaited on shutdown.
+- **Note**: rate-limit state is in-memory (per-process). Adequate for single-replica MVP; if horizontally scaled, move to Redis.
+
 ## Backlog (P1 / P2)
 - **P1** Persist scheduled auto-trigger in DB (survive restarts) via cron sweep
 - **P1** Verified domain for Resend (so emails actually reach all patients/therapists)
