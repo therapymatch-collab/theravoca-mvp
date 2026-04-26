@@ -48,20 +48,35 @@ Tech: FastAPI + MongoDB + React. Email via Resend. ~100 seeded Idaho therapists.
 - **Cron sweep loop**: every `SWEEP_INTERVAL_SECONDS` (default 300s), backend scans for requests where `verified=true, results_sent_at=null, verified_at <= now - AUTO_DELAY_HOURS`, and triggers `_deliver_results`. Survives backend restarts (replaces fragile per-request `asyncio.sleep`).
 - **Email templates**: signup received + approval emails added.
 
+## Iteration 8 (2026-04-26) — Payment & Insurance UI/data-model sync
+- **TherapistSignup.jsx** rewritten with full v2 schema fields: gender, client_types, age_groups, primary/secondary/general specialty tiers, modalities, modality_offering, office_locations, insurance_accepted (multi-select Idaho insurer pills), cash_rate, sliding_scale, years_experience, availability, urgency_capacity, style_tags, free_consult, bio.
+- **IntakeForm Step 4 (Payment)** — Idaho insurer Select dropdown (15 options incl. "Other / not listed") for insurance/either; numeric budget input + sliding-scale-ok checkbox for cash/either.
+- **`/app/frontend/src/lib/insurers.js`** — single source of truth for Idaho insurer lists (`IDAHO_INSURERS`, `PATIENT_INSURER_OPTIONS`).
+- 10/10 backend pytest pass, frontend Playwright validated. Test file: `/app/backend/tests/test_iteration8_payment_insurance.py`.
+
+## Iteration 9 (2026-04-26) — Match-breakdown transparency
+- **Backend** persists `notified_breakdowns` (axis-by-axis score map) on the request doc when matching runs; exposed via `GET /api/requests/{id}/results` per application.
+- **PatientResults.jsx** renders a "Why we matched" chip block (max 3 chips, only axes scoring ≥50% of max) below each therapist's message — `data-testid="why-match-{i}"`, `data-testid="why-match-{i}-{axisKey}"`.
+- **Patient results email** mirrors the same chip block in HTML so email + web stay consistent.
+- 5/5 backend pytest pass + frontend smoke screenshot validated. Test file: `/app/backend/tests/test_iteration9_match_breakdown.py`.
+
 ## Iteration 3 (2026-02-26)
 - **Admin login rate limiting**: 5 failures / 15 min lockout per IP (configurable via `LOGIN_MAX_FAILURES`, `LOGIN_LOCKOUT_MINUTES` env). Returns helpful 401 detail with attempts remaining; 429 once locked. Lockout precedence: even a correct password is rejected during lockout window. Successful login resets the counter for that IP.
 - **FastAPI lifespan migration**: replaced deprecated `@app.on_event` hooks with `@asynccontextmanager lifespan`. No more deprecation warnings; sweep task is properly cancelled and awaited on shutdown.
 - **Note**: rate-limit state is in-memory (per-process). Adequate for single-replica MVP; if horizontally scaled, move to Redis.
 
 ## Backlog (P1 / P2)
-- **P1** Persist scheduled auto-trigger in DB (survive restarts) via cron sweep
-- **P1** Verified domain for Resend (so emails actually reach all patients/therapists)
-- **P1** Brute-force protection / rate-limit on `/api/admin/login`
-- **P2** Therapist self-onboarding portal (currently admin-seeded only)
-- **P2** Multi-state expansion (currently Idaho only)
-- **P2** Patient inline status page (already partially built — extend with timeline)
-- **P2** "Try again" button if patient unhappy with matches
-- **P2** Optional $15 fee + Stripe (mentioned on inspiration site)
+- **P1** Score `sliding_scale_ok × therapist.sliding_scale` in matching engine (currently captured & persisted but not scored — see iter-8 reviewer note).
+- **P1** Treat patient insurer choice "Other / not listed" as a no-op for the insurance hard filter (else patient matches zero therapists).
+- **P1** Verified domain for Resend (so emails actually reach all patients/therapists, not just verified address).
+- **P2** Sort "Why we matched" reasons by raw score (not % of max) so the heaviest-weighted axes (issues=35) surface first when tied at 100%.
+- **P2** Extract AXIS_META into a single source of truth shared between FE + email_service to prevent drift.
+- **P2** Persist scheduled auto-trigger in DB (already done via cron sweep — keep monitoring).
+- **P2** Therapist self-onboarding portal (already shipped — track signup conversion).
+- **P2** Multi-state expansion (currently Idaho only).
+- **P2** Patient inline status page (already partially built — extend with timeline).
+- **P2** "Try again" button if patient unhappy with matches.
+- **P2** Optional $15 fee + Stripe (mentioned on inspiration site).
 
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
