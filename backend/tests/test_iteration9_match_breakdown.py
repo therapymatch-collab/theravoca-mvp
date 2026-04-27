@@ -118,6 +118,9 @@ class TestResultsEndpointBreakdown:
 
     def test_results_endpoint_returns_match_breakdown(self, session, request_with_application):
         rid, tid = request_with_application
+        # Iter-13: release the 24h hold so apps are visible
+        session.post(f"{API}/admin/requests/{rid}/release-results",
+                     headers=ADMIN_HEADERS, timeout=15)
         r = session.get(f"{API}/requests/{rid}/results", timeout=15)
         assert r.status_code == 200
         body = r.json()
@@ -170,6 +173,10 @@ class TestBackwardsCompatLegacyRequest:
             c.close()
 
         asyncio.get_event_loop().run_until_complete(_unset())
+
+        # Iter-13: 24h hold — release so apps are visible
+        session.post(f"{API}/admin/requests/{rid}/release-results",
+                     headers=ADMIN_HEADERS, timeout=15)
 
         # Endpoint should still respond cleanly
         r = session.get(f"{API}/requests/{rid}/results", timeout=15)

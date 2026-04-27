@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { CheckCircle2, ArrowRight, X, Plus, Camera } from "lucide-react";
@@ -165,12 +165,41 @@ export default function TherapistSignup() {
     data.availability_windows.length >= 1 &&
     (data.modality_offering === "telehealth" || data.office_locations.length >= 1);
 
+  const [therapistId, setTherapistId] = useState(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [trialActivated, setTrialActivated] = useState(false);
+
+  // Detect ?subscribed=ID&session_id=cs_test_... return from Stripe
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const subscribedId = params.get("subscribed");
+    const sessionId = params.get("session_id");
+    if (subscribedId && sessionId) {
+      api
+        .post(`/therapists/${subscribedId}/sync-payment-method`, { session_id: sessionId })
+        .then((res) => {
+          if (res.data?.ok) {
+            setTrialActivated(true);
+            setSubmitted(true);
+            setTherapistId(subscribedId);
+            toast.success("Free trial started — you're all set!");
+          } else {
+            toast.error("Payment session not complete; please try again.");
+          }
+          // Clean URL
+          window.history.replaceState({}, "", "/therapists/join");
+        })
+        .catch(() => toast.error("Could not finalize subscription"));
+    }
+  }, []);
+
   const submit = async () => {
     setSubmitting(true);
     try {
-      await api.post("/therapists/signup", data);
+      const res = await api.post("/therapists/signup", data);
+      setTherapistId(res.data?.id);
       setSubmitted(true);
-      toast.success("Profile received — we'll be in touch soon.");
+      toast.success("Profile received — please add a payment method to start your free trial.");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Submission failed");
@@ -179,7 +208,68 @@ export default function TherapistSignup() {
     }
   };
 
+  const goToCheckout = async () => {
+    if (!therapistId) return;
+    setCheckoutLoading(true);
+    try {
+      const res = await api.post(`/therapists/${therapistId}/subscribe-checkout`, {});
+      if (res.data?.demo_mode) {
+        // Stripe Emergent proxy returns unreachable URLs — fast-forward the
+        // sync step locally so the UX is fully testable today. Switch to a
+        // real Stripe key in /app/backend/.env to enable hosted Checkout.
+        toast.info("Demo mode — fast-forwarding card setup");
+        const sync = await api.post(`/therapists/${therapistId}/sync-payment-method`, {
+          session_id: `demo_${therapistId}_${Date.now()}`,
+        });
+        if (sync.data?.ok) {
+          setTrialActivated(true);
+          window.history.replaceState({}, "", "/therapists/join");
+        } else {
+          toast.error("Could not finalize trial in demo mode");
+        }
+      } else if (res.data?.url) {
+        window.location.href = res.data.url;
+      } else {
+        toast.error("Could not create checkout session");
+      }
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Checkout failed");
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
+
   if (submitted) {
+    if (trialActivated) {
+      return (
+        <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
+          <Header minimal />
+          <main className="flex-1 flex items-center justify-center px-5 py-16">
+            <div className="max-w-xl w-full bg-white border border-[#E8E5DF] rounded-3xl p-10 text-center tv-fade-up">
+              <div className="mx-auto w-14 h-14 rounded-full bg-[#2D4A3E]/10 text-[#2D4A3E] flex items-center justify-center">
+                <CheckCircle2 size={28} strokeWidth={1.6} />
+              </div>
+              <h1 className="font-serif-display text-4xl text-[#2D4A3E] mt-5" data-testid="trial-activated-heading">
+                You're in — free trial active
+              </h1>
+              <p className="text-[#6D6A65] mt-3 leading-relaxed">
+                Your card is saved and your <strong className="text-[#2D4A3E]">30-day free trial</strong> has started.
+                You'll receive your first anonymous referral as soon as a patient match scores ≥71%.
+                We'll email you 3 days before your first $45 charge — cancel any time before then with no fees.
+              </p>
+              <Link
+                to="/"
+                className="tv-btn-primary mt-8 inline-flex"
+                data-testid="signup-success-home"
+              >
+                Back home
+              </Link>
+            </div>
+          </main>
+          <Footer />
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
         <Header minimal />
@@ -189,19 +279,35 @@ export default function TherapistSignup() {
               <CheckCircle2 size={28} strokeWidth={1.6} />
             </div>
             <h1 className="font-serif-display text-4xl text-[#2D4A3E] mt-5">
-              Profile received
+              Profile received — one more step
             </h1>
             <p className="text-[#6D6A65] mt-3 leading-relaxed">
-              Thank you for joining the TheraVoca network. Our team will review your
-              profile within 1–2 business days. We just sent a confirmation to{" "}
+              We've received your profile and emailed a confirmation to{" "}
               <span className="text-[#2D4A3E] font-medium">{data.email}</span>.
+              Add a payment method now to start your <strong className="text-[#2D4A3E]">30-day free trial</strong>.
+              You won't be charged until day 31, and you can cancel any time
+              from your portal.
             </p>
+            <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-5 mt-6 text-left">
+              <div className="text-xs uppercase tracking-wider text-[#6D6A65]">Plan</div>
+              <div className="font-serif-display text-2xl text-[#2D4A3E] mt-0.5">$45 / month</div>
+              <div className="text-xs text-[#6D6A65] mt-1">After 30-day free trial · Cancel anytime · Card via Stripe</div>
+            </div>
+            <button
+              onClick={goToCheckout}
+              disabled={checkoutLoading}
+              data-testid="signup-checkout-btn"
+              className="tv-btn-primary mt-6 w-full disabled:opacity-50"
+            >
+              {checkoutLoading ? "Redirecting…" : "Add payment method & start free trial"}
+              <ArrowRight size={18} className="inline ml-2" />
+            </button>
             <Link
               to="/"
-              className="tv-btn-secondary mt-8 inline-flex"
+              className="tv-btn-secondary mt-3 inline-flex"
               data-testid="signup-success-home"
             >
-              Back home
+              I'll do this later
             </Link>
           </div>
         </main>

@@ -176,6 +176,34 @@ export default function AdminDashboard() {
     }
   };
 
+  const runBackfill = async () => {
+    if (!confirm(
+      "Backfill ALL therapist profiles with realistic fake data + therapymatch+tNNN@gmail.com emails?\n\nThis is idempotent (only fills missing fields)."
+    )) return;
+    try {
+      const res = await client.post("/admin/backfill-therapists", {});
+      toast.success(`Backfill done — ${res.data.updated}/${res.data.scanned} updated`);
+      refresh();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Backfill failed");
+    }
+  };
+
+  const releaseResults = async (rid) => {
+    try {
+      await client.post(`/admin/requests/${rid}/release-results`, {});
+      toast.success("Results released to patient");
+      if (openId === rid) {
+        const d = await client.get(`/admin/requests/${rid}`);
+        setDetail(d.data);
+      }
+      refresh();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Release failed");
+    }
+  };
+
+
   const loadEmailTemplates = async () => {
     try {
       const res = await client.get("/admin/email-templates");
@@ -470,6 +498,7 @@ export default function AdminDashboard() {
                           <td className="p-4 text-[#2B2A29] text-xs break-all">{t.email}</td>
                           <td className="p-4">
                             <ProviderStatus t={t} />
+                            <SubBadge t={t} />
                           </td>
                           <td className="p-4 text-[#2B2A29]">
                             ${t.cash_rate ?? "—"}
@@ -1331,6 +1360,27 @@ function ProviderStatus({ t }) {
     <span className={`inline-flex text-xs px-2.5 py-1 rounded-full ${cls}`}>
       {label}
     </span>
+  );
+}
+
+function SubBadge({ t }) {
+  const status = t?.subscription_status || "incomplete";
+  const palette = {
+    trialing: "bg-[#4A6B5D]/15 text-[#4A6B5D]",
+    active: "bg-[#2D4A3E]/15 text-[#2D4A3E]",
+    past_due: "bg-[#D45D5D]/15 text-[#D45D5D]",
+    canceled: "bg-[#6D6A65]/15 text-[#6D6A65]",
+    unpaid: "bg-[#D45D5D]/15 text-[#D45D5D]",
+    incomplete: "bg-[#C87965]/15 text-[#C87965]",
+    legacy_free: "bg-[#6D6A65]/10 text-[#6D6A65]",
+  };
+  return (
+    <div
+      className={`inline-flex text-[10px] px-2 py-0.5 rounded-full mt-1 ${palette[status] || palette.incomplete}`}
+      data-testid={`sub-badge-${t.id}`}
+    >
+      {status.replace("_", " ")}
+    </div>
   );
 }
 

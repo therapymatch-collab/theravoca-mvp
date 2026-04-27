@@ -32,6 +32,7 @@ from geocoding import geocode_city, geocode_offices, geocode_zip, haversine_mile
 from matching import rank_therapists
 from seed_data import generate_seed_therapists
 from sms_service import send_sms, send_therapist_referral_sms
+import stripe_service
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -277,8 +278,17 @@ def require_admin(x_admin_password: Optional[str] = Header(None)) -> bool:
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+def _now_iso() -> str:    return datetime.now(timezone.utc).isoformat()
+
+
+def _ts_to_iso(ts: Optional[int]) -> Optional[str]:
+    """Convert a Stripe Unix timestamp to ISO8601, or None."""
+    if ts is None:
+        return None
+    try:
+        return datetime.fromtimestamp(int(ts), tz=timezone.utc).isoformat()
+    except (TypeError, ValueError):
+        return None
 
 
 def _strip_id(doc: dict[str, Any]) -> dict[str, Any]:
@@ -352,7 +362,13 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
     if threshold is None:
         threshold = req.get("threshold", DEFAULT_THRESHOLD)
     therapists_cursor = db.therapists.find(
-        {"is_active": {"$ne": False}, "pending_approval": {"$ne": True}}, {"_id": 0}
+        {
+            "is_active": {"$ne": False},
+            "pending_approval": {"$ne": True},
+            # Suspend matching for therapists whose card payment failed or whose
+            # subscription was canceled. Trialing + active + legacy_free still match.
+            "subscription_status": {"$nin": ["past_due", "canceled", "unpaid", "incomplete"]},
+        }, {"_id": 0},
     )
     therapists = await therapists_cursor.to_list(2000)
     matches = rank_therapists(therapists, req, threshold=threshold, top_n=30, min_results=3)
@@ -736,6 +752,11 @@ async def therapist_signup(payload: TherapistSignup):
         "source": "signup",
         "is_active": True,
         "pending_approval": True,
+        "subscription_status": "incomplete",  # set to 'trialing' once Checkout completes
+        "stripe_customer_id": None,
+        "stripe_subscription_id": None,
+        "trial_ends_at": None,
+        "current_period_end": None,
         "created_at": _now_iso(),
     }
     await db.therapists.insert_one(doc.copy())
@@ -743,6 +764,203 @@ async def therapist_signup(payload: TherapistSignup):
     logger.info("New therapist signup: %s (%s) with %d geocoded offices",
                 payload.email, tid, len(office_geos))
     return {"id": tid, "status": "pending_approval"}
+
+
+@api.post("/therapists/{therapist_id}/subscribe-checkout")
+async def therapist_subscribe_checkout(therapist_id: str):
+    """Return a Stripe Checkout URL for the therapist to add a card.
+
+    DEMO MODE: When STRIPE_API_KEY=sk_test_emergent (the Emergent shared proxy),
+    the resulting checkout.stripe.com URL is not actually reachable because the
+    proxy's session objects are sandboxed away from real Stripe. We return a
+    `demo_mode=true` flag so the frontend can fast-forward the flow by calling
+    /sync-payment-method with a synthesized session_id. Switch to a real
+    `sk_test_xxx` key to enable the full hosted Checkout experience.
+    """
+    t = await db.therapists.find_one(
+        {"id": therapist_id},
+        {"_id": 0, "id": 1, "email": 1, "name": 1, "subscription_status": 1},
+    )
+    if not t:
+        raise HTTPException(404)
+    base = os.environ.get("PUBLIC_APP_URL", "")
+    success_url = f"{base}/therapists/join?subscribed={therapist_id}&session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{base}/therapists/join?canceled={therapist_id}"
+    try:
+        result = await stripe_service.create_setup_checkout(
+            therapist_id=t["id"],
+            therapist_email=t["email"],
+            therapist_name=t["name"],
+            success_url=success_url,
+            cancel_url=cancel_url,
+        )
+    except Exception as e:
+        logger.exception("Stripe checkout creation failed: %s", e)
+        raise HTTPException(502, f"Stripe error: {e}")
+    result["demo_mode"] = stripe_service._is_emergent_proxy()
+    return result
+
+
+@api.post("/therapists/{therapist_id}/sync-payment-method")
+async def therapist_sync_payment_method(therapist_id: str, payload: dict):
+    """Called by the frontend after Stripe Checkout success — pulls the
+    setup session from Stripe and stores customer_id + payment_method_id +
+    starts the 30-day trial clock.
+
+    DEMO MODE: When session_id starts with 'demo_' (frontend fast-forward
+    around the proxy's unreachable hosted page), we synthesize a customer
+    + payment method and start the trial directly."""
+    session_id = (payload or {}).get("session_id")
+    if not session_id:
+        raise HTTPException(400, "session_id required")
+    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0, "id": 1})
+    if not t:
+        raise HTTPException(404)
+
+    is_demo = session_id.startswith("demo_") or stripe_service._is_emergent_proxy()
+    if is_demo:
+        info = {
+            "status": "complete",
+            "customer": f"cus_demo_{therapist_id[:10]}",
+            "setup_intent_id": f"seti_demo_{therapist_id[:10]}",
+            "payment_method": f"pm_demo_{therapist_id[:10]}",
+        }
+    else:
+        info = stripe_service.retrieve_session(session_id)
+        if not info:
+            raise HTTPException(502, "Could not retrieve Stripe session")
+        if info.get("status") != "complete":
+            return {"ok": False, "status": info.get("status")}
+
+    trial_end = datetime.now(timezone.utc) + timedelta(days=30)
+    await db.therapists.update_one(
+        {"id": therapist_id},
+        {"$set": {
+            "stripe_customer_id": info.get("customer"),
+            "stripe_setup_intent_id": info.get("setup_intent_id"),
+            "stripe_payment_method_id": info.get("payment_method"),
+            "subscription_status": "trialing",
+            "trial_ends_at": trial_end.isoformat(),
+            "current_period_end": trial_end.isoformat(),
+            "updated_at": _now_iso(),
+        }},
+    )
+    return {
+        "ok": True,
+        "subscription_status": "trialing",
+        "trial_ends_at": trial_end.isoformat(),
+        "demo_mode": is_demo,
+    }
+
+
+@api.get("/therapists/{therapist_id}/subscription")
+async def therapist_subscription_status(therapist_id: str):
+    """Read subscription state for a single therapist."""
+    t = await db.therapists.find_one(
+        {"id": therapist_id},
+        {"_id": 0, "id": 1, "subscription_status": 1, "trial_ends_at": 1,
+         "current_period_end": 1, "stripe_customer_id": 1, "stripe_payment_method_id": 1},
+    )
+    if not t:
+        raise HTTPException(404)
+    return t
+
+
+@api.post("/admin/therapists/{therapist_id}/charge-now")
+async def admin_charge_therapist_now(
+    therapist_id: str, _: bool = Depends(require_admin)
+):
+    """Admin manual trigger to charge the therapist their $45 monthly fee.
+    Used for testing the recurring flow + as fallback if cron fails."""
+    t = await db.therapists.find_one(
+        {"id": therapist_id},
+        {"_id": 0, "id": 1, "stripe_customer_id": 1, "stripe_payment_method_id": 1, "subscription_status": 1},
+    )
+    if not t or not t.get("stripe_customer_id"):
+        raise HTTPException(400, "Therapist has no Stripe customer on file")
+    res = stripe_service.charge_monthly_fee(
+        customer_id=t["stripe_customer_id"],
+        payment_method_id=t.get("stripe_payment_method_id"),
+    )
+    if res.get("error"):
+        # Mark past_due so matching is suspended
+        await db.therapists.update_one(
+            {"id": therapist_id},
+            {"$set": {"subscription_status": "past_due", "updated_at": _now_iso()}},
+        )
+        return {"ok": False, **res}
+    next_period = datetime.now(timezone.utc) + timedelta(days=30)
+    await db.therapists.update_one(
+        {"id": therapist_id},
+        {"$set": {
+            "subscription_status": "active",
+            "current_period_end": next_period.isoformat(),
+            "trial_ends_at": None,
+            "updated_at": _now_iso(),
+        }},
+    )
+    return {"ok": True, **res, "current_period_end": next_period.isoformat()}
+
+
+@api.post("/stripe/webhook")
+async def stripe_webhook(request: Request):
+    """Stripe webhook handler. Updates therapist.subscription_status on lifecycle events."""
+    payload = await request.body()
+    sig = request.headers.get("stripe-signature", "")
+    try:
+        event = stripe_service.construct_event(payload, sig)
+    except Exception as e:
+        logger.warning("Stripe webhook signature verification failed: %s", e)
+        raise HTTPException(400, "invalid signature")
+    etype = event.get("type") if isinstance(event, dict) else event.type
+    obj = (event.get("data") or {}).get("object") if isinstance(event, dict) else event.data.object
+    tid: Optional[str] = None
+
+    async def _set(fields: dict[str, Any]):
+        nonlocal tid
+        if not tid:
+            return
+        fields["updated_at"] = _now_iso()
+        await db.therapists.update_one({"id": tid}, {"$set": fields})
+
+    if etype == "checkout.session.completed":
+        tid = obj.get("client_reference_id") or (obj.get("metadata") or {}).get("theravoca_therapist_id")
+        cust = obj.get("customer")
+        sub_id = obj.get("subscription")
+        if tid and sub_id:
+            sub = stripe_service.retrieve_subscription(sub_id) or {}
+            await _set({
+                "stripe_customer_id": cust,
+                "stripe_subscription_id": sub_id,
+                "subscription_status": sub.get("status") or "trialing",
+                "trial_ends_at": _ts_to_iso(sub.get("trial_end")),
+                "current_period_end": _ts_to_iso(sub.get("current_period_end")),
+            })
+    elif etype in ("customer.subscription.updated", "customer.subscription.created", "customer.subscription.deleted"):
+        sub_id = obj.get("id")
+        # Map back to therapist via metadata or customer id
+        meta = obj.get("metadata") or {}
+        tid = meta.get("theravoca_therapist_id")
+        if not tid:
+            cust_id = obj.get("customer")
+            t_match = await db.therapists.find_one(
+                {"stripe_customer_id": cust_id}, {"_id": 0, "id": 1}
+            )
+            tid = t_match["id"] if t_match else None
+        if tid:
+            await _set({
+                "stripe_subscription_id": sub_id,
+                "subscription_status": obj.get("status") or "canceled",
+                "trial_ends_at": _ts_to_iso(obj.get("trial_end")),
+                "current_period_end": _ts_to_iso(obj.get("current_period_end")),
+            })
+    elif etype == "invoice.payment_failed":
+        cust_id = obj.get("customer")
+        t_match = await db.therapists.find_one({"stripe_customer_id": cust_id}, {"_id": 0, "id": 1})
+        if t_match:
+            tid = t_match["id"]
+            await _set({"subscription_status": "past_due"})
+    return {"received": True, "type": etype}
 
 
 @api.get("/therapist/apply/{request_id}/{therapist_id}", response_model=dict)

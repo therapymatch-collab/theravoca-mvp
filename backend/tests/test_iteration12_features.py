@@ -193,7 +193,14 @@ class TestEmailGreetingFirstName:
             captured["html"] = html
             return True
 
+        async def fake_get_template(_db, key):
+            # Return the default template — no DB access
+            from email_templates import DEFAULTS
+            return dict(DEFAULTS[key])
+
         monkeypatch.setattr(email_service, "_send", fake_send)
+        monkeypatch.setattr(email_service, "get_template", fake_get_template)
+        monkeypatch.setattr(email_service, "_db", lambda: None)
 
         async def go():
             await email_service.send_therapist_notification(

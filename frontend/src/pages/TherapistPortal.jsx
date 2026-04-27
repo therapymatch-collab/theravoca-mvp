@@ -17,6 +17,7 @@ export default function TherapistPortal() {
   const session = getSession();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const [sub, setSub] = useState(null);
 
   useEffect(() => {
     if (!session || session.role !== "therapist") {
@@ -25,7 +26,16 @@ export default function TherapistPortal() {
     }
     sessionClient()
       .get("/portal/therapist/referrals")
-      .then((res) => setData(res.data))
+      .then((res) => {
+        setData(res.data);
+        const tid = res.data?.therapist?.id;
+        if (tid) {
+          api
+            .get(`/therapists/${tid}/subscription`)
+            .then((s) => setSub(s.data))
+            .catch(() => {});
+        }
+      })
       .catch((e) => {
         if (e?.response?.status === 401) {
           clearSession();
@@ -35,6 +45,30 @@ export default function TherapistPortal() {
         }
       });
   }, [session, navigate]);
+
+  const startCheckout = async () => {
+    const tid = data?.therapist?.id;
+    if (!tid) return;
+    try {
+      const res = await api.post(`/therapists/${tid}/subscribe-checkout`, {});
+      if (res.data?.demo_mode) {
+        toast.info("Demo mode — fast-forwarding card setup");
+        const sync = await api.post(`/therapists/${tid}/sync-payment-method`, {
+          session_id: `demo_${tid}_${Date.now()}`,
+        });
+        if (sync.data?.ok) {
+          toast.success("Free trial started!");
+          // Refresh subscription state
+          const s = await api.get(`/therapists/${tid}/subscription`);
+          setSub(s.data);
+        }
+      } else if (res.data?.url) {
+        window.location.href = res.data.url;
+      }
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Could not start checkout");
+    }
+  };
 
   const signOut = () => {
     clearSession();
@@ -75,6 +109,49 @@ export default function TherapistPortal() {
           {error && (
             <div className="mt-10 bg-white border border-[#E8E5DF] rounded-2xl p-8 text-center">
               <p className="text-[#D45D5D]">{error}</p>
+            </div>
+          )}
+
+          {sub && ["incomplete", "past_due", "canceled", "unpaid"].includes(sub.subscription_status) && (
+            <div
+              className="mt-6 bg-[#FDF7EC] border border-[#E8DCC1] rounded-2xl p-5 flex items-start justify-between gap-4 flex-wrap"
+              data-testid="subscription-banner"
+            >
+              <div className="flex items-start gap-3">
+                <AlertTriangle size={18} className="text-[#C87965] mt-1 shrink-0" />
+                <div>
+                  <div className="text-sm font-semibold text-[#2B2A29]">
+                    Add a payment method to continue receiving referrals
+                  </div>
+                  <p className="text-sm text-[#6D6A65] mt-1 leading-relaxed">
+                    {sub.subscription_status === "past_due"
+                      ? "Your last payment failed. Update your card to resume matching."
+                      : sub.subscription_status === "canceled"
+                      ? "Your subscription was canceled. Reactivate to continue."
+                      : "Your free trial has not started yet — add a card to begin."}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={startCheckout}
+                className="tv-btn-primary !py-2 !px-4 text-sm shrink-0"
+                data-testid="portal-checkout-btn"
+              >
+                <CreditCard size={14} className="inline mr-1.5" /> Add payment method
+              </button>
+            </div>
+          )}
+
+          {sub && sub.subscription_status === "trialing" && sub.trial_ends_at && (
+            <div className="mt-6 bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl px-5 py-3 text-sm text-[#6D6A65] flex items-center gap-2 flex-wrap">
+              <CheckCircle2 size={14} className="text-[#2D4A3E]" />
+              Your free trial ends on{" "}
+              <span className="text-[#2D4A3E] font-medium">
+                {new Date(sub.trial_ends_at).toLocaleDateString(undefined, {
+                  month: "short", day: "numeric", year: "numeric",
+                })}
+              </span>
+              . You won't be charged until then.
             </div>
           )}
 

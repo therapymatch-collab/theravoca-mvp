@@ -325,10 +325,12 @@ class TestPatientReranking:
         rr = session.post(f"{API}/admin/requests/{rid}/trigger-results",
                           headers=ADMIN_HEADERS, timeout=30)
         assert rr.status_code == 200, rr.text
+        # Iter-13: 24h hold on results. Release for test.
+        rel = session.post(f"{API}/admin/requests/{rid}/release-results",
+                           headers=ADMIN_HEADERS, timeout=15)
+        assert rel.status_code == 200, rel.text
         # The re-rank logic is in _deliver_results; it doesn't store rank.
         # We assert via the public results which sorts by match_score+created_at.
-        # Since equal score, order by created_at desc -> t2 first since later.
-        # But the re-rank tested in spec is internal to email; assert sort behavior here.
         pub = session.get(f"{API}/requests/{rid}/results", timeout=15).json()
         apps = pub["applications"]
         assert len(apps) >= 2

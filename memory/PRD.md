@@ -54,6 +54,22 @@ Tech: FastAPI + MongoDB + React. Email via Resend. ~100 seeded Idaho therapists.
 - **`/app/frontend/src/lib/insurers.js`** — single source of truth for Idaho insurer lists (`IDAHO_INSURERS`, `PATIENT_INSURER_OPTIONS`).
 - 10/10 backend pytest pass, frontend Playwright validated. Test file: `/app/backend/tests/test_iteration8_payment_insurance.py`.
 
+## Iteration 14 (2026-04-27) — Stripe subscription onboarding ($45/mo, 30-day free trial)
+
+**Therapist subscription flow shipped end-to-end:**
+- `stripe_service.py` — uses Stripe Checkout in **setup mode** (collects card without immediate charge), via the Emergent-managed Stripe proxy (`STRIPE_API_KEY=sk_test_emergent` in `/app/backend/.env`).
+- After signup, therapist sees a "Add payment method & start free trial" CTA → Stripe Checkout (or fast-forward in demo mode) → returns to `/therapists/join?subscribed=ID&session_id=...` → backend `/sync-payment-method` endpoint stores `stripe_customer_id`/`stripe_payment_method_id` and sets `subscription_status="trialing"` with `trial_ends_at = now+30d`.
+- Day-31 charging: `POST /admin/therapists/{id}/charge-now` runs a $45 PaymentIntent (off-session, customer's saved card). On failure → `subscription_status="past_due"` and matching is suspended.
+- Webhook handler `POST /stripe/webhook` reacts to `customer.subscription.updated/created/deleted` and `invoice.payment_failed` to keep status in sync (production path).
+- **Matching gate**: `_trigger_matching` now skips therapists whose `subscription_status` is in `{past_due, canceled, unpaid, incomplete}`. Trialing + active + legacy_free still match.
+- **Therapist Portal banner**: shows "Add a payment method to continue receiving referrals" when status needs attention; shows "Trial ends MMM DD" when trialing.
+- **Admin All Providers**: every row now displays a 2nd-line subscription badge (incomplete / trialing / active / past_due / canceled / unpaid / legacy_free).
+- **Backfill** updated: all 147 existing therapists set to `trialing` with 30-day clock so they go through the same payment funnel.
+
+**DEMO MODE limitation (transparent fallback):** The Emergent Stripe proxy returns a session ID but the real `checkout.stripe.com` hosted page rejects it. Frontend detects `demo_mode=true` from the backend and fast-forwards the sync step locally so the entire UX is testable today. To switch to real Stripe Checkout, drop a real `sk_test_xxx` key into `/app/backend/.env`.
+
+**Tests**: 44/44 across iter-7/9/12 pass. (Existing tests updated to release the new 24h hold before reading results.)
+
 ## Iteration 13 (2026-04-27) — 24h hold + Compact match cards + Therapist credentials/notify-prefs + Profile backfill
 
 **Major UX redesign + 5 new features**:

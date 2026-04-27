@@ -185,6 +185,16 @@ def backfill_therapist(t: dict[str, Any], idx: int) -> dict[str, Any]:
     if "notify_sms" not in t:
         set_fields["notify_sms"] = True
 
+    # Subscription defaults — existing therapists are put into trialing state
+    # with a 30-day clock so they need to add a card too. Date is stored as ISO.
+    if not t.get("subscription_status") or t.get("subscription_status") == "incomplete":
+        from datetime import datetime, timedelta, timezone
+        trial_end = datetime.now(timezone.utc) + timedelta(days=30)
+        set_fields["subscription_status"] = "trialing"
+        set_fields["trial_ends_at"] = trial_end.isoformat()
+        set_fields.setdefault("stripe_customer_id", None)
+        set_fields.setdefault("stripe_subscription_id", None)
+
     # Profile picture left null — frontend renders initials fallback
     if "profile_picture" not in t:
         set_fields["profile_picture"] = DEFAULT_PROFILE_PICTURE
