@@ -204,36 +204,19 @@ export default function TherapistApply() {
             </div>
             <div className="md:col-span-2 bg-white border border-[#E8E5DF] rounded-2xl p-6">
               <h3 className="font-semibold text-[#2B2A29] mb-3">Referral summary</h3>
-
-              {/* Pull payment to a hero row so the actual insurance plan or
-                  cash budget is unmissable — it's the #1 thing that drives
-                  apply/decline decisions. */}
-              {data.summary["Payment"] && (
-                <div
-                  className="bg-[#FDF7EC] border border-[#E8DCC1] rounded-xl px-4 py-3 mb-4"
-                  data-testid="apply-payment-hero"
-                >
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-[#C87965] font-semibold">
-                    Payment
-                  </div>
-                  <div className="font-medium text-[#2B2A29] mt-0.5 text-sm leading-snug">
-                    {data.summary["Payment"]}
-                  </div>
-                </div>
-              )}
-
               <dl className="space-y-2.5">
-                {Object.entries(data.summary)
-                  .filter(([k]) => k !== "Payment")
-                  .map(([k, v]) => (
-                    <div
-                      key={k}
-                      className="grid grid-cols-3 gap-3 text-sm border-b border-[#E8E5DF]/70 last:border-0 pb-2 last:pb-0"
-                    >
-                      <dt className="text-[#6D6A65]">{k}</dt>
-                      <dd className="col-span-2 text-[#2B2A29]">{v || "—"}</dd>
-                    </div>
-                  ))}
+                {Object.entries(data.summary).map(([k, v]) => (
+                  <div
+                    key={k}
+                    className="grid grid-cols-3 gap-3 text-sm border-b border-[#E8E5DF]/70 last:border-0 pb-2 last:pb-0"
+                    data-testid={
+                      k === "Payment" ? "apply-payment-row" : undefined
+                    }
+                  >
+                    <dt className="text-[#6D6A65]">{k}</dt>
+                    <dd className="col-span-2 text-[#2B2A29]">{v || "—"}</dd>
+                  </div>
+                ))}
               </dl>
             </div>
           </div>

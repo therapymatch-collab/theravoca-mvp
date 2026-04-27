@@ -57,6 +57,11 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+### iter-26 — Phone format, payment-row inline, prod webhook reminder (Apr 27, 2026)
+- **Auto-formatted phone fields**: All three phone inputs (therapist private alert, therapist office, patient SMS receipt) now auto-format as `xxx-xxx-xxxx` while typing. Strips parens/spaces/dots, caps at 10 digits. `formatUsPhone()` helper at `/app/frontend/src/lib/phone.js`.
+- **Apply page payment row**: Reverted the highlighted hero card; Payment is now back inline with the other summary fields (per user feedback). The actual insurance plan name + dollar budget still show correctly because backend's `_safe_summary_for_therapist` formats it that way (e.g. "Insurance — Blue Cross of Idaho" or "Cash — up to $200/session").
+- **Prod webhook reminder**: PRD documents that `STRIPE_WEBHOOK_SECRET` must be regenerated in Stripe live-mode dashboard and added to production `.env` when flipping live (test-mode `whsec_…` won't work in prod).
+
 ### iter-25 — Multi-experience preference, invite-link routing, apply UX, admin LLM transparency, alignment fixes (Apr 27, 2026)
 - **Patient intake**: Therapist experience preference is now multi-select (was single) — `no_pref` becomes mutually exclusive when other prefs are picked. Backend accepts list OR legacy string.
 - **Therapist invite-link landing**: `/therapists/join?invite_request_id=…` auto-scrolls to `#signup-form` so non-registered therapists land directly on the signup wizard.

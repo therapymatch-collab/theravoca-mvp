@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { CheckCircle2, ArrowRight, X, Plus, Camera, Sparkles } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
+import { formatUsPhone } from "@/lib/phone";
 import { api } from "@/lib/api";
 import { IDAHO_INSURERS } from "@/lib/insurers";
 import { imageToDataUrl } from "@/lib/image";
@@ -810,9 +811,14 @@ export default function TherapistSignup() {
                       hint="SMS alerts only — never shown to patients."
                     >
                       <Input
+                        type="tel"
+                        inputMode="tel"
+                        maxLength={12}
                         value={data.phone_alert || data.phone}
-                        onChange={(e) => set("phone_alert", e.target.value)}
-                        placeholder="(208) 555-0123"
+                        onChange={(e) =>
+                          set("phone_alert", formatUsPhone(e.target.value))
+                        }
+                        placeholder="208-555-0123"
                         className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                         data-testid="signup-phone-alert"
                       />
@@ -822,9 +828,14 @@ export default function TherapistSignup() {
                       hint="Patients see this on your profile."
                     >
                       <Input
+                        type="tel"
+                        inputMode="tel"
+                        maxLength={12}
                         value={data.office_phone}
-                        onChange={(e) => set("office_phone", e.target.value)}
-                        placeholder="(208) 555-0150"
+                        onChange={(e) =>
+                          set("office_phone", formatUsPhone(e.target.value))
+                        }
+                        placeholder="208-555-0150"
                         className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                         data-testid="signup-office-phone"
                       />

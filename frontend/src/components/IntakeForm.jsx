@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { formatUsPhone } from "@/lib/phone";
 import { toast } from "sonner";
 import { ArrowRight, Check } from "lucide-react";
 import { api } from "@/lib/api";
@@ -679,9 +680,11 @@ export default function IntakeForm() {
                 <Field label="Phone (optional — for an instant text receipt)">
                   <Input
                     type="tel"
+                    inputMode="tel"
+                    maxLength={12}
                     value={data.phone}
-                    onChange={(e) => set("phone", e.target.value)}
-                    placeholder="(208) 555-0123"
+                    onChange={(e) => set("phone", formatUsPhone(e.target.value))}
+                    placeholder="208-555-0123"
                     className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                     data-testid="phone-input"
                   />
