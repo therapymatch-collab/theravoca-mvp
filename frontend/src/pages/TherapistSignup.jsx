@@ -568,7 +568,7 @@ export default function TherapistSignup() {
                     per click."
                   </div>
                   <div className="text-white/70 text-xs mt-1">
-                    — Idaho-based LCSW, TheraVoca pilot
+                    — Licensed clinical social worker, TheraVoca pilot
                   </div>
                 </div>
               </div>
@@ -587,57 +587,41 @@ export default function TherapistSignup() {
                 not chase clicks.
               </h2>
               <p className="mt-4 text-[#2B2A29]/80 leading-relaxed">
-                We're an Idaho-focused referral network designed by clinicians,
-                for clinicians. Every part of the system is built around
-                <strong> protecting your time, your privacy, and the
+                We're a referral network designed by clinicians, for clinicians.
+                Every part of the system is built around{" "}
+                <strong>protecting your time, your privacy, and the
                 therapeutic alliance</strong> — not maximizing the number of
                 referrals we can spam you with.
               </p>
             </div>
-            <ul className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm text-[#2B2A29]">
+            <ul className="grid sm:grid-cols-2 gap-4 text-sm text-[#2B2A29]">
               {[
                 {
-                  t: "Only ideal-fit referrals",
-                  d: "You'll receive patient leads aligned with your specialties, schedule, and preferences — every match scores ≥ 70% before we even tell you about it.",
+                  t: "Only ideal-fit, transparent referrals",
+                  d: "You'll only hear about patient leads aligned with your specialties, schedule, and preferences — every match scores ≥ 70% before we even tell you about it. Each referral comes with a plain-English breakdown of why we matched you, plus a Gaps section showing exactly what kept the score from hitting 100%.",
                 },
                 {
-                  t: "You're always in control",
-                  d: "Review each referral and choose whether to opt in. No pressure, no obligations, no explanations needed.",
+                  t: "You're always in control — and private by default",
+                  d: "Review each referral and choose whether to opt in. No pressure, no obligations, no explanations needed. Your information stays private unless you say \"yes\" to a specific match — no public directory listing, no cold outreach from anyone but us.",
                 },
                 {
-                  t: "No public profile, no spam",
-                  d: "Your information stays private unless you say \"yes\" to a specific match. No directory listing, no cold outreach from anyone but us.",
+                  t: "Save your billable hours — peers you can trust",
+                  d: "No SEO content to write, no paid ads to run, no profile to maintain. We handle pre-screening, intake, and routing — you handle the session. Every TheraVoca therapist is license-verified by our team before going live, so you're sharing the network with vetted clinicians, not bots or unlicensed life-coaches.",
                 },
                 {
                   t: "30-day free trial, then $45/month",
                   d: "Cancel anytime. No setup fees, no per-referral charges, no hidden costs — and patients reach out directly once you opt in.",
                 },
-                {
-                  t: "Hyper-local to Idaho",
-                  d: "We're not another national directory. Every patient has a real Idaho ZIP — our matching engine scores office distance, drive time, and local insurance plans before notifying you.",
-                },
-                {
-                  t: "Transparent matching",
-                  d: "Every referral comes with a plain-English breakdown of why we matched you — and a Gaps section showing exactly what kept the score from hitting 100%.",
-                },
-                {
-                  t: "Save your billable hours",
-                  d: "No SEO content, no paid ads, no Psychology Today profile to maintain. We handle pre-screening, intake, and routing — you handle the session.",
-                },
-                {
-                  t: "Manually verified peers",
-                  d: "Every TheraVoca therapist is license-verified by our team before going live. No bots, no unlicensed life-coaches, no race-to-the-bottom rates dragging the network down.",
-                },
               ].map((b) => (
                 <li
                   key={b.t}
-                  className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-4 hover:border-[#2D4A3E] hover:shadow-sm transition-all"
+                  className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-5 hover:border-[#2D4A3E] hover:shadow-sm transition-all"
                 >
                   <div className="flex items-center gap-2">
                     <CheckCircle2 size={16} className="text-[#2D4A3E] shrink-0" />
                     <div className="font-semibold text-[#2D4A3E]">{b.t}</div>
                   </div>
-                  <div className="text-[#6D6A65] mt-1.5 text-xs leading-relaxed">{b.d}</div>
+                  <div className="text-[#6D6A65] mt-2 text-xs leading-relaxed">{b.d}</div>
                 </li>
               ))}
             </ul>
