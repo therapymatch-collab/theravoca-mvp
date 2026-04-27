@@ -19,6 +19,32 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# ── Background task registry ────────────────────────────────────────────────
+# `asyncio.create_task()` only holds a weak reference to the resulting task,
+# so a fire-and-forget task can be garbage-collected mid-execution. We keep a
+# strong reference here so background outreach + email + SMS dispatches always
+# complete even after the original request handler returns.
+_BG_TASKS: set[asyncio.Task] = set()
+
+
+def _spawn_bg(coro, *, name: str = "bg_task") -> asyncio.Task:
+    """Schedule a coroutine as a background task we'll keep referenced until
+    completion. Logs exceptions so silent failures don't disappear."""
+    task = asyncio.create_task(coro, name=name)
+    _BG_TASKS.add(task)
+
+    def _on_done(t: asyncio.Task):
+        _BG_TASKS.discard(t)
+        if t.cancelled():
+            return
+        exc = t.exception()
+        if exc is not None:
+            logger.exception("Background task %s failed: %s", t.get_name(), exc)
+
+    task.add_done_callback(_on_done)
+    return task
+
+
 def _ts_to_iso(ts: Optional[int]) -> Optional[str]:
     """Convert a Stripe Unix timestamp to ISO8601, or None."""
     if ts is None:
@@ -190,7 +216,14 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
     if outreach_needed_count > 0 and os.environ.get("OUTREACH_AUTO_RUN", "true").lower() == "true":
         try:
             from outreach_agent import run_outreach_for_request
-            asyncio.create_task(run_outreach_for_request(request_id))
+            _spawn_bg(
+                run_outreach_for_request(request_id),
+                name=f"outreach_for_{request_id[:8]}",
+            )
+            logger.info(
+                "Scheduled background outreach for %s (gap=%d)",
+                request_id, outreach_needed_count,
+            )
         except Exception as e:
             logger.warning("Could not schedule outreach for %s: %s", request_id, e)
     return {

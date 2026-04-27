@@ -643,6 +643,24 @@ async def admin_research_all_reviews(
     return await research_reviews_for_all(limit=limit)
 
 
+@router.post("/admin/requests/{request_id}/run-outreach")
+async def admin_run_outreach_now(
+    request_id: str, _: bool = Depends(require_admin),
+):
+    """Manually re-run the LLM outreach for a request whose initial run was
+    skipped or failed. Clears the `outreach_run_at` flag first so the agent
+    will actually execute regardless of prior state."""
+    req = await db.requests.find_one({"id": request_id}, {"_id": 0, "id": 1})
+    if not req:
+        raise HTTPException(404, "Request not found")
+    await db.requests.update_one(
+        {"id": request_id},
+        {"$unset": {"outreach_run_at": "", "outreach_skipped_reason": ""}},
+    )
+    from outreach_agent import run_outreach_for_request
+    return await run_outreach_for_request(request_id)
+
+
 @router.get("/admin/coverage-gap-analysis")
 async def admin_coverage_gap_analysis(_: bool = Depends(require_admin)):
     """Coverage gap analysis across the active therapist directory.

@@ -103,7 +103,12 @@ async def verify_request(token: str):
             {"id": req["id"]},
             {"$set": {"verified": True, "status": "open", "verified_at": _now_iso()}},
         )
-        asyncio.create_task(_trigger_matching(req["id"]))
+        # Hold a strong ref to the task so Python's GC can't kill it mid-run.
+        from helpers import _spawn_bg
+        _spawn_bg(
+            _trigger_matching(req["id"]),
+            name=f"match_for_{req['id'][:8]}",
+        )
     return {"id": req["id"], "verified": True}
 
 

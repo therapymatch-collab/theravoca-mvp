@@ -263,6 +263,24 @@ export default function AdminDashboard() {
     }
   };
 
+  const runOutreachNow = async (id) => {
+    if (!confirm(
+      "Run LLM outreach for this patient now?\n\n" +
+      "Searches Google Places + Claude for additional Idaho therapists who match this patient's brief, " +
+      "and queues invite emails to fill the gap. Use this if the auto-trigger didn't run or the directory had < 30 matches."
+    )) return;
+    try {
+      const res = await client.post(`/admin/requests/${id}/run-outreach`);
+      const sent = res.data?.emails_sent ?? 0;
+      const found = res.data?.candidates_found ?? 0;
+      toast.success(`Outreach: ${found} candidate(s) found, ${sent} email(s) queued`);
+      refresh();
+      if (openId === id) openDetail(id);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Outreach failed");
+    }
+  };
+
   const updateThreshold = async (id, threshold) => {
     try {
       await client.put(`/admin/requests/${id}/threshold`, { threshold });
@@ -2048,6 +2066,14 @@ export default function AdminDashboard() {
                   data-testid="resend-btn"
                 >
                   <RotateCw size={14} className="inline mr-1.5" /> Re-run matching
+                </button>
+                <button
+                  className="tv-btn-secondary !py-2 !px-4 text-sm border-[#C87965] text-[#C87965]"
+                  onClick={() => runOutreachNow(detail.request.id)}
+                  data-testid="run-outreach-btn"
+                  title="Manually fire the LLM outreach for this request — useful if the auto-trigger didn't run or fewer than 30 directory matches were found."
+                >
+                  <Send size={14} className="inline mr-1.5" /> Run LLM outreach now
                 </button>
                 <ThresholdControl
                   current={detail.request.threshold}

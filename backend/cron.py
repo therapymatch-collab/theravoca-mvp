@@ -46,12 +46,46 @@ async def _sweep_overdue_results() -> None:
             logger.exception("Sweep failed for %s: %s", req["id"], e)
 
 
+async def _sweep_pending_outreach() -> None:
+    """Self-heal sweep for requests whose LLM outreach got dropped (e.g. due
+    to fire-and-forget task GC, transient LLM failure, or backend restart).
+
+    Runs every ~5 minutes. Picks up any verified request that has an
+    `outreach_needed_count > 0` and no `outreach_run_at` flag, but only
+    >2 minutes after `matched_at` (so we don't race the initial trigger)."""
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=2)
+    cur = db.requests.find(
+        {
+            "verified": True,
+            "outreach_needed_count": {"$gt": 0},
+            "outreach_run_at": {"$exists": False},
+            "matched_at": {"$lte": cutoff.isoformat()},
+        },
+        {"_id": 0, "id": 1, "outreach_needed_count": 1},
+    )
+    pending = await cur.to_list(50)
+    if not pending:
+        return
+    logger.info("Outreach-retry sweep: %d pending request(s)", len(pending))
+    from outreach_agent import run_outreach_for_request
+    for req in pending:
+        try:
+            res = await run_outreach_for_request(req["id"])
+            logger.info("Outreach-retry for %s → %s", req["id"][:8], res)
+        except Exception as e:
+            logger.exception("Outreach-retry failed for %s: %s", req["id"], e)
+
+
 async def _sweep_loop(interval_seconds: int = 300) -> None:
     while True:
         try:
             await _sweep_overdue_results()
         except Exception as e:
             logger.exception("Sweep loop error: %s", e)
+        try:
+            await _sweep_pending_outreach()
+        except Exception as e:
+            logger.exception("Outreach-retry sweep error: %s", e)
         await asyncio.sleep(interval_seconds)
 
 
