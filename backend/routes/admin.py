@@ -440,8 +440,10 @@ async def admin_get_referral_source_options() -> dict[str, Any]:
 @router.put("/admin/referral-source-options", dependencies=[Depends(require_admin)])
 async def admin_set_referral_source_options(payload: dict) -> dict[str, Any]:
     options = payload.get("options")
-    if not isinstance(options, list) or not all(
-        isinstance(o, str) and o.strip() for o in options
+    if (
+        not isinstance(options, list)
+        or len(options) == 0
+        or not all(isinstance(o, str) and o.strip() for o in options)
     ):
         raise HTTPException(400, "options must be a non-empty list of strings")
     cleaned = [o.strip() for o in options]

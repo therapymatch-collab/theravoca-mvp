@@ -57,6 +57,25 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+### iter-24 — Therapist signup hardening + intake spam controls + admin-managed options + Try-again (Apr 27, 2026)
+- 8-step therapist wizard (one card per step) with red-asterisk required fields and per-step `Next` validation
+- License state Idaho-only · license photo upload required · website URL validator + reachability check
+- Office full street addresses (replaces city-only chips) for patient profile + 30-mile radius matching
+- Insurance "Other (specify)" textbox · phone fields aligned · Next stays in place (scrolls form card not page)
+- Patient intake: forced Select dropdown for "How did you hear about us?" (admin-managed) + required + Other-specify
+- Patient intake: ZIP-state mismatch shows inline error and blocks advancing per step
+- Admin: new `/admin/referral-source-options` GET/PUT + `/config/referral-source-options` public endpoint
+- Admin Referral sources tab: new chip-editor to add/delete dropdown options
+- Patient results: "Try again with different answers" CTA after hold lifts
+- Auth/email: signup confirmation explains "can't sign in yet"; "I'll do this later" → /sign-in?role=therapist; Sign-in "Join here" → #signup-form
+- Stripe webhook: empty-list validation hardened (testing-agent bug fix)
+- 11 new pytest cases (test_iteration24_referral_admin.py) — all green
+
+### iter-23 — Status timeline, signup section header, Stripe webhook signing live (Apr 27, 2026)
+- Patient inline status timeline (3-stage tracker) on /results/:id
+- Therapist signup section header ("FOR LICENSED THERAPISTS · SIGN UP / Get more *targeted* referrals")
+- Stripe `whsec_…` configured + signed/tampered/unsigned webhook tests green
+
 ### iter-22 — Spam guards, SMS receipts, referral analytics, distance UI, wizard split (Apr 27, 2026)
 - **Disposable email + ZIP-state + ZIP-city consistency validation** — POST `/requests` rejects mailinator/temp-mail addresses, ZIPs that don't belong to the stated state, and ZIPs that geo-locate >35mi from the supplied city. Returns HTTP 400 with friendly messages.
 - **Patient SMS receipt** — Optional phone + opt-in checkbox on intake step 7. Twilio fires an immediate "we got your referral" SMS when both are provided.
