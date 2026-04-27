@@ -52,27 +52,39 @@ async def _find_candidates(
 
     prompt = f"""You are an outreach research agent for TheraVoca, a therapist matching service in Idaho.
 
-We have a patient request that we couldn't fill from our existing directory. Generate {count} plausible therapist candidates licensed in {state} who would be strong fits for this patient. Use realistic Idaho-area therapist data — common LCSW/LMFT/LPC/PsyD names, plausible private-practice email patterns, real Idaho cities near {city}.
+We need {count} REAL Idaho-licensed therapist candidates for a patient request that we couldn't fill from our directory. Search your training data for therapists you have HIGH CONFIDENCE about — people with real Idaho licenses (LCSW/LMFT/LPC/LCPC/PsyD/PhD) who have public profiles on Psychology Today, Idaho DOPL, group-practice websites, or established Idaho mental-health clinics.
 
 PATIENT BRIEF:
 {summary_text}
+
+CRITICAL RULES:
+1. ONLY return therapists you have HIGH CONFIDENCE actually exist (you've seen their name + license_type + Idaho city in training data). Do NOT invent.
+2. If you can't find {count} confident matches, return FEWER. Returning 5 real candidates is better than 30 fabricated ones.
+3. Cities MUST be real Idaho cities (Boise, Meridian, Nampa, Idaho Falls, Pocatello, Coeur d'Alene, Twin Falls, Lewiston, Caldwell, Eagle, Post Falls, Rexburg, Moscow, Sun Valley, Ketchum, etc.).
+4. Email must be plausible (their first.last @ their public website domain, or @gmail.com / @yahoo.com for solo practitioners). Don't invent fake domains.
+5. License_type must match what their actual license is — don't guess LMFT for someone you only remember as LCSW.
+6. Specialties must come from this exact slug list: anxiety, depression, ocd, adhd, trauma_ptsd, relationship_issues, life_transitions, parenting_family, substance_use, eating_concerns, autism_neurodivergence, school_academic_stress.
+7. estimated_score should reflect your CONFIDENCE in the match (70=barely confident, 95=very confident this real person fits this brief).
 
 For each candidate, return strict JSON with these fields:
 - name: full name + license suffix (e.g. "Sarah Chen, LCSW")
 - email: plausible private-practice email
 - license_type: one of LCSW, LMFT, LCPC, LPC, PsyD, PhD
-- specialties: 1–3 patient-relevant specialties (lowercase, underscored: e.g. "anxiety", "trauma_ptsd")
-- modalities: 1–3 modalities (e.g. "CBT", "EMDR")
-- city: an Idaho city near the patient
+- specialties: 1–3 patient-relevant specialties from the slug list above
+- modalities: 1–3 modalities (e.g. "CBT", "EMDR", "IFS", "ACT", "DBT")
+- city: a real Idaho city near {city}
 - state: "{state}"
 - match_rationale: one sentence on why this therapist is a fit
-- estimated_score: integer 70–95
+- estimated_score: integer 70–95 reflecting your confidence
 
-Return ONLY a JSON array of {count} objects. No prose, no markdown fences."""
+Return ONLY a JSON array. No prose, no markdown fences. Empty array `[]` is acceptable if you have zero high-confidence matches."""
 
     chat = (
         LlmChat(api_key=EMERGENT_KEY, session_id=f"outreach_{uuid.uuid4().hex[:10]}",
-                system_message="You are a precise research agent. Always return valid JSON.")
+                system_message=(
+                    "You are a precise research agent. Never invent therapists. "
+                    "If unsure, return fewer candidates. Always return valid JSON."
+                ))
         .with_model("anthropic", "claude-sonnet-4-5-20250929")
     )
     try:
