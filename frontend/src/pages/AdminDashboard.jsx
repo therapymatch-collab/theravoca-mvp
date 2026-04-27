@@ -127,6 +127,7 @@ export default function AdminDashboard() {
   // LLM outreach invites — therapists we scraped + emailed (separate from in-app signups)
   const [outreach, setOutreach] = useState(null);
   const [outreachLoading, setOutreachLoading] = useState(false);
+  const [outreachShowAll, setOutreachShowAll] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -907,10 +908,9 @@ export default function AdminDashboard() {
                         (via the Emergent LLM key).
                       </li>
                       <li>
-                        Claude generates plausible Idaho-licensed therapist
-                        candidates whose specialties + city match the patient's
-                        ask, with a per-candidate <em>match rationale</em> and
-                        estimated score.
+                        Claude generates plausible licensed therapist candidates
+                        whose specialties + city match the patient's ask, with a
+                        per-candidate <em>match rationale</em> and estimated score.
                       </li>
                       <li>
                         Each candidate gets a personalized invite email with a
@@ -950,81 +950,104 @@ export default function AdminDashboard() {
                         triggers the LLM agent (i.e. when a patient request
                         produces fewer than 30 directory matches).
                       </div>
-                    ) : (
-                      <table className="w-full text-sm" data-testid="invited-table">
-                        <thead className="bg-[#FDFBF7] text-[#6D6A65]">
-                          <tr className="text-left">
-                            <Th>Therapist</Th>
-                            <Th>Email sent</Th>
-                            <Th>Specialties</Th>
-                            <Th>Score</Th>
-                            <Th>Why we invited them</Th>
-                            <Th>Referral</Th>
-                            <Th>Sent</Th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {outreach.invites.map((inv, idx) => {
-                            const c = inv.candidate || {};
-                            return (
-                              <tr
-                                key={inv.id}
-                                className="border-t border-[#E8E5DF] align-top"
-                                data-testid={`invited-row-${idx}`}
+                    ) : (() => {
+                      const all = outreach.invites || [];
+                      const limit = outreachShowAll ? all.length : 50;
+                      const visible = all.slice(0, limit);
+                      return (
+                        <>
+                          <div className="px-5 py-3 border-b border-[#E8E5DF] flex items-center justify-between text-sm">
+                            <div className="text-[#6D6A65]">
+                              Showing <strong className="text-[#2B2A29]">{visible.length}</strong> of{" "}
+                              <strong className="text-[#2B2A29]">{all.length}</strong> invited therapists
+                            </div>
+                            {all.length > 50 && (
+                              <button
+                                type="button"
+                                className="text-sm text-[#2D4A3E] underline hover:text-[#3A5E50]"
+                                onClick={() => setOutreachShowAll((v) => !v)}
+                                data-testid="invited-toggle-show-all"
                               >
-                                <td className="p-4">
-                                  <div className="text-[#2B2A29] font-medium">
-                                    {c.name || "—"}
-                                  </div>
-                                  <div className="text-xs text-[#6D6A65]">
-                                    {c.license_type} · {c.city}, {c.state}
-                                  </div>
-                                </td>
-                                <td className="p-4 text-xs text-[#2B2A29]">
-                                  {c.email || "—"}
-                                  <div className="mt-1">
-                                    {inv.email_sent ? (
-                                      <span className="inline-flex items-center gap-1 text-[#2D4A3E] text-[11px]">
-                                        <CheckCircle2 size={11} /> Delivered
-                                      </span>
-                                    ) : (
-                                      <span className="inline-flex items-center gap-1 text-[#D45D5D] text-[11px]">
-                                        <XCircle size={11} /> Send failed
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="p-4 text-xs">
-                                  {(c.specialties || []).join(", ") || "—"}
-                                </td>
-                                <td className="p-4 text-[#2D4A3E] font-semibold">
-                                  {c.estimated_score ?? "—"}
-                                  {c.estimated_score ? "%" : ""}
-                                </td>
-                                <td className="p-4 text-xs text-[#2B2A29] max-w-[300px]">
-                                  {c.match_rationale || "—"}
-                                </td>
-                                <td className="p-4">
-                                  <button
-                                    type="button"
-                                    onClick={() => openDetail(inv.request_id)}
-                                    className="text-xs text-[#2D4A3E] underline hover:text-[#3A5E50]"
-                                    data-testid={`invited-request-${idx}`}
-                                  >
-                                    {inv.request_id?.slice(0, 8)}…
-                                  </button>
-                                </td>
-                                <td className="p-4 text-xs text-[#6D6A65]">
-                                  {inv.created_at
-                                    ? new Date(inv.created_at).toLocaleDateString()
-                                    : "—"}
-                                </td>
+                                {outreachShowAll ? "Show first 50 only" : `Show all ${all.length}`}
+                              </button>
+                            )}
+                          </div>
+                          <table className="w-full text-sm" data-testid="invited-table">
+                            <thead className="bg-[#FDFBF7] text-[#6D6A65]">
+                              <tr className="text-left">
+                                <Th>Therapist</Th>
+                                <Th>Email sent</Th>
+                                <Th>Specialties</Th>
+                                <Th>Score</Th>
+                                <Th>Why we invited them</Th>
+                                <Th>Referral</Th>
+                                <Th>Sent</Th>
                               </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    )}
+                            </thead>
+                            <tbody>
+                              {visible.map((inv, idx) => {
+                                const c = inv.candidate || {};
+                                return (
+                                  <tr
+                                    key={inv.id}
+                                    className="border-t border-[#E8E5DF] align-top"
+                                    data-testid={`invited-row-${idx}`}
+                                  >
+                                    <td className="p-4">
+                                      <div className="text-[#2B2A29] font-medium">
+                                        {c.name || "—"}
+                                      </div>
+                                      <div className="text-xs text-[#6D6A65]">
+                                        {c.license_type} · {c.city}, {c.state}
+                                      </div>
+                                    </td>
+                                    <td className="p-4 text-xs text-[#2B2A29]">
+                                      {c.email || "—"}
+                                      <div className="mt-1">
+                                        {inv.email_sent ? (
+                                          <span className="inline-flex items-center gap-1 text-[#2D4A3E] text-[11px]">
+                                            <CheckCircle2 size={11} /> Delivered
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1 text-[#D45D5D] text-[11px]">
+                                            <XCircle size={11} /> Send failed
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="p-4 text-xs">
+                                      {(c.specialties || []).join(", ") || "—"}
+                                    </td>
+                                    <td className="p-4 text-[#2D4A3E] font-semibold">
+                                      {c.estimated_score ?? "—"}
+                                      {c.estimated_score ? "%" : ""}
+                                    </td>
+                                    <td className="p-4 text-xs text-[#2B2A29] max-w-[300px]">
+                                      {c.match_rationale || "—"}
+                                    </td>
+                                    <td className="p-4">
+                                      <button
+                                        type="button"
+                                        onClick={() => openDetail(inv.request_id)}
+                                        className="text-xs text-[#2D4A3E] underline hover:text-[#3A5E50]"
+                                        data-testid={`invited-request-${idx}`}
+                                      >
+                                        {inv.request_id?.slice(0, 8)}…
+                                      </button>
+                                    </td>
+                                    <td className="p-4 text-xs text-[#6D6A65]">
+                                      {inv.created_at
+                                        ? new Date(inv.created_at).toLocaleDateString()
+                                        : "—"}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
