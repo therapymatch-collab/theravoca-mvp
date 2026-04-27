@@ -226,6 +226,18 @@ async def _run_followup_surveys() -> dict[str, int]:
     return sent
 
 
+async def _run_gap_recruitment() -> dict[str, int]:
+    """Daily gap-fill: keep the directory healthy by recruiting therapists for
+    the most-in-demand specialties/cities/age groups we're thin on. Pre-launch
+    this runs in `dry_run=True` mode (fake emails, drafts only)."""
+    try:
+        from gap_recruiter import run_gap_recruitment
+        return await run_gap_recruitment(dry_run=True, max_drafts=10)
+    except Exception as e:
+        logger.warning("Daily gap recruit failed: %s", e)
+        return {"error": str(e)}
+
+
 async def _daily_loop() -> None:
     while True:
         try:
@@ -244,12 +256,13 @@ async def _daily_loop() -> None:
                     lic = await _run_license_expiry_alerts()
                     avail = await _run_availability_prompts()
                     follow = await _run_followup_surveys()
+                    recruit = await _run_gap_recruitment()
                     await db.cron_runs.update_one(
                         {"name": "daily_tasks", "date": today_iso},
                         {"$set": {
                             "completed_at": _now_iso(),
                             "billing": bill, "license": lic, "availability": avail,
-                            "followups": follow,
+                            "followups": follow, "gap_recruit": recruit,
                         }},
                     )
         except Exception as e:

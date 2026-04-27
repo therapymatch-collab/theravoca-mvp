@@ -638,15 +638,12 @@ async def admin_coverage_gap_analysis(_: bool = Depends(require_admin)):
     language, urgency capacity, in-person vs telehealth, fee tier) plus a
     prioritized recommendations list of where we should recruit therapists
     before launch.
-
-    Heuristic: a `gap` is any axis where coverage < target. Defaults reflect
-    how the matching algorithm weights each dimension:
-      - specialty: target=8 (axis worth 35 pts; coverage starvation hurts most)
-      - modality: target=6 (15 pts axis)
-      - age_group: target=5 (hard filter — 0 = total miss)
-      - insurance: target=3 (covers 90%+ of insured Idahoans)
-      - urgency: target=10 ("can take new patient ASAP" capacity)
     """
+    return await _compute_coverage_gap_analysis()
+
+
+async def _compute_coverage_gap_analysis() -> dict:
+    """Auth-free helper used by both the admin endpoint and the daily cron."""
     from collections import Counter
 
     # Demand priors — weighted by what a typical Idaho mental-health intake
@@ -667,6 +664,19 @@ async def admin_coverage_gap_analysis(_: bool = Depends(require_admin)):
         "Trauma-Informed", "IFS", "Psychodynamic",
     ]
     AGE_GROUPS = ["child", "teen", "young_adult", "adult", "older_adult"]
+    AGE_GROUP_TARGETS = {
+        "child": 8,         # historically thinnest — bump target so we recruit more
+        "teen": 8,
+        "young_adult": 5,
+        "adult": 5,
+        "older_adult": 5,
+    }
+    # Major Idaho cities outside Boise we want in-person coverage in.
+    OUTSIDE_BOISE_CITIES = [
+        "Meridian", "Nampa", "Idaho Falls", "Pocatello",
+        "Coeur d'Alene", "Twin Falls",
+    ]
+    PER_CITY_INPERSON_TARGET = 3
     CLIENT_TYPES = ["individual", "couples", "family", "group"]
     INSURERS_CORE = [
         "Blue Cross of Idaho", "Regence BlueShield of Idaho",
@@ -691,6 +701,7 @@ async def admin_coverage_gap_analysis(_: bool = Depends(require_admin)):
     gender_counts: Counter = Counter()
     urgency_counts: Counter = Counter()
     has_id_office = 0
+    in_person_by_city: Counter = Counter()
     telehealth_only = 0
     in_person_only = 0
     sliding_scale = 0
@@ -715,6 +726,10 @@ async def admin_coverage_gap_analysis(_: bool = Depends(require_admin)):
         urgency_counts[t.get("urgency_capacity") or "unspecified"] += 1
         if t.get("office_addresses"):
             has_id_office += 1
+            # Tally in-person coverage by Idaho city.
+            for city in (t.get("office_locations") or [])[:3]:
+                if city:
+                    in_person_by_city[city.strip()] += 1
         if t.get("telehealth") and not t.get("offers_in_person"):
             telehealth_only += 1
         if t.get("offers_in_person") and not t.get("telehealth"):
@@ -772,18 +787,18 @@ async def admin_coverage_gap_analysis(_: bool = Depends(require_admin)):
             })
     for ag in AGE_GROUPS:
         have = age_counts.get(ag, 0)
-        target = 5
+        target = AGE_GROUP_TARGETS.get(ag, 5)
         if have < target:
             gaps.append({
                 "dimension": "age_group",
                 "key": ag,
                 "have": have,
                 "target": target,
-                "severity": "critical" if have == 0 else "warning",
+                "severity": "critical" if have < target / 2 or have == 0 else "warning",
                 "recommendation": (
                     f"Recruit {target - have} more therapist(s) serving "
                     f"`{ag}` — age group is a HARD filter in matching, "
-                    "patients in this bucket will see zero matches."
+                    "patients in this bucket will see weak or zero matches."
                 ),
             })
     for ct in CLIENT_TYPES:
@@ -837,21 +852,25 @@ async def admin_coverage_gap_analysis(_: bool = Depends(require_admin)):
             ),
         })
 
-    # Geographic coverage
-    if has_id_office < 15:
-        gaps.append({
-            "dimension": "geography",
-            "key": "in_person_idaho",
-            "have": has_id_office,
-            "target": 15,
-            "severity": "warning",
-            "recommendation": (
-                f"Only {has_id_office} therapist(s) have a physical Idaho "
-                "office. Patients preferring in-person sessions will mostly "
-                "match the same handful — consider recruiting more in-person "
-                "providers especially outside Boise."
-            ),
-        })
+    # Geographic coverage — per-city in-person targets outside Boise.
+    # Case-insensitive city match so "Coeur D'Alene" / "coeur d'alene" all match.
+    in_person_lower = {k.lower(): v for k, v in in_person_by_city.items()}
+    for city in OUTSIDE_BOISE_CITIES:
+        have = in_person_lower.get(city.lower(), 0)
+        if have < PER_CITY_INPERSON_TARGET:
+            gaps.append({
+                "dimension": "geography",
+                "key": city,
+                "have": have,
+                "target": PER_CITY_INPERSON_TARGET,
+                "severity": "critical" if have == 0 else "warning",
+                "recommendation": (
+                    f"Only {have} therapist(s) with an in-person office in "
+                    f"{city}. Recruit {PER_CITY_INPERSON_TARGET - have} more "
+                    "in-person provider(s) here so patients outside Boise have "
+                    "real local options."
+                ),
+            })
 
     # Fee diversity
     affordable = rate_buckets["<100"] + rate_buckets["100-149"]
@@ -902,6 +921,7 @@ async def admin_coverage_gap_analysis(_: bool = Depends(require_admin)):
             "languages": dict(language_counts.most_common()),
             "rate_distribution": rate_buckets,
             "with_idaho_office": has_id_office,
+            "in_person_by_city": dict(in_person_by_city.most_common()),
             "telehealth_only": telehealth_only,
             "in_person_only": in_person_only,
             "sliding_scale_count": sliding_scale,
@@ -914,6 +934,53 @@ async def admin_coverage_gap_analysis(_: bool = Depends(require_admin)):
             "total": len(gaps),
         },
     }
+
+
+@router.post("/admin/gap-recruit/run")
+async def admin_run_gap_recruit(
+    payload: dict | None = None, _: bool = Depends(require_admin),
+):
+    """Manually trigger the gap recruiter. Pre-launch, runs in dry-run mode
+    (fake `therapymatch+recruitNNN@gmail.com` emails). Post-launch, set
+    `dry_run=false` in the payload to use real emails."""
+    from gap_recruiter import run_gap_recruitment
+    dry = bool((payload or {}).get("dry_run", True))
+    cap = int((payload or {}).get("max_drafts", 30))
+    return await run_gap_recruitment(dry_run=dry, max_drafts=cap)
+
+
+@router.get("/admin/gap-recruit/drafts")
+async def admin_list_gap_drafts(_: bool = Depends(require_admin)):
+    """All recruit-draft rows, newest first."""
+    docs = await db.recruit_drafts.find(
+        {}, {"_id": 0},
+    ).sort("created_at", -1).to_list(length=500)
+    sent = sum(1 for d in docs if d.get("sent"))
+    pending = sum(1 for d in docs if not d.get("sent"))
+    dry = sum(1 for d in docs if d.get("dry_run"))
+    return {
+        "drafts": docs,
+        "total": len(docs),
+        "sent": sent,
+        "pending": pending,
+        "dry_run_count": dry,
+    }
+
+
+@router.delete("/admin/gap-recruit/drafts/{draft_id}")
+async def admin_delete_gap_draft(draft_id: str, _: bool = Depends(require_admin)):
+    res = await db.recruit_drafts.delete_one({"id": draft_id})
+    if res.deleted_count == 0:
+        raise HTTPException(404)
+    return {"ok": True}
+
+
+@router.post("/admin/gap-recruit/send-all")
+async def admin_send_gap_drafts(_: bool = Depends(require_admin)):
+    """Fire off all pending non-dry-run drafts via Resend. Pre-launch this
+    endpoint will return 0 sent because every draft is `dry_run=true`."""
+    from gap_recruiter import send_pending_drafts
+    return await send_pending_drafts()
 
 
 @router.post("/admin/seed/reset")

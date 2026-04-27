@@ -202,6 +202,41 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 - Iter-38 added 4 new tests for the outreach-invite → therapist conversion flow.
 
 ## Recent Changes Log
+- **Iter-44 (Feb 2026) — Pre-launch gap recruiter + admin search + UX fixes**:
+  - **Pre-launch gap recruiter** (`gap_recruiter.py`): every day at 2am MT
+    (and on-demand via "Generate more drafts" button), Claude finds real
+    Idaho therapists matching each coverage gap (specialty / age group /
+    city / etc.). Drafts land in `recruit_drafts` collection with safe
+    `therapymatch+recruitNNN@gmail.com` placeholder emails — **never sends
+    real outreach pre-launch**.
+  - New endpoints:
+    - `POST /admin/gap-recruit/run` — manually trigger (idempotent)
+    - `GET /admin/gap-recruit/drafts` — list with sent/pending/dry-run counts
+    - `DELETE /admin/gap-recruit/drafts/{id}` — remove a draft
+    - `POST /admin/gap-recruit/send-all` — fire pending non-dry-run drafts
+      via Resend (post-launch only; pre-launch returns 0 since all are dry).
+  - **Coverage Gap analysis extended**:
+    - Per-Idaho-city in-person targets (Meridian, Nampa, Idaho Falls,
+      Pocatello, Coeur d'Alene, Twin Falls — 3 in-person each).
+    - Bumped age targets: child/teen now target 8 (was 5) — historically
+      thinnest, most patient demand.
+    - Case-insensitive city matching so capitalization variants merge.
+    - Helper `_compute_coverage_gap_analysis()` extracted so the cron can
+      reuse it without going through the auth dependency.
+  - **Admin Coverage Gaps tab** now embeds a "Recruit list" section that
+    auto-loads draft candidates grouped by gap target, with Copy email
+    (clipboard-ready outreach text) and Delete actions.
+  - **Admin search bar** added to every tab (Patient requests, Therapist
+    signups, All providers, Invited therapists, Coverage gaps + drafts).
+    Filter clears on tab switch.
+  - **Bug fix**: removed duplicate "Credential type" field from the admin
+    therapist edit modal (was showing once in Contact section, again in
+    License section — only the License-section instance is kept).
+  - Daily cron at 2am MT now also runs `_run_gap_recruitment` in dry-run
+    mode (max 10 drafts/day) so the recruit list stays fresh.
+  - Tests: `tests/test_iteration44_gap_recruit.py` (6 cases — endpoint
+    shape, helper callability, drafts listing, fake-email indexing,
+    send-all dry-run invariant, 404 on unknown id).
 - **Iter-43 (Feb 2026) — Coverage gap analysis + review research run**:
   - **New endpoint**: `GET /api/admin/coverage-gap-analysis` — returns counts
     per dimension (specialty, modality, age group, client type, insurance,

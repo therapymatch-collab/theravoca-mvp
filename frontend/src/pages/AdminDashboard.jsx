@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -21,6 +21,9 @@ import {
   TrendingUp,
   AlertTriangle,
   AlertCircle,
+  Search,
+  Trash2,
+  Copy,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
@@ -138,6 +141,58 @@ export default function AdminDashboard() {
   // Coverage-gap analysis — recruiting recommendations.
   const [coverageGap, setCoverageGap] = useState(null);
   const [coverageGapLoading, setCoverageGapLoading] = useState(false);
+  // Pre-launch recruit drafts (LLM-generated candidates for each gap).
+  const [recruitDrafts, setRecruitDrafts] = useState(null);
+  const [recruitDraftsLoading, setRecruitDraftsLoading] = useState(false);
+  const [generatingDrafts, setGeneratingDrafts] = useState(false);
+
+  // Per-tab search query — filters whatever list is open.
+  const [search, setSearch] = useState("");
+  useEffect(() => setSearch(""), [tab]);
+
+  // ── Search filter helpers ──
+  const matches = useCallback((needle, ...haystacks) => {
+    if (!needle) return true;
+    const q = needle.toLowerCase();
+    return haystacks.some((h) =>
+      h && String(h).toLowerCase().includes(q),
+    );
+  }, []);
+
+  const filteredRequests = useMemo(
+    () => requests.filter((r) =>
+      matches(search, r.email, r.location_state, r.location_zip,
+        r.referral_source, r.status, r.client_type, r.age_group,
+        (r.presenting_issues || []).join(" ")),
+    ),
+    [requests, search, matches],
+  );
+  const filteredPendingTherapists = useMemo(
+    () => pendingTherapists.filter((t) =>
+      matches(search, t.name, t.email, t.credential_type, t.license_number,
+        (t.modalities || []).join(" "), (t.primary_specialties || []).join(" ")),
+    ),
+    [pendingTherapists, search, matches],
+  );
+  const filteredAllTherapists = useMemo(
+    () => allTherapists.filter((t) =>
+      matches(search, t.name, t.email, t.credential_type, t.license_number,
+        (t.modalities || []).join(" "), (t.primary_specialties || []).join(" "),
+        (t.office_locations || []).join(" "), t.subscription_status),
+    ),
+    [allTherapists, search, matches],
+  );
+  const filteredOutreach = useMemo(() => {
+    if (!outreach) return outreach;
+    return {
+      ...outreach,
+      invites: (outreach.invites || []).filter((inv) =>
+        matches(search, inv?.candidate?.name, inv?.candidate?.email,
+          inv?.candidate?.city, (inv?.candidate?.specialties || []).join(" "),
+          (inv?.candidate?.modalities || []).join(" "), inv?.status),
+      ),
+    };
+  }, [outreach, search, matches]);
 
   const refresh = useCallback(async () => {
     try {
@@ -405,6 +460,62 @@ export default function AdminDashboard() {
     }
   }, [client]);
 
+  const loadRecruitDrafts = useCallback(async () => {
+    setRecruitDraftsLoading(true);
+    try {
+      const res = await client.get("/admin/gap-recruit/drafts");
+      setRecruitDrafts(res.data);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Couldn't load drafts");
+    } finally {
+      setRecruitDraftsLoading(false);
+    }
+  }, [client]);
+
+  const generateRecruitDrafts = useCallback(async () => {
+    setGeneratingDrafts(true);
+    try {
+      const res = await client.post(
+        "/admin/gap-recruit/run",
+        { dry_run: true, max_drafts: 15 },
+      );
+      toast.success(
+        `Generated ${res.data.drafts_created} new draft(s) for ${res.data.gaps_processed} gap(s).`,
+      );
+      await loadRecruitDrafts();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Recruit run failed");
+    } finally {
+      setGeneratingDrafts(false);
+    }
+  }, [client, loadRecruitDrafts]);
+
+  const deleteRecruitDraft = useCallback(
+    async (id) => {
+      try {
+        await client.delete(`/admin/gap-recruit/drafts/${id}`);
+        await loadRecruitDrafts();
+      } catch (err) {
+        toast.error(err?.response?.data?.detail || "Couldn't delete draft");
+      }
+    },
+    [client, loadRecruitDrafts],
+  );
+
+  const sendAllRecruitDrafts = useCallback(async () => {
+    if (!confirm(
+      "Send ALL pending non-dry-run recruit drafts via Resend?\n\n" +
+      "Pre-launch all drafts are dry_run=true (fake emails), so this will report 0 sent."
+    )) return;
+    try {
+      const res = await client.post("/admin/gap-recruit/send-all");
+      toast.success(`Sent ${res.data.sent || 0}, failed ${res.data.failed || 0}`);
+      await loadRecruitDrafts();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Send failed");
+    }
+  }, [client, loadRecruitDrafts]);
+
   const convertInvite = useCallback(
     async (invite) => {
       const inviteId = invite?.id;
@@ -587,6 +698,7 @@ export default function AdminDashboard() {
                   onClick={() => {
                     setTab("coverage_gap");
                     if (!coverageGap) loadCoverageGap();
+                    if (!recruitDrafts) loadRecruitDrafts();
                   }}
                   icon={<TrendingUp size={14} />}
                   label="Coverage gaps"
@@ -594,6 +706,34 @@ export default function AdminDashboard() {
                   testid="tab-coverage-gap"
                   highlight={(coverageGap?.gap_summary?.critical ?? 0) > 0}
                 />
+              </div>
+
+              {/* Per-tab search — applies a substring filter to whichever list is open */}
+              <div className="mt-4 flex items-center gap-2 max-w-md" data-testid="admin-search-wrap">
+                <div className="relative flex-1">
+                  <Search
+                    size={14}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6D6A65] pointer-events-none"
+                  />
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder={`Search ${tab.replace("_", " ")}…`}
+                    className="w-full bg-white border border-[#E8E5DF] rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-[#2D4A3E]"
+                    data-testid="admin-search-input"
+                  />
+                </div>
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="text-xs text-[#6D6A65] underline hover:text-[#2D4A3E]"
+                    data-testid="admin-search-clear"
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
 
               {tab === "requests" && (
@@ -620,7 +760,7 @@ export default function AdminDashboard() {
                         </td>
                       </tr>
                     )}
-                    {requests.map((r) => (
+                    {filteredRequests.map((r) => (
                       <tr
                         key={r.id}
                         className="border-t border-[#E8E5DF] hover:bg-[#FDFBF7] cursor-pointer"
@@ -675,7 +815,7 @@ export default function AdminDashboard() {
                     </div>
                   ) : (
                     <div className="divide-y divide-[#E8E5DF]" data-testid="pending-therapists-list">
-                      {pendingTherapists.map((t) => (
+                      {filteredPendingTherapists.map((t) => (
                         <div key={t.id} className="p-5 flex items-start gap-5 hover:bg-[#FDFBF7]">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-3 flex-wrap">
@@ -746,7 +886,7 @@ export default function AdminDashboard() {
                           </td>
                         </tr>
                       )}
-                      {allTherapists.map((t) => (
+                      {filteredAllTherapists.map((t) => (
                         <tr
                           key={t.id}
                           className="border-t border-[#E8E5DF] hover:bg-[#FDFBF7]"
@@ -1040,14 +1180,12 @@ export default function AdminDashboard() {
                         <Loader2 className="animate-spin mx-auto mb-3 text-[#2D4A3E]" />
                         Loading invited therapists…
                       </div>
-                    ) : (outreach.invites || []).length === 0 ? (
+                    ) : (filteredOutreach?.invites || []).length === 0 ? (
                       <div className="p-10 text-center text-[#6D6A65]">
-                        No outreach invites yet. They'll appear once a request
-                        triggers the LLM agent (i.e. when a patient request
-                        produces fewer than 30 directory matches).
+                        {search ? "No invites match your search." : "No outreach invites yet. They'll appear once a request triggers the LLM agent (i.e. when a patient request produces fewer than 30 directory matches)."}
                       </div>
                     ) : (() => {
-                      const all = outreach.invites || [];
+                      const all = filteredOutreach.invites || [];
                       const limit = outreachShowAll ? all.length : 50;
                       const visible = all.slice(0, limit);
                       return (
@@ -1176,11 +1314,23 @@ export default function AdminDashboard() {
               )}
 
               {tab === "coverage_gap" && (
-                <CoverageGapPanel
-                  data={coverageGap}
-                  loading={coverageGapLoading}
-                  onReload={loadCoverageGap}
-                />
+                <>
+                  <CoverageGapPanel
+                    data={coverageGap}
+                    loading={coverageGapLoading}
+                    onReload={loadCoverageGap}
+                  />
+                  <RecruitDraftsPanel
+                    data={recruitDrafts}
+                    loading={recruitDraftsLoading}
+                    generating={generatingDrafts}
+                    search={search}
+                    onLoad={loadRecruitDrafts}
+                    onGenerate={generateRecruitDrafts}
+                    onDelete={deleteRecruitDraft}
+                    onSendAll={sendAllRecruitDrafts}
+                  />
+                </>
               )}
 
               {tab === "email_templates" && (
@@ -1348,25 +1498,6 @@ export default function AdminDashboard() {
                     }
                     data-testid="edit-office-phone"
                   />
-                </FieldRow>
-                <FieldRow label="Credential type">
-                  <select
-                    value={editTherapist.credential_type || ""}
-                    onChange={(e) =>
-                      setEditTherapist({ ...editTherapist, credential_type: e.target.value })
-                    }
-                    className="w-full bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg p-2 text-sm"
-                    data-testid="edit-credential-type"
-                  >
-                    <option value="">Select…</option>
-                    <option value="psychologist">Psychologist (PhD/PsyD)</option>
-                    <option value="lcsw">LCSW</option>
-                    <option value="lpc">LPC / LCPC / LPCC</option>
-                    <option value="lmft">LMFT</option>
-                    <option value="lmhc">LMHC</option>
-                    <option value="psychiatrist">Psychiatrist (MD)</option>
-                    <option value="other">Other</option>
-                  </select>
                 </FieldRow>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -2181,6 +2312,177 @@ function FactStat({ label, value }) {
     <div>
       <div className="text-xs uppercase tracking-wider text-[#6D6A65]">{label}</div>
       <div className="font-serif-display text-2xl text-[#2D4A3E] mt-1">{value}</div>
+    </div>
+  );
+}
+
+function RecruitDraftsPanel({
+  data, loading, generating, search, onLoad, onGenerate, onDelete, onSendAll,
+}) {
+  const drafts = (data?.drafts || []).filter((d) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    const c = d.candidate || {};
+    return [c.name, c.email, c.city, c.license_type, (c.specialties || []).join(" "), (c.modalities || []).join(" "), d.gap?.key, d.gap?.dimension]
+      .some((v) => v && String(v).toLowerCase().includes(q));
+  });
+  const grouped = drafts.reduce((acc, d) => {
+    const k = `${d.gap?.dimension || "?"} → ${d.gap?.key || "?"}`;
+    (acc[k] = acc[k] || []).push(d);
+    return acc;
+  }, {});
+
+  const copyDraft = (d) => {
+    const c = d.candidate || {};
+    const subject = "Idaho therapist outreach — joining TheraVoca's launch network";
+    const body = `Hi ${(c.name || "there").split(" ")[0]},
+
+I'm reaching out from TheraVoca, a small Idaho-based therapist matching service. We're building our directory ahead of launch, and your practice came up as a strong fit for an underserved area we're trying to fill.
+
+Why we're reaching out: ${c.match_rationale || "Your specialties align with where we're growing."}
+
+Specialties we'd showcase: ${(c.specialties || []).join(", ") || "(your choice)"}
+Modalities: ${(c.modalities || []).join(", ") || "(your choice)"}
+
+If you're open to a 30-day free trial (then $45/mo, cancellable any time), here's the signup link:
+https://www.theravoca.com/therapists/join
+
+Cheers,
+TheraVoca team`;
+    const block = `TO: ${c.email}\nSUBJECT: ${subject}\n\n${body}`;
+    navigator.clipboard.writeText(block).then(
+      () => toast.success(`Copied draft for ${c.name}`),
+      () => toast.error("Couldn't copy"),
+    );
+  };
+
+  return (
+    <div className="mt-8 space-y-4" data-testid="recruit-drafts-panel">
+      <div className="bg-white border border-[#E8E5DF] rounded-2xl p-5 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="font-serif-display text-2xl text-[#2D4A3E] leading-tight">
+            Recruit list
+          </h2>
+          <p className="text-sm text-[#6D6A65] mt-1.5 leading-relaxed max-w-2xl">
+            Pre-launch drafts the LLM has queued for each gap above. Emails
+            currently use safe placeholders (<code className="text-xs bg-[#FDFBF7] px-1 py-0.5 rounded">therapymatch+recruitNNN@gmail.com</code>) — no
+            real outreach is sent. Click &ldquo;Copy email&rdquo; to preview the draft, or
+            &ldquo;Send all&rdquo; once you're ready post-launch.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={onLoad}
+            className="text-xs text-[#2D4A3E] underline hover:text-[#3A5E50]"
+            data-testid="recruit-drafts-refresh-btn"
+          >
+            Refresh
+          </button>
+          <button
+            type="button"
+            onClick={onGenerate}
+            disabled={generating}
+            className="tv-btn-secondary !py-2 !px-4 text-sm disabled:opacity-60"
+            data-testid="recruit-drafts-generate-btn"
+          >
+            {generating ? <Loader2 size={14} className="inline mr-1.5 animate-spin" /> : <UserPlus size={14} className="inline mr-1.5" />}
+            Generate more drafts
+          </button>
+          <button
+            type="button"
+            onClick={onSendAll}
+            className="bg-[#2D4A3E] text-white rounded-lg px-3 py-2 text-xs font-medium hover:bg-[#3A5E50] disabled:opacity-50"
+            data-testid="recruit-drafts-send-all"
+            title="Pre-launch: all drafts are dry-run, this will report 0 sent"
+          >
+            Send all (post-launch)
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+        <FactStat label="Total drafts" value={data?.total ?? "—"} />
+        <FactStat label="Pending" value={data?.pending ?? "—"} />
+        <FactStat label="Sent" value={data?.sent ?? "—"} />
+        <FactStat label="Dry-run (placeholder)" value={data?.dry_run_count ?? "—"} />
+      </div>
+
+      {loading && !data ? (
+        <div className="bg-white border border-[#E8E5DF] rounded-2xl p-12 text-center text-[#6D6A65]">
+          <Loader2 className="animate-spin mx-auto mb-3 text-[#2D4A3E]" />
+          Loading drafts…
+        </div>
+      ) : drafts.length === 0 ? (
+        <div className="bg-white border border-dashed border-[#E8E5DF] rounded-2xl p-10 text-center" data-testid="recruit-drafts-empty">
+          <p className="text-sm text-[#6D6A65]">
+            {search ? "No drafts match your search." : "No drafts yet. Click \"Generate more drafts\" to populate."}
+          </p>
+        </div>
+      ) : (
+        Object.entries(grouped).map(([groupLabel, items]) => (
+          <div key={groupLabel} className="bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
+            <div className="px-5 py-3 border-b border-[#E8E5DF] bg-[#FDFBF7] text-xs font-semibold text-[#2B2A29] uppercase tracking-wider">
+              Targeting: {groupLabel}{" "}
+              <span className="ml-2 text-[#6D6A65] normal-case font-normal">
+                {items.length} draft{items.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            <ul className="divide-y divide-[#E8E5DF]">
+              {items.map((d, i) => {
+                const c = d.candidate || {};
+                return (
+                  <li key={d.id} className="px-5 py-4 flex items-start gap-4 flex-wrap" data-testid={`recruit-draft-${i}`}>
+                    <div className="flex-1 min-w-[260px]">
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        <div className="font-medium text-sm text-[#2B2A29]">{c.name}</div>
+                        <span className="text-xs text-[#6D6A65]">
+                          {c.license_type} · {c.city}, {c.state}
+                        </span>
+                        {d.dry_run && (
+                          <span className="text-[10px] uppercase tracking-wider bg-[#C87965]/15 text-[#C87965] rounded-full px-2 py-0.5">
+                            dry-run
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-[#6D6A65] mt-1 break-all">
+                        {c.email}
+                      </div>
+                      {c.match_rationale && (
+                        <p className="text-xs text-[#6D6A65] mt-1.5 italic leading-relaxed">
+                          &ldquo;{c.match_rationale}&rdquo;
+                        </p>
+                      )}
+                      <div className="text-[11px] text-[#6D6A65] mt-1.5">
+                        {(c.specialties || []).slice(0, 4).join(" · ")}
+                        {c.modalities?.length ? ` · ${(c.modalities || []).slice(0, 3).join(", ")}` : ""}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => copyDraft(d)}
+                        className="inline-flex items-center gap-1 text-[11px] text-[#2D4A3E] bg-[#FDFBF7] border border-[#E8E5DF] rounded-md px-2 py-1 hover:border-[#2D4A3E]"
+                        data-testid={`recruit-copy-${i}`}
+                      >
+                        <Copy size={11} /> Copy email
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDelete(d.id)}
+                        className="inline-flex items-center gap-1 text-[11px] text-[#D45D5D] bg-white border border-[#E8E5DF] rounded-md px-2 py-1 hover:border-[#D45D5D]"
+                        data-testid={`recruit-delete-${i}`}
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))
+      )}
     </div>
   );
 }
