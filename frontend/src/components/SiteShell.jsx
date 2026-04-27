@@ -28,31 +28,9 @@ function useScrollTopNavigate(to) {
   };
 }
 
-// "For therapists" header link — lands on the signup-form section so the
-// "Get more targeted patient referrals" header is visible (not the hero).
-function useNavigateToSignupForm() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  return (e) => {
-    e.preventDefault();
-    const scrollToForm = () =>
-      document
-        .getElementById("signup-form")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    if (location.pathname === "/therapists/join") {
-      scrollToForm();
-    } else {
-      navigate("/therapists/join#signup-form");
-      // The TherapistSignup useEffect handles the hash on mount; defer here
-      // as a belt-and-braces fallback in case the section renders late.
-      setTimeout(scrollToForm, 350);
-    }
-  };
-}
-
 export function Header({ minimal = false }) {
   const onLogoClick = useScrollTopNavigate("/");
-  const onTherapistsClick = useNavigateToSignupForm();
+  const onTherapistsClick = useScrollTopNavigate("/therapists/join");
   return (
     <header
       className="sticky top-0 z-30 border-b border-[#E8E5DF] bg-[#FDFBF7]/85 backdrop-blur-md"
