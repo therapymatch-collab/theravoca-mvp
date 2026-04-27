@@ -1,0 +1,42 @@
+{
+  "summary": "Iter-24 verification of TheraVoca. 10/11 new pytest cases green against the preview URL (GET public + admin referral-source-options endpoints, PUT persistence + validation, email-template copy, patient-request payload accepting referral_source string). 1 backend validation gap found: PUT /api/admin/referral-source-options does NOT reject empty list (returns 200 with options=[]) — missing len(options)>0 guard. Frontend verified via Playwright + source inspection: 8-step wizard (STEP 1 OF 8, BASICS with red asterisks on Full name / Credential type / Email / Phone / Office phone / Gender, Next disabled before required fields filled), SignIn 'Join here' link correctly resolves to /therapists/join#signup-form, Admin Referral sources tab shows ref-options-editor with all 7 default chips + Add input, public /api/config/referral-source-options returns the expected 7 defaults, patient intake step 7 uses shadcn Select with data-testid='referral-source-trigger' (not free text), ZIP3_TO_STATES validator + inline zipError wired in IntakeForm, 'Other' reveals Please specify and payload built as `Other: <text>`, PatientResults 'Try again with different answers' CTA present linking to /#start, TherapistSignup post-Stripe modal link goes to /sign-in?role=therapist, totalSteps=8 in code, license_picture required, office_addresses street+city+zip, Idaho-only license dropdown.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/admin/referral-source-options", "issue": "Accepts empty list {'options':[]} and returns 200 instead of 400. Root cause: routes/admin.py line 443-446 — `not all(isinstance(o,str) and o.strip() for o in options)` is vacuously False for empty lists, so the validation passes. One-line fix: add `or len(options)==0` (or `not options`) to the guard. Review item explicitly requires 400 for empty list."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration24_referral_admin.py",
+    "/app/test_reports/pytest/iteration24_results.xml"
+  ],
+  "action_items": [
+    "Fix PUT /api/admin/referral-source-options validation to reject empty list with 400. In /app/backend/routes/admin.py around line 443, change the guard to: `if not isinstance(options, list) or len(options) == 0 or not all(isinstance(o, str) and o.strip() for o in options):`"
+  ],
+  "critical_code_review_comments": [
+    "Backend admin.py PUT /admin/referral-source-options: empty-list validation gap (vacuous `all()` on []). See action_items.",
+    "Backend admin.py public_router.get /config/referral-source-options correctly falls back to DEFAULT_REFERRAL_SOURCE_OPTIONS when the app_config doc is absent — good defense.",
+    "IntakeForm.jsx line 242-244: payload built with `Other: ${referral_source_other}` only when value === 'Other' — correctly deletes `referral_source_other` from payload before POST. Clean.",
+    "IntakeForm.jsx line 230: `!!data.referral_source` gates Continue — but Select placeholder empty string is falsy so the gate works. If someone selects then clears via a 'None' option, the gate still holds. Good.",
+    "TherapistSignup.jsx totalSteps=8 confirmed; `scrollFormIntoView` uses formCardRef — keeps focus on the card across Next clicks (no scroll-to-top regression).",
+    "TherapistSignup.jsx line 257: `!!data.license_picture` gates Next out of step 2 — matches review req.",
+    "PatientResults.jsx line 368: Try-again Link to='/#start' is a Link (react-router); since /#start is a hash on the same page as the landing intake, this works — verified via source; full UX test would need a released-hold request with apps."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration24_referral_admin.py",
+    "/app/test_reports/pytest/iteration24_results.xml",
+    "/app/test_reports/iteration_12.json"
+  ],
+  "success_rate": {"backend": "91% (10/11 new tests)", "frontend": "100% (all frontend review items verified via Playwright or source inspection)"},
+  "test_credentials": "Admin password admin123! (from /app/memory/test_credentials.md). REACT_APP_BACKEND_URL and ADMIN_PASSWORD exported into pytest run.",
+  "seed_data_creation": "test_iteration24 creates 2 patient requests (iter24_refsrc@example.com, iter24_refsrc_other@example.com) via POST /api/requests. autouse fixture resets referral_source_options back to DEFAULT_REFERRAL_SOURCE_OPTIONS after every test, so admin editor state is clean post-run.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run tests: `REACT_APP_BACKEND_URL=https://care-matcher-1.preview.emergentagent.com ADMIN_PASSWORD='admin123!' pytest /app/backend/tests/test_iteration24_referral_admin.py -v`. The one failure (test_put_rejects_empty_list) is a real backend bug, not a flake. Patient intake still has 7 steps (Step 1 of 7) on the homepage; referral_source Select is on step 7. Therapist signup wizard has 8 steps (totalSteps=8, indicator 'STEP 1 OF 8'). data-testid references: ref-options-editor (admin Referral sources tab card), referral-source-trigger (intake Select), referral-source-other-input, tab-referral-sources. Skipped exhaustive E2E traversal of the 7-step intake via Playwright due to chip-button label coupling — source inspection + public API test cover the dropdown population path. Landing-page Join here link href = /therapists/join#signup-form (confirmed via DOM query, not visual click).",
+  "rca_of_the_issue": "Empty-list bug RCA: In `/app/backend/routes/admin.py` the guard `if not isinstance(options, list) or not all(isinstance(o, str) and o.strip() for o in options)` uses Python's vacuous truth for `all([])` which returns True. Thus `not all(...)` is False for empty lists and the function proceeds to upsert an empty options array. Reproduction: `curl -X PUT $BASE/api/admin/referral-source-options -H 'X-Admin-Password: admin123!' -H 'Content-Type: application/json' -d '{\"options\":[]}'` returns 200 with `{\"options\":[]}`. Mitigation: add an explicit length check — `if not isinstance(options, list) or len(options) == 0 or not all(...)`. After mitigation, public GET will continue to return DEFAULT_REFERRAL_SOURCE_OPTIONS via the existing `if not options` fallback, preserving backwards compat if an empty doc was ever written by accident."
+}

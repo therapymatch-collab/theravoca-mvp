@@ -119,6 +119,11 @@ export default function AdminDashboard() {
   const [refStart, setRefStart] = useState("");
   const [refEnd, setRefEnd] = useState("");
   const [refLoading, setRefLoading] = useState(false);
+  // Admin-managed dropdown options for the patient intake's "How did you hear" field
+  const [refOptions, setRefOptions] = useState([]);
+  const [refOptionsLoaded, setRefOptionsLoaded] = useState(false);
+  const [refNewOption, setRefNewOption] = useState("");
+  const [refSavingOptions, setRefSavingOptions] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -331,6 +336,31 @@ export default function AdminDashboard() {
     [client, refStart, refEnd],
   );
 
+  const loadRefOptions = useCallback(async () => {
+    try {
+      const res = await client.get("/admin/referral-source-options");
+      setRefOptions(res.data?.options || []);
+      setRefOptionsLoaded(true);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Couldn't load options");
+    }
+  }, [client]);
+
+  const saveRefOptions = async (next) => {
+    setRefSavingOptions(true);
+    try {
+      const res = await client.put("/admin/referral-source-options", {
+        options: next,
+      });
+      setRefOptions(res.data?.options || []);
+      toast.success("Saved");
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Save failed");
+    } finally {
+      setRefSavingOptions(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
       <Header minimal />
@@ -434,6 +464,7 @@ export default function AdminDashboard() {
                   onClick={() => {
                     setTab("referral_sources");
                     if (!refSources) loadReferralSources();
+                    if (!refOptionsLoaded) loadRefOptions();
                   }}
                   icon={<Sliders size={14} />}
                   label="Referral sources"
@@ -642,6 +673,77 @@ export default function AdminDashboard() {
               )}
               {tab === "referral_sources" && (
                 <div className="mt-6 space-y-4" data-testid="referral-sources-panel">
+                  <div className="bg-white border border-[#E8E5DF] rounded-2xl p-5" data-testid="ref-options-editor">
+                    <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                      <div>
+                        <h3 className="font-medium text-[#2B2A29]">
+                          Patient intake dropdown options
+                        </h3>
+                        <p className="text-xs text-[#6D6A65] mt-0.5">
+                          These appear on the patient form's "How did you hear about us?" select.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {refOptions.map((opt, i) => (
+                        <span
+                          key={`${opt}-${i}`}
+                          className="inline-flex items-center gap-1.5 text-sm bg-[#FDFBF7] border border-[#E8E5DF] text-[#2B2A29] px-3 py-1.5 rounded-full"
+                          data-testid={`ref-option-${i}`}
+                        >
+                          {opt}
+                          <button
+                            type="button"
+                            className="text-[#6D6A65] hover:text-[#D45D5D] -mr-1"
+                            disabled={refSavingOptions || refOptions.length <= 1}
+                            onClick={() =>
+                              saveRefOptions(refOptions.filter((o) => o !== opt))
+                            }
+                            data-testid={`ref-option-delete-${i}`}
+                            aria-label={`Remove ${opt}`}
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="mt-4 flex gap-2">
+                      <Input
+                        value={refNewOption}
+                        onChange={(e) => setRefNewOption(e.target.value)}
+                        placeholder="Add a new option (e.g. Reddit)"
+                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                        data-testid="ref-option-new"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && refNewOption.trim()) {
+                            const n = refNewOption.trim();
+                            if (!refOptions.includes(n)) {
+                              saveRefOptions([...refOptions, n]);
+                            }
+                            setRefNewOption("");
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="tv-btn-primary !py-2 !px-4 text-sm shrink-0"
+                        disabled={refSavingOptions || !refNewOption.trim()}
+                        onClick={() => {
+                          const n = refNewOption.trim();
+                          if (!n) return;
+                          if (refOptions.includes(n)) {
+                            toast.error("Already in the list");
+                            return;
+                          }
+                          saveRefOptions([...refOptions, n]);
+                          setRefNewOption("");
+                        }}
+                        data-testid="ref-option-add"
+                      >
+                        {refSavingOptions ? "Saving…" : "Add"}
+                      </button>
+                    </div>
+                  </div>
                   <div className="bg-white border border-[#E8E5DF] rounded-2xl p-5 flex flex-wrap items-end gap-3">
                     <div className="flex-1 min-w-[160px]">
                       <label className="block text-[11px] uppercase tracking-wider text-[#6D6A65] mb-1">

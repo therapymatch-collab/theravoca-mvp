@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import { Loader2, Phone, Mail, Star, Sparkles, CalendarPlus, Send, Inbox, CheckCircle2, Clock } from "lucide-react";
+import { Link, useParams } from "react-router-dom";
+import { Loader2, Phone, Mail, Star, Sparkles, CalendarPlus, Send, Inbox, CheckCircle2, Clock, ArrowRight } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { api } from "@/lib/api";
 import { RESULTS_POLL_INTERVAL_MS } from "@/lib/constants";
@@ -347,6 +347,38 @@ export default function PatientResults() {
                   </article>
                 );
               })}
+            </div>
+          )}
+
+          {/* "Try again" — give patients a way to re-run intake if matches don't feel right.
+              We send them back to /#start — the homepage's intake form is the canonical entry. */}
+          {!hold_active && applications.length > 0 && (
+            <div
+              className="mt-10 bg-white border border-[#E8E5DF] rounded-2xl p-6 text-center"
+              data-testid="results-try-again-section"
+            >
+              <h3 className="font-serif-display text-xl text-[#2D4A3E]">
+                Not feeling these matches?
+              </h3>
+              <p className="text-sm text-[#6D6A65] mt-1.5 max-w-md mx-auto leading-relaxed">
+                Sometimes a few tweaks to your answers surfaces a totally different
+                set of therapists. Run the intake again — it takes 2 minutes.
+              </p>
+              <Link
+                to="/#start"
+                className="tv-btn-primary mt-5 inline-flex"
+                data-testid="results-try-again-btn"
+                onClick={() => {
+                  // Force a hash-scroll on the destination
+                  setTimeout(() => {
+                    document
+                      .getElementById("start")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }, 250);
+                }}
+              >
+                Try again with different answers <ArrowRight size={16} />
+              </Link>
             </div>
           )}
         </div>

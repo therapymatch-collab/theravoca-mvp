@@ -143,7 +143,11 @@ export default function SignIn() {
               {role === "therapist" && (
                 <p className="mt-5 text-xs text-[#6D6A65] text-center">
                   Not in our network yet?{" "}
-                  <Link to="/therapists/join" className="text-[#2D4A3E] underline">
+                  <Link
+                    to="/therapists/join#signup-form"
+                    className="text-[#2D4A3E] underline"
+                    data-testid="signin-join-link"
+                  >
                     Join here
                   </Link>
                 </p>

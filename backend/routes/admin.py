@@ -415,6 +415,57 @@ async def admin_referral_sources(
     }
 
 
+DEFAULT_REFERRAL_SOURCE_OPTIONS = [
+    "Google search",
+    "Instagram",
+    "Friend / family",
+    "Therapist referred me",
+    "News article / podcast",
+    "Other",
+    "Prefer not to say",
+]
+
+
+@router.get("/admin/referral-source-options", dependencies=[Depends(require_admin)])
+async def admin_get_referral_source_options() -> dict[str, Any]:
+    """Editable list of choices shown on the patient intake's
+    'How did you hear about us?' dropdown."""
+    doc = await db.app_config.find_one({"key": "referral_source_options"}, {"_id": 0})
+    options = doc.get("options") if doc else None
+    if not options:
+        options = DEFAULT_REFERRAL_SOURCE_OPTIONS
+    return {"options": options}
+
+
+@router.put("/admin/referral-source-options", dependencies=[Depends(require_admin)])
+async def admin_set_referral_source_options(payload: dict) -> dict[str, Any]:
+    options = payload.get("options")
+    if not isinstance(options, list) or not all(
+        isinstance(o, str) and o.strip() for o in options
+    ):
+        raise HTTPException(400, "options must be a non-empty list of strings")
+    cleaned = [o.strip() for o in options]
+    await db.app_config.update_one(
+        {"key": "referral_source_options"},
+        {"$set": {"key": "referral_source_options", "options": cleaned}},
+        upsert=True,
+    )
+    return {"options": cleaned}
+
+
+# Public endpoint — patient intake calls this to populate its dropdown.
+public_router = APIRouter()
+
+
+@public_router.get("/config/referral-source-options")
+async def public_referral_source_options() -> dict[str, Any]:
+    doc = await db.app_config.find_one({"key": "referral_source_options"}, {"_id": 0})
+    options = doc.get("options") if doc else None
+    if not options:
+        options = DEFAULT_REFERRAL_SOURCE_OPTIONS
+    return {"options": options}
+
+
 @router.post("/admin/therapists/{therapist_id}/reviews")
 async def admin_update_therapist_reviews(
     therapist_id: str, payload: dict, _: bool = Depends(require_admin),

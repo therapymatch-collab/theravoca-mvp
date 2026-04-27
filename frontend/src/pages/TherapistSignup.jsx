@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { CheckCircle2, ArrowRight, X, Plus, Camera, Sparkles } from "lucide-react";
@@ -128,9 +128,16 @@ export default function TherapistSignup() {
   });
   const [office, setOffice] = useState("");
   const [officeAddress, setOfficeAddress] = useState("");
+  const [officeCity, setOfficeCity] = useState("");
+  const [officeZip, setOfficeZip] = useState("");
+  const [insuranceOther, setInsuranceOther] = useState("");
+  const [websiteError, setWebsiteError] = useState("");
+  const [websiteChecking, setWebsiteChecking] = useState(false);
+  const [stepError, setStepError] = useState("");
   const [showPreview, setShowPreview] = useState(false);
   const [step, setStep] = useState(1);
-  const totalSteps = 6;
+  const totalSteps = 8;
+  const formCardRef = useRef(null);
   const set = (k, v) => setData((d) => ({ ...d, [k]: v }));
   const toggleArr = (k, v, max) =>
     setData((d) => {
@@ -147,6 +154,66 @@ export default function TherapistSignup() {
     if (data.general_treats.includes(issue)) return "general";
     return null;
   };
+
+  // ── URL helpers — auto-prefix https:// and validate basic structure ────
+  const normalizeWebsite = (raw) => {
+    const s = (raw || "").trim();
+    if (!s) return "";
+    if (/^https?:\/\//i.test(s)) return s;
+    return `https://${s}`;
+  };
+  const websiteIsValid = (raw) => {
+    const s = (raw || "").trim();
+    if (!s) return true; // optional
+    try {
+      const u = new URL(normalizeWebsite(s));
+      // Require a dot in the hostname so "https://foo" is rejected
+      if (!u.hostname.includes(".")) return false;
+      if (u.hostname.length < 4) return false;
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const verifyWebsiteReachable = async (raw) => {
+    const url = normalizeWebsite(raw);
+    if (!url) return true;
+    setWebsiteChecking(true);
+    try {
+      // No-cors so cross-origin doesn't error; we just want a successful round-trip.
+      // Most sites respond to HEAD/GET; if the fetch resolves at all, we count it as reachable.
+      await fetch(url, { method: "GET", mode: "no-cors", redirect: "follow" });
+      setWebsiteError("");
+      return true;
+    } catch {
+      setWebsiteError(
+        "We couldn't reach that website — double-check the URL or leave it blank.",
+      );
+      return false;
+    } finally {
+      setWebsiteChecking(false);
+    }
+  };
+
+  // Scroll to top of the form card (NOT the page) on Next/Back so users
+  // stay in context and don't watch the hero scroll back into view.
+  const scrollFormIntoView = () => {
+    requestAnimationFrame(() => {
+      formCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  // Honor /therapists/join#signup-form anchor links from /sign-in etc.
+  useEffect(() => {
+    if (window.location.hash === "#signup-form") {
+      setTimeout(() => {
+        document
+          .getElementById("signup-form")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 250);
+    }
+  }, []);
+
   const setIssueTier = (issue, tier) => {
     setData((d) => {
       const stripped = {
@@ -168,20 +235,48 @@ export default function TherapistSignup() {
     });
   };
 
-  const valid =
-    data.name.trim().length >= 3 &&
-    data.email.includes("@") &&
-    !!data.gender &&
-    !!data.credential_type &&
-    !!(data.phone_alert?.trim() || data.phone?.trim()) &&
-    !!data.license_number?.trim() &&
-    !!data.license_expires_at &&
-    data.client_types.length >= 1 &&
-    data.age_groups.length >= 1 &&
-    data.primary_specialties.length >= 1 &&
-    data.modalities.length >= 1 &&
-    data.availability_windows.length >= 1 &&
-    (data.modality_offering === "telehealth" || data.office_locations.length >= 1);
+  // Per-step validation — mirrors the required-field asterisks. Each step's
+  // "Next" button is disabled until canAdvance(step) is true.
+  const canAdvance = (s) => {
+    if (s === 1) {
+      return (
+        data.name.trim().length >= 3 &&
+        data.email.includes("@") &&
+        !!data.credential_type &&
+        !!(data.phone_alert?.trim() || data.phone?.trim()) &&
+        !!data.office_phone?.trim() &&
+        !!data.gender &&
+        websiteIsValid(data.website)
+      );
+    }
+    if (s === 2) {
+      return (
+        (data.licensed_states && data.licensed_states.length > 0) &&
+        !!data.license_number?.trim() &&
+        !!data.license_expires_at &&
+        !!data.license_picture
+      );
+    }
+    if (s === 3)
+      return data.client_types.length >= 1 && data.age_groups.length >= 1;
+    if (s === 4) return data.primary_specialties.length >= 1;
+    if (s === 5)
+      return (
+        data.modalities.length >= 1 &&
+        !!data.modality_offering &&
+        (data.modality_offering === "telehealth" ||
+          data.office_addresses.length >= 1) &&
+        data.availability_windows.length >= 1
+      );
+    if (s === 6) return data.cash_rate > 0 && data.years_experience >= 0;
+    if (s === 7) return data.style_tags.length >= 1;
+    if (s === 8) return true; // notifications optional
+    return true;
+  };
+
+  // Aggregate validity across all steps (used by the Preview button on the
+  // final step + the Submit button inside the modal).
+  const valid = [1, 2, 3, 4, 5, 6, 7, 8].every(canAdvance);
 
   const [therapistId, setTherapistId] = useState(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -327,7 +422,7 @@ export default function TherapistSignup() {
               <ArrowRight size={18} className="inline ml-2" />
             </button>
             <Link
-              to="/"
+              to="/sign-in?role=therapist"
               className="tv-btn-secondary mt-3 inline-flex"
               data-testid="signup-success-home"
             >
@@ -469,7 +564,10 @@ export default function TherapistSignup() {
                 Approval typically takes 1 business day.
               </p>
             </div>
-            <div className="bg-white border border-[#E8E5DF] rounded-3xl p-6 sm:p-10">
+            <div
+              ref={formCardRef}
+              className="bg-white border border-[#E8E5DF] rounded-3xl p-6 sm:p-10"
+            >
               {(inviteRequestId || inviteCode) && (
                 <div
                   className="mb-6 bg-[#FDF7EC] border border-[#E8DCC1] rounded-2xl p-4 flex items-start gap-3"
@@ -507,8 +605,10 @@ export default function TherapistSignup() {
                       "Basics",
                       "License & verification",
                       "Who you see",
-                      "Format & insurance",
-                      "Rates & style",
+                      "Specialties",
+                      "Format & locations",
+                      "Insurance & rates",
+                      "Style & bio",
                       "Notifications",
                     ][step - 1]}
                   </span>
@@ -579,7 +679,7 @@ export default function TherapistSignup() {
                     </div>
                   </Field>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Field label="Full name + title (e.g. Sarah Lin, LCSW)">
+                    <Field label={<>Full name + title (e.g. Sarah Lin, LCSW) <Req /></>}>
                       <Input
                         value={data.name}
                         onChange={(e) => set("name", e.target.value)}
@@ -587,7 +687,7 @@ export default function TherapistSignup() {
                         data-testid="signup-name"
                       />
                     </Field>
-                    <Field label="Credential type">
+                    <Field label={<>Credential type <Req /></>}>
                       <select
                         value={data.credential_type}
                         onChange={(e) => set("credential_type", e.target.value)}
@@ -600,7 +700,7 @@ export default function TherapistSignup() {
                         ))}
                       </select>
                     </Field>
-                    <Field label="Email">
+                    <Field label={<>Email <Req /></>}>
                       <Input
                         type="email"
                         value={data.email}
@@ -610,20 +710,38 @@ export default function TherapistSignup() {
                         data-testid="signup-email"
                       />
                     </Field>
-                    <Field label="Website (public)">
+                    <Field
+                      label="Website (public)"
+                      hint="We'll auto-prefix https:// and check the link works."
+                    >
                       <Input
                         type="url"
                         value={data.website}
-                        onChange={(e) => set("website", e.target.value)}
-                        placeholder="https://your-practice.com"
+                        onChange={(e) => {
+                          set("website", e.target.value);
+                          setWebsiteError("");
+                        }}
+                        onBlur={() => {
+                          if (data.website && !websiteIsValid(data.website)) {
+                            setWebsiteError(
+                              "That doesn't look like a valid URL — try e.g. yourpractice.com",
+                            );
+                          }
+                        }}
+                        placeholder="yourpractice.com"
                         className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                         data-testid="signup-website"
                       />
+                      {websiteError && (
+                        <p
+                          className="mt-1.5 text-xs text-[#D45D5D]"
+                          data-testid="signup-website-error"
+                        >
+                          {websiteError}
+                        </p>
+                      )}
                     </Field>
-                    <Field
-                      label="Phone (private, alerts)"
-                      hint="We use this only for SMS alerts — never shown to patients."
-                    >
+                    <Field label={<>Phone (private, alerts) <Req /></>}>
                       <Input
                         value={data.phone_alert || data.phone}
                         onChange={(e) => set("phone_alert", e.target.value)}
@@ -631,11 +749,11 @@ export default function TherapistSignup() {
                         className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                         data-testid="signup-phone-alert"
                       />
+                      <p className="mt-1.5 text-[11px] text-[#6D6A65]">
+                        SMS alerts only — never shown to patients.
+                      </p>
                     </Field>
-                    <Field
-                      label="Office phone (public)"
-                      hint="Patients see this number on your profile."
-                    >
+                    <Field label={<>Office phone (public) <Req /></>}>
                       <Input
                         value={data.office_phone}
                         onChange={(e) => set("office_phone", e.target.value)}
@@ -643,9 +761,12 @@ export default function TherapistSignup() {
                         className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                         data-testid="signup-office-phone"
                       />
+                      <p className="mt-1.5 text-[11px] text-[#6D6A65]">
+                        Patients see this on your profile.
+                      </p>
                     </Field>
                   </div>
-                  <Field label="Gender (used only when patients have a stated preference)">
+                  <Field label={<>Gender <Req /></>} hint="Used only when patients have a stated preference.">
                     <PillRow
                       items={GENDERS}
                       selected={[data.gender]}
@@ -662,7 +783,10 @@ export default function TherapistSignup() {
                   hint="We verify every therapist's license before they go live."
                 >
                   <div className="grid grid-cols-2 gap-3">
-                    <Field label="License state">
+                    <Field
+                      label={<>License state <Req /></>}
+                      hint="We're currently live in Idaho only — multi-state coming soon."
+                    >
                       <select
                         value={(data.licensed_states && data.licensed_states[0]) || "ID"}
                         onChange={(e) => set("licensed_states", [e.target.value])}
@@ -670,15 +794,9 @@ export default function TherapistSignup() {
                         data-testid="signup-license-state"
                       >
                         <option value="ID">Idaho (ID)</option>
-                        <option value="WA">Washington (WA)</option>
-                        <option value="OR">Oregon (OR)</option>
-                        <option value="MT">Montana (MT)</option>
-                        <option value="UT">Utah (UT)</option>
-                        <option value="WY">Wyoming (WY)</option>
-                        <option value="NV">Nevada (NV)</option>
                       </select>
                     </Field>
-                    <Field label="License number">
+                    <Field label={<>License number <Req /></>}>
                       <Input
                         value={data.license_number}
                         onChange={(e) => set("license_number", e.target.value)}
@@ -688,7 +806,7 @@ export default function TherapistSignup() {
                       />
                     </Field>
                   </div>
-                  <Field label="License expiration date">
+                  <Field label={<>License expiration date <Req /></>}>
                     <Input
                       type="date"
                       value={data.license_expires_at || ""}
@@ -697,7 +815,10 @@ export default function TherapistSignup() {
                       data-testid="signup-license-expires"
                     />
                   </Field>
-                  <Field label="Upload a photo of your license">
+                  <Field
+                    label={<>Upload a photo of your license <Req /></>}
+                    hint="Required so we can manually verify your credentials match. PNG, JPG or PDF. Patients never see this."
+                  >
                     <div className="flex items-center gap-4">
                       <div className="w-24 h-16 rounded-lg bg-[#FDFBF7] border border-dashed border-[#E8E5DF] overflow-hidden flex items-center justify-center">
                         {data.license_picture ? (
@@ -745,9 +866,6 @@ export default function TherapistSignup() {
                             Remove
                           </button>
                         )}
-                        <p className="text-xs text-[#6D6A65] mt-1.5">
-                          PNG, JPG or PDF. We use this only for verification — patients never see it.
-                        </p>
                       </div>
                     </div>
                   </Field>
@@ -759,7 +877,7 @@ export default function TherapistSignup() {
                   title="Who do you see?"
                   hint="Required — patients are pre-filtered by these"
                 >
-                  <Field label="Client types">
+                  <Field label={<>Client types <Req /></>}>
                     <PillRow
                       items={CLIENT_TYPES}
                       selected={data.client_types}
@@ -767,7 +885,7 @@ export default function TherapistSignup() {
                       testid="signup-client-type"
                     />
                   </Field>
-                  <Field label="Age groups">
+                  <Field label={<>Age groups <Req /></>}>
                     <PillRow
                       items={AGE_GROUPS}
                       selected={data.age_groups}
@@ -776,10 +894,12 @@ export default function TherapistSignup() {
                     />
                   </Field>
                 </Group>
+                </>)}
 
+                {step === 4 && (<>
                 <Group
                   title="Specialties"
-                  hint="Tap an issue, then choose its tier. Higher tier = stronger match score."
+                  hint="Tap an issue, then choose its tier. Higher tier = stronger match score. (At least 1 Primary required.)"
                 >
                   <div className="space-y-2.5">
                     {ISSUES.map((iss) => {
@@ -842,8 +962,8 @@ export default function TherapistSignup() {
                 </Group>
                 </>)}
 
-                {step === 4 && (<>
-                <Group title="Modalities you practice (pick 1–6)">
+                {step === 5 && (<>
+                <Group title={<>Modalities you practice (pick 1–6) <Req /></>}>
                   <div className="flex flex-wrap gap-2">
                     {MODALITIES.map((m) => {
                       const active = data.modalities.includes(m);
@@ -867,7 +987,7 @@ export default function TherapistSignup() {
                 </Group>
 
                 <Group title="Practice format & availability">
-                  <Field label="Where do you see clients?">
+                  <Field label={<>Where do you see clients? <Req /></>}>
                     <PillRow
                       items={MODALITY_OFFERINGS}
                       selected={[data.modality_offering]}
@@ -876,44 +996,76 @@ export default function TherapistSignup() {
                     />
                   </Field>
                   {data.modality_offering !== "telehealth" && (
-                    <Field label="Office cities (Idaho)">
-                      <div className="flex gap-2">
+                    <Field
+                      label={<>Office addresses (Idaho) <Req /></>}
+                      hint="Patients see these on your profile. We use them to match you within ~30 miles of patient cities/ZIPs."
+                    >
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
                         <Input
-                          value={office}
-                          onChange={(e) => setOffice(e.target.value)}
-                          placeholder="e.g. Boise"
-                          className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                          data-testid="signup-office-input"
+                          value={officeAddress}
+                          onChange={(e) => setOfficeAddress(e.target.value)}
+                          placeholder="Street address (e.g. 123 W Main St, Suite 200)"
+                          className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl sm:col-span-7"
+                          data-testid="signup-office-street"
                         />
-                        <button
-                          type="button"
-                          className="tv-btn-secondary !py-2 !px-4 text-sm"
-                          onClick={() => {
-                            if (office.trim()) {
-                              set("office_locations", [
-                                ...data.office_locations,
-                                office.trim(),
-                              ]);
-                              setOffice("");
-                            }
-                          }}
-                          data-testid="signup-office-add"
-                        >
-                          <Plus size={14} className="inline mr-1" /> Add
-                        </button>
+                        <Input
+                          value={officeCity}
+                          onChange={(e) => setOfficeCity(e.target.value)}
+                          placeholder="City"
+                          className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl sm:col-span-3"
+                          data-testid="signup-office-city"
+                        />
+                        <Input
+                          value={officeZip}
+                          onChange={(e) => setOfficeZip(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                          placeholder="ZIP"
+                          className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl sm:col-span-2"
+                          data-testid="signup-office-zip"
+                        />
                       </div>
+                      <button
+                        type="button"
+                        className="tv-btn-secondary !py-2 !px-4 text-sm mt-2"
+                        onClick={() => {
+                          const street = officeAddress.trim();
+                          const city = officeCity.trim();
+                          const zip = officeZip.trim();
+                          if (!street || !city || !zip) {
+                            toast.error("Street, city, and ZIP are all required.");
+                            return;
+                          }
+                          const full = `${street}, ${city}, ID ${zip}`;
+                          set("office_addresses", [...data.office_addresses, full]);
+                          // Keep cities in sync for back-compat geocoder
+                          set("office_locations", [...data.office_locations, city]);
+                          setOfficeAddress("");
+                          setOfficeCity("");
+                          setOfficeZip("");
+                        }}
+                        data-testid="signup-office-add"
+                      >
+                        <Plus size={14} className="inline mr-1" /> Add office
+                      </button>
                       <Tags
-                        items={data.office_locations}
-                        onRemove={(c) =>
+                        items={data.office_addresses}
+                        onRemove={(addr) => {
                           set(
-                            "office_locations",
-                            data.office_locations.filter((x) => x !== c),
-                          )
-                        }
+                            "office_addresses",
+                            data.office_addresses.filter((x) => x !== addr),
+                          );
+                          // Drop the matching city from office_locations too
+                          const cityFromAddr = addr.split(",")[1]?.trim();
+                          if (cityFromAddr) {
+                            set(
+                              "office_locations",
+                              data.office_locations.filter((c) => c !== cityFromAddr),
+                            );
+                          }
+                        }}
                       />
                     </Field>
                   )}
-                  <Field label="Sessions you can offer">
+                  <Field label={<>Sessions you can offer <Req /></>}>
                     <PillRow
                       items={AVAILABILITY}
                       selected={data.availability_windows}
@@ -930,8 +1082,13 @@ export default function TherapistSignup() {
                     />
                   </Field>
                 </Group>
+                </>)}
 
-                <Group title="Insurance accepted (optional)">
+                {step === 6 && (<>
+                <Group
+                  title="Insurance accepted (optional)"
+                  hint="Tap any plans you're in-network with — this helps patients on insurance see you. If your plan isn't listed, add it under 'Other'."
+                >
                   <div className="flex flex-wrap gap-2">
                     {IDAHO_INSURERS.map((i) => {
                       const active = data.insurance_accepted.includes(i);
@@ -952,13 +1109,41 @@ export default function TherapistSignup() {
                       );
                     })}
                   </div>
+                  <div className="mt-3 flex gap-2 items-end">
+                    <Field label="Other (specify) — added to your accepted list" hint="Comma-separated for multiple plans.">
+                      <Input
+                        value={insuranceOther}
+                        onChange={(e) => setInsuranceOther(e.target.value)}
+                        placeholder="e.g. SelectHealth, IEHP"
+                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                        data-testid="signup-insurance-other"
+                      />
+                    </Field>
+                    <button
+                      type="button"
+                      className="tv-btn-secondary !py-2 !px-4 text-sm shrink-0 mb-px"
+                      onClick={() => {
+                        const parts = insuranceOther
+                          .split(",")
+                          .map((p) => p.trim())
+                          .filter(Boolean);
+                        if (parts.length === 0) return;
+                        const merged = Array.from(
+                          new Set([...data.insurance_accepted, ...parts]),
+                        );
+                        set("insurance_accepted", merged);
+                        setInsuranceOther("");
+                      }}
+                      data-testid="signup-insurance-other-add"
+                    >
+                      <Plus size={14} className="inline mr-1" /> Add
+                    </button>
+                  </div>
                 </Group>
-                </>)}
 
-                {step === 5 && (<>
                 <Group title="Rates & experience">
                   <div className="grid grid-cols-2 gap-4">
-                    <Field label="Cash rate per session ($)">
+                    <Field label={<>Cash rate per session ($) <Req /></>}>
                       <Input
                         type="number"
                         value={data.cash_rate}
@@ -969,7 +1154,7 @@ export default function TherapistSignup() {
                         data-testid="signup-cash-rate"
                       />
                     </Field>
-                    <Field label="Years of experience">
+                    <Field label={<>Years of experience <Req /></>}>
                       <Input
                         type="number"
                         value={data.years_experience}
@@ -1016,8 +1201,10 @@ export default function TherapistSignup() {
                     </label>
                   </div>
                 </Group>
+                </>)}
 
-                <Group title="How would you describe your style?">
+                {step === 7 && (<>
+                <Group title={<>How would you describe your style? <Req /></>}>
                   <PillRow
                     items={STYLE_TAGS}
                     selected={data.style_tags}
@@ -1038,7 +1225,7 @@ export default function TherapistSignup() {
                 </Group>
                 </>)}
 
-                {step === 6 && (<>
+                {step === 8 && (<>
                 <Group title="Notifications">
                   <p className="text-xs text-[#6D6A65] -mt-1 mb-2">
                     Choose how you'd like to be alerted when a new referral matches you.
@@ -1070,7 +1257,10 @@ export default function TherapistSignup() {
                   <button
                     type="button"
                     className="tv-btn-secondary"
-                    onClick={() => setStep((s) => Math.max(1, s - 1))}
+                    onClick={() => {
+                      setStep((s) => Math.max(1, s - 1));
+                      scrollFormIntoView();
+                    }}
                     data-testid="signup-back"
                   >
                     Back
@@ -1083,14 +1273,23 @@ export default function TherapistSignup() {
                 {step < totalSteps ? (
                   <button
                     type="button"
-                    className="tv-btn-primary"
-                    onClick={() => {
+                    className="tv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!canAdvance(step) || websiteChecking}
+                    onClick={async () => {
+                      // Step 1: normalize website + check reachability if provided
+                      if (step === 1 && data.website?.trim()) {
+                        const reachable = await verifyWebsiteReachable(data.website);
+                        if (!reachable) return;
+                        // Persist normalized form (https:// prefix etc.)
+                        set("website", normalizeWebsite(data.website));
+                      }
+                      setStepError("");
                       setStep((s) => Math.min(totalSteps, s + 1));
-                      window.scrollTo({ top: 0, behavior: "smooth" });
+                      scrollFormIntoView();
                     }}
                     data-testid="signup-next"
                   >
-                    Next <ArrowRight size={18} />
+                    {websiteChecking ? "Checking…" : "Next"} <ArrowRight size={18} />
                   </button>
                 ) : (
                   <button
@@ -1235,8 +1434,8 @@ function PreviewModal({ data, onClose, onConfirm, submitting }) {
             span={2}
           />
           <SummaryRow
-            label="Office cities"
-            value={(data.office_locations || []).join(", ") || "—"}
+            label="Offices"
+            value={(data.office_addresses || data.office_locations || []).join(" · ") || "—"}
             span={2}
           />
           <SummaryRow
@@ -1341,7 +1540,7 @@ function Group({ title, hint, children }) {
 function Field({ label, hint, children }) {
   return (
     <div>
-      <label className="block text-xs font-semibold text-[#6D6A65] mb-1.5 uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">
+      <label className="block text-xs font-semibold text-[#6D6A65] mb-1.5 uppercase tracking-wider">
         {label}
       </label>
       {hint && (
@@ -1351,6 +1550,15 @@ function Field({ label, hint, children }) {
       )}
       {children}
     </div>
+  );
+}
+
+// Red asterisk used inline next to required field labels.
+function Req() {
+  return (
+    <span className="text-[#D45D5D] ml-0.5" aria-label="required">
+      *
+    </span>
   );
 }
 

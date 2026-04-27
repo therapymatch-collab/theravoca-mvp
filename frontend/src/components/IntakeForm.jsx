@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowRight, Check } from "lucide-react";
@@ -157,6 +157,31 @@ export default function IntakeForm() {
       return { ...d, [k]: [...arr, v] };
     });
 
+  // ── Admin-managed referral source dropdown options ────────────────────
+  const [referralSourceOptions, setReferralSourceOptions] = useState([]);
+  useEffect(() => {
+    api
+      .get("/config/referral-source-options")
+      .then((r) => setReferralSourceOptions(r.data?.options || []))
+      .catch(() => setReferralSourceOptions([]));
+  }, []);
+
+  // ── ZIP validation: state-prefix sanity (catches "10001 in Idaho" before
+  // the user moves on, instead of failing at final submit). Mirrors the
+  // backend's zip3-prefix table.
+  const ZIP3_TO_STATES = {
+    ID: [832, 833, 834, 835, 836, 837, 838, 839],
+  };
+  const zipMatchesState = (zip, state) => {
+    const z = (zip || "").trim();
+    const s = (state || "").trim().toUpperCase();
+    if (!z || z.length < 5 || !/^\d{5}$/.test(z.slice(0, 5))) return true;
+    const prefixes = ZIP3_TO_STATES[s];
+    if (!prefixes) return true; // unknown state — let backend handle
+    return prefixes.includes(parseInt(z.slice(0, 3), 10));
+  };
+  const [zipError, setZipError] = useState("");
+
   // Cheap client-side guard against typos / disposable inboxes — backend
   // does the real validation, but this catches obvious mistakes early.
   const DISPOSABLE_HINT = /(mailinator|guerrillamail|10minutemail|tempmail|temp-mail|yopmail|throwawaymail|trashmail|fakeinbox|getnada)/i;
@@ -178,7 +203,11 @@ export default function IntakeForm() {
           data.modality_preference,
         )
       ) {
-        return !!(data.location_city || data.location_zip);
+        if (!(data.location_city || data.location_zip)) return false;
+        if (data.location_zip && !zipMatchesState(data.location_zip, data.location_state)) {
+          return false;
+        }
+        return true;
       }
       return true;
     }
@@ -196,17 +225,29 @@ export default function IntakeForm() {
       );
     if (step === 5) return true;
     if (step === 6)
-      return emailLooksOk(data.email) && agreed && confirmAdult && confirmNotEmergency;
+      return (
+        emailLooksOk(data.email) &&
+        !!data.referral_source &&
+        agreed &&
+        confirmAdult &&
+        confirmNotEmergency
+      );
     return false;
   };
 
   const submit = async () => {
     setSubmitting(true);
     try {
+      const refSrc =
+        data.referral_source === "Other" && data.referral_source_other
+          ? `Other: ${data.referral_source_other}`
+          : data.referral_source;
       const payload = {
         ...data,
+        referral_source: refSrc,
         budget: data.budget ? parseInt(data.budget, 10) : null,
       };
+      delete payload.referral_source_other;
       const res = await api.post("/requests", payload);
       toast.success("Request received — please check your email to confirm.");
       navigate(`/verify/pending?id=${res.data.id}`, { replace: true });
@@ -334,16 +375,29 @@ export default function IntakeForm() {
                         inputMode="numeric"
                         maxLength={5}
                         value={data.location_zip}
-                        onChange={(e) =>
-                          set(
-                            "location_zip",
-                            e.target.value.replace(/\D/g, "").slice(0, 5),
-                          )
-                        }
+                        onChange={(e) => {
+                          const z = e.target.value.replace(/\D/g, "").slice(0, 5);
+                          set("location_zip", z);
+                          if (z.length === 5 && !zipMatchesState(z, data.location_state)) {
+                            setZipError(
+                              `ZIP ${z} doesn't appear to be in ${data.location_state}. Please double-check.`,
+                            );
+                          } else {
+                            setZipError("");
+                          }
+                        }}
                         placeholder="83702"
                         className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                         data-testid="zip-input"
                       />
+                      {zipError && (
+                        <p
+                          className="mt-1.5 text-xs text-[#D45D5D]"
+                          data-testid="zip-error"
+                        >
+                          {zipError}
+                        </p>
+                      )}
                     </Field>
                   </div>
                 )}
@@ -573,15 +627,44 @@ export default function IntakeForm() {
                     </label>
                   )}
                 </Field>
-                <Field label="How did you hear about us? (optional)">
-                  <Input
+                <Field label="How did you hear about us?">
+                  <Select
                     value={data.referral_source}
-                    onChange={(e) => set("referral_source", e.target.value)}
-                    placeholder="e.g. Instagram, Google, friend"
-                    className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                    data-testid="referral-source-input"
-                  />
+                    onValueChange={(v) => set("referral_source", v)}
+                  >
+                    <SelectTrigger
+                      className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                      data-testid="referral-source-trigger"
+                    >
+                      <SelectValue placeholder="Select an option…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {referralSourceOptions.map((opt) => (
+                        <SelectItem
+                          key={opt}
+                          value={opt}
+                          data-testid={`referral-source-${opt
+                            .toLowerCase()
+                            .replace(/[^a-z0-9]+/g, "-")
+                            .replace(/^-+|-+$/g, "")}`}
+                        >
+                          {opt}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
+                {data.referral_source === "Other" && (
+                  <Field label="Please specify">
+                    <Input
+                      value={data.referral_source_other || ""}
+                      onChange={(e) => set("referral_source_other", e.target.value)}
+                      placeholder="e.g. saw your booth at..."
+                      className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                      data-testid="referral-source-other-input"
+                    />
+                  </Field>
+                )}
                 <div className="space-y-3 pt-2">
                   <CheckRow
                     id="agree"
