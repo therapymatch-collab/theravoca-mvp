@@ -242,9 +242,15 @@ async def _deliver_results(request_id: str) -> dict[str, Any]:
             })
 
     await send_patient_results(req["email"], request_id, enriched)
+    # Mark sent + auto-release the 24h hold so the patient sees results now.
+    now_iso = _now_iso()
     await db.requests.update_one(
         {"id": request_id},
-        {"$set": {"results_sent_at": _now_iso(), "status": "completed"}},
+        {"$set": {
+            "results_sent_at": now_iso,
+            "results_released_at": now_iso,
+            "status": "completed",
+        }},
     )
     return {"sent_to": req["email"], "count": len(enriched)}
 

@@ -202,6 +202,46 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 - Iter-38 added 4 new tests for the outreach-invite → therapist conversion flow.
 
 ## Recent Changes Log
+- **Iter-46 (Feb 2026) — Polish + analytics + recruit attribution batch**:
+  - **Bug fix**: removed duplicate "Email matches now" / "Release results to
+    patient" buttons; single **"Send matches now"** action now triggers
+    matching, sends therapist invites, AND auto-releases the 24h hold.
+    After click, button label flips to **"Matches sent to patient"**
+    (disabled). Backend `_deliver_results` now sets both `results_sent_at`
+    and `results_released_at`.
+  - **Patient match cards**: `years_experience` now reads "12 years
+    experience" not "12 yrs"; insurance shows actual plan names ("Aetna,
+    Cigna +3 more") instead of just count; cash rate shows
+    "$X / session"; sliding scale + free consult are explicit Yes/No.
+  - **Admin request detail enriched**: full RequestFullBrief panel shows
+    every intake field grouped (patient, location, prefs, payment, status,
+    timestamps); Matched providers list now shows credential, distance,
+    review badge, click-to-expand score breakdown with per-axis points.
+  - **Provider editor cleaned up**: Credential type moved up next to Name
+    + license; major sections now have colored headers
+    (Contact / License & credentials / Practice & rates / Clinical fit /
+    Insurance & sessions / Locations) with brand-aligned colors.
+  - **Threshold display bug**: `7000%` → correct percent regardless of
+    whether stored as 0–1 fraction or 0–100 integer.
+  - **Gap-recruit attribution**: every recruit email now embeds
+    `?recruit_code=XXXXXXXX` on the signup link. Therapist signup captures
+    the code, links it back to the originating `recruit_drafts` row,
+    flips `converted_therapist_id` for analytics. Email body has a clear
+    "Reference code" footer so therapists know they're being invited.
+  - **Therapist portal analytics card**: new `/portal/therapist/analytics`
+    endpoint + UI section showing referrals received, applied count,
+    apply rate, avg match score, top patient concerns, public review
+    summary, and refer-a-colleague conversions.
+  - **Admin Referrals tab**: new `/admin/referral-analytics` endpoint
+    aggregating patient invites, therapist refer-a-colleague chains,
+    intake "How did you hear?" breakdown, and gap-recruit conversion rate.
+  - **Review research backfill**: cleared LLM-only flags and re-ran with
+    Google Places. **85/122 therapists now have real Google reviews**
+    auto-folded into match ranking; 36 found on Google with 0 reviews;
+    1 not found.
+  - Tests: `tests/test_iteration46_polish.py` (4 cases — referral
+    analytics shape, request detail breakdown, drafts converted count,
+    signup recruit_code persistence). All passing.
 - **Iter-45 (Feb 2026) — Google Places integration + draft preview + name-match flag**:
   - **Google Places API (New) integrated** (`places_client.py`). Two-call
     workflow (Text Search → Place Details) with field-mask cost control.

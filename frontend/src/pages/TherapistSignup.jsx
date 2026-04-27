@@ -90,6 +90,10 @@ export default function TherapistSignup() {
   const [searchParams] = useSearchParams();
   const inviteRequestId = searchParams.get("invite_request_id");
   const inviteCode = searchParams.get("ref");
+  // Pre-launch gap-recruit attribution: every recruit email includes
+  // `?recruit_code=XXXXXXXX` so we can track which gap-fill invite drove
+  // a signup. Sent through to the backend on submit.
+  const recruitCode = searchParams.get("recruit_code");
 
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -379,6 +383,7 @@ export default function TherapistSignup() {
         // Keep `phone` mirroring the alert phone for legacy SMS routing
         phone: data.phone_alert?.trim() || data.phone || "",
         referred_by_code: inviteCode || data.referred_by_code || null,
+        recruit_code: recruitCode || null,
       };
       const res = await api.post("/therapists/signup", payload);
       setTherapistId(res.data?.id);

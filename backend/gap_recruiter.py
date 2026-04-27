@@ -291,15 +291,21 @@ async def run_gap_recruitment(dry_run: bool = True, max_drafts: int = DRAFT_LIMI
     }
 
 
-def _build_recruit_email(candidate: dict) -> tuple[str, str]:
-    """Render the recruit email subject + HTML body for a single candidate."""
+def _build_recruit_email(candidate: dict, draft_id: str | None = None) -> tuple[str, str]:
+    """Render the recruit email subject + HTML body for a single candidate.
+
+    `draft_id` is appended as `?recruit_code=<8-char-token>` so we can attribute
+    therapist signups back to the gap-fill invite they came from.
+    """
     from email_service import _wrap, BRAND, _get_app_url
 
     first = (candidate.get("name") or "there").split(" ")[0]
     rationale = candidate.get("match_rationale") or "Your specialties align with where we're growing."
+    code = (draft_id or uuid.uuid4().hex)[:8].upper()
     signup_url = (
         f"{_get_app_url()}/therapists/join"
-        f"?utm_source=gap_recruit&utm_campaign=pre_launch"
+        f"?recruit_code={code}"
+        f"&utm_source=gap_recruit&utm_campaign=pre_launch"
     )
     inner = f"""
     <p style="font-size:16px;line-height:1.6;">Hi {first},</p>
@@ -320,6 +326,11 @@ def _build_recruit_email(candidate: dict) -> tuple[str, str]:
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">
       30-day free trial, $45/mo after — no clients, no charge. We don't sell your email.
     </p>
+    <p style="color:{BRAND['muted']};font-size:11px;line-height:1.6;border-top:1px solid #E8E5DF;padding-top:10px;margin-top:18px;">
+      You're receiving this because TheraVoca is recruiting for an underserved
+      Idaho specialty before public launch. Reference code: <code>{code}</code>.
+      You can ignore this email — we won't follow up unless you click above.
+    </p>
     """
     subject = "Idaho therapist outreach — joining TheraVoca's launch network"
     return subject, _wrap("Pre-launch invite", inner)
@@ -336,7 +347,7 @@ async def send_pending_drafts() -> dict[str, Any]:
     failed = 0
     async for d in cur:
         c = d.get("candidate") or {}
-        subject, html = _build_recruit_email(c)
+        subject, html = _build_recruit_email(c, draft_id=d.get("id"))
         try:
             await _send(c.get("email"), subject, html)
             await db.recruit_drafts.update_one(
@@ -381,7 +392,7 @@ async def send_draft_preview(limit: int = 3, ids: list[str] | None = None) -> di
     failed: list[dict] = []
     for d in rows:
         c = d.get("candidate") or {}
-        subject, html = _build_recruit_email(c)
+        subject, html = _build_recruit_email(c, draft_id=d.get("id"))
         try:
             await _send(c.get("email"), f"[PREVIEW] {subject}", html)
             await db.recruit_drafts.update_one(

@@ -68,6 +68,7 @@ async def admin_request_detail(request_id: str, _: bool = Depends(require_admin)
         raise HTTPException(404)
     notified_ids = req.get("notified_therapist_ids") or []
     notified_distances = req.get("notified_distances") or {}
+    notified_breakdowns = req.get("notified_breakdowns") or {}
     notified = []
     for tid in notified_ids:
         t = await db.therapists.find_one({"id": tid}, {"_id": 0})
@@ -76,9 +77,21 @@ async def admin_request_detail(request_id: str, _: bool = Depends(require_admin)
                 "id": t["id"],
                 "name": t["name"],
                 "email": t["email"],
+                "credential_type": t.get("credential_type"),
                 "match_score": (req.get("notified_scores") or {}).get(tid, 0),
+                "match_breakdown": notified_breakdowns.get(tid) or {},
                 "distance_miles": notified_distances.get(tid),
                 "office_locations": t.get("office_locations", []),
+                "primary_specialties": t.get("primary_specialties", []),
+                "modalities": t.get("modalities", []),
+                "cash_rate": t.get("cash_rate"),
+                "sliding_scale": t.get("sliding_scale"),
+                "insurance_accepted": t.get("insurance_accepted", []),
+                "telehealth": t.get("telehealth"),
+                "offers_in_person": t.get("offers_in_person"),
+                "review_avg": t.get("review_avg"),
+                "review_count": t.get("review_count"),
+                "years_experience": t.get("years_experience"),
             })
     apps = await db.applications.find({"request_id": request_id}, {"_id": 0}).to_list(50)
     apps.sort(key=lambda a: a["match_score"], reverse=True)
@@ -958,12 +971,111 @@ async def admin_list_gap_drafts(_: bool = Depends(require_admin)):
     sent = sum(1 for d in docs if d.get("sent"))
     pending = sum(1 for d in docs if not d.get("sent"))
     dry = sum(1 for d in docs if d.get("dry_run"))
+    converted = sum(1 for d in docs if d.get("converted_therapist_id"))
     return {
         "drafts": docs,
         "total": len(docs),
         "sent": sent,
         "pending": pending,
         "dry_run_count": dry,
+        "converted": converted,
+    }
+
+
+@router.get("/admin/referral-analytics")
+async def admin_referral_analytics(_: bool = Depends(require_admin)):
+    """Referral analytics:
+    - patient `referred_by_patient_code` chains
+    - therapist `referred_by_code` chains
+    - gap-recruit conversion rate
+    - referral_source breakdown from intake form
+    """
+    from collections import Counter
+
+    # Patient → patient referrals
+    patient_chains: Counter = Counter()
+    patient_codes_seen: dict[str, dict] = {}
+    async for r in db.requests.find(
+        {}, {"_id": 0, "patient_referral_code": 1,
+             "referred_by_patient_code": 1, "email": 1, "created_at": 1},
+    ):
+        if r.get("patient_referral_code"):
+            patient_codes_seen[r["patient_referral_code"]] = {
+                "email": r.get("email"),
+                "code": r["patient_referral_code"],
+                "created_at": r.get("created_at"),
+            }
+        if r.get("referred_by_patient_code"):
+            patient_chains[r["referred_by_patient_code"]] += 1
+
+    top_patient_referrers = []
+    for code, n in patient_chains.most_common(20):
+        meta = patient_codes_seen.get(code) or {}
+        top_patient_referrers.append({
+            "code": code,
+            "inviter_email": meta.get("email") or "—",
+            "invited_count": n,
+        })
+
+    # Therapist refer-a-colleague chains
+    therapist_chains: Counter = Counter()
+    therapist_codes: dict[str, dict] = {}
+    async for t in db.therapists.find(
+        {}, {"_id": 0, "referral_code": 1, "referred_by_code": 1,
+             "name": 1, "email": 1},
+    ):
+        if t.get("referral_code"):
+            therapist_codes[t["referral_code"]] = {
+                "name": t.get("name"), "email": t.get("email"),
+                "code": t["referral_code"],
+            }
+        if t.get("referred_by_code"):
+            therapist_chains[t["referred_by_code"]] += 1
+
+    top_therapist_referrers = []
+    for code, n in therapist_chains.most_common(20):
+        meta = therapist_codes.get(code) or {}
+        top_therapist_referrers.append({
+            "code": code,
+            "inviter_name": meta.get("name") or "—",
+            "inviter_email": meta.get("email") or "—",
+            "invited_count": n,
+        })
+
+    # Referral source breakdown from intake form
+    src_counts: Counter = Counter()
+    async for r in db.requests.find({}, {"_id": 0, "referral_source": 1}):
+        src = (r.get("referral_source") or "").strip() or "(unspecified)"
+        src_counts[src] += 1
+
+    # Gap-recruit conversion
+    drafts_total = await db.recruit_drafts.count_documents({})
+    drafts_sent = await db.recruit_drafts.count_documents({"sent": True})
+    drafts_converted = await db.recruit_drafts.count_documents(
+        {"converted_therapist_id": {"$exists": True, "$ne": None}},
+    )
+
+    return {
+        "patient_referrals": {
+            "total_invited": sum(patient_chains.values()),
+            "unique_referrers": len(patient_chains),
+            "top": top_patient_referrers,
+        },
+        "therapist_referrals": {
+            "total_invited": sum(therapist_chains.values()),
+            "unique_referrers": len(therapist_chains),
+            "top": top_therapist_referrers,
+        },
+        "referral_sources": dict(src_counts.most_common()),
+        "gap_recruit": {
+            "total_drafts": drafts_total,
+            "sent": drafts_sent,
+            "converted": drafts_converted,
+            "conversion_rate": (
+                round(drafts_converted / drafts_sent * 100, 1)
+                if drafts_sent else 0.0
+            ),
+        },
     }
 
 

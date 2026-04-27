@@ -38,6 +38,7 @@ export default function TherapistPortal() {
   const navigate = useNavigate();
   const session = getSession();
   const [data, setData] = useState(null);
+  const [analytics, setAnalytics] = useState(null);
   const [error, setError] = useState(null);
   const [sub, setSub] = useState(null);
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
@@ -89,6 +90,10 @@ export default function TherapistPortal() {
   };
 
   const loadAll = () => {
+    sessionClient()
+      .get("/portal/therapist/analytics")
+      .then((r) => setAnalytics(r.data))
+      .catch(() => {});
     return sessionClient()
       .get("/portal/therapist/referrals")
       .then((res) => {
@@ -227,6 +232,10 @@ export default function TherapistPortal() {
             <div className="mt-10 bg-white border border-[#E8E5DF] rounded-2xl p-8 text-center">
               <p className="text-[#D45D5D]">{error}</p>
             </div>
+          )}
+
+          {analytics && !error && (
+            <PortalAnalyticsCard analytics={analytics} />
           )}
 
           {!error && data === null && (
@@ -771,6 +780,92 @@ function PreviewRow({ label, value, span = 1 }) {
     <div className={span === 2 ? "sm:col-span-2" : ""}>
       <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">{label}</div>
       <div className="font-medium text-[#2B2A29]">{value || "—"}</div>
+    </div>
+  );
+}
+
+function PortalAnalyticsCard({ analytics }) {
+  const a = analytics;
+  const topics = Object.entries(a.top_referral_topics || {}).slice(0, 5);
+  return (
+    <section
+      className="mt-10 bg-white border border-[#E8E5DF] rounded-2xl p-6"
+      data-testid="portal-analytics-card"
+    >
+      <div className="flex items-baseline justify-between mb-4 flex-wrap gap-2">
+        <h2 className="font-serif-display text-xl text-[#2D4A3E]">Your stats</h2>
+        <span className="text-xs text-[#6D6A65]">All-time totals</span>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Stat label="Referrals received" value={a.invited_count} />
+        <Stat label="Applied" value={a.applied_count} hue="#2D4A3E" />
+        <Stat label="Apply rate" value={`${a.apply_rate}%`} />
+        <Stat label="Avg match score" value={`${a.avg_match_score}%`} hue="#C87965" />
+      </div>
+      {(topics.length > 0 || a.review_count > 0) && (
+        <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {topics.length > 0 && (
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-2">
+                Top patient concerns you've matched on
+              </div>
+              <ul className="space-y-1">
+                {topics.map(([t, n]) => (
+                  <li key={t} className="flex items-center justify-between text-sm">
+                    <span className="text-[#2B2A29] capitalize">{t.replace(/_/g, " ")}</span>
+                    <span className="text-[#6D6A65] tabular-nums">{n}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {a.review_count > 0 && (
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-2">
+                Public reviews on your profile
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="font-serif-display text-3xl text-[#C87965]">
+                  {a.review_avg.toFixed(1)}★
+                </span>
+                <span className="text-sm text-[#6D6A65]">
+                  from {a.review_count} review{a.review_count === 1 ? "" : "s"}
+                </span>
+              </div>
+              <p className="text-xs text-[#6D6A65] mt-1">
+                Source: {a.review_source === "google_places" ? "Google Business Profile" : "—"}.
+                Higher review counts boost your match ranking by up to +5 pts.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+      {a.referral_code && (
+        <div className="mt-5 border-t border-[#E8E5DF] pt-4 text-xs text-[#6D6A65]">
+          Refer-a-colleague code:{" "}
+          <span className="font-mono text-[#2D4A3E] bg-[#FDFBF7] border border-[#E8E5DF] rounded px-1.5 py-0.5">
+            {a.referral_code}
+          </span>
+          {" — "}
+          {a.referrals_made > 0
+            ? `${a.referrals_made} colleague${a.referrals_made === 1 ? "" : "s"} have signed up using your code.`
+            : "no signups via your code yet."}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Stat({ label, value, hue }) {
+  return (
+    <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl p-3">
+      <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">{label}</div>
+      <div
+        className="font-serif-display text-2xl mt-1"
+        style={{ color: hue || "#2D4A3E" }}
+      >
+        {value ?? "—"}
+      </div>
     </div>
   );
 }

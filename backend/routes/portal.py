@@ -103,6 +103,67 @@ async def portal_patient_requests(
     return out
 
 
+@router.get("/portal/therapist/analytics")
+async def portal_therapist_analytics(
+    session: dict[str, Any] = Depends(require_session(("therapist",))),
+):
+    """Lightweight analytics for the therapist portal: how many referrals
+    we've sent them, how many they applied to / declined, conversion rate,
+    avg match score, top specialty fits, and review summary."""
+    from collections import Counter
+
+    therapist = await db.therapists.find_one(
+        {"email": {"$regex": f"^{re.escape(session['email'])}$", "$options": "i"}},
+        {"_id": 0},
+    )
+    if not therapist:
+        raise HTTPException(404, "Therapist profile not found")
+    tid = therapist["id"]
+
+    reqs = await db.requests.find(
+        {"notified_therapist_ids": tid},
+        {"_id": 0, "id": 1, "notified_scores": 1, "presenting_issues": 1,
+         "created_at": 1, "results_sent_at": 1},
+    ).to_list(500)
+    invited = len(reqs)
+    score_sum = 0.0
+    score_count = 0
+    issues_seen: Counter = Counter()
+    for r in reqs:
+        s = (r.get("notified_scores") or {}).get(tid)
+        if s is not None:
+            score_sum += float(s)
+            score_count += 1
+        for i in (r.get("presenting_issues") or []):
+            issues_seen[i] += 1
+    avg_score = round(score_sum / score_count, 1) if score_count else 0.0
+
+    applied = await db.applications.count_documents({"therapist_id": tid})
+    declined = await db.declines.count_documents({"therapist_id": tid})
+    apply_rate = round(applied / invited * 100, 1) if invited else 0.0
+    decline_rate = round(declined / invited * 100, 1) if invited else 0.0
+
+    # Refer-a-colleague chain
+    referrals_made = await db.therapists.count_documents(
+        {"referred_by_code": therapist.get("referral_code") or "—"},
+    )
+
+    return {
+        "invited_count": invited,
+        "applied_count": applied,
+        "declined_count": declined,
+        "apply_rate": apply_rate,
+        "decline_rate": decline_rate,
+        "avg_match_score": avg_score,
+        "top_referral_topics": dict(issues_seen.most_common(8)),
+        "referrals_made": referrals_made,
+        "referral_code": therapist.get("referral_code"),
+        "review_avg": therapist.get("review_avg") or 0,
+        "review_count": therapist.get("review_count") or 0,
+        "review_source": therapist.get("review_research_source"),
+    }
+
+
 @router.get("/portal/therapist/referrals")
 async def portal_therapist_referrals(
     session: dict[str, Any] = Depends(require_session(("therapist",))),

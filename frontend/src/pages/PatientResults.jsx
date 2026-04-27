@@ -229,7 +229,10 @@ export default function PatientResults() {
                           </div>
                         </div>
                         <div className="text-xs text-[#6D6A65] mt-0.5">
-                          {t.years_experience || "—"} yrs •{" "}
+                          {t.years_experience
+                            ? `${t.years_experience} year${t.years_experience === 1 ? "" : "s"} experience`
+                            : "Experience: —"}{" "}
+                          •{" "}
                           {(t.modalities || []).slice(0, 3).join(" · ") || "—"}
                           {t.review_count >= 10 && t.review_avg >= 4.0 && (
                             <span
@@ -244,7 +247,10 @@ export default function PatientResults() {
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 mt-3 text-xs">
                           <Detail label="Format" value={formatStr} />
-                          <Detail label="Rate" value={`$${t.cash_rate || "?"}`} />
+                          <Detail
+                            label="Cash rate"
+                            value={t.cash_rate ? `$${t.cash_rate} / session` : "—"}
+                          />
                           <Detail
                             label="Sliding scale"
                             value={t.sliding_scale ? "Yes" : "No"}
@@ -302,15 +308,28 @@ export default function PatientResults() {
                               </div>
                             </div>
                           )}
-                          <Detail
-                            label="Insurance"
-                            value={
-                              (t.insurance_accepted || []).length > 0
-                                ? `${t.insurance_accepted.length} plans`
-                                : "Cash / OON"
+                          {(() => {
+                            const plans = t.insurance_accepted || [];
+                            if (plans.length === 0) {
+                              return (
+                                <Detail
+                                  label="Insurance"
+                                  value={`Cash only — $${t.cash_rate || "?"}/session`}
+                                  span={2}
+                                />
+                              );
                             }
-                            span={2}
-                          />
+                            // Show first 4 plans inline + count for any remainder.
+                            const head = plans.slice(0, 4).join(", ");
+                            const tailN = Math.max(0, plans.length - 4);
+                            return (
+                              <Detail
+                                label="Insurance"
+                                value={tailN > 0 ? `${head} +${tailN} more` : head}
+                                span={2}
+                              />
+                            );
+                          })()}
                           {(t.languages_spoken || []).length > 0 && (
                             <Detail
                               label="Languages"

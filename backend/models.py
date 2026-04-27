@@ -63,6 +63,7 @@ class TherapistSignup(BaseModel):
     credential_type: Optional[str] = ""
     referral_code: Optional[str] = None  # auto-issued on signup, used for "refer a colleague"
     referred_by_code: Optional[str] = None  # captured from invite link
+    recruit_code: Optional[str] = None  # captured from gap-recruit invite link
     notify_email: bool = True
     notify_sms: bool = True
 

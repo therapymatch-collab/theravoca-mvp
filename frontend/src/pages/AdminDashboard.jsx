@@ -24,6 +24,7 @@ import {
   Search,
   Trash2,
   Copy,
+  Share2,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
@@ -145,6 +146,9 @@ export default function AdminDashboard() {
   const [recruitDrafts, setRecruitDrafts] = useState(null);
   const [recruitDraftsLoading, setRecruitDraftsLoading] = useState(false);
   const [generatingDrafts, setGeneratingDrafts] = useState(false);
+  // Patient + therapist referral analytics.
+  const [referralAnalytics, setReferralAnalytics] = useState(null);
+  const [referralAnalyticsLoading, setReferralAnalyticsLoading] = useState(false);
 
   // Per-tab search query — filters whatever list is open.
   const [search, setSearch] = useState("");
@@ -531,6 +535,18 @@ export default function AdminDashboard() {
     }
   }, [client, loadRecruitDrafts]);
 
+  const loadReferralAnalytics = useCallback(async () => {
+    setReferralAnalyticsLoading(true);
+    try {
+      const res = await client.get("/admin/referral-analytics");
+      setReferralAnalytics(res.data);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Couldn't load referral analytics");
+    } finally {
+      setReferralAnalyticsLoading(false);
+    }
+  }, [client]);
+
   const convertInvite = useCallback(
     async (invite) => {
       const inviteId = invite?.id;
@@ -720,6 +736,22 @@ export default function AdminDashboard() {
                   count={coverageGap?.gap_summary?.total ?? null}
                   testid="tab-coverage-gap"
                   highlight={(coverageGap?.gap_summary?.critical ?? 0) > 0}
+                />
+                <TabBtn
+                  active={tab === "referrals"}
+                  onClick={() => {
+                    setTab("referrals");
+                    if (!referralAnalytics) loadReferralAnalytics();
+                  }}
+                  icon={<Share2 size={14} />}
+                  label="Referrals"
+                  count={
+                    referralAnalytics
+                      ? (referralAnalytics.patient_referrals.total_invited +
+                         referralAnalytics.therapist_referrals.total_invited)
+                      : null
+                  }
+                  testid="tab-referrals"
                 />
               </div>
 
@@ -1349,6 +1381,14 @@ export default function AdminDashboard() {
                 </>
               )}
 
+              {tab === "referrals" && (
+                <ReferralAnalyticsPanel
+                  data={referralAnalytics}
+                  loading={referralAnalyticsLoading}
+                  onReload={loadReferralAnalytics}
+                />
+              )}
+
               {tab === "email_templates" && (
                 <div className="mt-6 space-y-3" data-testid="email-templates-list">
                   {emailTemplates.length === 0 ? (
@@ -1484,6 +1524,28 @@ export default function AdminDashboard() {
                   data-testid="edit-name"
                 />
               </FieldRow>
+              <FieldRow label="Credential type">
+                <select
+                  value={editTherapist.credential_type || ""}
+                  onChange={(e) =>
+                    setEditTherapist({ ...editTherapist, credential_type: e.target.value })
+                  }
+                  className="w-full bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg p-2 text-sm"
+                  data-testid="edit-credential-type"
+                >
+                  <option value="">Select…</option>
+                  <option value="LCSW">LCSW</option>
+                  <option value="LPC">LPC</option>
+                  <option value="LCPC">LCPC</option>
+                  <option value="LMFT">LMFT</option>
+                  <option value="LMHC">LMHC</option>
+                  <option value="PsyD">Psychologist (PsyD)</option>
+                  <option value="PhD">Psychologist (PhD)</option>
+                  <option value="psychiatrist">Psychiatrist (MD)</option>
+                  <option value="Other">Other</option>
+                </select>
+              </FieldRow>
+              <SectionHeader color="#2D4A3E" label="Contact" />
               <div className="grid grid-cols-2 gap-3">
                 <FieldRow label="Email">
                   <Input
@@ -1516,6 +1578,7 @@ export default function AdminDashboard() {
                   />
                 </FieldRow>
               </div>
+              <SectionHeader color="#C87965" label="License & credentials" />
               <div className="grid grid-cols-2 gap-3">
                 <FieldRow label="License #">
                   <Input
@@ -1561,6 +1624,7 @@ export default function AdminDashboard() {
                   <p className="text-xs text-[#6D6A65]">No license image on file.</p>
                 )}
               </FieldRow>
+              <SectionHeader color="#3A6E50" label="Practice & rates" />
               <div className="grid grid-cols-2 gap-3">
                 <FieldRow label="Cash rate ($)">
                   <Input
@@ -1677,6 +1741,7 @@ export default function AdminDashboard() {
                   <span className="text-sm">Pending approval</span>
                 </label>
               </div>
+              <SectionHeader color="#7A5895" label="Clinical fit" />
               <FieldRow label="Bio">
                 <Textarea
                   rows={3}
@@ -1686,25 +1751,6 @@ export default function AdminDashboard() {
                   }
                   data-testid="edit-bio"
                 />
-              </FieldRow>
-              <FieldRow label="Credential type">
-                <select
-                  value={editTherapist.credential_type || ""}
-                  onChange={(e) =>
-                    setEditTherapist({ ...editTherapist, credential_type: e.target.value })
-                  }
-                  className="w-full bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg p-2 text-sm"
-                  data-testid="edit-credential-type"
-                >
-                  <option value="">Select…</option>
-                  <option value="psychologist">Psychologist (PhD/PsyD)</option>
-                  <option value="lcsw">LCSW</option>
-                  <option value="lpc">LPC / LCPC / LPCC</option>
-                  <option value="lmft">LMFT</option>
-                  <option value="lmhc">LMHC</option>
-                  <option value="psychiatrist">Psychiatrist (MD)</option>
-                  <option value="other">Other</option>
-                </select>
               </FieldRow>
               <FieldRow label="Primary specialties (max 2)">
                 <PillPicker
@@ -1749,6 +1795,7 @@ export default function AdminDashboard() {
                   testid="edit-modality-offering"
                 />
               </FieldRow>
+              <SectionHeader color="#D45D5D" label="Insurance & sessions" />
               <FieldRow label="Insurances accepted">
                 <PillPicker
                   items={INSURERS_LIST}
@@ -1757,6 +1804,7 @@ export default function AdminDashboard() {
                   testid="edit-insurance-accepted"
                 />
               </FieldRow>
+              <SectionHeader color="#5C7DB6" label="Locations" />
               <FieldRow label="Office cities">
                 <PillPicker
                   items={IDAHO_CITY_LIST}
@@ -1969,7 +2017,7 @@ export default function AdminDashboard() {
       </Dialog>
 
       <Dialog open={!!openId} onOpenChange={(o) => !o && setOpenId(null)}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto bg-white border-[#E8E5DF]">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto bg-white border-[#E8E5DF]">
           <DialogHeader>
             <DialogTitle className="font-serif-display text-2xl text-[#2D4A3E]">
               Request detail
@@ -1979,30 +2027,20 @@ export default function AdminDashboard() {
             <Loader2 className="animate-spin mx-auto my-8 text-[#2D4A3E]" />
           ) : (
             <div className="space-y-5">
-              <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl p-4">
-                <div className="text-xs uppercase tracking-wider text-[#6D6A65] mb-2">
-                  Patient
-                </div>
-                <div className="font-mono text-sm">{detail.request.email}</div>
-                <div className="text-sm mt-2 text-[#2B2A29]">
-                  Age {detail.request.client_age} • {detail.request.location_state}{" "}
-                  • {detail.request.session_format} •{" "}
-                  {detail.request.payment_type === "cash"
-                    ? `$${detail.request.budget || "?"} cash`
-                    : detail.request.insurance_name || "insurance"}
-                </div>
-                <p className="text-sm mt-3 text-[#2B2A29] whitespace-pre-wrap">
-                  {detail.request.presenting_issues}
-                </p>
-              </div>
+              <RequestFullBrief request={detail.request} />
 
               <div className="flex flex-wrap gap-3">
                 <button
-                  className="tv-btn-primary !py-2 !px-4 text-sm"
+                  className="tv-btn-primary !py-2 !px-4 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                   onClick={() => triggerResults(detail.request.id)}
+                  disabled={!!detail.request.results_sent_at}
                   data-testid="trigger-results-btn"
+                  title={detail.request.results_sent_at
+                    ? `Results delivered at ${detail.request.results_sent_at}`
+                    : "Re-run matching, email therapist invites, and release the 24h hold so the patient sees results immediately"}
                 >
-                  <Send size={14} className="inline mr-1.5" /> Email matches now
+                  <Send size={14} className="inline mr-1.5" />
+                  {detail.request.results_sent_at ? "Matches sent to patient" : "Send matches now"}
                 </button>
                 <button
                   className="tv-btn-secondary !py-2 !px-4 text-sm"
@@ -2011,19 +2049,6 @@ export default function AdminDashboard() {
                 >
                   <RotateCw size={14} className="inline mr-1.5" /> Re-run matching
                 </button>
-                <button
-                  className="tv-btn-secondary !py-2 !px-4 text-sm border-[#C87965] text-[#C87965]"
-                  onClick={() => releaseResults(detail.request.id)}
-                  data-testid="release-results-btn"
-                  disabled={!!detail.request.results_released_at}
-                  title={detail.request.results_released_at
-                    ? `Already released at ${detail.request.results_released_at}`
-                    : "Manually release the 24h hold so the patient can see therapist responses"}
-                >
-                  {detail.request.results_released_at
-                    ? "Results released"
-                    : "Release results to patient"}
-                </button>
                 <ThresholdControl
                   current={detail.request.threshold}
                   onChange={(t) => updateThreshold(detail.request.id, t)}
@@ -2031,34 +2056,20 @@ export default function AdminDashboard() {
               </div>
 
               <div>
-                <h4 className="font-semibold text-[#2B2A29] mb-2">
-                  Notified therapists ({detail.notified.length})
-                </h4>
-                <div className="space-y-1.5 max-h-60 overflow-y-auto">
-                  {detail.notified.map((t) => (
-                    <div
-                      key={t.id}
-                      className="flex items-center justify-between text-sm border border-[#E8E5DF] rounded-lg px-3 py-2"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium text-[#2B2A29] truncate">{t.name}</div>
-                        <div className="text-xs text-[#6D6A65] flex flex-wrap gap-x-3">
-                          <span>{t.email}</span>
-                          {t.distance_miles != null && (
-                            <span className="text-[#C87965]">
-                              {t.distance_miles} mi away
-                            </span>
-                          )}
-                          {t.office_locations?.length > 0 && (
-                            <span>{t.office_locations.join(", ")}</span>
-                          )}
-                        </div>
-                      </div>
-                      <span className="font-mono text-xs bg-[#2D4A3E]/10 text-[#2D4A3E] px-2 py-0.5 rounded ml-2 shrink-0">
-                        {Math.round(t.match_score)}%
-                      </span>
-                    </div>
-                  ))}
+                <div className="flex items-baseline justify-between gap-3 mb-3">
+                  <h4 className="font-semibold text-[#2B2A29]">
+                    Matched providers ({detail.notified.length})
+                  </h4>
+                  <p className="text-xs text-[#6D6A65]">
+                    Sorted by match score • click any row to see the breakdown
+                  </p>
+                </div>
+                <div className="space-y-2 max-h-[440px] overflow-y-auto" data-testid="matched-providers-list">
+                  {[...detail.notified]
+                    .sort((a, b) => (b.match_score || 0) - (a.match_score || 0))
+                    .map((t) => (
+                      <MatchedProviderCard key={t.id} t={t} />
+                    ))}
                 </div>
               </div>
 
@@ -2096,6 +2107,304 @@ export default function AdminDashboard() {
         </DialogContent>
       </Dialog>
       <Footer />
+    </div>
+  );
+}
+
+function RequestFullBrief({ request }) {
+  if (!request) return null;
+  const fields = [
+    { label: "Patient email", value: request.email },
+    { label: "Phone", value: request.phone || "—" },
+    { label: "Location", value: `${request.location_city || ""} ${request.location_state || ""} ${request.location_zip || ""}`.trim() || "—" },
+    { label: "Client age / type", value: `${request.client_age || "—"} · ${request.client_type || "—"}` },
+    { label: "Age group", value: request.age_group || "—" },
+    { label: "Session format", value: request.session_format || request.modality_preference || "—" },
+    { label: "Urgency", value: request.urgency || "—" },
+    { label: "Prior therapy", value: request.prior_therapy || "—" },
+    { label: "Experience pref", value: Array.isArray(request.experience_preference) ? request.experience_preference.join(", ") : (request.experience_preference || "—") },
+    { label: "Gender pref", value: request.gender_preference || "no_pref" },
+    { label: "Style pref", value: Array.isArray(request.style_preference) ? request.style_preference.join(", ") : (request.style_preference || "—") },
+    { label: "Modality pref", value: Array.isArray(request.modality_preferences) ? request.modality_preferences.join(", ") : (request.modality_preferences || "—") },
+    { label: "Payment", value: request.payment_type === "cash" ? `Cash $${request.budget || "?"}` : (request.insurance_name || "Insurance") },
+    { label: "Threshold", value: (() => {
+      const t = request.threshold;
+      if (t == null) return "—";
+      const num = Number(t);
+      // Backwards-compat: thresholds stored as 0–1 fraction OR 0–100 integer.
+      const pct = num <= 1 ? num * 100 : num;
+      return `${Math.round(pct)}%`;
+    })() },
+    { label: "Status", value: request.status || "—" },
+    { label: "Referral source", value: request.referral_source || "—" },
+    { label: "Referred by code", value: request.referred_by_patient_code || "—" },
+    { label: "SMS opt-in", value: request.sms_opt_in ? "Yes" : "No" },
+    { label: "Created", value: request.created_at ? new Date(request.created_at).toLocaleString() : "—" },
+    { label: "Matched", value: request.matched_at ? new Date(request.matched_at).toLocaleString() : "—" },
+    { label: "Results sent", value: request.results_sent_at ? new Date(request.results_sent_at).toLocaleString() : "—" },
+  ];
+  const issues = Array.isArray(request.presenting_issues)
+    ? request.presenting_issues.join(", ")
+    : (request.presenting_issues || "—");
+  const availability = Array.isArray(request.availability_windows)
+    ? request.availability_windows.join(", ")
+    : (request.availability_windows || "—");
+  return (
+    <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl p-5 space-y-4" data-testid="request-full-brief">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-sm">
+        {fields.map((f) => (
+          <div key={f.label}>
+            <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">{f.label}</div>
+            <div className="text-[#2B2A29] break-words">{f.value || "—"}</div>
+          </div>
+        ))}
+      </div>
+      <div className="border-t border-[#E8E5DF] pt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Presenting issues</div>
+          <div className="text-[#2B2A29] mt-0.5 leading-relaxed">{issues}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Availability windows</div>
+          <div className="text-[#2B2A29] mt-0.5">{availability}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MatchedProviderCard({ t }) {
+  const [open, setOpen] = useState(false);
+  const breakdown = t.match_breakdown || {};
+  const breakdownEntries = Object.entries(breakdown).filter(([, v]) => v > 0);
+  return (
+    <div
+      className="border border-[#E8E5DF] rounded-xl bg-white overflow-hidden"
+      data-testid={`matched-provider-${t.id}`}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full text-left px-4 py-3 flex items-center justify-between gap-3 hover:bg-[#FDFBF7] transition"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className="font-medium text-[#2B2A29] truncate">{t.name}</span>
+            <span className="text-xs text-[#6D6A65]">{t.credential_type || "—"}</span>
+            {t.review_count >= 10 && t.review_avg >= 4.0 && (
+              <span className="text-[10px] text-[#C87965]">
+                ★{t.review_avg.toFixed(1)} · {t.review_count}
+              </span>
+            )}
+          </div>
+          <div className="text-xs text-[#6D6A65] mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+            <span>{t.email}</span>
+            {t.distance_miles != null && (
+              <span className="text-[#C87965]">{t.distance_miles} mi</span>
+            )}
+            {(t.office_locations || []).length > 0 && (
+              <span>{t.office_locations.join(", ")}</span>
+            )}
+          </div>
+        </div>
+        <span className="font-mono text-xs bg-[#2D4A3E] text-white px-2.5 py-0.5 rounded shrink-0">
+          {Math.round(t.match_score)}%
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-[#E8E5DF] bg-[#FDFBF7] px-4 py-3 text-xs space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1.5">
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Years exp</div>
+              <div className="text-[#2B2A29]">{t.years_experience ?? "—"}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Cash rate</div>
+              <div className="text-[#2B2A29]">${t.cash_rate ?? "—"}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Sliding scale</div>
+              <div className="text-[#2B2A29]">{t.sliding_scale ? "Yes" : "No"}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Telehealth</div>
+              <div className="text-[#2B2A29]">{t.telehealth ? "Yes" : "No"}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">In-person</div>
+              <div className="text-[#2B2A29]">{t.offers_in_person ? "Yes" : "No"}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Plans</div>
+              <div className="text-[#2B2A29]">{(t.insurance_accepted || []).length || 0}</div>
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Specialties</div>
+            <div className="text-[#2B2A29]">{(t.primary_specialties || []).join(" · ") || "—"}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Modalities</div>
+            <div className="text-[#2B2A29]">{(t.modalities || []).join(" · ") || "—"}</div>
+          </div>
+          {breakdownEntries.length > 0 && (
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-1">
+                Score breakdown ({Math.round(breakdownEntries.reduce((a, [, v]) => a + v, 0))} pts)
+              </div>
+              <div className="grid grid-cols-2 gap-1">
+                {breakdownEntries.map(([axis, pts]) => (
+                  <div key={axis} className="flex items-center justify-between bg-white border border-[#E8E5DF] rounded px-2 py-1">
+                    <span className="text-[#6D6A65]">{axis.replace(/_/g, " ")}</span>
+                    <span className="font-mono text-[#2D4A3E]">+{pts}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SectionHeader({ color, label }) {
+  return (
+    <div
+      className="flex items-center gap-2 mt-2 mb-1"
+      data-testid={`section-${label.toLowerCase().replace(/\s+/g, "-")}`}
+    >
+      <div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
+      <span className="text-[11px] uppercase tracking-wider font-semibold" style={{ color }}>
+        {label}
+      </span>
+      <div className="flex-1 h-px" style={{ backgroundColor: `${color}33` }} />
+    </div>
+  );
+}
+
+function ReferralAnalyticsPanel({ data, loading, onReload }) {
+  if (loading || !data) {
+    return (
+      <div className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl p-12 text-center text-[#6D6A65]">
+        <Loader2 className="animate-spin mx-auto mb-3 text-[#2D4A3E]" />
+        Loading referral analytics…
+      </div>
+    );
+  }
+  const { patient_referrals: pr, therapist_referrals: tr, referral_sources: srcs, gap_recruit: gr } = data;
+  return (
+    <div className="mt-6 space-y-6" data-testid="referral-analytics-panel">
+      <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-5 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="font-serif-display text-2xl text-[#2D4A3E] leading-tight">
+            Referral analytics
+          </h2>
+          <p className="text-sm text-[#6D6A65] mt-1.5 leading-relaxed max-w-2xl">
+            Tracks patient-to-patient invites, therapist refer-a-colleague chains,
+            intake-form &ldquo;how did you hear&rdquo; breakdown, and gap-recruit
+            conversion attribution.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onReload}
+          className="text-xs text-[#2D4A3E] underline hover:text-[#3A5E50]"
+          data-testid="referrals-refresh-btn"
+        >
+          Refresh
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <FactStat label="Patient referrals" value={pr.total_invited} />
+        <FactStat label="Patient referrers" value={pr.unique_referrers} />
+        <FactStat label="Therapist referrals" value={tr.total_invited} />
+        <FactStat label="Therapist referrers" value={tr.unique_referrers} />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-white border border-[#E8E5DF] rounded-2xl p-5">
+          <div className="text-xs uppercase tracking-wider text-[#6D6A65] mb-3">
+            Top patient referrers
+          </div>
+          {pr.top.length === 0 ? (
+            <div className="text-sm text-[#6D6A65]">No patient invites yet.</div>
+          ) : (
+            <ul className="space-y-1.5">
+              {pr.top.map((r) => (
+                <li key={r.code} className="flex items-center justify-between text-sm gap-2">
+                  <span className="font-mono text-[11px] text-[#6D6A65] shrink-0">{r.code}</span>
+                  <span className="flex-1 truncate text-[#2B2A29]">{r.inviter_email}</span>
+                  <span className="font-mono text-[#2D4A3E] tabular-nums">{r.invited_count}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="bg-white border border-[#E8E5DF] rounded-2xl p-5">
+          <div className="text-xs uppercase tracking-wider text-[#6D6A65] mb-3">
+            Top therapist referrers
+          </div>
+          {tr.top.length === 0 ? (
+            <div className="text-sm text-[#6D6A65]">No therapist invites yet.</div>
+          ) : (
+            <ul className="space-y-1.5">
+              {tr.top.map((r) => (
+                <li key={r.code} className="flex items-center justify-between text-sm gap-2">
+                  <span className="font-mono text-[11px] text-[#6D6A65] shrink-0">{r.code}</span>
+                  <span className="flex-1 truncate text-[#2B2A29]">{r.inviter_name}</span>
+                  <span className="font-mono text-[#2D4A3E] tabular-nums">{r.invited_count}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white border border-[#E8E5DF] rounded-2xl p-5">
+        <div className="text-xs uppercase tracking-wider text-[#6D6A65] mb-3">
+          Intake &ldquo;How did you hear?&rdquo; breakdown
+        </div>
+        {Object.keys(srcs).length === 0 ? (
+          <div className="text-sm text-[#6D6A65]">No requests submitted yet.</div>
+        ) : (
+          <ul className="space-y-1.5">
+            {Object.entries(srcs).map(([k, v]) => {
+              const total = Object.values(srcs).reduce((s, n) => s + n, 0) || 1;
+              const pct = Math.round((v / total) * 100);
+              return (
+                <li key={k} className="flex items-center gap-3 text-sm">
+                  <div className="flex-1 min-w-0 truncate text-[#2B2A29]">{k}</div>
+                  <div className="w-40 h-1.5 rounded-full bg-[#FDFBF7] border border-[#E8E5DF] overflow-hidden">
+                    <div className="h-full bg-[#2D4A3E]" style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="w-12 text-right text-[#6D6A65] tabular-nums">
+                    {v} ({pct}%)
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      <div className="bg-white border border-[#E8E5DF] rounded-2xl p-5">
+        <div className="text-xs uppercase tracking-wider text-[#6D6A65] mb-3">
+          Gap-recruit conversion (pre-launch)
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <FactStat label="Drafts queued" value={gr.total_drafts} />
+          <FactStat label="Sent" value={gr.sent} />
+          <FactStat label="Converted to signups" value={gr.converted} />
+          <FactStat label="Conversion rate" value={`${gr.conversion_rate}%`} />
+        </div>
+        {gr.sent === 0 && (
+          <p className="text-xs text-[#6D6A65] mt-3 italic">
+            Conversion tracking activates once you go live and send real (non-dry-run) recruit emails.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

@@ -34,12 +34,35 @@ async def therapist_signup(payload: TherapistSignup):
     data["offers_in_person"] = data["modality_offering"] in ("in_person", "both")
     # Issue a stable refer-a-colleague code (8 chars, base32-ish)
     referral_code = data.get("referral_code") or uuid.uuid4().hex[:8].upper()
+
+    # Gap-recruit attribution: if the signup came in via a recruit_code, find
+    # the originating recruit_drafts row, mark it `converted=true`, and store
+    # the code on the therapist for future analytics.
+    recruit_code = (data.pop("recruit_code", None) or "").strip().upper()
+    converted_draft_id: str | None = None
+    if recruit_code:
+        draft = await db.recruit_drafts.find_one(
+            {"id": {"$regex": f"^{recruit_code.lower()}", "$options": "i"}},
+            {"_id": 0, "id": 1},
+        )
+        if draft:
+            converted_draft_id = draft["id"]
+            await db.recruit_drafts.update_one(
+                {"id": converted_draft_id},
+                {"$set": {
+                    "converted_therapist_id": tid,
+                    "converted_at": _now_iso(),
+                }},
+            )
+
     doc = {
         "id": tid,
         **data,
         "referral_code": referral_code,
         "office_geos": office_geos,
-        "source": "signup",
+        "source": "signup" if not recruit_code else "gap_recruit_signup",
+        "recruit_code": recruit_code or None,
+        "recruit_draft_id": converted_draft_id,
         "is_active": True,
         "pending_approval": True,
         "subscription_status": "incomplete",
@@ -52,8 +75,8 @@ async def therapist_signup(payload: TherapistSignup):
     await db.therapists.insert_one(doc.copy())
     asyncio.create_task(send_therapist_signup_received(payload.email, payload.name))
     logger.info(
-        "New therapist signup: %s (%s) with %d geocoded offices",
-        payload.email, tid, len(office_geos),
+        "New therapist signup: %s (%s) with %d geocoded offices, recruit_code=%s",
+        payload.email, tid, len(office_geos), recruit_code or "—",
     )
     return {"id": tid, "status": "pending_approval"}
 
