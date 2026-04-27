@@ -162,6 +162,8 @@ async def admin_update_therapist(
         "next_7_day_capacity", "responsiveness_score", "top_responder",
         "stripe_customer_id", "subscription_status", "trial_ends_at",
         "current_period_end",
+        "review_avg", "review_count", "review_sources",
+        "referral_code", "referred_by_code",
     }
     update = {k: v for k, v in (payload or {}).items() if k in allowed}
     if not update:
@@ -346,6 +348,48 @@ async def admin_export_therapists_csv(_: bool = Depends(require_admin)):
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=theravoca_therapists.csv"},
     )
+
+
+@router.post("/admin/outreach/run/{request_id}")
+async def admin_run_outreach(request_id: str, _: bool = Depends(require_admin)):
+    """Trigger LLM outreach agent for a single request. Idempotent."""
+    from outreach_agent import run_outreach_for_request
+    return await run_outreach_for_request(request_id)
+
+
+@router.post("/admin/outreach/run-all")
+async def admin_run_outreach_all(_: bool = Depends(require_admin)):
+    """Run LLM outreach agent on all recent requests with outreach gap."""
+    from outreach_agent import run_outreach_for_all_pending
+    return await run_outreach_for_all_pending()
+
+
+@router.get("/admin/outreach")
+async def admin_list_outreach(_: bool = Depends(require_admin)):
+    docs = await db.outreach_invites.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return {"invites": docs, "total": len(docs)}
+
+
+@router.post("/admin/therapists/{therapist_id}/reviews")
+async def admin_update_therapist_reviews(
+    therapist_id: str, payload: dict, _: bool = Depends(require_admin),
+):
+    """Manually attach review data to a therapist (manual-entry stub for the
+    web-scraping pipeline). `payload`: {avg, count, sources: [{platform, url, rating}]}."""
+    avg = float(payload.get("avg") or 0)
+    cnt = int(payload.get("count") or 0)
+    sources = payload.get("sources") or []
+    if not 0 <= avg <= 5 or cnt < 0:
+        raise HTTPException(400, "Invalid review data")
+    await db.therapists.update_one(
+        {"id": therapist_id},
+        {"$set": {
+            "review_avg": avg, "review_count": cnt, "review_sources": sources,
+            "review_updated_at": _now_iso(),
+            "updated_at": _now_iso(),
+        }},
+    )
+    return {"ok": True, "review_avg": avg, "review_count": cnt}
 
 
 @router.post("/admin/seed/reset")

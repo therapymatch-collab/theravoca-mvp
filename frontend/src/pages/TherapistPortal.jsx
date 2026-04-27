@@ -12,6 +12,7 @@ import {
   CreditCard,
   Settings,
   Clock,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header, Footer } from "@/components/SiteShell";
@@ -424,6 +425,40 @@ export default function TherapistPortal() {
               </div>
             );
           })()}
+
+          {/* Refer-a-colleague tile (always visible for active therapists) */}
+          {therapist?.referral_code && !isPending && (
+            <div
+              className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl p-5 flex items-start justify-between gap-4 flex-wrap"
+              data-testid="refer-tile"
+            >
+              <div className="flex items-start gap-3 flex-1 min-w-[220px]">
+                <Sparkles size={18} className="text-[#C87965] mt-1 shrink-0" />
+                <div>
+                  <div className="text-sm font-semibold text-[#2B2A29]">
+                    Know a colleague? Send them an invite.
+                  </div>
+                  <p className="text-xs text-[#6D6A65] mt-1 leading-relaxed">
+                    Therapists who join via your link skip the waitlist on referrals
+                    that match their first profile setup.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = `${window.location.origin}/therapists/join?ref=${therapist.referral_code}`;
+                  navigator.clipboard.writeText(url).then(() => {
+                    toast.success("Invite link copied!");
+                  }).catch(() => toast.error("Couldn't copy link"));
+                }}
+                className="tv-btn-secondary !py-2 !px-4 text-sm shrink-0"
+                data-testid="refer-copy-btn"
+              >
+                Copy invite link
+              </button>
+            </div>
+          )}
 
           {/* Empty state for approved therapists */}
           {!isPending && data?.referrals?.length === 0 && (

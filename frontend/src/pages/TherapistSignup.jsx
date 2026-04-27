@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { CheckCircle2, ArrowRight, X, Plus, Camera } from "lucide-react";
+import { CheckCircle2, ArrowRight, X, Plus, Camera, Sparkles } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { api } from "@/lib/api";
 import { IDAHO_INSURERS } from "@/lib/insurers";
@@ -86,6 +86,10 @@ const GENDERS = [
 ];
 
 export default function TherapistSignup() {
+  const [searchParams] = useSearchParams();
+  const inviteRequestId = searchParams.get("invite_request_id");
+  const inviteCode = searchParams.get("ref");
+
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [data, setData] = useState({
@@ -214,6 +218,7 @@ export default function TherapistSignup() {
         ...data,
         // Keep `phone` mirroring the alert phone for legacy SMS routing
         phone: data.phone_alert?.trim() || data.phone || "",
+        referred_by_code: inviteCode || data.referred_by_code || null,
       };
       const res = await api.post("/therapists/signup", payload);
       setTherapistId(res.data?.id);
@@ -426,6 +431,28 @@ export default function TherapistSignup() {
         <section className="py-14">
           <div className="max-w-3xl mx-auto px-5 sm:px-8">
             <div className="bg-white border border-[#E8E5DF] rounded-3xl p-6 sm:p-10">
+              {(inviteRequestId || inviteCode) && (
+                <div
+                  className="mb-6 bg-[#FDF7EC] border border-[#E8DCC1] rounded-2xl p-4 flex items-start gap-3"
+                  data-testid="invite-banner"
+                >
+                  <Sparkles size={18} className="text-[#C87965] mt-0.5 shrink-0" />
+                  <div className="text-sm text-[#2B2A29] leading-relaxed">
+                    {inviteRequestId ? (
+                      <>
+                        <strong>You've been invited to apply</strong> for a specific
+                        patient referral. Complete your profile and you'll be
+                        auto-matched the moment you go live.
+                      </>
+                    ) : (
+                      <>
+                        <strong>Invited by a colleague.</strong> Welcome — you'll
+                        start with the same 30-day free trial as everyone else.
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
               <h2 className="font-serif-display text-3xl text-[#2D4A3E]">
                 Tell us about your practice
               </h2>

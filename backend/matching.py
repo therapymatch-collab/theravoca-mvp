@@ -363,6 +363,15 @@ def score_therapist(t: dict, r: dict) -> dict[str, Any]:
         "payment_fit": _score_payment_fit(t, r),
         "modality_pref": _score_modality_pref(t, r),
     }
+    # Reputation boost — verified online reviews ≥ 4.5★ adds +5 (out of 100).
+    review_avg = float(t.get("review_avg") or 0)
+    review_count = int(t.get("review_count") or 0)
+    if review_avg >= 4.5 and review_count >= 3:
+        breakdown["reviews"] = 5
+    elif review_avg >= 4.0 and review_count >= 3:
+        breakdown["reviews"] = 2
+    else:
+        breakdown["reviews"] = 0
     total = round(min(100.0, sum(breakdown.values())), 1)
     return {"total": total, "breakdown": breakdown, "filtered": False}
 

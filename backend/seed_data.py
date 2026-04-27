@@ -254,6 +254,7 @@ def generate_therapist(idx: int) -> dict:
         "id": str(uuid.uuid4()),
         "name": name,
         "email": email,
+        "referral_code": hashlib.sha1(f"{first}-{last}-{idx}".encode()).hexdigest()[:8].upper(),
         "phone": phone_alert,
         "phone_alert": phone_alert,
         "office_phone": office_phone,

@@ -1,6 +1,7 @@
 """Helpers for TheraVoca: time, summaries, matching, results delivery."""
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -185,6 +186,13 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
         "Matched request %s -> notified %d new (total %d, outreach gap %d) at threshold>=%s",
         request_id, len(new_matches), notified_total, outreach_needed_count, threshold,
     )
+    # Auto-fire LLM outreach in background if we have a gap to fill
+    if outreach_needed_count > 0 and os.environ.get("OUTREACH_AUTO_RUN", "true").lower() == "true":
+        try:
+            from outreach_agent import run_outreach_for_request
+            asyncio.create_task(run_outreach_for_request(request_id))
+        except Exception as e:
+            logger.warning("Could not schedule outreach for %s: %s", request_id, e)
     return {
         "notified_new": len(new_matches),
         "notified_total": notified_total,

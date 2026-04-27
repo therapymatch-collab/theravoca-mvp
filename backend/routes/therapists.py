@@ -32,9 +32,12 @@ async def therapist_signup(payload: TherapistSignup):
     data = payload.model_dump()
     data["telehealth"] = data["modality_offering"] in ("telehealth", "both")
     data["offers_in_person"] = data["modality_offering"] in ("in_person", "both")
+    # Issue a stable refer-a-colleague code (8 chars, base32-ish)
+    referral_code = data.get("referral_code") or uuid.uuid4().hex[:8].upper()
     doc = {
         "id": tid,
         **data,
+        "referral_code": referral_code,
         "office_geos": office_geos,
         "source": "signup",
         "is_active": True,
