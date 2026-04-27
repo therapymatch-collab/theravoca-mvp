@@ -575,8 +575,25 @@ export default function TherapistSignup() {
             </div>
           </div>
         </section>
-        <section className="border-b border-[#E8E5DF] py-12 bg-white">
+        <section className="border-b border-[#E8E5DF] py-14 bg-white">
           <div className="max-w-5xl mx-auto px-5 sm:px-8">
+            <div className="text-center mb-10 max-w-2xl mx-auto">
+              <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] mb-3">
+                Why join TheraVoca
+              </p>
+              <h2 className="font-serif-display text-3xl sm:text-4xl text-[#2D4A3E] leading-[1.1]">
+                Built for therapists who want to grow{" "}
+                <em className="not-italic text-[#C87965]">slowly and well</em> —
+                not chase clicks.
+              </h2>
+              <p className="mt-4 text-[#2B2A29]/80 leading-relaxed">
+                We're an Idaho-focused referral network designed by clinicians,
+                for clinicians. Every part of the system is built around
+                <strong> protecting your time, your privacy, and the
+                therapeutic alliance</strong> — not maximizing the number of
+                referrals we can spam you with.
+              </p>
+            </div>
             <ul className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm text-[#2B2A29]">
               {[
                 {
@@ -595,10 +612,26 @@ export default function TherapistSignup() {
                   t: "30-day free trial, then $45/month",
                   d: "Cancel anytime. No setup fees, no per-referral charges, no hidden costs — and patients reach out directly once you opt in.",
                 },
+                {
+                  t: "Hyper-local to Idaho",
+                  d: "We're not another national directory. Every patient has a real Idaho ZIP — our matching engine scores office distance, drive time, and local insurance plans before notifying you.",
+                },
+                {
+                  t: "Transparent matching",
+                  d: "Every referral comes with a plain-English breakdown of why we matched you — and a Gaps section showing exactly what kept the score from hitting 100%.",
+                },
+                {
+                  t: "Save your billable hours",
+                  d: "No SEO content, no paid ads, no Psychology Today profile to maintain. We handle pre-screening, intake, and routing — you handle the session.",
+                },
+                {
+                  t: "Manually verified peers",
+                  d: "Every TheraVoca therapist is license-verified by our team before going live. No bots, no unlicensed life-coaches, no race-to-the-bottom rates dragging the network down.",
+                },
               ].map((b) => (
                 <li
                   key={b.t}
-                  className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-4"
+                  className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-4 hover:border-[#2D4A3E] hover:shadow-sm transition-all"
                 >
                   <div className="flex items-center gap-2">
                     <CheckCircle2 size={16} className="text-[#2D4A3E] shrink-0" />
@@ -608,6 +641,11 @@ export default function TherapistSignup() {
                 </li>
               ))}
             </ul>
+            <div className="mt-10 grid sm:grid-cols-3 gap-4">
+              <Stat label="Match score floor" value="70%" caption="No noise. No 30%-fit Hail Marys." />
+              <Stat label="Free trial" value="30 days" caption="Plenty of time to see if we fit your practice." />
+              <Stat label="Per-referral fee" value="$0" caption="Flat $45/mo · no hidden costs ever." />
+            </div>
           </div>
         </section>
 
@@ -1661,6 +1699,24 @@ function Req() {
     <span className="text-[#D45D5D] ml-0.5" aria-label="required">
       *
     </span>
+  );
+}
+
+// Big-number stat tile used in the Why-Join section. Light card, accent
+// number, tiny caption — keeps the tone calm and not "marketing-y."
+function Stat({ label, value, caption }) {
+  return (
+    <div className="bg-[#FDF7EC] border border-[#E8DCC1] rounded-2xl p-5">
+      <div className="text-[10px] uppercase tracking-[0.2em] text-[#C87965] font-semibold">
+        {label}
+      </div>
+      <div className="font-serif-display text-3xl text-[#2D4A3E] mt-1">
+        {value}
+      </div>
+      <div className="text-xs text-[#6D6A65] mt-1.5 leading-relaxed">
+        {caption}
+      </div>
+    </div>
   );
 }
 
