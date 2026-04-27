@@ -171,25 +171,28 @@ export default function TherapistApply() {
               </div>
               {data.gaps && data.gaps.length > 0 && (
                 <div className="mt-5 pt-5 border-t border-[#E8E5DF]" data-testid="apply-gaps">
-                  <div className="text-xs uppercase tracking-[0.15em] text-[#6D6A65] mb-2">
-                    Why not 100%
+                  <div className="text-xs uppercase tracking-[0.15em] text-[#6D6A65] mb-3">
+                    Why not 100% — and what to address
                   </div>
-                  <ul className="space-y-1.5">
+                  <ul className="space-y-3">
                     {data.gaps.map((g) => (
                       <li
                         key={g.key}
-                        className="text-xs text-[#2B2A29] leading-snug"
+                        className="text-xs leading-snug"
                         data-testid={`gap-${g.key}`}
                       >
-                        <span className="text-[#C87965] font-semibold">
-                          {g.label}
-                        </span>{" "}
-                        — {g.score}/{g.max}
+                        <div className="text-[#C87965] font-semibold">{g.label}</div>
+                        <div className="text-[#2B2A29] mt-0.5 leading-relaxed">
+                          {g.explanation}
+                        </div>
+                        <div className="text-[#6D6A65] italic mt-1 leading-relaxed">
+                          → {g.suggestion}
+                        </div>
                       </li>
                     ))}
                   </ul>
-                  <p className="text-[10px] text-[#6D6A65] mt-2 leading-relaxed">
-                    These don't disqualify you — they just help you decide.
+                  <p className="text-[10px] text-[#6D6A65] mt-3 leading-relaxed">
+                    Address these directly in your message below if you want to apply.
                   </p>
                 </div>
               )}

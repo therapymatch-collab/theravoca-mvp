@@ -124,7 +124,7 @@ async def portal_therapist_referrals(
     for r in reqs:
         score = (r.get("notified_scores") or {}).get(therapist["id"])
         breakdown = (r.get("notified_breakdowns") or {}).get(therapist["id"]) or {}
-        gaps = gap_axes(breakdown, top_n=3) if breakdown else []
+        gaps = gap_axes(therapist, r, breakdown, top_n=3) if breakdown else []
         application = await db.applications.find_one(
             {"request_id": r["id"], "therapist_id": therapist["id"]},
             {"_id": 0, "id": 1, "message": 1, "created_at": 1,

@@ -528,15 +528,17 @@ export default function TherapistPortal() {
                           </div>
                           {r.gaps && r.gaps.length > 0 && r.referral_status === "pending" && (
                             <div className="mt-3 text-xs text-[#6D6A65]">
-                              <span className="font-semibold text-[#C87965]">
-                                Gaps:
-                              </span>{" "}
-                              {r.gaps.map((g, i) => (
-                                <span key={g.key}>
-                                  {i > 0 && " · "}
-                                  {g.label} ({g.score}/{g.max})
-                                </span>
-                              ))}
+                              <div className="font-semibold text-[#C87965] uppercase tracking-wider text-[10px] mb-1">
+                                Address in reply
+                              </div>
+                              <ul className="space-y-1">
+                                {r.gaps.map((g) => (
+                                  <li key={g.key} className="leading-snug">
+                                    <span className="font-medium text-[#2B2A29]">{g.label}:</span>{" "}
+                                    {g.explanation}
+                                  </li>
+                                ))}
+                              </ul>
                             </div>
                           )}
                         </Link>

@@ -141,20 +141,24 @@ async def send_therapist_notification(
     gaps_html = ""
     if gaps:
         rows = "".join(
-            f'<li style="margin:6px 0;color:{BRAND["text"]};font-size:14px;line-height:1.5;">'
-            f'<strong style="color:{BRAND["primary"]};">{g["label"]}</strong>'
-            f' — scored {g["score"]}/{g["max"]}'
+            f'<li style="margin:10px 0;color:{BRAND["text"]};font-size:14px;line-height:1.55;">'
+            f'<div style="font-weight:600;color:{BRAND["primary"]};margin-bottom:2px;">'
+            f'{g["label"]}</div>'
+            f'<div style="margin-bottom:3px;">{g["explanation"]}</div>'
+            f'<div style="color:{BRAND["muted"]};font-size:13px;font-style:italic;">'
+            f'→ {g["suggestion"]}</div>'
             f'</li>'
             for g in gaps
         )
         gaps_html = (
             f'<div style="background:#FDF7EC;border:1px solid #E8DCC1;border-radius:12px;'
-            f'padding:14px 18px;margin:0 0 20px;">'
+            f'padding:16px 20px;margin:0 0 20px;">'
             f'<div style="font-size:13px;color:{BRAND["muted"]};text-transform:uppercase;'
-            f'letter-spacing:0.08em;margin-bottom:6px;">Gaps — why this isn\'t 100%</div>'
-            f'<ul style="margin:6px 0 0;padding-left:18px;">{rows}</ul>'
-            f'<div style="font-size:12px;color:{BRAND["muted"]};margin-top:8px;line-height:1.5;">'
-            f'These gaps don\'t disqualify you — they just help you decide whether to take this referral.'
+            f'letter-spacing:0.08em;margin-bottom:8px;">Why this isn\'t 100% — and what to address</div>'
+            f'<ul style="margin:6px 0 0;padding-left:18px;list-style:disc;">{rows}</ul>'
+            f'<div style="font-size:12px;color:{BRAND["muted"]};margin-top:10px;line-height:1.5;">'
+            f'These don\'t disqualify you — they\'re just the points the patient cares about. '
+            f'Speak to them in your reply if you want to apply.'
             f'</div>'
             f'</div>'
         )

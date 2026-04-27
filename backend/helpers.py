@@ -143,7 +143,7 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
     for m in new_matches:
         notify_email = m.get("notify_email", True)
         notify_sms = m.get("notify_sms", True)
-        gaps = gap_axes(m.get("match_breakdown") or {}, top_n=3)
+        gaps = gap_axes(m, req, m.get("match_breakdown") or {}, top_n=3)
         if notify_email:
             await send_therapist_notification(
                 to=m["email"],

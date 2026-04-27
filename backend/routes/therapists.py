@@ -268,7 +268,7 @@ async def therapist_view(request_id: str, therapist_id: str):
     summary = _safe_summary_for_therapist({**req, "email": ""})
     breakdown = (req.get("notified_breakdowns") or {}).get(therapist_id) or {}
     from matching import gap_axes
-    gaps = gap_axes(breakdown, top_n=3) if breakdown else []
+    gaps = gap_axes(therapist, req, breakdown, top_n=3) if breakdown else []
     return {
         "request_id": request_id,
         "therapist": {"id": therapist["id"], "name": therapist["name"]},
