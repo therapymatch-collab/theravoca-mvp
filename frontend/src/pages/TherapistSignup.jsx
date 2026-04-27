@@ -452,6 +452,23 @@ export default function TherapistSignup() {
 
         <section id="signup-form" className="py-14 scroll-mt-24">
           <div className="max-w-3xl mx-auto px-5 sm:px-8">
+            <div
+              className="text-center mb-8"
+              data-testid="signup-section-header"
+            >
+              <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] mb-3">
+                <Sparkles size={14} className="inline mr-1.5 -mt-0.5" strokeWidth={1.8} />
+                For licensed therapists · Sign up
+              </p>
+              <h2 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] leading-[1.05]">
+                Get more <em className="not-italic text-[#C87965]">targeted</em> patient referrals.
+              </h2>
+              <p className="mt-4 text-[#2B2A29]/80 leading-relaxed max-w-xl mx-auto">
+                Build your TheraVoca profile below — patients pre-screened by your
+                specialties, schedule, and rates will land directly in your inbox.
+                Approval typically takes 1 business day.
+              </p>
+            </div>
             <div className="bg-white border border-[#E8E5DF] rounded-3xl p-6 sm:p-10">
               {(inviteRequestId || inviteCode) && (
                 <div

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Loader2, Phone, Mail, Star, Sparkles, CalendarPlus } from "lucide-react";
+import { Loader2, Phone, Mail, Star, Sparkles, CalendarPlus, Send, Inbox, CheckCircle2, Clock } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { api } from "@/lib/api";
 import { RESULTS_POLL_INTERVAL_MS } from "@/lib/constants";
@@ -108,6 +108,43 @@ export default function PatientResults() {
     ? new Date(hold_ends_at).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })
     : "soon";
 
+  // Stage logic for the inline status timeline (no numeric details exposed,
+  // per UX direction — just qualitative milestones the patient cares about).
+  const matchedAt = request?.matched_at || request?.created_at;
+  const releasedAt = request?.results_released_at;
+  const stage = !matchedAt
+    ? "submitted"
+    : hold_active
+      ? "matching"
+      : applications.length === 0
+        ? "waiting"
+        : "ready";
+  const STAGES = [
+    {
+      key: "submitted",
+      icon: Send,
+      title: "Referral submitted",
+      sub: "We received your request and started looking for matches.",
+    },
+    {
+      key: "matching",
+      icon: Inbox,
+      title: "Matching with therapists",
+      sub: hold_active
+        ? `We'll release your matched therapists within 24 hours — full results unlock ${holdEndsLabel}.`
+        : "We'll release your matched therapists within 24 hours.",
+    },
+    {
+      key: "ready",
+      icon: CheckCircle2,
+      title: "Matches ready",
+      sub: releasedAt
+        ? "Your matches are live below — reach out whenever you're ready."
+        : "Your matched therapists will appear below once the 24-hour window closes.",
+    },
+  ];
+  const stageIdx = { submitted: 0, matching: 1, waiting: 1, ready: 2 }[stage] ?? 0;
+
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
       <Header minimal />
@@ -125,23 +162,11 @@ export default function PatientResults() {
           </p>
 
           {hold_active && (
-            <div
-              className="mt-6 bg-[#FDF7EC] border border-[#E8DCC1] rounded-2xl p-5 flex items-start gap-3"
-              data-testid="results-hold-banner"
-            >
-              <Sparkles size={18} className="text-[#C87965] mt-1 shrink-0" />
-              <div>
-                <div className="text-sm font-semibold text-[#2B2A29]">
-                  Your matches are still coming in
-                </div>
-                <p className="text-sm text-[#6D6A65] mt-1 leading-relaxed">
-                  We give every therapist a 24-hour window to respond so you can
-                  compare the strongest matches side-by-side instead of contacting
-                  the first person to reply. Your full results will unlock{" "}
-                  <strong className="text-[#2D4A3E]">{holdEndsLabel}</strong>.
-                </p>
-              </div>
-            </div>
+            <StatusTimeline
+              stages={STAGES}
+              activeIdx={stageIdx}
+              holdEndsLabel={holdEndsLabel}
+            />
           )}
 
           {applications.length === 0 ? (
@@ -343,5 +368,98 @@ function Detail({ label, value, span = 1, highlight = false }) {
         {value || "—"}
       </div>
     </div>
+  );
+}
+
+function StatusTimeline({ stages, activeIdx, holdEndsLabel }) {
+  return (
+    <section
+      className="mt-7 bg-white border border-[#E8E5DF] rounded-2xl p-5 sm:p-6"
+      data-testid="results-status-timeline"
+    >
+      <div className="flex items-baseline justify-between gap-3 flex-wrap mb-5">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.2em] text-[#C87965]">
+            What happens next
+          </p>
+          <h2 className="font-serif-display text-xl text-[#2D4A3E] mt-1 leading-tight">
+            We're matching you with therapists right now
+          </h2>
+        </div>
+        <div className="inline-flex items-center gap-1.5 text-xs text-[#2D4A3E] bg-[#F2F4F0] border border-[#D9DDD2] rounded-full px-2.5 py-1">
+          <Clock size={12} strokeWidth={2} />
+          Unlocks {holdEndsLabel}
+        </div>
+      </div>
+
+      <ol className="relative pl-6 sm:pl-8">
+        {stages.map((s, i) => {
+          const Icon = s.icon || Sparkles;
+          const isActive = i === activeIdx;
+          const isDone = i < activeIdx;
+          const isPending = i > activeIdx;
+          const dotColor = isPending
+            ? "bg-[#E8E5DF] text-[#A8A39A]"
+            : isActive
+              ? "bg-[#C87965] text-white"
+              : "bg-[#2D4A3E] text-white";
+          const lineColor =
+            i < stages.length - 1
+              ? isPending
+                ? "bg-[#E8E5DF]"
+                : "bg-[#2D4A3E]"
+              : "bg-transparent";
+          return (
+            <li
+              key={s.key}
+              className="relative pb-6 last:pb-0"
+              data-testid={`status-stage-${s.key}`}
+            >
+              <span
+                className={`absolute -left-[3px] sm:-left-[1px] top-0 inline-flex items-center justify-center w-7 h-7 rounded-full border-2 border-white ${dotColor} shadow-sm ${
+                  isActive ? "ring-2 ring-[#C87965]/30" : ""
+                }`}
+              >
+                <Icon size={13} strokeWidth={2.2} />
+              </span>
+              <span
+                aria-hidden="true"
+                className={`absolute left-[10px] sm:left-[12px] top-7 bottom-0 w-0.5 ${lineColor}`}
+              />
+              <div className="ml-7 sm:ml-9">
+                <div
+                  className={`text-sm font-semibold ${
+                    isPending ? "text-[#A8A39A]" : "text-[#2B2A29]"
+                  }`}
+                >
+                  {s.title}
+                  {isActive && (
+                    <span className="ml-2 inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-[#C87965]">
+                      <span className="relative flex w-1.5 h-1.5">
+                        <span className="absolute inline-flex w-full h-full rounded-full bg-[#C87965] opacity-60 animate-ping" />
+                        <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#C87965]" />
+                      </span>
+                      In progress
+                    </span>
+                  )}
+                  {isDone && (
+                    <span className="ml-2 text-[10px] uppercase tracking-wider text-[#2D4A3E]">
+                      Done
+                    </span>
+                  )}
+                </div>
+                <p
+                  className={`text-xs mt-1 leading-relaxed ${
+                    isPending ? "text-[#A8A39A]" : "text-[#6D6A65]"
+                  }`}
+                >
+                  {s.sub}
+                </p>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }
