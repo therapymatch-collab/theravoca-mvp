@@ -192,6 +192,9 @@ class TherapistSignup(BaseModel):
     free_consult: bool = False
     bio: Optional[str] = ""
     profile_picture: Optional[str] = None  # base64 data URL, max ~500KB
+    credential_type: Optional[str] = ""  # psychologist | lcsw | lpc | lmft | psychiatrist | other
+    notify_email: bool = True
+    notify_sms: bool = True
 
 
 class RequestCreate(BaseModel):
@@ -379,17 +382,21 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
     summary = _safe_summary_for_therapist(req)
     public_url = os.environ.get("PUBLIC_APP_URL", "")
     for m in new_matches:
-        await send_therapist_notification(
-            to=m["email"],
-            therapist_name=m["name"].split(",")[0],
-            request_id=req["id"],
-            therapist_id=m["id"],
-            match_score=m["match_score"],
-            summary=summary,
-        )
+        # Respect therapist notification preferences (default both on)
+        notify_email = m.get("notify_email", True)
+        notify_sms = m.get("notify_sms", True)
+        if notify_email:
+            await send_therapist_notification(
+                to=m["email"],
+                therapist_name=m["name"].split(",")[0],
+                request_id=req["id"],
+                therapist_id=m["id"],
+                match_score=m["match_score"],
+                summary=summary,
+            )
         # Best-effort SMS — does not block matching if it fails or is disabled
         phone = m.get("phone") or ""
-        if phone:
+        if phone and notify_sms:
             apply_url = f"{public_url}/therapist/apply/{req['id']}/{m['id']}"
             try:
                 await send_therapist_referral_sms(
@@ -584,23 +591,105 @@ async def public_request_view(request_id: str):
     return req
 
 
+@api.post("/admin/requests/{request_id}/release-results")
+async def admin_release_results(request_id: str, _: bool = Depends(require_admin)):
+    """Manually release the 24h hold on patient results — used for testing or
+    when the admin decides enough therapists have responded."""
+    req = await db.requests.find_one({"id": request_id}, {"_id": 0, "id": 1})
+    if not req:
+        raise HTTPException(404)
+    await db.requests.update_one(
+        {"id": request_id},
+        {"$set": {"results_released_at": _now_iso()}},
+    )
+    return {"ok": True, "released_at": _now_iso()}
+
+
+@api.get("/therapist/{therapist_id}/referrals")
+async def therapist_referrals(therapist_id: str):
+    """List of all referrals this therapist was notified for, with their status
+    (interested / declined / pending). Replaces the email-only workflow."""
+    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0, "id": 1, "name": 1, "email": 1})
+    if not t:
+        raise HTTPException(404)
+
+    # Find requests where this therapist was notified
+    cur = db.requests.find(
+        {"notified_therapist_ids": therapist_id},
+        {"_id": 0, "verification_token": 0},
+    ).sort("matched_at", -1).limit(100)
+    requests_list = await cur.to_list(100)
+
+    # Get applications + declines for this therapist
+    apps = {a["request_id"]: a async for a in db.applications.find(
+        {"therapist_id": therapist_id}, {"_id": 0}
+    )}
+    declines = {d["request_id"]: d async for d in db.declines.find(
+        {"therapist_id": therapist_id}, {"_id": 0}
+    )}
+
+    out = []
+    for r in requests_list:
+        rid = r["id"]
+        score = (r.get("notified_scores") or {}).get(therapist_id) or 0
+        breakdown = (r.get("notified_breakdowns") or {}).get(therapist_id) or {}
+        if rid in apps:
+            status = "interested"
+        elif rid in declines:
+            status = "declined"
+        else:
+            status = "pending"
+        out.append({
+            "request_id": rid,
+            "matched_at": r.get("matched_at"),
+            "patient_email_anon": (r.get("email", "")[:3] + "***") if r.get("email") else "",
+            "match_score": score,
+            "match_breakdown": breakdown,
+            "status": status,
+            "summary": _safe_summary_for_therapist({**r, "email": ""}),
+        })
+    return {"therapist": t, "referrals": out}
+
+
 @api.get("/requests/{request_id}/results", response_model=dict)
 async def public_request_results(request_id: str):
-    """Patient view of ranked therapist applications (uses same re-rank as email)."""
+    """Patient view of ranked therapist applications (uses same re-rank as email).
+
+    Iter-13: Patient cannot see therapist responses for the first 24h after matching
+    OR until admin manually releases via POST /admin/requests/{id}/release-results.
+    The hold prevents premature contact with therapists who might not be the best
+    matches once all responses are in. We still record application timing for
+    matching-algo tuning.
+    """
     req = await db.requests.find_one({"id": request_id}, {"_id": 0, "verification_token": 0})
     if not req:
         raise HTTPException(404)
-    apps = await db.applications.find({"request_id": request_id}, {"_id": 0}).to_list(50)
+    apps_raw = await db.applications.find({"request_id": request_id}, {"_id": 0}).to_list(50)
+
+    # Determine if we're still inside the 24h hold window
+    released_at = req.get("results_released_at")
+    matched_at_str = req.get("matched_at") or req.get("created_at")
+    matched_dt = _parse_iso(matched_at_str) if matched_at_str else None
+    now = datetime.now(timezone.utc)
+    hold_active = False
+    hold_ends_at_iso: Optional[str] = None
+    if not released_at and matched_dt:
+        elapsed_h = (now - matched_dt).total_seconds() / 3600.0
+        if elapsed_h < 24.0:
+            hold_active = True
+            hold_ends_at_iso = (matched_dt + timedelta(hours=24)).isoformat()
+
+    apps = apps_raw if not hold_active else []  # hide individual apps but keep count
 
     matched_at = req.get("matched_at") or req.get("created_at")
-    matched_dt = _parse_iso(matched_at) if matched_at else None
+    matched_dt2 = _parse_iso(matched_at) if matched_at else None
     for a in apps:
         ms = float(a.get("match_score") or 0)
         speed_bonus = 0.0
-        if matched_dt:
+        if matched_dt2:
             applied_dt = _parse_iso(a.get("created_at") or "")
             if applied_dt:
-                hours = max(0.0, (applied_dt - matched_dt).total_seconds() / 3600.0)
+                hours = max(0.0, (applied_dt - matched_dt2).total_seconds() / 3600.0)
                 speed_bonus = max(0.0, min(30.0, 30.0 * (24.0 - hours) / 24.0))
         msg_len = len(a.get("message") or "")
         quality_bonus = min(10.0, msg_len / 300.0 * 10.0)
@@ -618,7 +707,13 @@ async def public_request_results(request_id: str):
                 "therapist": t,
                 "match_breakdown": breakdowns.get(a["therapist_id"]) or {},
             })
-    return {"request": req, "applications": enriched}
+    return {
+        "request": req,
+        "applications": enriched,
+        "hold_active": hold_active,
+        "hold_ends_at": hold_ends_at_iso,
+        "applications_pending_count": len(apps_raw) if hold_active else 0,
+    }
 
 
 # ─── Therapist Routes ─────────────────────────────────────────────────────────
@@ -891,15 +986,27 @@ async def portal_therapist_referrals(
             {"request_id": r["id"], "therapist_id": therapist["id"]},
             {"_id": 0, "id": 1, "message": 1, "created_at": 1},
         )
+        decline = await db.declines.find_one(
+            {"request_id": r["id"], "therapist_id": therapist["id"]},
+            {"_id": 0},
+        )
+        if application:
+            ref_status = "interested"
+        elif decline:
+            ref_status = "declined"
+        else:
+            ref_status = "pending"
         out.append({
             "request_id": r["id"],
             "match_score": score,
             "created_at": r["created_at"],
             "status": r.get("status"),
+            "referral_status": ref_status,
             "summary": _safe_summary_for_therapist({**r, "email": ""}),
             "presenting_issues_preview": (r.get("presenting_issues") or "")[:140],
             "applied": bool(application),
             "application": application,
+            "declined": bool(decline),
         })
     return {
         "therapist": {"id": therapist["id"], "name": therapist["name"], "email": therapist["email"]},
@@ -1034,7 +1141,7 @@ async def admin_update_therapist(
         "insurance_accepted", "cash_rate", "sliding_scale", "free_consult",
         "years_experience", "availability_windows", "urgency_capacity",
         "style_tags", "bio", "is_active", "pending_approval",
-        "profile_picture",
+        "profile_picture", "credential_type", "notify_email", "notify_sms",
     }
     update = {k: v for k, v in (payload or {}).items() if k in allowed}
     if not update:
@@ -1084,6 +1191,27 @@ async def admin_list_declines(_: bool = Depends(require_admin)):
         for code in d.get("reason_codes") or []:
             counts[code] = counts.get(code, 0) + 1
     return {"declines": declines, "reason_counts": counts}
+
+
+@api.post("/admin/backfill-therapists")
+async def admin_backfill_therapists(_: bool = Depends(require_admin)):
+    """One-shot completion of every therapist record with realistic fake data.
+    Idempotent: only fills missing fields, never overwrites existing values
+    (except the email, which is forced to therapymatch+tNNN@gmail.com so the
+    user's verified inbox receives every transactional email)."""
+    from backfill import backfill_therapist
+    cur = db.therapists.find({}, {"_id": 0}).sort("created_at", 1)
+    therapists = await cur.to_list(length=10_000)
+    updated = 0
+    for idx, t in enumerate(therapists, 1):
+        set_fields = backfill_therapist(t, idx)
+        if set_fields:
+            set_fields["updated_at"] = _now_iso()
+            await db.therapists.update_one(
+                {"id": t["id"]}, {"$set": set_fields}
+            )
+            updated += 1
+    return {"ok": True, "scanned": len(therapists), "updated": updated}
 
 
 @api.post("/admin/seed")

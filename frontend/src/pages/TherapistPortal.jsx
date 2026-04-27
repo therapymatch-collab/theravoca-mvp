@@ -7,6 +7,7 @@ import {
   Inbox,
   CheckCircle2,
   Star,
+  ThumbsDown,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { sessionClient, getSession, clearSession } from "@/lib/api";
@@ -112,9 +113,13 @@ export default function TherapistPortal() {
                           <Star size={10} fill="currentColor" />
                           {Math.round(r.match_score)}% match
                         </span>
-                        {r.applied ? (
+                        {r.referral_status === "interested" ? (
                           <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-[#4A6B5D]/15 text-[#4A6B5D]">
-                            <CheckCircle2 size={11} /> applied
+                            <CheckCircle2 size={11} /> interested
+                          </span>
+                        ) : r.referral_status === "declined" ? (
+                          <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-[#6D6A65]/15 text-[#6D6A65]">
+                            <ThumbsDown size={11} /> declined
                           </span>
                         ) : (
                           <span className="inline-flex text-xs px-2.5 py-1 rounded-full bg-[#C87965]/15 text-[#C87965]">

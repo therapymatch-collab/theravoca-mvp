@@ -42,6 +42,15 @@ const MODALITIES = [
   "CBT", "DBT", "EMDR", "Mindfulness-Based", "Psychodynamic", "ACT",
   "Solution-Focused", "Gottman", "IFS", "Somatic Experiencing", "Person-Centered",
 ];
+const CREDENTIAL_TYPES = [
+  { v: "psychologist", l: "Psychologist (PhD / PsyD)" },
+  { v: "lcsw", l: "Licensed Clinical Social Worker (LCSW)" },
+  { v: "lpc", l: "Licensed Professional Counselor (LPC / LCPC / LPCC)" },
+  { v: "lmft", l: "Licensed Marriage & Family Therapist (LMFT)" },
+  { v: "lmhc", l: "Licensed Mental Health Counselor (LMHC)" },
+  { v: "psychiatrist", l: "Psychiatrist (MD)" },
+  { v: "other", l: "Other" },
+];
 const AVAILABILITY = [
   { v: "weekday_morning", l: "Weekday mornings" },
   { v: "weekday_afternoon", l: "Weekday afternoons" },
@@ -103,6 +112,9 @@ export default function TherapistSignup() {
     free_consult: false,
     bio: "",
     profile_picture: null,
+    credential_type: "",
+    notify_email: true,
+    notify_sms: true,
   });
   const [office, setOffice] = useState("");
   const set = (k, v) => setData((d) => ({ ...d, [k]: v }));
@@ -309,6 +321,19 @@ export default function TherapistSignup() {
                       className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                       data-testid="signup-name"
                     />
+                  </Field>
+                  <Field label="Credential type">
+                    <select
+                      value={data.credential_type}
+                      onChange={(e) => set("credential_type", e.target.value)}
+                      className="w-full bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5 text-sm"
+                      data-testid="signup-credential-type"
+                    >
+                      <option value="">Select credential type…</option>
+                      {CREDENTIAL_TYPES.map((c) => (
+                        <option key={c.v} value={c.v}>{c.l}</option>
+                      ))}
+                    </select>
                   </Field>
                   <Field label="Email">
                     <Input
@@ -615,6 +640,30 @@ export default function TherapistSignup() {
                     className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                     data-testid="signup-bio"
                   />
+                </Group>
+
+                <Group title="Notifications">
+                  <p className="text-xs text-[#6D6A65] -mt-1 mb-2">
+                    Choose how you'd like to be alerted when a new referral matches you.
+                  </p>
+                  <label className="flex items-center gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer">
+                    <Checkbox
+                      checked={data.notify_email}
+                      onCheckedChange={(v) => set("notify_email", !!v)}
+                      data-testid="signup-notify-email"
+                      className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
+                    />
+                    <span className="text-sm text-[#2B2A29]">Email me each new referral</span>
+                  </label>
+                  <label className="flex items-center gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer">
+                    <Checkbox
+                      checked={data.notify_sms}
+                      onCheckedChange={(v) => set("notify_sms", !!v)}
+                      data-testid="signup-notify-sms"
+                      className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
+                    />
+                    <span className="text-sm text-[#2B2A29]">Text me each new referral</span>
+                  </label>
                 </Group>
               </div>
 

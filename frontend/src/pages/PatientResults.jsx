@@ -101,7 +101,10 @@ export default function PatientResults() {
     );
   }
 
-  const { request, applications } = data;
+  const { request, applications, hold_active, hold_ends_at, applications_pending_count } = data;
+  const holdEndsLabel = hold_ends_at
+    ? new Date(hold_ends_at).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })
+    : "soon";
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
@@ -125,40 +128,71 @@ export default function PatientResults() {
               label="Therapists notified"
               value={(request.notified_therapist_ids || []).length}
             />
-            <Stat label="Responses received" value={applications.length} />
+            <Stat
+              label="Responses received"
+              value={hold_active ? applications_pending_count : applications.length}
+            />
           </div>
+
+          {hold_active && (
+            <div
+              className="mt-6 bg-[#FDF7EC] border border-[#E8DCC1] rounded-2xl p-5 flex items-start gap-3"
+              data-testid="results-hold-banner"
+            >
+              <Sparkles size={18} className="text-[#C87965] mt-1 shrink-0" />
+              <div>
+                <div className="text-sm font-semibold text-[#2B2A29]">
+                  Your matches are still coming in
+                </div>
+                <p className="text-sm text-[#6D6A65] mt-1 leading-relaxed">
+                  We give every therapist a 24-hour window to respond so you can
+                  compare the strongest matches side-by-side instead of contacting
+                  the first person to reply. Your full results will unlock {holdEndsLabel}.
+                  {applications_pending_count > 0 && (
+                    <> So far <strong>{applications_pending_count}</strong> therapist{applications_pending_count === 1 ? " has" : "s have"} responded.</>
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
 
           {applications.length === 0 ? (
             <div className="mt-10 bg-white border border-[#E8E5DF] rounded-2xl p-10 text-center">
               <Loader2 className="animate-spin mx-auto text-[#2D4A3E]" />
               <p className="text-[#6D6A65] mt-4">
-                Therapists are reviewing your referral. Responses typically arrive within
-                24 hours. We'll email you as soon as your matches are ready.
+                {hold_active
+                  ? "Therapists are reviewing your referral. Your matches will unlock once the 24-hour window closes."
+                  : "Therapists are reviewing your referral. Responses typically arrive within 24 hours. We'll email you as soon as your matches are ready."}
               </p>
             </div>
           ) : (
-            <div className="mt-10 space-y-5">
-              {applications.map((app, i) => (
-                <article
-                  key={app.id}
-                  className="bg-white border border-[#E8E5DF] rounded-2xl p-6 md:p-8 hover:-translate-y-0.5 transition"
-                  data-testid={`result-card-${i}`}
-                >
-                  <div className="flex items-start justify-between flex-wrap gap-3">
-                    <div className="flex items-start gap-4 min-w-0 flex-1">
+            <div className="mt-8 space-y-3">
+              {applications.map((app, i) => {
+                const t = app.therapist;
+                const formats = [];
+                if (t.telehealth) formats.push("Virtual");
+                if (t.offers_in_person) formats.push("In-person");
+                const formatStr = formats.join(" + ") || "Virtual";
+                return (
+                  <article
+                    key={app.id}
+                    className="bg-white border border-[#E8E5DF] rounded-2xl p-4 md:p-5 hover:border-[#2D4A3E] transition"
+                    data-testid={`result-card-${i}`}
+                  >
+                    <div className="flex gap-4">
                       <div
-                        className="w-16 h-16 rounded-full bg-[#FDFBF7] border border-[#E8E5DF] overflow-hidden flex items-center justify-center shrink-0"
+                        className="w-14 h-14 rounded-full bg-[#FDFBF7] border border-[#E8E5DF] overflow-hidden flex items-center justify-center shrink-0"
                         data-testid={`avatar-${i}`}
                       >
-                        {app.therapist.profile_picture ? (
+                        {t.profile_picture ? (
                           <img
-                            src={app.therapist.profile_picture}
-                            alt={app.therapist.name}
+                            src={t.profile_picture}
+                            alt={t.name}
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <span className="font-serif-display text-xl text-[#2D4A3E]">
-                            {(app.therapist.name || "")
+                          <span className="font-serif-display text-base text-[#2D4A3E]">
+                            {(t.name || "")
                               .split(",")[0]
                               .split(" ")
                               .filter(Boolean)
@@ -169,105 +203,106 @@ export default function PatientResults() {
                           </span>
                         )}
                       </div>
-                      <div className="min-w-0">
-                        <div className="inline-flex items-center gap-1.5 bg-[#2D4A3E] text-white text-xs font-semibold px-3 py-1 rounded-full">
-                          <Star size={12} fill="currentColor" />
-                          {Math.round(app.match_score)}% match
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                          <h3 className="font-serif-display text-xl text-[#2D4A3E] leading-tight truncate">
+                            {t.name}
+                          </h3>
+                          <div className="inline-flex items-center gap-1 bg-[#2D4A3E] text-white text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0">
+                            <Star size={10} fill="currentColor" />
+                            {Math.round(app.match_score)}%
+                          </div>
                         </div>
-                        <h3 className="font-serif-display text-2xl text-[#2D4A3E] mt-3">
-                          {app.therapist.name}
-                        </h3>
-                        <div className="text-sm text-[#6D6A65] mt-1">
-                          {app.therapist.years_experience} yrs experience •{" "}
-                          {app.therapist.modalities?.slice(0, 3).join(", ")}
+                        <div className="text-xs text-[#6D6A65] mt-0.5">
+                          {t.years_experience || "—"} yrs •{" "}
+                          {(t.modalities || []).slice(0, 3).join(" · ") || "—"}
                         </div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm text-[#2B2A29] font-semibold">
-                        ${app.therapist.cash_rate}/session
-                      </div>
-                      {app.therapist.free_consult && (
-                        <div className="text-xs text-[#C87965] mt-1">
-                          ✦ Free consult available
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 mt-3 text-xs">
+                          <Detail label="Format" value={formatStr} />
+                          <Detail label="Rate" value={`$${t.cash_rate || "?"}`} />
+                          <Detail
+                            label="Sliding scale"
+                            value={t.sliding_scale ? "Yes" : "No"}
+                            highlight={t.sliding_scale}
+                          />
+                          <Detail
+                            label="Free consult"
+                            value={t.free_consult ? "Yes" : "—"}
+                            highlight={t.free_consult}
+                          />
+                          {t.office_locations && t.office_locations.length > 0 && (
+                            <Detail
+                              label="Offices"
+                              value={t.office_locations.slice(0, 2).join(", ")}
+                              span={2}
+                            />
+                          )}
+                          <Detail
+                            label="Insurance"
+                            value={
+                              (t.insurance_accepted || []).length > 0
+                                ? `${t.insurance_accepted.length} plans`
+                                : "Cash / OON"
+                            }
+                            span={2}
+                          />
                         </div>
-                      )}
-                    </div>
-                  </div>
 
-                  {app.message && app.message.trim().length > 0 ? (
-                    <p className="mt-5 text-[#2B2A29] leading-relaxed border-l-4 border-[#C87965] pl-4 italic">
-                      "{app.message}"
-                    </p>
-                  ) : (
-                    <p className="mt-5 text-[#6D6A65] leading-relaxed border-l-4 border-[#E8E5DF] pl-4 italic text-sm">
-                      This therapist submitted interest without a personal note.
-                      Reach out below — many offer a free 15-minute consult to see
-                      if you're a fit.
-                    </p>
-                  )}
-
-                  {topReasons(app.match_breakdown).length > 0 && (
-                    <div
-                      className="mt-5 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl p-4"
-                      data-testid={`why-match-${i}`}
-                    >
-                      <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[#6D6A65] mb-2.5">
-                        <Sparkles size={14} className="text-[#C87965]" />
-                        Why we matched
-                      </div>
-                      <ul className="flex flex-wrap gap-2">
-                        {topReasons(app.match_breakdown).map((r) => (
-                          <li
-                            key={r.key}
-                            className="text-xs sm:text-sm bg-white border border-[#E8E5DF] text-[#2B2A29] px-3 py-1.5 rounded-full"
-                            data-testid={`why-match-${i}-${r.key}`}
+                        {topReasons(app.match_breakdown).length > 0 && (
+                          <ul
+                            className="flex flex-wrap gap-1.5 mt-3"
+                            data-testid={`why-match-${i}`}
                           >
-                            {r.label}
-                          </li>
-                        ))}
-                      </ul>
+                            {topReasons(app.match_breakdown).map((r) => (
+                              <li
+                                key={r.key}
+                                className="text-[11px] bg-[#FDFBF7] border border-[#E8E5DF] text-[#2B2A29] px-2 py-0.5 rounded-full"
+                                data-testid={`why-match-${i}-${r.key}`}
+                              >
+                                {r.label}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+
+                        {app.message && app.message.trim().length > 0 && (
+                          <p className="mt-3 text-sm text-[#2B2A29] leading-snug border-l-2 border-[#C87965] pl-3 italic line-clamp-3">
+                            "{app.message}"
+                          </p>
+                        )}
+
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          <a
+                            href={buildConsultMailto(t, request)}
+                            className="inline-flex items-center gap-1.5 bg-[#2D4A3E] text-white rounded-lg px-3 py-1.5 text-xs font-medium hover:bg-[#3A5E50] transition"
+                            data-testid={`consult-btn-${i}`}
+                          >
+                            <CalendarPlus size={13} /> Book free consult
+                          </a>
+                          <a
+                            href={`mailto:${t.email}`}
+                            className="inline-flex items-center gap-1.5 bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg px-3 py-1.5 text-xs hover:border-[#2D4A3E] transition"
+                            data-testid={`contact-email-${i}`}
+                          >
+                            <Mail size={13} className="text-[#2D4A3E]" />
+                            Email
+                          </a>
+                          {t.phone && (
+                            <a
+                              href={`tel:${t.phone}`}
+                              className="inline-flex items-center gap-1.5 bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg px-3 py-1.5 text-xs hover:border-[#2D4A3E] transition"
+                              data-testid={`contact-phone-${i}`}
+                            >
+                              <Phone size={13} className="text-[#2D4A3E]" />
+                              {t.phone}
+                            </a>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  )}
-
-                  <div className="mt-5 grid sm:grid-cols-2 gap-3">
-                    <a
-                      href={buildConsultMailto(app.therapist, request)}
-                      className="flex items-center gap-2 bg-[#2D4A3E] text-white border border-[#2D4A3E] rounded-xl px-4 py-3 text-sm font-medium hover:bg-[#3A5E50] transition col-span-full"
-                      data-testid={`consult-btn-${i}`}
-                    >
-                      <CalendarPlus size={16} />
-                      <span>Schedule a free 15-min consult</span>
-                    </a>
-                    <a
-                      href={`mailto:${app.therapist.email}`}
-                      className="flex items-center gap-2 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 text-sm hover:border-[#2D4A3E] transition"
-                      data-testid={`contact-email-${i}`}
-                    >
-                      <Mail size={16} className="text-[#2D4A3E]" />
-                      <span className="text-[#2B2A29]">{app.therapist.email}</span>
-                    </a>
-                    {app.therapist.phone && (
-                      <a
-                        href={`tel:${app.therapist.phone}`}
-                        className="flex items-center gap-2 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 text-sm hover:border-[#2D4A3E] transition"
-                        data-testid={`contact-phone-${i}`}
-                      >
-                        <Phone size={16} className="text-[#2D4A3E]" />
-                        <span className="text-[#2B2A29]">{app.therapist.phone}</span>
-                      </a>
-                    )}
-                  </div>
-
-                  <div className="mt-5 text-xs text-[#6D6A65]">
-                    Specialties:{" "}
-                    {(app.therapist.specialties || [])
-                      .map((s) => s.name)
-                      .slice(0, 5)
-                      .join(", ")}
-                  </div>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
           )}
         </div>
@@ -283,6 +318,21 @@ function Stat({ label, value }) {
       <div className="text-xs uppercase tracking-[0.15em] text-[#6D6A65]">{label}</div>
       <div className="font-serif-display text-2xl text-[#2D4A3E] mt-1 capitalize">
         {value}
+      </div>
+    </div>
+  );
+}
+
+function Detail({ label, value, span = 1, highlight = false }) {
+  return (
+    <div className={span === 2 ? "col-span-2" : ""}>
+      <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">{label}</div>
+      <div
+        className={`font-medium ${
+          highlight ? "text-[#C87965]" : "text-[#2B2A29]"
+        } truncate`}
+      >
+        {value || "—"}
       </div>
     </div>
   );

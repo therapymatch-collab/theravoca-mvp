@@ -231,6 +231,14 @@ export default function AdminDashboard() {
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 className="tv-btn-secondary !py-2 !px-4 text-sm"
+                onClick={runBackfill}
+                data-testid="backfill-btn"
+                title="Complete every therapist profile with realistic fake data"
+              >
+                Backfill profiles
+              </button>
+              <button
+                className="tv-btn-secondary !py-2 !px-4 text-sm"
                 onClick={sendTestSms}
                 data-testid="test-sms-btn"
                 title="Send a test SMS to the configured Twilio dev override number"
@@ -775,6 +783,166 @@ export default function AdminDashboard() {
                   data-testid="edit-bio"
                 />
               </FieldRow>
+              <FieldRow label="Credential type">
+                <select
+                  value={editTherapist.credential_type || ""}
+                  onChange={(e) =>
+                    setEditTherapist({ ...editTherapist, credential_type: e.target.value })
+                  }
+                  className="w-full bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg p-2 text-sm"
+                  data-testid="edit-credential-type"
+                >
+                  <option value="">Select…</option>
+                  <option value="psychologist">Psychologist (PhD/PsyD)</option>
+                  <option value="lcsw">LCSW</option>
+                  <option value="lpc">LPC / LCPC / LPCC</option>
+                  <option value="lmft">LMFT</option>
+                  <option value="lmhc">LMHC</option>
+                  <option value="psychiatrist">Psychiatrist (MD)</option>
+                  <option value="other">Other</option>
+                </select>
+              </FieldRow>
+              <FieldRow label="Primary specialties (comma-separated, e.g. anxiety, depression)">
+                <Input
+                  value={(editTherapist.primary_specialties || []).join(", ")}
+                  onChange={(e) =>
+                    setEditTherapist({
+                      ...editTherapist,
+                      primary_specialties: e.target.value
+                        .split(",").map((s) => s.trim()).filter(Boolean),
+                    })
+                  }
+                  data-testid="edit-primary-specialties"
+                />
+              </FieldRow>
+              <FieldRow label="Secondary specialties (comma-separated)">
+                <Input
+                  value={(editTherapist.secondary_specialties || []).join(", ")}
+                  onChange={(e) =>
+                    setEditTherapist({
+                      ...editTherapist,
+                      secondary_specialties: e.target.value
+                        .split(",").map((s) => s.trim()).filter(Boolean),
+                    })
+                  }
+                  data-testid="edit-secondary-specialties"
+                />
+              </FieldRow>
+              <FieldRow label="Modalities (comma-separated, e.g. CBT, DBT, EMDR)">
+                <Input
+                  value={(editTherapist.modalities || []).join(", ")}
+                  onChange={(e) =>
+                    setEditTherapist({
+                      ...editTherapist,
+                      modalities: e.target.value
+                        .split(",").map((s) => s.trim()).filter(Boolean),
+                    })
+                  }
+                  data-testid="edit-modalities"
+                />
+              </FieldRow>
+              <FieldRow label="Insurances accepted (comma-separated)">
+                <Input
+                  value={(editTherapist.insurance_accepted || []).join(", ")}
+                  onChange={(e) =>
+                    setEditTherapist({
+                      ...editTherapist,
+                      insurance_accepted: e.target.value
+                        .split(",").map((s) => s.trim()).filter(Boolean),
+                    })
+                  }
+                  data-testid="edit-insurance-accepted"
+                />
+              </FieldRow>
+              <FieldRow label="Office locations (comma-separated cities)">
+                <Input
+                  value={(editTherapist.office_locations || []).join(", ")}
+                  onChange={(e) =>
+                    setEditTherapist({
+                      ...editTherapist,
+                      office_locations: e.target.value
+                        .split(",").map((s) => s.trim()).filter(Boolean),
+                    })
+                  }
+                  data-testid="edit-office-locations"
+                />
+              </FieldRow>
+              <FieldRow label="Client types (comma-separated: individual, couples, family, group)">
+                <Input
+                  value={(editTherapist.client_types || []).join(", ")}
+                  onChange={(e) =>
+                    setEditTherapist({
+                      ...editTherapist,
+                      client_types: e.target.value
+                        .split(",").map((s) => s.trim()).filter(Boolean),
+                    })
+                  }
+                  data-testid="edit-client-types"
+                />
+              </FieldRow>
+              <FieldRow label="Age groups served (comma-separated: child, teen, young_adult, adult, older_adult)">
+                <Input
+                  value={(editTherapist.age_groups || []).join(", ")}
+                  onChange={(e) =>
+                    setEditTherapist({
+                      ...editTherapist,
+                      age_groups: e.target.value
+                        .split(",").map((s) => s.trim()).filter(Boolean),
+                    })
+                  }
+                  data-testid="edit-age-groups"
+                />
+              </FieldRow>
+              <FieldRow label="Availability windows (comma-separated)">
+                <Input
+                  value={(editTherapist.availability_windows || []).join(", ")}
+                  onChange={(e) =>
+                    setEditTherapist({
+                      ...editTherapist,
+                      availability_windows: e.target.value
+                        .split(",").map((s) => s.trim()).filter(Boolean),
+                    })
+                  }
+                  data-testid="edit-availability"
+                />
+              </FieldRow>
+              <FieldRow label="Style tags (comma-separated)">
+                <Input
+                  value={(editTherapist.style_tags || []).join(", ")}
+                  onChange={(e) =>
+                    setEditTherapist({
+                      ...editTherapist,
+                      style_tags: e.target.value
+                        .split(",").map((s) => s.trim()).filter(Boolean),
+                    })
+                  }
+                  data-testid="edit-style-tags"
+                />
+              </FieldRow>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex items-center gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg px-3 py-2.5 cursor-pointer">
+                  <Checkbox
+                    checked={editTherapist.notify_email !== false}
+                    onCheckedChange={(v) =>
+                      setEditTherapist({ ...editTherapist, notify_email: !!v })
+                    }
+                    data-testid="edit-notify-email"
+                    className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
+                  />
+                  <span className="text-sm">Email referrals</span>
+                </label>
+                <label className="flex items-center gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg px-3 py-2.5 cursor-pointer">
+                  <Checkbox
+                    checked={editTherapist.notify_sms !== false}
+                    onCheckedChange={(v) =>
+                      setEditTherapist({ ...editTherapist, notify_sms: !!v })
+                    }
+                    data-testid="edit-notify-sms"
+                    className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
+                  />
+                  <span className="text-sm">Text referrals</span>
+                </label>
+              </div>
             </div>
           )}
           <DialogFooter className="mt-4 flex gap-2 justify-end">
@@ -933,6 +1101,19 @@ export default function AdminDashboard() {
                   data-testid="resend-btn"
                 >
                   <RotateCw size={14} className="inline mr-1.5" /> Re-run matching
+                </button>
+                <button
+                  className="tv-btn-secondary !py-2 !px-4 text-sm border-[#C87965] text-[#C87965]"
+                  onClick={() => releaseResults(detail.request.id)}
+                  data-testid="release-results-btn"
+                  disabled={!!detail.request.results_released_at}
+                  title={detail.request.results_released_at
+                    ? `Already released at ${detail.request.results_released_at}`
+                    : "Manually release the 24h hold so the patient can see therapist responses"}
+                >
+                  {detail.request.results_released_at
+                    ? "Results released"
+                    : "Release results to patient"}
                 </button>
                 <ThresholdControl
                   current={detail.request.threshold}

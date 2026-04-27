@@ -54,6 +54,21 @@ Tech: FastAPI + MongoDB + React. Email via Resend. ~100 seeded Idaho therapists.
 - **`/app/frontend/src/lib/insurers.js`** — single source of truth for Idaho insurer lists (`IDAHO_INSURERS`, `PATIENT_INSURER_OPTIONS`).
 - 10/10 backend pytest pass, frontend Playwright validated. Test file: `/app/backend/tests/test_iteration8_payment_insurance.py`.
 
+## Iteration 13 (2026-04-27) — 24h hold + Compact match cards + Therapist credentials/notify-prefs + Profile backfill
+
+**Major UX redesign + 5 new features**:
+- **24-hour hold on patient results**. New `results_released_at` field on requests. `GET /requests/{id}/results` returns `hold_active=true`, `hold_ends_at`, and `applications_pending_count` (response *count* visible, but individual responses hidden) for the first 24h. The matching engine still records timing for algo tuning.
+- **Admin manual release**. New `POST /admin/requests/{id}/release-results` endpoint + "Release results to patient" button in the admin request detail dialog. Used for testing or once enough therapists have responded.
+- **Compact patient match card** (4-col detail grid: Format / Rate / Sliding / Free consult + Offices / Insurance row + chips + small `Book free consult` button — was full-width 50px tall, now 138×30px). 3 cards now visible per viewport vs. 1 before.
+- **Therapist credential type** field (psychologist / LCSW / LPC / LMFT / LMHC / psychiatrist / other) on signup form + admin Edit Provider dialog.
+- **Therapist notification preferences** — `notify_email` + `notify_sms` toggles in signup form + admin edit. `_trigger_matching` respects them (skips email/SMS if disabled).
+- **Therapist portal** now displays referrals with 3 statuses (interested / declined / pending) instead of just "applied / new", reflecting decline data.
+- **Admin Edit Provider dialog** now exposes ALL fields: credential_type, primary/secondary specialties, modalities, insurances, office locations, client types, age groups, availability windows, style tags, notify_email, notify_sms — in addition to the existing photo/name/email/phone/rate/sliding-scale/free-consult/etc.
+- **One-shot backfill endpoint** `POST /admin/backfill-therapists` + "Backfill profiles" button in admin top bar. Idempotently completes every therapist record with realistic fake data (license-suffixed names, full insurances, modalities, bio, phone, credential_type, notification prefs, etc.) and forces every email to `therapymatch+tNNN@gmail.com` so all transactional emails route to your verified inbox. Confirmed: 147/147 records updated.
+- **Why-we-matched sort by raw score** — fixed in both PatientResults.jsx and email_service.py.
+
+**Note**: Stripe subscription onboarding ($45/mo after 30-day trial) — playbook in hand but DEFERRED to next iteration. Significant scope (Checkout Session + webhooks + subscription lifecycle handling).
+
 ## Iteration 12 (2026-04-26) — Email-template editor + decline flow + photo upload + payment detail
 
 **7 user-requested features**:
