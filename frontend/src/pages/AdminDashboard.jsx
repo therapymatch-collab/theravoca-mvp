@@ -23,6 +23,70 @@ import { ADMIN_POLL_INTERVAL_MS, STATUS_UNAUTHORIZED } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+
+// ─── Editor option lists (mirrors TherapistSignup) ───
+const ISSUES_LIST = [
+  "anxiety", "depression", "ocd", "adhd", "trauma_ptsd",
+  "relationship_issues", "life_transitions", "parenting_family",
+  "substance_use", "eating_concerns", "autism_neurodivergence",
+  "school_academic_stress",
+];
+const MODALITIES_LIST = [
+  "CBT", "DBT", "EMDR", "Mindfulness-Based", "Psychodynamic", "ACT",
+  "Solution-Focused", "Gottman", "IFS", "Somatic Experiencing", "Person-Centered",
+];
+const INSURERS_LIST = [
+  "Blue Cross of Idaho", "Regence BlueShield of Idaho", "Mountain Health Co-op",
+  "PacificSource Health Plans", "SelectHealth", "Aetna", "Cigna", "UnitedHealthcare",
+  "Humana", "Idaho Medicaid", "Medicare", "Tricare West", "Optum", "Magellan Health",
+];
+const CLIENT_TYPES_LIST = ["individual", "couples", "family", "group"];
+const AGE_GROUPS_LIST = ["child", "teen", "young_adult", "adult", "older_adult"];
+const AVAIL_LIST = [
+  "weekday_morning", "weekday_afternoon", "weekday_evening",
+  "weekend_morning", "weekend_afternoon",
+];
+const STYLE_LIST = [
+  "structured", "warm_supportive", "direct_practical", "trauma_informed",
+  "insight_oriented", "faith_informed", "culturally_responsive", "lgbtq_affirming",
+];
+const URGENCY_LIST = ["asap", "within_2_3_weeks", "within_month", "full"];
+const MODALITY_OFFERING_LIST = ["telehealth", "in_person", "both"];
+const IDAHO_CITY_LIST = [
+  "Boise", "Meridian", "Nampa", "Idaho Falls", "Pocatello", "Caldwell",
+  "Coeur d'Alene", "Twin Falls", "Lewiston", "Post Falls", "Rexburg", "Eagle",
+  "Kuna", "Moscow", "Ammon",
+];
+
+function PillPicker({ items, selected, onChange, max, testid }) {
+  const sel = selected || [];
+  return (
+    <div className="flex flex-wrap gap-1.5" data-testid={testid}>
+      {items.map((it) => {
+        const active = sel.includes(it);
+        return (
+          <button
+            key={it}
+            type="button"
+            data-testid={`${testid}-${it}`}
+            onClick={() => {
+              if (active) onChange(sel.filter((x) => x !== it));
+              else if (max && sel.length >= max) return;
+              else onChange([...sel, it]);
+            }}
+            className={`text-xs px-2.5 py-1 rounded-full border transition ${
+              active
+                ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
+                : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+            }`}
+          >
+            {it.replace(/_/g, " ")}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 import {
   Dialog,
   DialogContent,
@@ -906,121 +970,126 @@ export default function AdminDashboard() {
                   <option value="other">Other</option>
                 </select>
               </FieldRow>
-              <FieldRow label="Primary specialties (comma-separated, e.g. anxiety, depression)">
-                <Input
-                  value={(editTherapist.primary_specialties || []).join(", ")}
-                  onChange={(e) =>
-                    setEditTherapist({
-                      ...editTherapist,
-                      primary_specialties: e.target.value
-                        .split(",").map((s) => s.trim()).filter(Boolean),
-                    })
-                  }
-                  data-testid="edit-primary-specialties"
+              <FieldRow label="Primary specialties (max 2)">
+                <PillPicker
+                  items={ISSUES_LIST}
+                  selected={editTherapist.primary_specialties}
+                  onChange={(v) => setEditTherapist({ ...editTherapist, primary_specialties: v })}
+                  max={2}
+                  testid="edit-primary-specialties"
                 />
               </FieldRow>
-              <FieldRow label="Secondary specialties (comma-separated)">
-                <Input
-                  value={(editTherapist.secondary_specialties || []).join(", ")}
-                  onChange={(e) =>
-                    setEditTherapist({
-                      ...editTherapist,
-                      secondary_specialties: e.target.value
-                        .split(",").map((s) => s.trim()).filter(Boolean),
-                    })
-                  }
-                  data-testid="edit-secondary-specialties"
+              <FieldRow label="Secondary specialties (max 3)">
+                <PillPicker
+                  items={ISSUES_LIST}
+                  selected={editTherapist.secondary_specialties}
+                  onChange={(v) => setEditTherapist({ ...editTherapist, secondary_specialties: v })}
+                  max={3}
+                  testid="edit-secondary-specialties"
                 />
               </FieldRow>
-              <FieldRow label="Modalities (comma-separated, e.g. CBT, DBT, EMDR)">
-                <Input
-                  value={(editTherapist.modalities || []).join(", ")}
-                  onChange={(e) =>
-                    setEditTherapist({
-                      ...editTherapist,
-                      modalities: e.target.value
-                        .split(",").map((s) => s.trim()).filter(Boolean),
-                    })
-                  }
-                  data-testid="edit-modalities"
+              <FieldRow label="General treats (max 5)">
+                <PillPicker
+                  items={ISSUES_LIST}
+                  selected={editTherapist.general_treats}
+                  onChange={(v) => setEditTherapist({ ...editTherapist, general_treats: v })}
+                  max={5}
+                  testid="edit-general-treats"
                 />
               </FieldRow>
-              <FieldRow label="Insurances accepted (comma-separated)">
-                <Input
-                  value={(editTherapist.insurance_accepted || []).join(", ")}
-                  onChange={(e) =>
-                    setEditTherapist({
-                      ...editTherapist,
-                      insurance_accepted: e.target.value
-                        .split(",").map((s) => s.trim()).filter(Boolean),
-                    })
-                  }
-                  data-testid="edit-insurance-accepted"
+              <FieldRow label="Modalities">
+                <PillPicker
+                  items={MODALITIES_LIST}
+                  selected={editTherapist.modalities}
+                  onChange={(v) => setEditTherapist({ ...editTherapist, modalities: v })}
+                  testid="edit-modalities"
                 />
               </FieldRow>
-              <FieldRow label="Office locations (comma-separated cities)">
-                <Input
-                  value={(editTherapist.office_locations || []).join(", ")}
-                  onChange={(e) =>
-                    setEditTherapist({
-                      ...editTherapist,
-                      office_locations: e.target.value
-                        .split(",").map((s) => s.trim()).filter(Boolean),
-                    })
-                  }
-                  data-testid="edit-office-locations"
+              <FieldRow label="Modality offering">
+                <PillPicker
+                  items={MODALITY_OFFERING_LIST}
+                  selected={[editTherapist.modality_offering].filter(Boolean)}
+                  onChange={(v) => setEditTherapist({ ...editTherapist, modality_offering: v[v.length - 1] || editTherapist.modality_offering })}
+                  testid="edit-modality-offering"
                 />
               </FieldRow>
-              <FieldRow label="Client types (comma-separated: individual, couples, family, group)">
-                <Input
-                  value={(editTherapist.client_types || []).join(", ")}
-                  onChange={(e) =>
-                    setEditTherapist({
-                      ...editTherapist,
-                      client_types: e.target.value
-                        .split(",").map((s) => s.trim()).filter(Boolean),
-                    })
-                  }
-                  data-testid="edit-client-types"
+              <FieldRow label="Insurances accepted">
+                <PillPicker
+                  items={INSURERS_LIST}
+                  selected={editTherapist.insurance_accepted}
+                  onChange={(v) => setEditTherapist({ ...editTherapist, insurance_accepted: v })}
+                  testid="edit-insurance-accepted"
                 />
               </FieldRow>
-              <FieldRow label="Age groups served (comma-separated: child, teen, young_adult, adult, older_adult)">
-                <Input
-                  value={(editTherapist.age_groups || []).join(", ")}
-                  onChange={(e) =>
-                    setEditTherapist({
-                      ...editTherapist,
-                      age_groups: e.target.value
-                        .split(",").map((s) => s.trim()).filter(Boolean),
-                    })
-                  }
-                  data-testid="edit-age-groups"
+              <FieldRow label="Office cities">
+                <PillPicker
+                  items={IDAHO_CITY_LIST}
+                  selected={editTherapist.office_locations}
+                  onChange={(v) => setEditTherapist({ ...editTherapist, office_locations: v })}
+                  testid="edit-office-locations"
                 />
               </FieldRow>
-              <FieldRow label="Availability windows (comma-separated)">
-                <Input
-                  value={(editTherapist.availability_windows || []).join(", ")}
+              <FieldRow label="Office addresses (one per line, full street + city + zip)">
+                <Textarea
+                  rows={3}
+                  value={(editTherapist.office_addresses || []).join("\n")}
                   onChange={(e) =>
                     setEditTherapist({
                       ...editTherapist,
-                      availability_windows: e.target.value
-                        .split(",").map((s) => s.trim()).filter(Boolean),
+                      office_addresses: e.target.value
+                        .split("\n").map((s) => s.trim()).filter(Boolean),
                     })
                   }
-                  data-testid="edit-availability"
+                  data-testid="edit-office-addresses"
                 />
               </FieldRow>
-              <FieldRow label="Style tags (comma-separated)">
+              <FieldRow label="Website">
                 <Input
-                  value={(editTherapist.style_tags || []).join(", ")}
-                  onChange={(e) =>
-                    setEditTherapist({
-                      ...editTherapist,
-                      style_tags: e.target.value
-                        .split(",").map((s) => s.trim()).filter(Boolean),
-                    })
-                  }
-                  data-testid="edit-style-tags"
+                  type="url"
+                  value={editTherapist.website || ""}
+                  onChange={(e) => setEditTherapist({ ...editTherapist, website: e.target.value })}
+                  placeholder="https://example.com"
+                  data-testid="edit-website"
+                />
+              </FieldRow>
+              <FieldRow label="Client types">
+                <PillPicker
+                  items={CLIENT_TYPES_LIST}
+                  selected={editTherapist.client_types}
+                  onChange={(v) => setEditTherapist({ ...editTherapist, client_types: v })}
+                  testid="edit-client-types"
+                />
+              </FieldRow>
+              <FieldRow label="Age groups served">
+                <PillPicker
+                  items={AGE_GROUPS_LIST}
+                  selected={editTherapist.age_groups}
+                  onChange={(v) => setEditTherapist({ ...editTherapist, age_groups: v })}
+                  testid="edit-age-groups"
+                />
+              </FieldRow>
+              <FieldRow label="Availability windows">
+                <PillPicker
+                  items={AVAIL_LIST}
+                  selected={editTherapist.availability_windows}
+                  onChange={(v) => setEditTherapist({ ...editTherapist, availability_windows: v })}
+                  testid="edit-availability"
+                />
+              </FieldRow>
+              <FieldRow label="Style tags">
+                <PillPicker
+                  items={STYLE_LIST}
+                  selected={editTherapist.style_tags}
+                  onChange={(v) => setEditTherapist({ ...editTherapist, style_tags: v })}
+                  testid="edit-style-tags"
+                />
+              </FieldRow>
+              <FieldRow label="Urgency capacity">
+                <PillPicker
+                  items={URGENCY_LIST}
+                  selected={[editTherapist.urgency_capacity].filter(Boolean)}
+                  onChange={(v) => setEditTherapist({ ...editTherapist, urgency_capacity: v[v.length - 1] || editTherapist.urgency_capacity })}
+                  testid="edit-urgency"
                 />
               </FieldRow>
               <div className="grid grid-cols-2 gap-3">

@@ -13,7 +13,9 @@ import stripe_service
 from email_service import send_therapist_signup_received
 from geocoding import geocode_offices
 from helpers import _now_iso
-from models import ApplicationOut, TherapistApplyIn, TherapistDeclineIn, TherapistSignup
+from models import (
+    ApplicationOut, BulkApplyIn, TherapistApplyIn, TherapistDeclineIn, TherapistSignup,
+)
 
 router = APIRouter()
 
@@ -193,6 +195,62 @@ async def admin_charge_therapist_now(
 from helpers import _safe_summary_for_therapist  # noqa: E402
 
 
+@router.post("/portal/therapist/bulk-apply")
+async def therapist_bulk_apply(
+    payload: BulkApplyIn,
+    session: dict = Depends(__import__("deps", fromlist=["require_session"]).require_session(("therapist",))),
+):
+    """Confirm interest on N referrals at once. Each referral gets the same
+    message + commitment flags. Skips referrals the therapist wasn't notified for."""
+    import re
+    therapist = await db.therapists.find_one(
+        {"email": {"$regex": f"^{re.escape(session['email'])}$", "$options": "i"}},
+        {"_id": 0, "id": 1, "name": 1},
+    )
+    if not therapist:
+        raise HTTPException(404, "Therapist profile not found")
+    tid = therapist["id"]
+    out: list[dict] = []
+    for rid in payload.request_ids[:50]:
+        req = await db.requests.find_one({"id": rid}, {"_id": 0, "id": 1, "notified_scores": 1})
+        if not req:
+            out.append({"request_id": rid, "ok": False, "error": "not_found"})
+            continue
+        score = (req.get("notified_scores") or {}).get(tid)
+        if score is None:
+            out.append({"request_id": rid, "ok": False, "error": "not_notified"})
+            continue
+        existing = await db.applications.find_one(
+            {"request_id": rid, "therapist_id": tid}, {"_id": 0, "id": 1}
+        )
+        all_confirmed = all([
+            payload.confirms_availability, payload.confirms_urgency, payload.confirms_payment,
+        ])
+        doc = {
+            "message": payload.message,
+            "confirms_availability": payload.confirms_availability,
+            "confirms_urgency": payload.confirms_urgency,
+            "confirms_payment": payload.confirms_payment,
+            "all_confirmed": all_confirmed,
+            "updated_at": _now_iso(),
+        }
+        if existing:
+            await db.applications.update_one({"id": existing["id"]}, {"$set": doc})
+            out.append({"request_id": rid, "ok": True, "updated": True})
+        else:
+            doc.update({
+                "id": str(uuid.uuid4()),
+                "request_id": rid,
+                "therapist_id": tid,
+                "therapist_name": therapist["name"],
+                "match_score": score,
+                "created_at": _now_iso(),
+            })
+            await db.applications.insert_one(doc.copy())
+            out.append({"request_id": rid, "ok": True, "created": True})
+    return {"results": out, "succeeded": sum(1 for x in out if x["ok"])}
+
+
 @router.get("/therapist/apply/{request_id}/{therapist_id}", response_model=dict)
 async def therapist_view(request_id: str, therapist_id: str):
     req = await db.requests.find_one(
@@ -208,14 +266,24 @@ async def therapist_view(request_id: str, therapist_id: str):
         {"request_id": request_id, "therapist_id": therapist_id}, {"_id": 0}
     )
     summary = _safe_summary_for_therapist({**req, "email": ""})
+    breakdown = (req.get("notified_breakdowns") or {}).get(therapist_id) or {}
+    from matching import gap_axes
+    gaps = gap_axes(breakdown, top_n=3) if breakdown else []
     return {
         "request_id": request_id,
         "therapist": {"id": therapist["id"], "name": therapist["name"]},
         "match_score": score,
+        "match_breakdown": breakdown,
+        "gaps": gaps,
         "summary": summary,
         "presenting_issues": req.get("presenting_issues", ""),
         "already_applied": bool(existing),
         "existing_message": existing.get("message") if existing else None,
+        "existing_confirmations": {
+            "availability": bool((existing or {}).get("confirms_availability")),
+            "urgency": bool((existing or {}).get("confirms_urgency")),
+            "payment": bool((existing or {}).get("confirms_payment")),
+        } if existing else None,
     }
 
 
@@ -236,7 +304,18 @@ async def therapist_apply(request_id: str, therapist_id: str, payload: Therapist
     if existing:
         await db.applications.update_one(
             {"id": existing["id"]},
-            {"$set": {"message": payload.message, "updated_at": now}},
+            {"$set": {
+                "message": payload.message,
+                "confirms_availability": payload.confirms_availability,
+                "confirms_urgency": payload.confirms_urgency,
+                "confirms_payment": payload.confirms_payment,
+                "all_confirmed": all([
+                    payload.confirms_availability,
+                    payload.confirms_urgency,
+                    payload.confirms_payment,
+                ]),
+                "updated_at": now,
+            }},
         )
         return ApplicationOut(
             id=existing["id"],
@@ -255,6 +334,14 @@ async def therapist_apply(request_id: str, therapist_id: str, payload: Therapist
         "therapist_name": therapist["name"],
         "match_score": score,
         "message": payload.message,
+        "confirms_availability": payload.confirms_availability,
+        "confirms_urgency": payload.confirms_urgency,
+        "confirms_payment": payload.confirms_payment,
+        "all_confirmed": all([
+            payload.confirms_availability,
+            payload.confirms_urgency,
+            payload.confirms_payment,
+        ]),
         "created_at": now,
     }
     await db.applications.insert_one(app_doc.copy())

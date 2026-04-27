@@ -57,6 +57,24 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+### iter-18 — Mega batch: matching threshold, gaps, follow-ups, UX polish (Apr 27, 2026)
+- **70% match floor + 30-target rule** — `rank_therapists` never returns matches below 70%; tracks `outreach_needed_count` for Phase D LLM agent
+- **30-mile in-person distance filter** — Haversine-based; auto-pass if no geo data
+- **"Gaps" surfaces** — top 3 low-scoring axes shown on therapist email + Apply page + Portal cards (helps therapists self-assess fit)
+- **Therapist commitment checkboxes** — availability / urgency / payment must be confirmed before submitting interest. Bulk-confirm in portal (multi-select + one click).
+- **Patient follow-up triggers** — automated 48h / 2-week / 6-week emails with structured survey form (helpful score 1–10, contacted Y/N, sessions, would recommend, barriers, notes). Admin stats endpoint. Idempotent via `followup_sent_<m>` flags.
+- **Multi-slide therapist signup wizard** — 5 steps with progress bar, color-divided sections (warm cream / sage / dusty rose / taupe / muted blue accents)
+- **Side-by-side form fields** — phone-private + office phone, email + website, license state + license number all share rows
+- **Hero image** on `/therapists/join` — therapist taking notes (Unsplash)
+- **Therapist website + full office addresses** — added to model, signup, admin editor, patient results card
+- **Admin therapist editor** — pill-toggle dropdowns for specialties / modalities / insurance / cities / age groups / availability (replacing comma-text inputs)
+- **Admin bulk approve** + **CSV export** + **DB reset/reseed** endpoints
+- **Patient results** — removed redundant waiting-text duplication, fixed "Reach out" wrap, dropped notified/responses stats block
+- **Login dashboard CTA** in therapist email
+- **Stripe Customer Portal e2e verified** with real test key (`sk_test_51RWhfV...`); fixed shadowed env var
+- **`STRIPE_WEBHOOK_SECRET`** env stub (you provide the value from Stripe dashboard)
+- **Fresh DB**: 100 brand-new therapists with realistic names, NPI-style license numbers, license expiration dates, headshot URLs (DiceBear), full street addresses, websites, geo-coded offices
+
 ### iter-17 — Refactor + legacy test cleanup (Apr 27, 2026)
 - Split 1761-line `server.py` → 5 route modules + `deps`/`models`/`helpers`/`cron` (server.py now 95 lines)
 - Modernized v1-schema legacy tests with shared `conftest.py` payload helpers

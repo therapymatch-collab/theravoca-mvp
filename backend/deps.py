@@ -25,7 +25,8 @@ db = mongo_client[os.environ["DB_NAME"]]
 
 # ─── Env-driven constants ────────────────────────────────────────────────────
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123!")
-DEFAULT_THRESHOLD = float(os.environ.get("DEFAULT_MATCH_THRESHOLD", "71"))
+DEFAULT_THRESHOLD = float(os.environ.get("DEFAULT_MATCH_THRESHOLD", "70"))
+MIN_TARGET_MATCHES = int(os.environ.get("MIN_TARGET_MATCHES", "30"))
 AUTO_DELAY_HOURS = float(os.environ.get("AUTO_RESULTS_DELAY_HOURS", "24"))
 PATIENT_DEMO_EMAIL = os.environ.get("PATIENT_DEMO_EMAIL", "")
 ADMIN_NOTIFY_EMAIL = os.environ.get("ADMIN_NOTIFY_EMAIL", "therapymatch@gmail.com")

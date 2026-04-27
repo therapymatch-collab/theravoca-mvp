@@ -106,8 +106,42 @@ def _modality_pass(t: dict, r: dict) -> bool:
     if pref == "telehealth_only":
         return offering in ("telehealth", "both")
     if pref == "in_person_only":
-        return offering in ("in_person", "both")
+        if offering not in ("in_person", "both"):
+            return False
+        # 30-mile distance filter for in-person seekers
+        return _distance_within(t, r, miles=30.0)
+    if pref == "prefer_inperson":
+        # Soft preference — only filter out true in-person at >30mi distance.
+        if offering == "in_person":
+            return _distance_within(t, r, miles=30.0)
+        return True
     return True
+
+
+def _distance_within(t: dict, r: dict, miles: float) -> bool:
+    """Return True if any of the therapist's offices is within `miles` of the
+    patient. If we don't have geo data on either side, default to True (don't
+    block the match — let the patient + therapist sort it out)."""
+    p = r.get("patient_geo") or {}
+    plat, plng = p.get("lat"), p.get("lng")
+    if plat is None or plng is None:
+        return True
+    offices = t.get("office_geos") or []
+    if not offices:
+        return True
+    for o in offices:
+        olat, olng = o.get("lat"), o.get("lng")
+        if olat is None or olng is None:
+            continue
+        # Inline haversine to avoid circular imports
+        from math import asin, cos, radians, sin, sqrt
+        dlat = radians(olat - plat)
+        dlng = radians(olng - plng)
+        a = sin(dlat / 2) ** 2 + cos(radians(plat)) * cos(radians(olat)) * sin(dlng / 2) ** 2
+        d_miles = 2 * 3958.8 * asin(sqrt(a))
+        if d_miles <= miles:
+            return True
+    return False
 
 
 def _gender_pass(t: dict, r: dict) -> bool:
@@ -336,14 +370,15 @@ def score_therapist(t: dict, r: dict) -> dict[str, Any]:
 def rank_therapists(
     therapists: list[dict],
     request: dict,
-    threshold: float = 71.0,
+    threshold: float = 70.0,
     top_n: int = 30,
     min_results: int = 3,
 ) -> list[dict]:
     """Score and filter per spec:
-       - send to top N where score >= threshold
-       - if fewer than min_results above threshold, lower stepwise (60, 50)
-       - return up to top_n therapists
+       - hard floor: never include therapists below `threshold` (default 70)
+       - target up to `top_n` matches
+       - if fewer than `min_results` clear the floor, return what we have
+         (caller should trigger Phase D outreach to find more)
     """
     scored = []
     for t in therapists:
@@ -354,15 +389,36 @@ def rank_therapists(
 
     scored.sort(key=lambda x: x["match_score"], reverse=True)
     above = [s for s in scored if s["match_score"] >= threshold]
-    if len(above) >= min_results:
-        return above[:top_n]
+    return above[:top_n]
 
-    # Auto-lower threshold per spec: try 60, then 50
-    for cur in (60.0, 50.0):
-        if cur >= threshold:
+
+def gap_axes(breakdown: dict, top_n: int = 3) -> list[dict]:
+    """Surface the axes where this therapist scored *low* so a referral email
+    can show "Why this isn't a 100% match" — helps therapists self-assess fit
+    before they commit. Returns the top-N axes with the largest gap (max - score)
+    where score < 100% of max. Each entry: {key, score, max, gap, label}."""
+    AXIS = {
+        "issues":       (MAX_ISSUES,       "Specializes in your concerns"),
+        "availability": (MAX_AVAILABILITY, "Schedule overlap"),
+        "modality":     (MAX_MODALITY,     "Format (telehealth / in-person)"),
+        "urgency":      (MAX_URGENCY,      "How quickly they can start"),
+        "prior_therapy":(MAX_PRIOR,        "Fit for your therapy history"),
+        "experience":   (MAX_EXPERIENCE,   "Years of experience"),
+        "gender":       (MAX_GENDER,       "Gender preference"),
+        "style":        (MAX_STYLE,        "Style preference"),
+        "payment_fit":  (MAX_PAYMENT_FIT,  "Sliding-scale fit"),
+        "modality_pref":(MAX_MODALITY_PREF,"Preferred therapy approach"),
+    }
+    gaps: list[dict] = []
+    for k, (mx, label) in AXIS.items():
+        score = breakdown.get(k, 0) or 0
+        if mx <= 0:
             continue
-        above = [s for s in scored if s["match_score"] >= cur]
-        if len(above) >= min_results:
-            return above[:top_n]
-
-    return scored[:top_n]
+        if score >= mx:
+            continue  # full credit, not a gap
+        gap = mx - score
+        if gap < 1.0:
+            continue  # essentially full, ignore
+        gaps.append({"key": k, "score": round(score, 1), "max": mx, "gap": round(gap, 1), "label": label})
+    gaps.sort(key=lambda g: g["gap"], reverse=True)
+    return gaps[:top_n]

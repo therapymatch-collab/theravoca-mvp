@@ -13,6 +13,7 @@ from deps import (
 )
 from email_service import (
     send_availability_prompt,
+    send_followup_survey,
     send_license_expiring_to_admin,
     send_license_expiring_to_therapist,
 )
@@ -188,6 +189,43 @@ async def _run_availability_prompts() -> dict[str, int]:
     return {"sent_email": sent_email, "sent_sms": sent_sms}
 
 
+async def _run_followup_surveys() -> dict[str, int]:
+    """Send 48h / 2-week / 6-week follow-ups based on `results_sent_at`.
+    Idempotent via `followup_sent_at_<milestone>` flag on the request doc."""
+    now = datetime.now(timezone.utc)
+    milestones = [
+        ("48h", 2, "followup_sent_48h"),
+        ("2wk", 14, "followup_sent_2wk"),
+        ("6wk", 42, "followup_sent_6wk"),
+    ]
+    sent: dict[str, int] = {}
+    for code, days, flag in milestones:
+        cutoff = (now - timedelta(days=days)).isoformat()
+        cur = db.requests.find(
+            {
+                "results_sent_at": {"$ne": None, "$lte": cutoff},
+                flag: {"$exists": False},
+                "email": {"$ne": None},
+            },
+            {"_id": 0, "id": 1, "email": 1},
+        )
+        count = 0
+        async for r in cur:
+            try:
+                await send_followup_survey(r["email"], r["id"], code)
+                await db.requests.update_one(
+                    {"id": r["id"]},
+                    {"$set": {flag: _now_iso()}},
+                )
+                count += 1
+            except Exception as e:
+                logger.warning("Followup %s failed for %s: %s", code, r["id"], e)
+        if count:
+            logger.info("Follow-up %s surveys sent: %d", code, count)
+        sent[code] = count
+    return sent
+
+
 async def _daily_loop() -> None:
     while True:
         try:
@@ -205,11 +243,13 @@ async def _daily_loop() -> None:
                     bill = await _run_daily_billing_charges()
                     lic = await _run_license_expiry_alerts()
                     avail = await _run_availability_prompts()
+                    follow = await _run_followup_surveys()
                     await db.cron_runs.update_one(
                         {"name": "daily_tasks", "date": today_iso},
                         {"$set": {
                             "completed_at": _now_iso(),
                             "billing": bill, "license": lic, "availability": avail,
+                            "followups": follow,
                         }},
                     )
         except Exception as e:

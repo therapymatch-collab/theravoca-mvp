@@ -94,6 +94,7 @@ export default function TherapistSignup() {
     phone: "",
     phone_alert: "",
     office_phone: "",
+    website: "",
     gender: "",
     licensed_states: ["ID"],
     license_number: "",
@@ -122,7 +123,10 @@ export default function TherapistSignup() {
     notify_sms: true,
   });
   const [office, setOffice] = useState("");
+  const [officeAddress, setOfficeAddress] = useState("");
   const [showPreview, setShowPreview] = useState(false);
+  const [step, setStep] = useState(1);
+  const totalSteps = 5;
   const set = (k, v) => setData((d) => ({ ...d, [k]: v }));
   const toggleArr = (k, v, max) =>
     setData((d) => {
@@ -336,12 +340,12 @@ export default function TherapistSignup() {
       <Header />
       <main className="flex-1" data-testid="therapist-signup-page">
         <section className="border-b border-[#E8E5DF] py-16">
-          <div className="max-w-4xl mx-auto px-5 sm:px-8 grid md:grid-cols-2 gap-10 items-center">
+          <div className="max-w-5xl mx-auto px-5 sm:px-8 grid md:grid-cols-2 gap-10 items-center">
             <div>
               <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] mb-3">
                 For licensed therapists
               </p>
-              <h1 className="font-serif-display text-5xl sm:text-6xl text-[#2D4A3E] leading-tight">
+              <h1 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] leading-[1.05]">
                 <em className="not-italic text-[#C87965]">Grow</em> your practice
                 without the marketing grind.
               </h1>
@@ -358,15 +362,42 @@ export default function TherapistSignup() {
                 </div>
               </div>
             </div>
-            <ul className="space-y-3 text-sm text-[#2B2A29]">
+            <div className="relative">
+              <div
+                className="aspect-[4/5] rounded-3xl overflow-hidden bg-gradient-to-br from-[#E8DCC1] via-[#FDF7EC] to-[#F2F4F0] relative"
+                data-testid="signup-hero-image"
+              >
+                <img
+                  src="https://images.unsplash.com/photo-1573497019418-b400bb3ab074?auto=format&fit=crop&w=720&q=70"
+                  alt="A therapist taking notes during a calm session"
+                  className="absolute inset-0 w-full h-full object-cover"
+                  loading="lazy"
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                />
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#2D4A3E]/85 via-[#2D4A3E]/30 to-transparent p-5">
+                  <div className="text-white text-sm font-medium leading-snug">
+                    "I get warm, well-fit referrals every week — and I don't pay
+                    per click."
+                  </div>
+                  <div className="text-white/70 text-xs mt-1">
+                    — Idaho-based LCSW, TheraVoca pilot
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section className="border-b border-[#E8E5DF] py-12 bg-white">
+          <div className="max-w-5xl mx-auto px-5 sm:px-8">
+            <ul className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm text-[#2B2A29]">
               {[
                 {
                   t: "Only ideal-fit referrals",
-                  d: "We notify you when a patient scores ≥ 71% on your specialties, schedule, and preferences.",
+                  d: "We notify you when a patient scores ≥ 70% on your specialties, schedule, and preferences.",
                 },
                 {
                   t: "30-day free trial, then $45/month",
-                  d: "Cancel anytime in your portal. No setup fees, no per-referral charges, no hidden costs.",
+                  d: "Cancel anytime. No setup fees, no per-referral charges, no hidden costs.",
                 },
                 {
                   t: "You're always in control",
@@ -374,18 +405,18 @@ export default function TherapistSignup() {
                 },
                 {
                   t: "Patients reach out directly",
-                  d: "When you opt-in, the patient sees your full profile and contact info, then follows up on their own.",
+                  d: "When you opt-in, the patient sees your full profile and contact info.",
                 },
               ].map((b) => (
                 <li
                   key={b.t}
-                  className="flex items-start gap-3 bg-white border border-[#E8E5DF] rounded-xl p-4"
+                  className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-4"
                 >
-                  <CheckCircle2 size={18} className="text-[#2D4A3E] mt-0.5 shrink-0" />
-                  <div className="leading-relaxed">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={16} className="text-[#2D4A3E] shrink-0" />
                     <div className="font-semibold text-[#2D4A3E]">{b.t}</div>
-                    <div className="text-[#6D6A65] mt-0.5">{b.d}</div>
                   </div>
+                  <div className="text-[#6D6A65] mt-1.5 text-xs leading-relaxed">{b.d}</div>
                 </li>
               ))}
             </ul>
@@ -402,7 +433,30 @@ export default function TherapistSignup() {
                 The more accurate your profile, the better the matches we'll route to you.
               </p>
 
+              <div className="mt-6 mb-7">
+                <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-[#6D6A65] mb-2">
+                  <span>Step {step} of {totalSteps}</span>
+                  <span>
+                    {[
+                      "Basics + license",
+                      "Who you see",
+                      "Format & insurance",
+                      "Rates & style",
+                      "Notifications",
+                    ][step - 1]}
+                  </span>
+                </div>
+                <div className="h-1.5 bg-[#E8E5DF] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#2D4A3E] transition-all"
+                    style={{ width: `${(step / totalSteps) * 100}%` }}
+                    data-testid="signup-progress"
+                  />
+                </div>
+              </div>
+
               <div className="mt-8 space-y-7">
+                {step === 1 && (<>
                 <Group title="Basics">
                   <Field label="Profile photo (optional)">
                     <div className="flex items-center gap-4">
@@ -458,55 +512,67 @@ export default function TherapistSignup() {
                       </div>
                     </div>
                   </Field>
-                  <Field label="Full name + license (e.g. Sarah Anderson, LCSW)">
-                    <Input
-                      value={data.name}
-                      onChange={(e) => set("name", e.target.value)}
-                      className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                      data-testid="signup-name"
-                    />
-                  </Field>
-                  <Field label="Credential type">
-                    <select
-                      value={data.credential_type}
-                      onChange={(e) => set("credential_type", e.target.value)}
-                      className="w-full bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5 text-sm"
-                      data-testid="signup-credential-type"
-                    >
-                      <option value="">Select credential type…</option>
-                      {CREDENTIAL_TYPES.map((c) => (
-                        <option key={c.v} value={c.v}>{c.l}</option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="Email">
-                    <Input
-                      type="email"
-                      value={data.email}
-                      onChange={(e) => set("email", e.target.value)}
-                      placeholder="you@practice.com"
-                      className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                      data-testid="signup-email"
-                    />
-                  </Field>
-                  <Field label="Phone (private — for SMS alerts only, never shown to patients)">
-                    <Input
-                      value={data.phone_alert || data.phone}
-                      onChange={(e) => set("phone_alert", e.target.value)}
-                      placeholder="(208) 555-0123"
-                      className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                      data-testid="signup-phone-alert"
-                    />
-                  </Field>
-                  <Field label="Office phone (public — patients see this)">
-                    <Input
-                      value={data.office_phone}
-                      onChange={(e) => set("office_phone", e.target.value)}
-                      placeholder="(208) 555-0150"
-                      className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                      data-testid="signup-office-phone"
-                    />
-                  </Field>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Field label="Full name + title (e.g. Sarah Lin, LCSW)">
+                      <Input
+                        value={data.name}
+                        onChange={(e) => set("name", e.target.value)}
+                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                        data-testid="signup-name"
+                      />
+                    </Field>
+                    <Field label="Credential type">
+                      <select
+                        value={data.credential_type}
+                        onChange={(e) => set("credential_type", e.target.value)}
+                        className="w-full bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5 text-sm"
+                        data-testid="signup-credential-type"
+                      >
+                        <option value="">Select credential type…</option>
+                        {CREDENTIAL_TYPES.map((c) => (
+                          <option key={c.v} value={c.v}>{c.l}</option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Email">
+                      <Input
+                        type="email"
+                        value={data.email}
+                        onChange={(e) => set("email", e.target.value)}
+                        placeholder="you@practice.com"
+                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                        data-testid="signup-email"
+                      />
+                    </Field>
+                    <Field label="Website (public)">
+                      <Input
+                        type="url"
+                        value={data.website}
+                        onChange={(e) => set("website", e.target.value)}
+                        placeholder="https://your-practice.com"
+                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                        data-testid="signup-website"
+                      />
+                    </Field>
+                    <Field label="Phone — private (SMS alerts only)">
+                      <Input
+                        value={data.phone_alert || data.phone}
+                        onChange={(e) => set("phone_alert", e.target.value)}
+                        placeholder="(208) 555-0123"
+                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                        data-testid="signup-phone-alert"
+                      />
+                    </Field>
+                    <Field label="Office phone — public (patients see this)">
+                      <Input
+                        value={data.office_phone}
+                        onChange={(e) => set("office_phone", e.target.value)}
+                        placeholder="(208) 555-0150"
+                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                        data-testid="signup-office-phone"
+                      />
+                    </Field>
+                  </div>
                   <Field label="Gender (used only when patients have a stated preference)">
                     <PillRow
                       items={GENDERS}
@@ -612,7 +678,9 @@ export default function TherapistSignup() {
                     </div>
                   </Field>
                 </Group>
+                </>)}
 
+                {step === 2 && (<>
                 <Group
                   title="Who do you see?"
                   hint="Required — patients are pre-filtered by these"
@@ -698,7 +766,9 @@ export default function TherapistSignup() {
                     {data.general_treats.length}/5
                   </p>
                 </Group>
+                </>)}
 
+                {step === 3 && (<>
                 <Group title="Modalities you practice (pick 1–6)">
                   <div className="flex flex-wrap gap-2">
                     {MODALITIES.map((m) => {
@@ -809,7 +879,9 @@ export default function TherapistSignup() {
                     })}
                   </div>
                 </Group>
+                </>)}
 
+                {step === 4 && (<>
                 <Group title="Rates & experience">
                   <div className="grid grid-cols-2 gap-4">
                     <Field label="Cash rate per session ($)">
@@ -890,7 +962,9 @@ export default function TherapistSignup() {
                     data-testid="signup-bio"
                   />
                 </Group>
+                </>)}
 
+                {step === 5 && (<>
                 <Group title="Notifications">
                   <p className="text-xs text-[#6D6A65] -mt-1 mb-2">
                     Choose how you'd like to be alerted when a new referral matches you.
@@ -914,21 +988,47 @@ export default function TherapistSignup() {
                     <span className="text-sm text-[#2B2A29]">Text me each new referral</span>
                   </label>
                 </Group>
+                </>)}
               </div>
 
               <div className="mt-10 pt-6 border-t border-[#E8E5DF] flex items-center justify-between flex-wrap gap-4">
-                <p className="text-xs text-[#6D6A65] max-w-md">
-                  By submitting, you agree to receive anonymous referral notifications.
-                  Your profile is reviewed before going live.
-                </p>
-                <button
-                  className="tv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={!valid || submitting}
-                  onClick={() => setShowPreview(true)}
-                  data-testid="signup-preview"
-                >
-                  Preview profile <ArrowRight size={18} />
-                </button>
+                {step > 1 ? (
+                  <button
+                    type="button"
+                    className="tv-btn-secondary"
+                    onClick={() => setStep((s) => Math.max(1, s - 1))}
+                    data-testid="signup-back"
+                  >
+                    Back
+                  </button>
+                ) : (
+                  <p className="text-xs text-[#6D6A65] max-w-md">
+                    Your profile is reviewed before going live. You can edit anything later.
+                  </p>
+                )}
+                {step < totalSteps ? (
+                  <button
+                    type="button"
+                    className="tv-btn-primary"
+                    onClick={() => {
+                      setStep((s) => Math.min(totalSteps, s + 1));
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    data-testid="signup-next"
+                  >
+                    Next <ArrowRight size={18} />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="tv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!valid || submitting}
+                    onClick={() => setShowPreview(true)}
+                    data-testid="signup-preview"
+                  >
+                    Preview profile <ArrowRight size={18} />
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -1131,14 +1231,35 @@ function SummaryRow({ label, value, span = 1 }) {
   );
 }
 
+// Colored card per section — pick a stable accent color based on the title hash
+// so each Group is visually distinct without depending on render order.
+const GROUP_PALETTE = [
+  { bg: "#FDF7EC", border: "#E8DCC1", accent: "#C87965" }, // warm cream
+  { bg: "#F2F4F0", border: "#D9DDD2", accent: "#2D4A3E" }, // sage
+  { bg: "#FBF5F2", border: "#EBD5CB", accent: "#A8553F" }, // dusty rose
+  { bg: "#F4F1EC", border: "#E0D9CC", accent: "#6E5530" }, // taupe
+  { bg: "#EFF2F6", border: "#D5DCE4", accent: "#3F5775" }, // muted blue
+];
+function _hash(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
 function Group({ title, hint, children }) {
+  const c = GROUP_PALETTE[_hash(title || "x") % GROUP_PALETTE.length];
   return (
-    <div>
-      <div className="font-semibold text-[#2B2A29] text-sm uppercase tracking-wider">
+    <div
+      className="rounded-2xl p-5 sm:p-6 border-l-4"
+      style={{ background: c.bg, borderColor: c.accent, borderLeftColor: c.accent }}
+    >
+      <div
+        className="font-semibold text-sm uppercase tracking-wider"
+        style={{ color: c.accent }}
+      >
         {title}
       </div>
       {hint && <div className="text-xs text-[#6D6A65] mt-1">{hint}</div>}
-      <div className="mt-3 space-y-3">{children}</div>
+      <div className="mt-4 space-y-3">{children}</div>
     </div>
   );
 }

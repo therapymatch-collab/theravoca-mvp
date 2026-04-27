@@ -40,6 +40,8 @@ class TherapistSignup(BaseModel):
     license_number: Optional[str] = ""
     license_expires_at: Optional[str] = None  # ISO date
     license_picture: Optional[str] = None  # base64 data URL
+    website: Optional[str] = ""  # public — patients can click through
+    office_addresses: list[str] = Field(default_factory=list)  # full street addresses
     client_types: list[str] = Field(default_factory=lambda: ["individual"])
     age_groups: list[str] = Field(default_factory=list)
     primary_specialties: list[str] = Field(default_factory=list, max_length=2)
@@ -116,6 +118,19 @@ class RequestOut(BaseModel):
 
 class TherapistApplyIn(BaseModel):
     message: str = Field(default="", max_length=1500)
+    # Commitment confirmations — therapists must affirm to opt-in
+    confirms_availability: bool = False
+    confirms_urgency: bool = False
+    confirms_payment: bool = False
+
+
+class BulkApplyIn(BaseModel):
+    """Bulk-confirm interest across many referrals at once."""
+    request_ids: list[str] = Field(default_factory=list, max_length=50)
+    message: str = Field(default="", max_length=1500)
+    confirms_availability: bool = False
+    confirms_urgency: bool = False
+    confirms_payment: bool = False
 
 
 class TherapistDeclineIn(BaseModel):
@@ -131,6 +146,17 @@ class ApplicationOut(BaseModel):
     match_score: float
     message: str
     created_at: str
+
+
+class FollowupResponse(BaseModel):
+    """Patient follow-up survey response — captures success at 48h/2wk/6wk."""
+    contacted_therapist: Optional[bool] = None
+    therapist_id: Optional[str] = None
+    sessions_completed: Optional[int] = None
+    helpful_score: Optional[int] = None  # 1–10 NPS-style
+    would_recommend: Optional[bool] = None
+    barriers: list[str] = Field(default_factory=list)
+    notes: str = Field(default="", max_length=1500)
 
 
 class MagicCodeRequest(BaseModel):

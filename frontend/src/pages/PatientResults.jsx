@@ -119,7 +119,7 @@ export default function PatientResults() {
           <h1 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] mt-2 leading-tight">
             Therapists who want to work with you
           </h1>
-          <p className="text-[#6D6A65] mt-3 max-w-2xl">
+          <p className="text-[#6D6A65] mt-3 max-w-xl leading-relaxed">
             These therapists read your anonymous referral and submitted interest.
             Reach out to whoever feels right — many offer a free consult.
           </p>
@@ -137,10 +137,8 @@ export default function PatientResults() {
                 <p className="text-sm text-[#6D6A65] mt-1 leading-relaxed">
                   We give every therapist a 24-hour window to respond so you can
                   compare the strongest matches side-by-side instead of contacting
-                  the first person to reply. Your full results will unlock {holdEndsLabel}.
-                  {applications_pending_count > 0 && (
-                    <> So far <strong>{applications_pending_count}</strong> therapist{applications_pending_count === 1 ? " has" : "s have"} responded.</>
-                  )}
+                  the first person to reply. Your full results will unlock{" "}
+                  <strong className="text-[#2D4A3E]">{holdEndsLabel}</strong>.
                 </p>
               </div>
             </div>
@@ -149,9 +147,9 @@ export default function PatientResults() {
           {applications.length === 0 ? (
             <div className="mt-10 bg-white border border-[#E8E5DF] rounded-2xl p-10 text-center">
               <Loader2 className="animate-spin mx-auto text-[#2D4A3E]" />
-              <p className="text-[#6D6A65] mt-4">
+              <p className="text-[#6D6A65] mt-4 max-w-md mx-auto leading-relaxed">
                 {hold_active
-                  ? "Therapists are reviewing your referral. Your matches will unlock once the 24-hour window closes."
+                  ? "We'll show your matches once the 24-hour window closes."
                   : "Therapists are reviewing your referral. Responses typically arrive within 24 hours. We'll email you as soon as your matches are ready."}
               </p>
             </div>
@@ -220,12 +218,36 @@ export default function PatientResults() {
                             value={t.free_consult ? "Yes" : "—"}
                             highlight={t.free_consult}
                           />
-                          {t.office_locations && t.office_locations.length > 0 && (
+                          {t.office_addresses && t.office_addresses.length > 0 ? (
+                            <Detail
+                              label="Office"
+                              value={t.office_addresses.slice(0, 1).join(" · ")}
+                              span={2}
+                            />
+                          ) : t.office_locations && t.office_locations.length > 0 ? (
                             <Detail
                               label="Offices"
                               value={t.office_locations.slice(0, 2).join(", ")}
                               span={2}
                             />
+                          ) : null}
+                          {t.website && (
+                            <div className="col-span-2 text-xs">
+                              <span className="text-[10px] uppercase tracking-wider text-[#6D6A65]">
+                                Website
+                              </span>
+                              <div>
+                                <a
+                                  href={t.website}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[#2D4A3E] underline break-all hover:text-[#C87965]"
+                                  data-testid={`therapist-website-${i}`}
+                                >
+                                  {t.website.replace(/^https?:\/\//, "")}
+                                </a>
+                              </div>
+                            </div>
                           )}
                           <Detail
                             label="Insurance"

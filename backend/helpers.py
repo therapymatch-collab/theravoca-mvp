@@ -7,10 +7,10 @@ from typing import Any, Optional
 
 from fastapi import HTTPException
 
-from deps import db, logger, DEFAULT_THRESHOLD
+from deps import db, logger, DEFAULT_THRESHOLD, MIN_TARGET_MATCHES
 from email_service import send_patient_results, send_therapist_notification
 from geocoding import haversine_miles
-from matching import rank_therapists
+from matching import gap_axes, rank_therapists
 from sms_service import send_therapist_referral_sms
 
 
@@ -113,7 +113,9 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
         }, {"_id": 0},
     )
     therapists = await therapists_cursor.to_list(2000)
-    matches = rank_therapists(therapists, req, threshold=threshold, top_n=30, min_results=3)
+    matches = rank_therapists(
+        therapists, req, threshold=threshold, top_n=MIN_TARGET_MATCHES, min_results=3,
+    )
 
     already = set(req.get("notified_therapist_ids") or [])
     new_matches = [m for m in matches if m["id"] not in already]
@@ -141,6 +143,7 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
     for m in new_matches:
         notify_email = m.get("notify_email", True)
         notify_sms = m.get("notify_sms", True)
+        gaps = gap_axes(m.get("match_breakdown") or {}, top_n=3)
         if notify_email:
             await send_therapist_notification(
                 to=m["email"],
@@ -149,8 +152,9 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
                 therapist_id=m["id"],
                 match_score=m["match_score"],
                 summary=summary,
+                gaps=gaps,
             )
-        phone = m.get("phone") or ""
+        phone = m.get("phone_alert") or m.get("phone") or ""
         if phone and notify_sms:
             apply_url = f"{public_url}/therapist/apply/{req['id']}/{m['id']}"
             try:
@@ -163,6 +167,8 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
             except Exception as e:
                 logger.warning("SMS send failed for therapist %s: %s", m["id"], e)
 
+    notified_total = len(notified_ids)
+    outreach_needed_count = max(0, MIN_TARGET_MATCHES - notified_total)
     await db.requests.update_one(
         {"id": request_id},
         {"$set": {
@@ -172,15 +178,17 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
             "notified_distances": notified_distances,
             "matched_at": _now_iso(),
             "status": "matched",
+            "outreach_needed_count": outreach_needed_count,
         }},
     )
     logger.info(
-        "Matched request %s -> notified %d new (total %d) at threshold>=%s",
-        request_id, len(new_matches), len(notified_ids), threshold,
+        "Matched request %s -> notified %d new (total %d, outreach gap %d) at threshold>=%s",
+        request_id, len(new_matches), notified_total, outreach_needed_count, threshold,
     )
     return {
         "notified_new": len(new_matches),
-        "notified_total": len(notified_ids),
+        "notified_total": notified_total,
+        "outreach_needed_count": outreach_needed_count,
         "matches": [
             {"id": m["id"], "name": m["name"], "match_score": m["match_score"]}
             for m in new_matches

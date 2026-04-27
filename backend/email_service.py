@@ -5,7 +5,7 @@ import asyncio
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import resend
 from dotenv import load_dotenv
@@ -126,15 +126,45 @@ async def send_therapist_notification(
     therapist_id: str,
     match_score: float,
     summary: dict[str, Any],
+    gaps: Optional[list[dict[str, Any]]] = None,
 ) -> None:
     tpl = await get_template(_db(), "therapist_notification")
     first_name = _first_name(therapist_name)
     apply_url = f"{_get_app_url()}/therapist/apply/{request_id}/{therapist_id}"
     decline_url = f"{_get_app_url()}/therapist/apply/{request_id}/{therapist_id}?decline=1"
+    portal_url = f"{_get_app_url()}/portal/therapist"
     summary_rows = "".join(
         f'<tr><td style="padding:6px 0;color:{BRAND["muted"]};font-size:13px;width:140px;">{k}</td>'
         f'<td style="padding:6px 0;color:{BRAND["text"]};font-size:14px;">{v}</td></tr>'
         for k, v in summary.items()
+    )
+    gaps_html = ""
+    if gaps:
+        rows = "".join(
+            f'<li style="margin:6px 0;color:{BRAND["text"]};font-size:14px;line-height:1.5;">'
+            f'<strong style="color:{BRAND["primary"]};">{g["label"]}</strong>'
+            f' — scored {g["score"]}/{g["max"]}'
+            f'</li>'
+            for g in gaps
+        )
+        gaps_html = (
+            f'<div style="background:#FDF7EC;border:1px solid #E8DCC1;border-radius:12px;'
+            f'padding:14px 18px;margin:0 0 20px;">'
+            f'<div style="font-size:13px;color:{BRAND["muted"]};text-transform:uppercase;'
+            f'letter-spacing:0.08em;margin-bottom:6px;">Gaps — why this isn\'t 100%</div>'
+            f'<ul style="margin:6px 0 0;padding-left:18px;">{rows}</ul>'
+            f'<div style="font-size:12px;color:{BRAND["muted"]};margin-top:8px;line-height:1.5;">'
+            f'These gaps don\'t disqualify you — they just help you decide whether to take this referral.'
+            f'</div>'
+            f'</div>'
+        )
+    bulk_cta = (
+        f'<p style="color:{BRAND["muted"]};font-size:13px;line-height:1.6;text-align:center;'
+        f'margin:18px 0 0;">'
+        f'Have multiple referrals waiting? '
+        f'<a href="{portal_url}" style="color:{BRAND["primary"]};text-decoration:underline;">'
+        f'Open your dashboard</a> to review them all in one place.'
+        f'</p>'
     )
     vars_ = {"first_name": first_name, "match_score": int(match_score), "apply_url": apply_url, "decline_url": decline_url}
     greeting = render(tpl["greeting"], **vars_)
@@ -151,6 +181,7 @@ async def send_therapist_notification(
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:8px 0 24px;">
       {summary_rows}
     </table>
+    {gaps_html}
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:28px 0;">
       <tr>
         <td style="padding-right:10px;">
@@ -162,6 +193,7 @@ async def send_therapist_notification(
       </tr>
     </table>
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">{footer_note}</p>
+    {bulk_cta}
     """
     subject = render(tpl["subject"], **vars_)
     await _send(to, subject, _wrap(tpl["heading"], inner))
@@ -337,6 +369,37 @@ async def send_license_expiring_to_admin(
     </p>
     """
     await _send(to, subject, _wrap("License renewal alert", inner))
+
+
+async def send_followup_survey(
+    to: str, request_id: str, milestone: str
+) -> None:
+    """48h / 2-week / 6-week post-results survey email to the patient."""
+    portal_url = f"{_get_app_url()}/followup/{request_id}/{milestone}"
+    titles = {
+        "48h": ("48 hours in — how's it going?", "Just a quick check-in"),
+        "2wk": ("2 weeks in — quick check-in", "How are sessions going?"),
+        "6wk": ("6 weeks in — measuring progress", "Last check-in"),
+    }
+    subject, heading = titles.get(milestone, ("How's therapy going?", "Quick check-in"))
+    inner = f"""
+    <p style="font-size:16px;line-height:1.6;">Hi there,</p>
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      It's been a {('few days' if milestone == '48h' else 'couple weeks' if milestone == '2wk' else 'few weeks')}
+      since we sent you matches. We'd love to know how it's going so we can keep
+      improving for everyone.
+    </p>
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      It's a 30-second form — totally anonymous to your therapist.
+    </p>
+    <p style="margin:28px 0;">
+      <a href="{portal_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">Share an update</a>
+    </p>
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">
+      If you didn't end up working with anyone, that's useful too — let us know what got in the way.
+    </p>
+    """
+    await _send(to, subject, _wrap(heading, inner))
 
 
 async def send_availability_prompt(to: str, therapist_name: str) -> None:

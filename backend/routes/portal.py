@@ -120,11 +120,16 @@ async def portal_therapist_referrals(
     ).sort("created_at", -1).to_list(100)
 
     out = []
+    from matching import gap_axes
     for r in reqs:
         score = (r.get("notified_scores") or {}).get(therapist["id"])
+        breakdown = (r.get("notified_breakdowns") or {}).get(therapist["id"]) or {}
+        gaps = gap_axes(breakdown, top_n=3) if breakdown else []
         application = await db.applications.find_one(
             {"request_id": r["id"], "therapist_id": therapist["id"]},
-            {"_id": 0, "id": 1, "message": 1, "created_at": 1},
+            {"_id": 0, "id": 1, "message": 1, "created_at": 1,
+             "confirms_availability": 1, "confirms_urgency": 1,
+             "confirms_payment": 1, "all_confirmed": 1},
         )
         decline = await db.declines.find_one(
             {"request_id": r["id"], "therapist_id": therapist["id"]},
@@ -139,11 +144,13 @@ async def portal_therapist_referrals(
         out.append({
             "request_id": r["id"],
             "match_score": score,
+            "match_breakdown": breakdown,
+            "gaps": gaps,
             "created_at": r["created_at"],
             "status": r.get("status"),
             "referral_status": ref_status,
             "summary": _safe_summary_for_therapist({**r, "email": ""}),
-            "presenting_issues_preview": (r.get("presenting_issues") or "")[:140],
+            "presenting_issues_preview": (r.get("presenting_issues") or "")[:140] if isinstance(r.get("presenting_issues"), str) else (", ".join(r.get("presenting_issues") or []))[:140],
             "applied": bool(application),
             "application": application,
             "declined": bool(decline),
@@ -166,6 +173,8 @@ async def portal_therapist_referrals(
             "modalities": therapist.get("modalities", []),
             "modality_offering": therapist.get("modality_offering"),
             "office_locations": therapist.get("office_locations", []),
+            "office_addresses": therapist.get("office_addresses", []),
+            "website": therapist.get("website"),
             "insurance_accepted": therapist.get("insurance_accepted", []),
             "cash_rate": therapist.get("cash_rate"),
             "sliding_scale": therapist.get("sliding_scale"),

@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 import { Header, Footer } from "@/components/SiteShell";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { api, sessionClient, getSession, clearSession } from "@/lib/api";
 
 const AVAILABILITY = [
@@ -40,6 +41,51 @@ export default function TherapistPortal() {
   const [sub, setSub] = useState(null);
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
   const [availDraft, setAvailDraft] = useState({ availability_windows: [], urgency_capacity: "" });
+  const [selected, setSelected] = useState(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState("");
+  const [bulkAvail, setBulkAvail] = useState(false);
+  const [bulkUrgency, setBulkUrgency] = useState(false);
+  const [bulkPayment, setBulkPayment] = useState(false);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+
+  const toggleSelect = (rid) => {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(rid)) next.delete(rid);
+      else next.add(rid);
+      return next;
+    });
+  };
+
+  const submitBulk = async () => {
+    if (!bulkAvail || !bulkUrgency || !bulkPayment) {
+      toast.error("Please confirm all three commitments before bulk-applying.");
+      return;
+    }
+    setBulkSubmitting(true);
+    try {
+      const res = await sessionClient().post("/portal/therapist/bulk-apply", {
+        request_ids: Array.from(selected),
+        message: bulkMsg,
+        confirms_availability: bulkAvail,
+        confirms_urgency: bulkUrgency,
+        confirms_payment: bulkPayment,
+      });
+      toast.success(`Submitted interest on ${res.data?.succeeded || 0} referrals.`);
+      setBulkOpen(false);
+      setSelected(new Set());
+      setBulkMsg("");
+      setBulkAvail(false);
+      setBulkUrgency(false);
+      setBulkPayment(false);
+      await loadAll();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Bulk apply failed.");
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
 
   const loadAll = () => {
     return sessionClient()
@@ -392,57 +438,185 @@ export default function TherapistPortal() {
           )}
 
           {!isPending && data?.referrals?.length > 0 && (
-            <div className="mt-10 space-y-4">
-              {data.referrals.map((r) => (
-                <Link
-                  to={`/therapist/apply/${r.request_id}/${therapist.id}`}
-                  key={r.request_id}
-                  className="block bg-white border border-[#E8E5DF] rounded-2xl p-5 sm:p-6 hover:-translate-y-0.5 transition"
-                  data-testid={`therapist-referral-${r.request_id}`}
+            <div className="mt-10">
+              {/* Bulk action bar — only shown when ≥1 selected */}
+              {selected.size > 0 && (
+                <div
+                  className="sticky top-2 z-10 mb-4 bg-[#2D4A3E] text-white rounded-2xl p-4 flex items-center justify-between gap-4 flex-wrap shadow-lg"
+                  data-testid="bulk-action-bar"
                 >
-                  <div className="flex items-start justify-between flex-wrap gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <span className="inline-flex items-center gap-1 bg-[#2D4A3E] text-white text-xs font-semibold px-2.5 py-1 rounded-full">
-                          <Star size={10} fill="currentColor" />
-                          {Math.round(r.match_score)}% match
-                        </span>
-                        {r.referral_status === "interested" ? (
-                          <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-[#4A6B5D]/15 text-[#4A6B5D]">
-                            <CheckCircle2 size={11} /> interested
-                          </span>
-                        ) : r.referral_status === "declined" ? (
-                          <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-[#6D6A65]/15 text-[#6D6A65]">
-                            <ThumbsDown size={11} /> declined
-                          </span>
-                        ) : (
-                          <span className="inline-flex text-xs px-2.5 py-1 rounded-full bg-[#C87965]/15 text-[#C87965]">
-                            new
-                          </span>
+                  <div className="text-sm">
+                    <strong>{selected.size}</strong> referral{selected.size > 1 ? "s" : ""}{" "}
+                    selected
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSelected(new Set())}
+                      className="text-xs text-white/70 hover:text-white"
+                      data-testid="bulk-clear"
+                    >
+                      Clear
+                    </button>
+                    <button
+                      onClick={() => setBulkOpen(true)}
+                      className="bg-white text-[#2D4A3E] rounded-full px-4 py-1.5 text-sm font-semibold hover:bg-[#FDFBF7] transition"
+                      data-testid="bulk-confirm-open"
+                    >
+                      Confirm interest on all {selected.size}
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div className="space-y-4">
+                {data.referrals.map((r) => {
+                  const isSelected = selected.has(r.request_id);
+                  const canBulk = r.referral_status === "pending";
+                  return (
+                    <div
+                      key={r.request_id}
+                      className={`bg-white border rounded-2xl p-5 sm:p-6 transition ${
+                        isSelected
+                          ? "border-[#2D4A3E] ring-2 ring-[#2D4A3E]/20"
+                          : "border-[#E8E5DF] hover:-translate-y-0.5"
+                      }`}
+                      data-testid={`therapist-referral-${r.request_id}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        {canBulk && (
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => toggleSelect(r.request_id)}
+                            className="mt-1 border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E] shrink-0"
+                            data-testid={`select-${r.request_id}`}
+                          />
                         )}
-                        <span className="text-xs text-[#6D6A65]">
-                          {new Date(r.created_at).toLocaleString()}
-                        </span>
-                      </div>
-                      <p className="text-[#2B2A29] mt-3 leading-relaxed line-clamp-2">
-                        {r.presenting_issues_preview}
-                        {r.presenting_issues_preview?.length === 140 && "…"}
-                      </p>
-                      <div className="text-xs text-[#6D6A65] mt-2 flex flex-wrap gap-x-4 gap-y-1">
-                        <span>{r.summary["Age group"]}</span>
-                        <span>{r.summary.State}</span>
-                        <span>{r.summary["Session format"]}</span>
-                        <span>{r.summary.Payment}</span>
+                        <Link
+                          to={`/therapist/apply/${r.request_id}/${therapist.id}`}
+                          className="flex-1 min-w-0"
+                        >
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className="inline-flex items-center gap-1 bg-[#2D4A3E] text-white text-xs font-semibold px-2.5 py-1 rounded-full">
+                              <Star size={10} fill="currentColor" />
+                              {Math.round(r.match_score)}% match
+                            </span>
+                            {r.referral_status === "interested" ? (
+                              <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-[#4A6B5D]/15 text-[#4A6B5D]">
+                                <CheckCircle2 size={11} /> interested
+                              </span>
+                            ) : r.referral_status === "declined" ? (
+                              <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-[#6D6A65]/15 text-[#6D6A65]">
+                                <ThumbsDown size={11} /> declined
+                              </span>
+                            ) : (
+                              <span className="inline-flex text-xs px-2.5 py-1 rounded-full bg-[#C87965]/15 text-[#C87965]">
+                                new
+                              </span>
+                            )}
+                            <span className="text-xs text-[#6D6A65]">
+                              {new Date(r.created_at).toLocaleString()}
+                            </span>
+                          </div>
+                          <p className="text-[#2B2A29] mt-3 leading-relaxed line-clamp-2">
+                            {r.presenting_issues_preview}
+                            {r.presenting_issues_preview?.length === 140 && "…"}
+                          </p>
+                          <div className="text-xs text-[#6D6A65] mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                            <span>{r.summary["Age group"]}</span>
+                            <span>{r.summary.State}</span>
+                            <span>{r.summary["Session format"]}</span>
+                            <span>{r.summary.Payment}</span>
+                          </div>
+                          {r.gaps && r.gaps.length > 0 && r.referral_status === "pending" && (
+                            <div className="mt-3 text-xs text-[#6D6A65]">
+                              <span className="font-semibold text-[#C87965]">
+                                Gaps:
+                              </span>{" "}
+                              {r.gaps.map((g, i) => (
+                                <span key={g.key}>
+                                  {i > 0 && " · "}
+                                  {g.label} ({g.score}/{g.max})
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </Link>
+                        <ChevronRight className="text-[#6D6A65] mt-1 shrink-0" size={18} />
                       </div>
                     </div>
-                    <ChevronRight className="text-[#6D6A65] mt-1" size={18} />
-                  </div>
-                </Link>
-              ))}
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
       </main>
+
+      {/* Bulk-confirm modal */}
+      {bulkOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-3 sm:p-6 overflow-y-auto"
+          data-testid="bulk-modal"
+        >
+          <div className="bg-white rounded-3xl border border-[#E8E5DF] max-w-lg w-full p-6 sm:p-8">
+            <h3 className="font-serif-display text-2xl text-[#2D4A3E]">
+              Confirm interest on {selected.size} referral{selected.size > 1 ? "s" : ""}
+            </h3>
+            <p className="text-sm text-[#6D6A65] mt-1.5 leading-relaxed">
+              Same message + commitments will be applied to all selected referrals.
+              Patients only see therapists who confirmed they can actually take them.
+            </p>
+            <Textarea
+              rows={4}
+              value={bulkMsg}
+              onChange={(e) => setBulkMsg(e.target.value)}
+              placeholder="Optional intro that goes to all selected patients."
+              className="mt-4 bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+              data-testid="bulk-message"
+            />
+            <div className="mt-4 space-y-2">
+              {[
+                { k: "avail", state: bulkAvail, setter: setBulkAvail, label: "I can see them this week", testid: "bulk-confirm-availability" },
+                { k: "urgency", state: bulkUrgency, setter: setBulkUrgency, label: "I match their urgency", testid: "bulk-confirm-urgency" },
+                { k: "pay", state: bulkPayment, setter: setBulkPayment, label: "I accept their payment method", testid: "bulk-confirm-payment" },
+              ].map((row) => (
+                <label
+                  key={row.k}
+                  className={`flex items-center gap-3 border rounded-xl px-3 py-2.5 cursor-pointer transition ${
+                    row.state ? "bg-[#F2F4F0] border-[#2D4A3E]" : "bg-[#FDFBF7] border-[#E8E5DF] hover:border-[#2D4A3E]"
+                  }`}
+                >
+                  <Checkbox
+                    checked={row.state}
+                    onCheckedChange={(v) => row.setter(!!v)}
+                    className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
+                    data-testid={row.testid}
+                  />
+                  <span className="text-sm font-medium text-[#2B2A29]">{row.label}</span>
+                </label>
+              ))}
+            </div>
+            <div className="mt-6 flex flex-wrap gap-2 justify-end">
+              <button
+                type="button"
+                className="tv-btn-secondary !py-2 !px-4 text-sm"
+                onClick={() => setBulkOpen(false)}
+                data-testid="bulk-cancel"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={bulkSubmitting || !bulkAvail || !bulkUrgency || !bulkPayment}
+                onClick={submitBulk}
+                className="tv-btn-primary !py-2 !px-4 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                data-testid="bulk-submit"
+              >
+                {bulkSubmitting ? "Submitting..." : `Confirm all ${selected.size}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Availability modal */}
       {availabilityOpen && (
@@ -563,6 +737,3 @@ function PreviewRow({ label, value, span = 1 }) {
     </div>
   );
 }
-
-// Silence unused-import warnings on Checkbox (kept for future inline toggles)
-void Checkbox;

@@ -13,7 +13,7 @@ from deps import db, DEFAULT_THRESHOLD, require_admin
 from email_service import send_verification_email
 from geocoding import geocode_city, geocode_zip
 from helpers import _now_iso, _parse_iso, _trigger_matching
-from models import RequestCreate
+from models import FollowupResponse, RequestCreate
 
 router = APIRouter()
 
@@ -78,6 +78,58 @@ async def public_request_view(request_id: str):
     if not req:
         raise HTTPException(404)
     return req
+
+
+@router.get("/followup/{request_id}/{milestone}")
+async def followup_view(request_id: str, milestone: str):
+    """Surface enough context for the follow-up form: list of therapist
+    applications the patient saw, plus any previously submitted response."""
+    if milestone not in ("48h", "2wk", "6wk"):
+        raise HTTPException(400, "Invalid milestone")
+    req = await db.requests.find_one(
+        {"id": request_id},
+        {"_id": 0, "id": 1, "results_sent_at": 1, "status": 1},
+    )
+    if not req:
+        raise HTTPException(404)
+    apps = await db.applications.find(
+        {"request_id": request_id},
+        {"_id": 0, "therapist_id": 1, "therapist_name": 1, "match_score": 1},
+    ).sort("match_score", -1).to_list(50)
+    existing = await db.followups.find_one(
+        {"request_id": request_id, "milestone": milestone}, {"_id": 0}
+    )
+    return {
+        "request_id": request_id,
+        "milestone": milestone,
+        "applications": apps,
+        "existing": existing,
+    }
+
+
+@router.post("/followup/{request_id}/{milestone}")
+async def followup_submit(
+    request_id: str, milestone: str, payload: FollowupResponse,
+):
+    """Patient submits the follow-up survey. Idempotent — last write wins."""
+    if milestone not in ("48h", "2wk", "6wk"):
+        raise HTTPException(400, "Invalid milestone")
+    req = await db.requests.find_one({"id": request_id}, {"_id": 0, "id": 1, "email": 1})
+    if not req:
+        raise HTTPException(404)
+    doc = {
+        "request_id": request_id,
+        "patient_email_anon": (req.get("email", "")[:3] + "***") if req.get("email") else "",
+        "milestone": milestone,
+        **payload.model_dump(),
+        "created_at": _now_iso(),
+    }
+    await db.followups.update_one(
+        {"request_id": request_id, "milestone": milestone},
+        {"$set": doc},
+        upsert=True,
+    )
+    return {"ok": True, "milestone": milestone}
 
 
 @router.post("/admin/requests/{request_id}/release-results")

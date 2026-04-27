@@ -30,6 +30,9 @@ export default function TherapistApply() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState("");
+  const [confirmAvail, setConfirmAvail] = useState(false);
+  const [confirmUrgency, setConfirmUrgency] = useState(false);
+  const [confirmPayment, setConfirmPayment] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [declineOpen, setDeclineOpen] = useState(false);
@@ -45,9 +48,12 @@ export default function TherapistApply() {
         setData(res.data);
         if (res.data.already_applied) {
           setMessage(res.data.existing_message || "");
+          const c = res.data.existing_confirmations || {};
+          setConfirmAvail(!!c.availability);
+          setConfirmUrgency(!!c.urgency);
+          setConfirmPayment(!!c.payment);
           setSubmitted(true);
         }
-        // Auto-open decline dialog when therapist clicks "Not interested" in email
         if (searchParams.get("decline") === "1" && !res.data.already_applied) {
           setDeclineOpen(true);
         }
@@ -55,10 +61,21 @@ export default function TherapistApply() {
       .catch((e) => setError(e?.response?.data?.detail || "Could not load this referral."));
   }, [requestId, therapistId, searchParams]);
 
+  const allConfirmed = confirmAvail && confirmUrgency && confirmPayment;
+
   const submit = async () => {
+    if (!allConfirmed) {
+      toast.error("Please confirm all three commitments before submitting interest.");
+      return;
+    }
     setSubmitting(true);
     try {
-      await api.post(`/therapist/apply/${requestId}/${therapistId}`, { message });
+      await api.post(`/therapist/apply/${requestId}/${therapistId}`, {
+        message,
+        confirms_availability: confirmAvail,
+        confirms_urgency: confirmUrgency,
+        confirms_payment: confirmPayment,
+      });
       setSubmitted(true);
       toast.success("Thank you — your interest has been recorded.");
     } catch (e) {
@@ -152,6 +169,30 @@ export default function TherapistApply() {
                   style={{ width: `${data.match_score}%` }}
                 />
               </div>
+              {data.gaps && data.gaps.length > 0 && (
+                <div className="mt-5 pt-5 border-t border-[#E8E5DF]" data-testid="apply-gaps">
+                  <div className="text-xs uppercase tracking-[0.15em] text-[#6D6A65] mb-2">
+                    Why not 100%
+                  </div>
+                  <ul className="space-y-1.5">
+                    {data.gaps.map((g) => (
+                      <li
+                        key={g.key}
+                        className="text-xs text-[#2B2A29] leading-snug"
+                        data-testid={`gap-${g.key}`}
+                      >
+                        <span className="text-[#C87965] font-semibold">
+                          {g.label}
+                        </span>{" "}
+                        — {g.score}/{g.max}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-[10px] text-[#6D6A65] mt-2 leading-relaxed">
+                    These don't disqualify you — they just help you decide.
+                  </p>
+                </div>
+              )}
             </div>
             <div className="md:col-span-2 bg-white border border-[#E8E5DF] rounded-2xl p-6">
               <h3 className="font-semibold text-[#2B2A29] mb-3">Referral summary</h3>
@@ -187,10 +228,72 @@ export default function TherapistApply() {
               className="mt-4 bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
               data-testid="therapist-message"
             />
-            <div className="mt-6 flex items-center justify-between flex-wrap gap-4">
-              <p className="text-xs text-[#6D6A65] max-w-md">
-                The patient will see your name, profile and message only. Your contact info is
-                shared only with patients you're matched with.
+
+            <div className="mt-6 pt-6 border-t border-[#E8E5DF]">
+              <h4 className="font-semibold text-[#2B2A29]">
+                Confirm your commitment
+              </h4>
+              <p className="text-sm text-[#6D6A65] mt-1">
+                Please confirm all three before submitting interest. This protects
+                patients from being matched with therapists who can't actually take them.
+              </p>
+              <div className="mt-4 space-y-2.5">
+                {[
+                  {
+                    k: "avail",
+                    state: confirmAvail,
+                    setter: setConfirmAvail,
+                    title: "I can see this patient this week",
+                    sub: `Their availability: ${data.summary["Availability"] || "—"}`,
+                    testid: "confirm-availability",
+                  },
+                  {
+                    k: "urgency",
+                    state: confirmUrgency,
+                    setter: setConfirmUrgency,
+                    title: "I can match their urgency",
+                    sub: `Patient urgency: ${data.summary["Urgency"] || "—"}`,
+                    testid: "confirm-urgency",
+                  },
+                  {
+                    k: "payment",
+                    state: confirmPayment,
+                    setter: setConfirmPayment,
+                    title: "I accept their payment method",
+                    sub: `Payment: ${data.summary["Payment"] || "—"}`,
+                    testid: "confirm-payment",
+                  },
+                ].map((row) => (
+                  <label
+                    key={row.k}
+                    className={`flex items-start gap-3 border rounded-xl px-4 py-3 cursor-pointer transition ${
+                      row.state
+                        ? "bg-[#F2F4F0] border-[#2D4A3E]"
+                        : "bg-[#FDFBF7] border-[#E8E5DF] hover:border-[#2D4A3E]"
+                    } ${submitted || declined ? "pointer-events-none opacity-60" : ""}`}
+                  >
+                    <Checkbox
+                      checked={row.state}
+                      onCheckedChange={(v) => row.setter(!!v)}
+                      disabled={submitted || declined}
+                      className="mt-0.5 border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
+                      data-testid={row.testid}
+                    />
+                    <div className="text-sm">
+                      <div className="font-medium text-[#2B2A29]">{row.title}</div>
+                      <div className="text-xs text-[#6D6A65] mt-0.5 leading-relaxed">
+                        {row.sub}
+                      </div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-end justify-between flex-wrap gap-4">
+              <p className="text-xs text-[#6D6A65] flex-1 min-w-[260px] max-w-md leading-relaxed">
+                The patient will see your name, profile and message only. Your
+                contact info is shared only with patients you're matched with.
               </p>
               {submitted ? (
                 <div
@@ -216,8 +319,8 @@ export default function TherapistApply() {
                     <ThumbsDown size={14} /> Not interested
                   </button>
                   <button
-                    className="tv-btn-primary disabled:opacity-50"
-                    disabled={submitting}
+                    className="tv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={submitting || !allConfirmed}
                     onClick={submit}
                     data-testid="apply-submit-btn"
                   >

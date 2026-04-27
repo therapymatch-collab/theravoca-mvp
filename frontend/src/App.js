@@ -9,6 +9,7 @@ import TherapistSignup from "@/pages/TherapistSignup";
 import SignIn from "@/pages/SignIn";
 import PatientPortal from "@/pages/PatientPortal";
 import TherapistPortal from "@/pages/TherapistPortal";
+import FollowupForm from "@/pages/FollowupForm";
 import PatientResults from "@/pages/PatientResults";
 import AdminLogin from "@/pages/AdminLogin";
 import AdminDashboard from "@/pages/AdminDashboard";
@@ -34,6 +35,7 @@ function App() {
             element={<TherapistApply />}
           />
           <Route path="/results/:requestId" element={<PatientResults />} />
+          <Route path="/followup/:requestId/:milestone" element={<FollowupForm />} />
           <Route path="/admin" element={<AdminLogin />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="*" element={<NotFound />} />

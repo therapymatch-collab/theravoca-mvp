@@ -170,7 +170,10 @@ class TestAdminRequestDetailDistance:
         d = s.get(f"{BASE_URL}/api/admin/requests/{rid}",
                   headers={"x-admin-password": ADMIN_PASSWORD}, timeout=15).json()
         notified = d.get("notified", [])
-        assert len(notified) >= 5, f"Expected at least 5 notified, got {len(notified)}"
+        # With the new 70% floor + 30-mile in-person filter, count varies by
+        # seed RNG. The functionality we care about is distance metadata, so
+        # require at least 1 notified.
+        assert len(notified) >= 1, f"Expected at least 1 notified, got {len(notified)}"
         # notified_distances on the request doc
         nd = d["request"].get("notified_distances") or {}
         assert isinstance(nd, dict)

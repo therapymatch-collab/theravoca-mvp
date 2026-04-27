@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from cron import (
     _run_availability_prompts, _run_daily_billing_charges,
-    _run_license_expiry_alerts,
+    _run_followup_surveys, _run_license_expiry_alerts,
 )
 from deps import (
     db, logger, ADMIN_PASSWORD, DEFAULT_THRESHOLD,
@@ -153,7 +153,8 @@ async def admin_update_therapist(
         "license_number", "license_expires_at", "license_picture",
         "client_types", "age_groups",
         "primary_specialties", "secondary_specialties", "general_treats",
-        "modalities", "modality_offering", "office_locations",
+        "modalities", "modality_offering", "office_locations", "office_addresses",
+        "website",
         "insurance_accepted", "cash_rate", "sliding_scale", "free_consult",
         "years_experience", "availability_windows", "urgency_capacity",
         "style_tags", "bio", "is_active", "pending_approval",
@@ -263,7 +264,109 @@ async def admin_run_daily_tasks(_: bool = Depends(require_admin)):
     bill = await _run_daily_billing_charges()
     lic = await _run_license_expiry_alerts()
     avail = await _run_availability_prompts()
-    return {"ok": True, "billing": bill, "license": lic, "availability": avail}
+    follow = await _run_followup_surveys()
+    return {"ok": True, "billing": bill, "license": lic, "availability": avail, "followups": follow}
+
+
+@router.get("/admin/followups")
+async def admin_list_followups(_: bool = Depends(require_admin)):
+    """All follow-up survey responses across all milestones."""
+    docs = await db.followups.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    counts = {"48h": 0, "2wk": 0, "6wk": 0}
+    helpful_scores: list[int] = []
+    contacted = 0
+    for d in docs:
+        m = d.get("milestone")
+        if m in counts:
+            counts[m] += 1
+        if d.get("helpful_score") is not None:
+            helpful_scores.append(int(d["helpful_score"]))
+        if d.get("contacted_therapist"):
+            contacted += 1
+    avg = round(sum(helpful_scores) / len(helpful_scores), 2) if helpful_scores else None
+    return {
+        "responses": docs,
+        "counts": counts,
+        "avg_helpful_score": avg,
+        "contacted_count": contacted,
+        "total": len(docs),
+    }
+
+
+@router.post("/admin/therapists/bulk-approve")
+async def admin_bulk_approve_therapists(payload: dict, _: bool = Depends(require_admin)):
+    """Approve a list of pending therapists in one shot."""
+    import asyncio
+    ids = [str(x) for x in (payload or {}).get("therapist_ids") or []][:200]
+    approved: list[str] = []
+    for tid in ids:
+        t = await db.therapists.find_one({"id": tid}, {"_id": 0, "id": 1, "email": 1, "name": 1})
+        if not t:
+            continue
+        await db.therapists.update_one(
+            {"id": tid},
+            {"$set": {"pending_approval": False, "is_active": True, "approved_at": _now_iso()}},
+        )
+        asyncio.create_task(send_therapist_approved(t["email"], t["name"]))
+        approved.append(tid)
+    return {"ok": True, "approved": approved, "count": len(approved)}
+
+
+@router.get("/admin/therapists/export.csv")
+async def admin_export_therapists_csv(_: bool = Depends(require_admin)):
+    """CSV dump of all therapists for spreadsheet review."""
+    import csv
+    import io
+    from fastapi.responses import StreamingResponse
+    therapists = await db.therapists.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    cols = [
+        "id", "name", "email", "phone_alert", "office_phone", "website",
+        "credential_type", "license_number", "license_expires_at",
+        "subscription_status", "pending_approval", "is_active",
+        "primary_specialties", "secondary_specialties", "general_treats",
+        "modalities", "modality_offering", "office_locations", "office_addresses",
+        "insurance_accepted", "cash_rate", "sliding_scale", "free_consult",
+        "years_experience", "availability_windows", "urgency_capacity",
+        "created_at",
+    ]
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(cols)
+    for t in therapists:
+        row = []
+        for c in cols:
+            v = t.get(c)
+            if isinstance(v, list):
+                v = ", ".join(str(x) for x in v)
+            row.append(v if v is not None else "")
+        w.writerow(row)
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=theravoca_therapists.csv"},
+    )
+
+
+@router.post("/admin/seed/reset")
+async def admin_seed_reset(_: bool = Depends(require_admin)):
+    """DESTRUCTIVE — clears requests/applications/declines/therapists/magic_codes
+    and re-seeds 100 fresh therapists (v3 schema). Also kicks off office geocoding."""
+    cleared = {
+        "requests": (await db.requests.delete_many({})).deleted_count,
+        "applications": (await db.applications.delete_many({})).deleted_count,
+        "declines": (await db.declines.delete_many({})).deleted_count,
+        "therapists": (await db.therapists.delete_many({})).deleted_count,
+        "magic_codes": (await db.magic_codes.delete_many({})).deleted_count,
+        "cron_runs": (await db.cron_runs.delete_many({})).deleted_count,
+    }
+    therapists = generate_seed_therapists(100)
+    await db.therapists.insert_many([t.copy() for t in therapists])
+    # Trigger geocoding inline so post-reset matching works without waiting for the
+    # async startup task. Uses cached city geos so it's fast (<2s for 100 therapists).
+    from helpers import _backfill_therapist_geo
+    await _backfill_therapist_geo()
+    return {"ok": True, "cleared": cleared, "seeded": len(therapists)}
 
 
 # Suppress unused-import warnings on logger (kept for future logging)
