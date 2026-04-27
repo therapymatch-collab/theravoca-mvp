@@ -398,6 +398,23 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
   - Tests: `tests/test_iteration38_outreach_convert.py` covers happy path,
     duplicate convert (409), pre-existing therapist email (409), unknown id (404).
 
+### Iteration 47 (2026-04-27) — Outreach GC fix verified + invited therapists in detail view + dropdown reorder
+- **Background-task GC fix verified**: `helpers._spawn_bg()` strong-reference
+  helper, `_sweep_pending_outreach()` cron, and admin "Run LLM outreach now"
+  button at `POST /api/admin/requests/{id}/run-outreach` are live and tested
+  (22 backend tests pass, screenshot confirms admin UI button renders).
+- **Invited therapists in request detail panel** (`GET /api/admin/requests/{id}`
+  now returns `invited` array). New section "LLM-invited therapists (N)" at the
+  bottom of the admin request detail dialog shows each candidate's name,
+  license, email, location, estimated match score, specialties, match
+  rationale, and email-delivery status. Lets admins see directory matches +
+  applications + LLM invites in a single screen.
+- **Referral source dropdown order**: backend now always pushes "Other" and
+  "Prefer not to say" to the end of the options list (in that order) on both
+  the public `/config/referral-source-options` and admin endpoints, plus the
+  admin save endpoint. IntakeForm also reorders client-side as defense in
+  depth. Custom admin orderings of other items are preserved.
+
 ## Key DB Schemas
 
 **requests**: `{id, email, location_state, location_city, location_zip, patient_geo, client_type, age_group, payment_type, insurance_name, budget, sliding_scale_ok, presenting_issues:[…], modality_preferences:[…], availability_windows, urgency, prior_therapy, gender_preference, gender_required, style_preference, threshold, notified_therapist_ids, notified_scores, notified_breakdowns, notified_distances, results_released_at, results_sent_at, status, verified, verified_at, created_at, matched_at}`

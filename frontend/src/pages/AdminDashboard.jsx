@@ -2128,6 +2128,89 @@ export default function AdminDashboard() {
                   </div>
                 )}
               </div>
+
+              <div data-testid="detail-invited-therapists">
+                <div className="flex items-baseline justify-between gap-3 mb-2">
+                  <h4 className="font-semibold text-[#2B2A29]">
+                    LLM-invited therapists ({(detail.invited || []).length})
+                  </h4>
+                  <p className="text-xs text-[#6D6A65]">
+                    External candidates we emailed via the LLM outreach agent
+                  </p>
+                </div>
+                {(detail.invited || []).length === 0 ? (
+                  <p className="text-sm text-[#6D6A65]">
+                    No LLM outreach invites for this request yet. If the directory
+                    returned fewer than 30 matches, click <strong>Run LLM outreach now</strong> above.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-[360px] overflow-y-auto">
+                    {(detail.invited || []).map((inv, idx) => {
+                      const c = inv.candidate || {};
+                      return (
+                        <div
+                          key={inv.id}
+                          className="border border-[#E8E5DF] rounded-xl p-4 bg-[#FDFBF7]"
+                          data-testid={`detail-invited-row-${idx}`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-medium text-[#2B2A29] truncate">
+                                {c.name || "Unnamed candidate"}
+                                {c.license_type && (
+                                  <span className="text-xs text-[#6D6A65] font-normal ml-2">
+                                    {c.license_type}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-[#6D6A65] truncate">
+                                {c.email || "—"}
+                                {(c.city || c.state) && (
+                                  <span> · {[c.city, c.state].filter(Boolean).join(", ")}</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {c.estimated_score != null && (
+                                <span className="font-mono text-xs bg-[#C87965] text-white px-2 py-0.5 rounded">
+                                  ~{c.estimated_score}%
+                                </span>
+                              )}
+                              {inv.status === "converted" ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] text-[#2D4A3E] bg-[#F2F4F0] border border-[#D9DDD2] rounded-full px-2 py-0.5">
+                                  <CheckCircle2 size={11} /> Converted
+                                </span>
+                              ) : inv.email_sent ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] text-[#2D4A3E]">
+                                  <CheckCircle2 size={11} /> Emailed
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[11px] text-[#D45D5D]">
+                                  <XCircle size={11} /> Send failed
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {(c.specialties || []).length > 0 && (
+                            <div className="text-xs text-[#2B2A29] mt-2">
+                              <span className="text-[#6D6A65]">Specialties: </span>
+                              {(c.specialties || []).join(", ")}
+                            </div>
+                          )}
+                          {c.match_rationale && (
+                            <p className="text-xs text-[#2B2A29] mt-2 italic">
+                              "{c.match_rationale}"
+                            </p>
+                          )}
+                          <div className="text-[11px] text-[#6D6A65] mt-2">
+                            Sent {inv.created_at ? new Date(inv.created_at).toLocaleString() : "—"}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </DialogContent>

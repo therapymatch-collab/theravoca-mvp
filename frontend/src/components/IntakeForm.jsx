@@ -161,9 +161,20 @@ export default function IntakeForm() {
   // ── Admin-managed referral source dropdown options ────────────────────
   const [referralSourceOptions, setReferralSourceOptions] = useState([]);
   useEffect(() => {
+    const reorder = (opts) => {
+      // Always show "Other" and "Prefer not to say" at the bottom of the list,
+      // regardless of how the admin saved them.
+      const tailKeys = new Set(["other", "prefer not to say"]);
+      const head = opts.filter((o) => !tailKeys.has(o.trim().toLowerCase()));
+      const other = opts.find((o) => o.trim().toLowerCase() === "other");
+      const prefer = opts.find(
+        (o) => o.trim().toLowerCase() === "prefer not to say",
+      );
+      return [...head, ...(other ? [other] : []), ...(prefer ? [prefer] : [])];
+    };
     api
       .get("/config/referral-source-options")
-      .then((r) => setReferralSourceOptions(r.data?.options || []))
+      .then((r) => setReferralSourceOptions(reorder(r.data?.options || [])))
       .catch(() => setReferralSourceOptions([]));
   }, []);
 

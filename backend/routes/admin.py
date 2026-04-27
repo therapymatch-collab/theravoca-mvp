@@ -95,7 +95,15 @@ async def admin_request_detail(request_id: str, _: bool = Depends(require_admin)
             })
     apps = await db.applications.find({"request_id": request_id}, {"_id": 0}).to_list(50)
     apps.sort(key=lambda a: a["match_score"], reverse=True)
-    return {"request": req, "notified": notified, "applications": apps}
+    invited = await db.outreach_invites.find(
+        {"request_id": request_id}, {"_id": 0},
+    ).sort("created_at", -1).to_list(200)
+    return {
+        "request": req,
+        "notified": notified,
+        "applications": apps,
+        "invited": invited,
+    }
 
 
 @router.post("/admin/requests/{request_id}/trigger-results")
@@ -556,6 +564,19 @@ DEFAULT_REFERRAL_SOURCE_OPTIONS = [
 ]
 
 
+def _reorder_referral_options(options: list[str]) -> list[str]:
+    """Always send 'Other' and 'Prefer not to say' to the end of the list,
+    in that order, regardless of how the admin saved them."""
+    tail_keys = {"other", "prefer not to say"}
+    head = [o for o in options if o.strip().lower() not in tail_keys]
+    other = next((o for o in options if o.strip().lower() == "other"), None)
+    prefer = next(
+        (o for o in options if o.strip().lower() == "prefer not to say"), None,
+    )
+    tail = [o for o in (other, prefer) if o]
+    return head + tail
+
+
 @router.get("/admin/referral-source-options", dependencies=[Depends(require_admin)])
 async def admin_get_referral_source_options() -> dict[str, Any]:
     """Editable list of choices shown on the patient intake's
@@ -564,7 +585,7 @@ async def admin_get_referral_source_options() -> dict[str, Any]:
     options = doc.get("options") if doc else None
     if not options:
         options = DEFAULT_REFERRAL_SOURCE_OPTIONS
-    return {"options": options}
+    return {"options": _reorder_referral_options(options)}
 
 
 @router.put("/admin/referral-source-options", dependencies=[Depends(require_admin)])
@@ -576,7 +597,7 @@ async def admin_set_referral_source_options(payload: dict) -> dict[str, Any]:
         or not all(isinstance(o, str) and o.strip() for o in options)
     ):
         raise HTTPException(400, "options must be a non-empty list of strings")
-    cleaned = [o.strip() for o in options]
+    cleaned = _reorder_referral_options([o.strip() for o in options])
     await db.app_config.update_one(
         {"key": "referral_source_options"},
         {"$set": {"key": "referral_source_options", "options": cleaned}},
@@ -595,7 +616,7 @@ async def public_referral_source_options() -> dict[str, Any]:
     options = doc.get("options") if doc else None
     if not options:
         options = DEFAULT_REFERRAL_SOURCE_OPTIONS
-    return {"options": options}
+    return {"options": _reorder_referral_options(options)}
 
 
 @router.post("/admin/therapists/{therapist_id}/reviews")
