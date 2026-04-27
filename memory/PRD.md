@@ -57,6 +57,10 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+### iter-28 — Header navigation polish (Apr 27, 2026)
+- **Logo click → home top**: `useScrollTopNavigate("/")` forces `window.scrollTo(0,0)` whether the user is already on `/` (where React Router suppresses navigation) or coming from another route.
+- **"For therapists" click → form section**: New `useNavigateToSignupForm()` lands users directly on the `#signup-form` section of `/therapists/join` so the "Get more targeted patient referrals" header + wizard are immediately visible (skips the scrolling-past-hero step). Verified scrollY=913 with signup-form bbox.top=95px — exactly where the user wanted.
+
 ### iter-27 — Code-review hardening (Apr 27, 2026)
 - **Test secrets externalized**: All 16 backend test files now load admin password from `os.environ.get("ADMIN_PASSWORD", "admin123!")` instead of hardcoded literals — keeps fallback for local dev so nothing breaks.
 - **Removed `__import__` lazy-import hack**: `routes/therapists.py:204` cleaned up to use a direct `from deps import require_session` (was an ugly one-liner avoiding a non-existent circular). Verified portal/bulk-apply still works.

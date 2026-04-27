@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Leaf, ChevronDown } from "lucide-react";
 import {
   DropdownMenu,
@@ -8,21 +8,70 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+// React Router suppresses navigation when the target path matches the current
+// location, so clicking the logo while already on `/` does nothing visible —
+// the page stays at the user's current scroll position. This handler forces a
+// scroll-to-top in both cases (same route or different) and strips any hash
+// (`/#start`) that would otherwise re-scroll to a section.
+function useScrollTopNavigate(to) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return (e) => {
+    e.preventDefault();
+    if (location.pathname === to && !location.hash) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      navigate(to);
+      // Defer to next tick so route renders before we jump
+      setTimeout(() => window.scrollTo({ top: 0, behavior: "auto" }), 0);
+    }
+  };
+}
+
+// "For therapists" header link — lands on the signup-form section so the
+// "Get more targeted patient referrals" header is visible (not the hero).
+function useNavigateToSignupForm() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return (e) => {
+    e.preventDefault();
+    const scrollToForm = () =>
+      document
+        .getElementById("signup-form")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (location.pathname === "/therapists/join") {
+      scrollToForm();
+    } else {
+      navigate("/therapists/join#signup-form");
+      // The TherapistSignup useEffect handles the hash on mount; defer here
+      // as a belt-and-braces fallback in case the section renders late.
+      setTimeout(scrollToForm, 350);
+    }
+  };
+}
+
 export function Header({ minimal = false }) {
+  const onLogoClick = useScrollTopNavigate("/");
+  const onTherapistsClick = useNavigateToSignupForm();
   return (
     <header
       className="sticky top-0 z-30 border-b border-[#E8E5DF] bg-[#FDFBF7]/85 backdrop-blur-md"
       data-testid="site-header"
     >
       <div className="max-w-7xl mx-auto px-5 sm:px-8 py-4 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-2 group" data-testid="logo-link">
+        <a
+          href="/"
+          onClick={onLogoClick}
+          className="flex items-center gap-2 group"
+          data-testid="logo-link"
+        >
           <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-[#2D4A3E] text-white">
             <Leaf size={18} strokeWidth={1.6} />
           </span>
           <span className="font-serif-display text-2xl text-[#2D4A3E] leading-none">
             TheraVoca
           </span>
-        </Link>
+        </a>
         {!minimal && (
           <nav className="hidden md:flex items-center gap-7 text-sm text-[#6D6A65]">
             <a href="/#how" className="hover:text-[#2D4A3E] transition" data-testid="nav-how">
@@ -34,13 +83,14 @@ export function Header({ minimal = false }) {
             <a href="/#faq" className="hover:text-[#2D4A3E] transition" data-testid="nav-faq">
               FAQs
             </a>
-            <Link
-              to="/therapists/join"
+            <a
+              href="/therapists/join"
+              onClick={onTherapistsClick}
               className="hover:text-[#2D4A3E] transition"
               data-testid="nav-therapists"
             >
               For therapists
-            </Link>
+            </a>
             <DropdownMenu>
               <DropdownMenuTrigger
                 className="inline-flex items-center gap-1.5 hover:text-[#2D4A3E] transition outline-none"
