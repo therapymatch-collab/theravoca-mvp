@@ -47,12 +47,14 @@ _daily_task: Optional[asyncio.Task] = None
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     global _sweep_task, _daily_task
-    has_v2 = await db.therapists.count_documents({"source": "seed_v2"})
-    if has_v2 == 0:
-        await db.therapists.delete_many({"source": {"$in": ["seed", None]}})
+    # Auto-seed only if the directory is completely empty. This guards against
+    # accidental wipes during hot-reload AND respects the iter-42 imported
+    # therapist directory (don't double-seed alongside real data).
+    therapist_count = await db.therapists.count_documents({})
+    if therapist_count == 0:
         therapists = generate_seed_therapists(100)
         await db.therapists.insert_many([t.copy() for t in therapists])
-        logger.info("Re-seeded %d Idaho therapists with v2 schema", len(therapists))
+        logger.info("Cold start — seeded %d Idaho therapists with v2 schema", len(therapists))
 
     asyncio.create_task(_backfill_therapist_geo())
     sweep_interval = int(os.environ.get("SWEEP_INTERVAL_SECONDS", "300"))

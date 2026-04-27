@@ -630,6 +630,292 @@ async def admin_research_all_reviews(
     return await research_reviews_for_all(limit=limit)
 
 
+@router.get("/admin/coverage-gap-analysis")
+async def admin_coverage_gap_analysis(_: bool = Depends(require_admin)):
+    """Coverage gap analysis across the active therapist directory.
+
+    Returns counts per dimension (specialty, modality, age group, insurance,
+    language, urgency capacity, in-person vs telehealth, fee tier) plus a
+    prioritized recommendations list of where we should recruit therapists
+    before launch.
+
+    Heuristic: a `gap` is any axis where coverage < target. Defaults reflect
+    how the matching algorithm weights each dimension:
+      - specialty: target=8 (axis worth 35 pts; coverage starvation hurts most)
+      - modality: target=6 (15 pts axis)
+      - age_group: target=5 (hard filter — 0 = total miss)
+      - insurance: target=3 (covers 90%+ of insured Idahoans)
+      - urgency: target=10 ("can take new patient ASAP" capacity)
+    """
+    from collections import Counter
+
+    # Demand priors — weighted by what a typical Idaho mental-health intake
+    # population looks like (rough, but better than uniform).
+    SPECIALTY_DEMAND = {
+        "anxiety": "very_high", "depression": "very_high",
+        "trauma_ptsd": "very_high", "relationship_issues": "high",
+        "life_transitions": "high", "adhd": "high",
+        "parenting_family": "medium", "substance_use": "medium",
+        "ocd": "medium", "eating_concerns": "medium",
+        "autism_neurodivergence": "medium", "school_academic_stress": "low",
+    }
+    DEMAND_TARGETS = {
+        "very_high": 12, "high": 8, "medium": 5, "low": 3,
+    }
+    MODALITIES_CORE = [
+        "CBT", "DBT", "EMDR", "ACT", "Mindfulness-Based",
+        "Trauma-Informed", "IFS", "Psychodynamic",
+    ]
+    AGE_GROUPS = ["child", "teen", "young_adult", "adult", "older_adult"]
+    CLIENT_TYPES = ["individual", "couples", "family", "group"]
+    INSURERS_CORE = [
+        "Blue Cross of Idaho", "Regence BlueShield of Idaho",
+        "Mountain Health Co-op", "PacificSource Health Plans",
+        "SelectHealth", "Aetna", "Cigna", "UnitedHealthcare",
+        "Idaho Medicaid", "Medicare", "Tricare West", "Optum",
+    ]
+
+    therapists = await db.therapists.find(
+        {"is_active": True}, {"_id": 0},
+    ).to_list(length=2000)
+    total = len(therapists)
+
+    # ── Per-dimension counts ──
+    spec_counts: Counter = Counter()
+    modality_counts: Counter = Counter()
+    age_counts: Counter = Counter()
+    client_counts: Counter = Counter()
+    insurance_counts: Counter = Counter()
+    language_counts: Counter = Counter()
+    cred_counts: Counter = Counter()
+    gender_counts: Counter = Counter()
+    urgency_counts: Counter = Counter()
+    has_id_office = 0
+    telehealth_only = 0
+    in_person_only = 0
+    sliding_scale = 0
+    free_consult = 0
+    rate_buckets = {"<100": 0, "100-149": 0, "150-199": 0, "200-249": 0, "250+": 0}
+
+    for t in therapists:
+        for s in t.get("primary_specialties") or []:
+            spec_counts[s] += 1
+        for m in t.get("modalities") or []:
+            modality_counts[m] += 1
+        for a in t.get("age_groups") or []:
+            age_counts[a] += 1
+        for c in t.get("client_types") or []:
+            client_counts[c] += 1
+        for i in t.get("insurance_accepted") or []:
+            insurance_counts[i] += 1
+        for lang in t.get("languages_spoken") or []:
+            language_counts[lang] += 1
+        cred_counts[t.get("credential_type") or "Other"] += 1
+        gender_counts[t.get("gender") or "unspecified"] += 1
+        urgency_counts[t.get("urgency_capacity") or "unspecified"] += 1
+        if t.get("office_addresses"):
+            has_id_office += 1
+        if t.get("telehealth") and not t.get("offers_in_person"):
+            telehealth_only += 1
+        if t.get("offers_in_person") and not t.get("telehealth"):
+            in_person_only += 1
+        if t.get("sliding_scale"):
+            sliding_scale += 1
+        if t.get("free_consult"):
+            free_consult += 1
+        rate = t.get("cash_rate")
+        if isinstance(rate, (int, float)):
+            if rate < 100:
+                rate_buckets["<100"] += 1
+            elif rate < 150:
+                rate_buckets["100-149"] += 1
+            elif rate < 200:
+                rate_buckets["150-199"] += 1
+            elif rate < 250:
+                rate_buckets["200-249"] += 1
+            else:
+                rate_buckets["250+"] += 1
+
+    # ── Build recommendations ──
+    gaps: list[dict] = []
+
+    for slug, demand in SPECIALTY_DEMAND.items():
+        target = DEMAND_TARGETS[demand]
+        have = spec_counts.get(slug, 0)
+        if have < target:
+            gaps.append({
+                "dimension": "specialty",
+                "key": slug,
+                "have": have,
+                "target": target,
+                "demand": demand,
+                "severity": "critical" if have < target / 2 else "warning",
+                "recommendation": (
+                    f"Recruit {target - have} more therapist(s) specializing in "
+                    f"`{slug.replace('_', ' ')}` — patient demand is {demand}."
+                ),
+            })
+    for m in MODALITIES_CORE:
+        have = modality_counts.get(m, 0)
+        target = 6
+        if have < target:
+            gaps.append({
+                "dimension": "modality",
+                "key": m,
+                "have": have,
+                "target": target,
+                "severity": "critical" if have < 3 else "warning",
+                "recommendation": (
+                    f"Recruit {target - have} more therapist(s) trained in "
+                    f"{m} — common patient request."
+                ),
+            })
+    for ag in AGE_GROUPS:
+        have = age_counts.get(ag, 0)
+        target = 5
+        if have < target:
+            gaps.append({
+                "dimension": "age_group",
+                "key": ag,
+                "have": have,
+                "target": target,
+                "severity": "critical" if have == 0 else "warning",
+                "recommendation": (
+                    f"Recruit {target - have} more therapist(s) serving "
+                    f"`{ag}` — age group is a HARD filter in matching, "
+                    "patients in this bucket will see zero matches."
+                ),
+            })
+    for ct in CLIENT_TYPES:
+        have = client_counts.get(ct, 0)
+        target = 4 if ct in ("individual", "couples") else 2
+        if have < target:
+            gaps.append({
+                "dimension": "client_type",
+                "key": ct,
+                "have": have,
+                "target": target,
+                "severity": "critical" if have == 0 else "warning",
+                "recommendation": (
+                    f"Recruit {target - have} more therapist(s) offering "
+                    f"`{ct}` therapy."
+                ),
+            })
+    for ins in INSURERS_CORE:
+        have = insurance_counts.get(ins, 0)
+        target = 3
+        if have < target:
+            gaps.append({
+                "dimension": "insurance",
+                "key": ins,
+                "have": have,
+                "target": target,
+                "severity": "warning",
+                "recommendation": (
+                    f"Only {have} therapist(s) accept {ins}. Patients on "
+                    "this plan won't have many in-network options."
+                ),
+            })
+
+    # Urgency capacity
+    can_take_quick = (
+        urgency_counts.get("asap", 0)
+        + urgency_counts.get("within_2_3_weeks", 0)
+    )
+    if can_take_quick < 10:
+        gaps.append({
+            "dimension": "urgency",
+            "key": "fast_intake",
+            "have": can_take_quick,
+            "target": 10,
+            "severity": "warning",
+            "recommendation": (
+                f"Only {can_take_quick} therapist(s) flagged with ASAP / "
+                "2–3-week capacity. Patients marking `urgency=asap` will see "
+                "weak matches — prioritize confirming availability with your "
+                "current network."
+            ),
+        })
+
+    # Geographic coverage
+    if has_id_office < 15:
+        gaps.append({
+            "dimension": "geography",
+            "key": "in_person_idaho",
+            "have": has_id_office,
+            "target": 15,
+            "severity": "warning",
+            "recommendation": (
+                f"Only {has_id_office} therapist(s) have a physical Idaho "
+                "office. Patients preferring in-person sessions will mostly "
+                "match the same handful — consider recruiting more in-person "
+                "providers especially outside Boise."
+            ),
+        })
+
+    # Fee diversity
+    affordable = rate_buckets["<100"] + rate_buckets["100-149"]
+    if affordable < 10:
+        gaps.append({
+            "dimension": "fee",
+            "key": "affordable_cash",
+            "have": affordable,
+            "target": 10,
+            "severity": "warning",
+            "recommendation": (
+                f"Only {affordable} therapist(s) charge <$150/hr cash. "
+                "Patients with tight budgets will run out of options. "
+                "Recruit more sliding-scale or interns/associates."
+            ),
+        })
+    if sliding_scale < 20:
+        gaps.append({
+            "dimension": "fee",
+            "key": "sliding_scale",
+            "have": sliding_scale,
+            "target": 20,
+            "severity": "warning",
+            "recommendation": (
+                f"Only {sliding_scale} therapist(s) offer a sliding scale. "
+                "We tell patients we have flexible-fee options — verify."
+            ),
+        })
+
+    # Sort: critical > warning, then largest absolute gap.
+    severity_order = {"critical": 0, "warning": 1, "info": 2}
+    gaps.sort(key=lambda g: (
+        severity_order.get(g["severity"], 9),
+        -(g["target"] - g["have"]),
+    ))
+
+    return {
+        "total_active_therapists": total,
+        "summary": {
+            "specialties": dict(spec_counts.most_common()),
+            "modalities": dict(modality_counts.most_common()),
+            "age_groups": dict(age_counts.most_common()),
+            "client_types": dict(client_counts.most_common()),
+            "credentials": dict(cred_counts.most_common()),
+            "genders": dict(gender_counts.most_common()),
+            "urgency_capacity": dict(urgency_counts.most_common()),
+            "insurance": dict(insurance_counts.most_common()),
+            "languages": dict(language_counts.most_common()),
+            "rate_distribution": rate_buckets,
+            "with_idaho_office": has_id_office,
+            "telehealth_only": telehealth_only,
+            "in_person_only": in_person_only,
+            "sliding_scale_count": sliding_scale,
+            "free_consult_count": free_consult,
+        },
+        "gaps": gaps,
+        "gap_summary": {
+            "critical": sum(1 for g in gaps if g["severity"] == "critical"),
+            "warning": sum(1 for g in gaps if g["severity"] == "warning"),
+            "total": len(gaps),
+        },
+    }
+
+
 @router.post("/admin/seed/reset")
 async def admin_seed_reset(_: bool = Depends(require_admin)):
     """DESTRUCTIVE — clears requests/applications/declines/therapists/magic_codes

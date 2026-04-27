@@ -202,6 +202,25 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 - Iter-38 added 4 new tests for the outreach-invite → therapist conversion flow.
 
 ## Recent Changes Log
+- **Iter-43 (Feb 2026) — Coverage gap analysis + review research run**:
+  - **New endpoint**: `GET /api/admin/coverage-gap-analysis` — returns counts
+    per dimension (specialty, modality, age group, client type, insurance,
+    language, urgency, fee tier, geography) and a prioritized recommendations
+    list. Targets are calibrated to the matching algorithm weights:
+    very_high-demand specialties target 12 therapists, high target 8, etc.
+  - **New admin tab "Coverage gaps"** in `AdminDashboard.jsx`. Surfaces
+    critical/warning gap counts in the tab badge, shows recommendation cards
+    grouped by dimension, plus distribution charts for every axis.
+  - **Review research** ran across 78/122 imported therapists (background
+    task, conservatively halted by main agent). Outcome: 0 with verifiable
+    public-review data — Claude correctly refuses to invent review counts
+    for individual private-practice therapists. Guardrail works as intended.
+  - **Server lifespan hardened**: only auto-seed if directory is empty
+    (was: re-seeded any time `seed_v2` was missing — caused 100 placeholder
+    rows to leak in alongside the imported directory).
+  - Initial gap analysis on imported directory: **only 2 gaps** flagged
+    (school_academic_stress 0/3 critical · eating_concerns 3/5 warning) —
+    excellent pre-launch coverage on a 122-therapist Idaho directory.
 - **Iter-42 (Feb 2026) — Real-therapist directory import**:
   - Imported **122 real Idaho therapists** from user's Excel
     (`/app/backend/scripts/import_therapists_xlsx.py`).
