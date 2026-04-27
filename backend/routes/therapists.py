@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from deps import db, logger, require_admin
+from deps import db, logger, require_admin, require_session
 import stripe_service
 from email_service import send_therapist_signup_received
 from geocoding import geocode_offices
@@ -201,7 +201,7 @@ from helpers import _safe_summary_for_therapist  # noqa: E402
 @router.post("/portal/therapist/bulk-apply")
 async def therapist_bulk_apply(
     payload: BulkApplyIn,
-    session: dict = Depends(__import__("deps", fromlist=["require_session"]).require_session(("therapist",))),
+    session: dict = Depends(require_session(("therapist",))),
 ):
     """Confirm interest on N referrals at once. Each referral gets the same
     message + commitment flags. Skips referrals the therapist wasn't notified for."""

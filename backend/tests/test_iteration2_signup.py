@@ -22,7 +22,7 @@ def _read_backend_url() -> str:
 
 
 BASE = _read_backend_url()
-ADMIN = {"X-Admin-Password": "admin123!"}
+ADMIN = {"X-Admin-Password": os.environ.get("ADMIN_PASSWORD", "admin123!")}
 
 # Insert backend dir into path so we can import server helpers for sweep test
 sys.path.insert(0, "/app/backend")

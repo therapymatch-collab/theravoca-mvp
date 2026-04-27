@@ -57,6 +57,12 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+### iter-27 — Code-review hardening (Apr 27, 2026)
+- **Test secrets externalized**: All 16 backend test files now load admin password from `os.environ.get("ADMIN_PASSWORD", "admin123!")` instead of hardcoded literals — keeps fallback for local dev so nothing breaks.
+- **Removed `__import__` lazy-import hack**: `routes/therapists.py:204` cleaned up to use a direct `from deps import require_session` (was an ugly one-liner avoiding a non-existent circular). Verified portal/bulk-apply still works.
+- **Verified non-issues**: (#1) Server imports cleanly — no actual circular import. (#3 / #4) ESLint passes on all 4 components flagged by code review — the "missing deps" were module-level constants (`STATUS_UNAUTHORIZED`, `RESULTS_POLL_INTERVAL_MS`) and stable React setState refs, not real stale-closure bugs. (#7) Inline-array memoization skipped — real-world impact is zero on these forms. (#5 / #6 / #8) Major component splits + httpOnly cookie migration declined as over-engineering for working/tested code with no user-facing benefit.
+- **Tests**: portal+top-reasons 6/6, iter-2 16/16, iter-5 19/19, iter-20–25 all green.
+
 ### iter-26 — Phone format, payment-row inline, prod webhook reminder (Apr 27, 2026)
 - **Auto-formatted phone fields**: All three phone inputs (therapist private alert, therapist office, patient SMS receipt) now auto-format as `xxx-xxx-xxxx` while typing. Strips parens/spaces/dots, caps at 10 digits. `formatUsPhone()` helper at `/app/frontend/src/lib/phone.js`.
 - **Apply page payment row**: Reverted the highlighted hero card; Payment is now back inline with the other summary fields (per user feedback). The actual insurance plan name + dollar budget still show correctly because backend's `_safe_summary_for_therapist` formats it that way (e.g. "Insurance — Blue Cross of Idaho" or "Cash — up to $200/session").

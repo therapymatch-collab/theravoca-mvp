@@ -85,7 +85,7 @@ def test_sms_opt_in_field_persisted():
     # Verify via admin endpoint that the field was persisted
     detail = requests.get(
         f"{API}/admin/requests/{rid}",
-        headers={"X-Admin-Password": "admin123!"},
+        headers={"X-Admin-Password": os.environ.get("ADMIN_PASSWORD", "admin123!")},
         timeout=10,
     )
     assert detail.status_code == 200
@@ -106,7 +106,7 @@ def test_referral_source_aggregate_endpoint():
         assert res.status_code == 200, res.text
     res = requests.get(
         f"{API}/admin/referral-sources",
-        headers={"X-Admin-Password": "admin123!"},
+        headers={"X-Admin-Password": os.environ.get("ADMIN_PASSWORD", "admin123!")},
         timeout=10,
     )
     assert res.status_code == 200, res.text

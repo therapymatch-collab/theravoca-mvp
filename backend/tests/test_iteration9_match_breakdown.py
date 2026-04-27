@@ -22,7 +22,7 @@ import email_service  # noqa: E402
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL").rstrip("/")
 API = f"{BASE_URL}/api"
-ADMIN_PASSWORD = "admin123!"
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123!")
 ADMIN_HEADERS = {"X-Admin-Password": ADMIN_PASSWORD, "Content-Type": "application/json"}
 
 AXIS_KEYS = {"issues", "availability", "modality", "urgency",

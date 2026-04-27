@@ -11,9 +11,7 @@ import pytest
 
 BASE = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
 LOGIN = f"{BASE}/api/admin/login"
-ADMIN_PWD = "admin123!"
-
-
+ADMIN_PWD = os.environ.get("ADMIN_PASSWORD", "admin123!")
 def _post(session, ip, password):
     """Login attempt with a synthetic client IP via X-Forwarded-For (left-most wins)."""
     return session.post(

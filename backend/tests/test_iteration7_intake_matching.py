@@ -16,7 +16,7 @@ from matching import rank_therapists, score_therapist  # noqa: E402
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://care-matcher-1.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
-ADMIN_PASSWORD = "admin123!"
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123!")
 ADMIN_HEADERS = {"X-Admin-Password": ADMIN_PASSWORD, "Content-Type": "application/json"}
 
 

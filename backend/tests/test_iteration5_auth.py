@@ -196,7 +196,7 @@ class TestTherapistReferrals:
             return
         rid = r.json()["id"]
         # Lower the threshold so t007 likely matches regardless of their seed RNG
-        admin_h = {"X-Admin-Password": "admin123!"}
+        admin_h = {"X-Admin-Password": os.environ.get("ADMIN_PASSWORD", "admin123!")}
         requests.put(
             f"{API}/admin/requests/{rid}/threshold", headers=admin_h,
             json={"threshold": 30}, timeout=10,
