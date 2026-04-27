@@ -92,8 +92,13 @@ export default function TherapistSignup() {
     name: "",
     email: "",
     phone: "",
+    phone_alert: "",
+    office_phone: "",
     gender: "",
     licensed_states: ["ID"],
+    license_number: "",
+    license_expires_at: "",
+    license_picture: null,
     client_types: ["individual"],
     age_groups: [],
     primary_specialties: [],
@@ -117,6 +122,7 @@ export default function TherapistSignup() {
     notify_sms: true,
   });
   const [office, setOffice] = useState("");
+  const [showPreview, setShowPreview] = useState(false);
   const set = (k, v) => setData((d) => ({ ...d, [k]: v }));
   const toggleArr = (k, v, max) =>
     setData((d) => {
@@ -158,6 +164,10 @@ export default function TherapistSignup() {
     data.name.trim().length >= 3 &&
     data.email.includes("@") &&
     !!data.gender &&
+    !!data.credential_type &&
+    !!(data.phone_alert?.trim() || data.phone?.trim()) &&
+    !!data.license_number?.trim() &&
+    !!data.license_expires_at &&
     data.client_types.length >= 1 &&
     data.age_groups.length >= 1 &&
     data.primary_specialties.length >= 1 &&
@@ -196,7 +206,12 @@ export default function TherapistSignup() {
   const submit = async () => {
     setSubmitting(true);
     try {
-      const res = await api.post("/therapists/signup", data);
+      const payload = {
+        ...data,
+        // Keep `phone` mirroring the alert phone for legacy SMS routing
+        phone: data.phone_alert?.trim() || data.phone || "",
+      };
+      const res = await api.post("/therapists/signup", payload);
       setTherapistId(res.data?.id);
       setSubmitted(true);
       toast.success("Profile received — please add a payment method to start your free trial.");
@@ -327,27 +342,50 @@ export default function TherapistSignup() {
                 For licensed therapists
               </p>
               <h1 className="font-serif-display text-5xl sm:text-6xl text-[#2D4A3E] leading-tight">
-                Patients come to <em className="not-italic text-[#C87965]">you</em>.
+                <em className="not-italic text-[#C87965]">Grow</em> your practice
+                without the marketing grind.
               </h1>
               <p className="mt-5 text-[#2B2A29]/80 leading-relaxed">
-                Join the TheraVoca network and receive anonymous referral notifications
-                matched to your specialties. No subscription, no dashboards, no marketing
-                fluff — just real patients who need your help.
+                We send you pre-screened referrals so you can save billable hours
+                while growing your private practice. You focus on care — we handle
+                the matching.
               </p>
+              <div className="mt-6 inline-flex items-center gap-3 bg-white border border-[#E8E5DF] rounded-2xl px-4 py-3">
+                <div className="w-2 h-2 rounded-full bg-[#2D4A3E]" />
+                <div className="text-sm text-[#2B2A29]">
+                  <span className="font-semibold text-[#2D4A3E]">$45/month</span>
+                  <span className="text-[#6D6A65]"> · 30-day free trial · cancel anytime</span>
+                </div>
+              </div>
             </div>
             <ul className="space-y-3 text-sm text-[#2B2A29]">
               {[
-                "Free to join during our pilot",
-                "Only get notified when match score ≥ 71%",
-                "One-click apply with a personal note",
-                "Patient sees only your name, message, and rate until they reach out",
+                {
+                  t: "Only ideal-fit referrals",
+                  d: "We notify you when a patient scores ≥ 71% on your specialties, schedule, and preferences.",
+                },
+                {
+                  t: "30-day free trial, then $45/month",
+                  d: "Cancel anytime in your portal. No setup fees, no per-referral charges, no hidden costs.",
+                },
+                {
+                  t: "You're always in control",
+                  d: "Review each referral and opt-in (or pass) — no obligations, no explanation needed.",
+                },
+                {
+                  t: "Patients reach out directly",
+                  d: "When you opt-in, the patient sees your full profile and contact info, then follows up on their own.",
+                },
               ].map((b) => (
                 <li
-                  key={b}
+                  key={b.t}
                   className="flex items-start gap-3 bg-white border border-[#E8E5DF] rounded-xl p-4"
                 >
-                  <CheckCircle2 size={18} className="text-[#2D4A3E] mt-0.5" />
-                  <span className="leading-relaxed">{b}</span>
+                  <CheckCircle2 size={18} className="text-[#2D4A3E] mt-0.5 shrink-0" />
+                  <div className="leading-relaxed">
+                    <div className="font-semibold text-[#2D4A3E]">{b.t}</div>
+                    <div className="text-[#6D6A65] mt-0.5">{b.d}</div>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -451,13 +489,22 @@ export default function TherapistSignup() {
                       data-testid="signup-email"
                     />
                   </Field>
-                  <Field label="Phone (alerts only — never shown publicly)">
+                  <Field label="Phone (private — for SMS alerts only, never shown to patients)">
                     <Input
-                      value={data.phone}
-                      onChange={(e) => set("phone", e.target.value)}
+                      value={data.phone_alert || data.phone}
+                      onChange={(e) => set("phone_alert", e.target.value)}
                       placeholder="(208) 555-0123"
                       className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                      data-testid="signup-phone"
+                      data-testid="signup-phone-alert"
+                    />
+                  </Field>
+                  <Field label="Office phone (public — patients see this)">
+                    <Input
+                      value={data.office_phone}
+                      onChange={(e) => set("office_phone", e.target.value)}
+                      placeholder="(208) 555-0150"
+                      className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                      data-testid="signup-office-phone"
                     />
                   </Field>
                   <Field label="Gender (used only when patients have a stated preference)">
@@ -467,6 +514,102 @@ export default function TherapistSignup() {
                       onSelect={(v) => set("gender", v)}
                       testid="signup-gender"
                     />
+                  </Field>
+                </Group>
+
+                <Group
+                  title="License & verification"
+                  hint="We verify every therapist's license before they go live."
+                >
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="License state">
+                      <select
+                        value={(data.licensed_states && data.licensed_states[0]) || "ID"}
+                        onChange={(e) => set("licensed_states", [e.target.value])}
+                        className="w-full bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5 text-sm"
+                        data-testid="signup-license-state"
+                      >
+                        <option value="ID">Idaho (ID)</option>
+                        <option value="WA">Washington (WA)</option>
+                        <option value="OR">Oregon (OR)</option>
+                        <option value="MT">Montana (MT)</option>
+                        <option value="UT">Utah (UT)</option>
+                        <option value="WY">Wyoming (WY)</option>
+                        <option value="NV">Nevada (NV)</option>
+                      </select>
+                    </Field>
+                    <Field label="License number">
+                      <Input
+                        value={data.license_number}
+                        onChange={(e) => set("license_number", e.target.value)}
+                        placeholder="e.g. LCSW-12345"
+                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                        data-testid="signup-license-number"
+                      />
+                    </Field>
+                  </div>
+                  <Field label="License expiration date">
+                    <Input
+                      type="date"
+                      value={data.license_expires_at || ""}
+                      onChange={(e) => set("license_expires_at", e.target.value)}
+                      className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                      data-testid="signup-license-expires"
+                    />
+                  </Field>
+                  <Field label="Upload a photo of your license">
+                    <div className="flex items-center gap-4">
+                      <div className="w-24 h-16 rounded-lg bg-[#FDFBF7] border border-dashed border-[#E8E5DF] overflow-hidden flex items-center justify-center">
+                        {data.license_picture ? (
+                          <img
+                            src={data.license_picture}
+                            alt="License preview"
+                            className="w-full h-full object-cover"
+                            data-testid="signup-license-preview"
+                          />
+                        ) : (
+                          <Camera size={20} className="text-[#6D6A65]" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <label
+                          className="tv-btn-secondary !py-2 !px-4 text-sm cursor-pointer inline-flex"
+                          data-testid="signup-license-label"
+                        >
+                          {data.license_picture ? "Replace" : "Upload"}
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp,application/pdf"
+                            className="hidden"
+                            data-testid="signup-license-input"
+                            onChange={async (e) => {
+                              const f = e.target.files?.[0];
+                              if (!f) return;
+                              try {
+                                const url = await imageToDataUrl(f);
+                                set("license_picture", url);
+                              } catch (err) {
+                                toast.error(err.message || "Couldn't process file");
+                              }
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                        {data.license_picture && (
+                          <button
+                            type="button"
+                            className="ml-3 text-sm text-[#D45D5D] hover:underline"
+                            onClick={() => set("license_picture", null)}
+                            data-testid="signup-license-remove"
+                          >
+                            Remove
+                          </button>
+                        )}
+                        <p className="text-xs text-[#6D6A65] mt-1.5">
+                          PNG, JPG or PDF. We use this only for verification — patients never see it.
+                        </p>
+                      </div>
+                    </div>
                   </Field>
                 </Group>
 
@@ -781,18 +924,209 @@ export default function TherapistSignup() {
                 <button
                   className="tv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={!valid || submitting}
-                  onClick={submit}
-                  data-testid="signup-submit"
+                  onClick={() => setShowPreview(true)}
+                  data-testid="signup-preview"
                 >
-                  {submitting ? "Submitting..." : "Join the network"}{" "}
-                  <ArrowRight size={18} />
+                  Preview profile <ArrowRight size={18} />
                 </button>
               </div>
             </div>
           </div>
         </section>
       </main>
+      {showPreview && (
+        <PreviewModal
+          data={data}
+          onClose={() => setShowPreview(false)}
+          onConfirm={async () => {
+            await submit();
+            setShowPreview(false);
+          }}
+          submitting={submitting}
+        />
+      )}
       <Footer />
+    </div>
+  );
+}
+
+function PreviewModal({ data, onClose, onConfirm, submitting }) {
+  const formats = {
+    telehealth: "Telehealth only",
+    in_person: "In-person only",
+    both: "Telehealth + in-person",
+  };
+  const tier = (issue) => {
+    if (data.primary_specialties.includes(issue)) return "Primary";
+    if (data.secondary_specialties.includes(issue)) return "Secondary";
+    if (data.general_treats.includes(issue)) return "General";
+    return null;
+  };
+  const allIssues = [
+    ...data.primary_specialties,
+    ...data.secondary_specialties,
+    ...data.general_treats,
+  ];
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-3 sm:p-6 overflow-y-auto"
+      data-testid="signup-preview-modal"
+    >
+      <div className="bg-white rounded-3xl border border-[#E8E5DF] max-w-2xl w-full p-6 sm:p-8 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-[#C87965]">
+              Profile preview
+            </p>
+            <h3 className="font-serif-display text-2xl text-[#2D4A3E] mt-1">
+              How patients will see you
+            </h3>
+            <p className="text-sm text-[#6D6A65] mt-1.5 max-w-md">
+              Verify everything looks right before submitting. You can still edit afterwards.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-[#6D6A65] hover:text-[#2D4A3E] -m-2 p-2"
+            data-testid="signup-preview-close"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="mt-5 bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-5 flex gap-4">
+          <div className="w-16 h-16 rounded-full bg-white border border-[#E8E5DF] overflow-hidden flex items-center justify-center shrink-0">
+            {data.profile_picture ? (
+              <img src={data.profile_picture} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <span className="font-serif-display text-base text-[#2D4A3E]">
+                {(data.name || "")
+                  .split(",")[0]
+                  .split(" ")
+                  .filter(Boolean)
+                  .map((p) => p[0])
+                  .slice(0, 2)
+                  .join("")
+                  .toUpperCase() || "T"}
+              </span>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h4 className="font-serif-display text-xl text-[#2D4A3E] truncate">
+              {data.name || "—"}
+            </h4>
+            <div className="text-xs text-[#6D6A65] mt-0.5">
+              {data.years_experience || "—"} yrs •{" "}
+              {(data.modalities || []).slice(0, 3).join(" · ") || "—"}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 grid sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+          <SummaryRow label="Email" value={data.email} />
+          <SummaryRow label="Credential" value={data.credential_type} />
+          <SummaryRow label="License #" value={data.license_number} />
+          <SummaryRow label="License expires" value={data.license_expires_at} />
+          <SummaryRow label="Office phone (public)" value={data.office_phone || "—"} />
+          <SummaryRow label="Alert phone (private)" value={data.phone_alert || data.phone} />
+          <SummaryRow label="Gender" value={data.gender} />
+          <SummaryRow label="Format" value={formats[data.modality_offering] || data.modality_offering} />
+          <SummaryRow label="Cash rate" value={data.cash_rate ? `$${data.cash_rate}` : "—"} />
+          <SummaryRow label="Sliding scale" value={data.sliding_scale ? "Yes" : "No"} />
+          <SummaryRow label="Free consult" value={data.free_consult ? "Yes" : "No"} />
+          <SummaryRow label="Caseload" value={data.urgency_capacity?.replace(/_/g, " ")} />
+          <SummaryRow
+            label="Client types"
+            value={data.client_types?.join(", ") || "—"}
+            span={2}
+          />
+          <SummaryRow
+            label="Age groups"
+            value={(data.age_groups || []).map((a) => a.replace(/_/g, " ")).join(", ") || "—"}
+            span={2}
+          />
+          <SummaryRow
+            label="Specialties"
+            value={
+              allIssues.length > 0
+                ? allIssues.map((i) => `${i.replace(/_/g, " ")} (${tier(i)})`).join(", ")
+                : "—"
+            }
+            span={2}
+          />
+          <SummaryRow
+            label="Modalities"
+            value={(data.modalities || []).join(", ") || "—"}
+            span={2}
+          />
+          <SummaryRow
+            label="Office cities"
+            value={(data.office_locations || []).join(", ") || "—"}
+            span={2}
+          />
+          <SummaryRow
+            label="Insurance"
+            value={(data.insurance_accepted || []).join(", ") || "Cash / OON"}
+            span={2}
+          />
+          <SummaryRow
+            label="Availability"
+            value={
+              (data.availability_windows || []).map((w) => w.replace(/_/g, " ")).join(", ") || "—"
+            }
+            span={2}
+          />
+          <SummaryRow
+            label="Style"
+            value={(data.style_tags || []).map((s) => s.replace(/_/g, " ")).join(", ") || "—"}
+            span={2}
+          />
+          {data.bio && <SummaryRow label="Bio" value={data.bio} span={2} />}
+        </div>
+
+        {data.license_picture && (
+          <div className="mt-5">
+            <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-1.5">
+              License upload (admin verification)
+            </div>
+            <img
+              src={data.license_picture}
+              alt="License upload"
+              className="max-h-40 rounded-lg border border-[#E8E5DF]"
+            />
+          </div>
+        )}
+
+        <div className="mt-7 flex flex-wrap gap-2 justify-end">
+          <button
+            type="button"
+            className="tv-btn-secondary !py-2 !px-4 text-sm"
+            onClick={onClose}
+            data-testid="signup-preview-back"
+          >
+            Back to edit
+          </button>
+          <button
+            type="button"
+            className="tv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={submitting}
+            onClick={onConfirm}
+            data-testid="signup-preview-confirm"
+          >
+            {submitting ? "Submitting..." : "Looks good — submit"} <ArrowRight size={18} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SummaryRow({ label, value, span = 1 }) {
+  return (
+    <div className={span === 2 ? "sm:col-span-2" : ""}>
+      <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">{label}</div>
+      <div className="font-medium text-[#2B2A29] break-words">{value || "—"}</div>
     </div>
   );
 }

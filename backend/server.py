@@ -20,6 +20,9 @@ from pydantic import BaseModel, EmailStr, Field
 from starlette.middleware.cors import CORSMiddleware
 
 from email_service import (
+    send_availability_prompt,
+    send_license_expiring_to_admin,
+    send_license_expiring_to_therapist,
     send_magic_code,
     send_patient_results,
     send_therapist_approved,
@@ -31,7 +34,7 @@ from email_templates import DEFAULTS as EMAIL_TEMPLATE_DEFAULTS, list_templates,
 from geocoding import geocode_city, geocode_offices, geocode_zip, haversine_miles
 from matching import rank_therapists
 from seed_data import generate_seed_therapists
-from sms_service import send_sms, send_therapist_referral_sms
+from sms_service import send_availability_prompt_sms, send_sms, send_therapist_referral_sms
 import stripe_service
 
 ROOT_DIR = Path(__file__).parent
@@ -48,6 +51,15 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123!")
 DEFAULT_THRESHOLD = float(os.environ.get("DEFAULT_MATCH_THRESHOLD", "71"))
 AUTO_DELAY_HOURS = float(os.environ.get("AUTO_RESULTS_DELAY_HOURS", "24"))
 PATIENT_DEMO_EMAIL = os.environ.get("PATIENT_DEMO_EMAIL", "")
+
+# Admin alert inbox (license expiry, etc.)
+ADMIN_NOTIFY_EMAIL = os.environ.get("ADMIN_NOTIFY_EMAIL", "therapymatch@gmail.com")
+
+# Daily-billing + license + availability cron
+LICENSE_WARN_DAYS = int(os.environ.get("LICENSE_WARN_DAYS", "30"))
+AVAILABILITY_PROMPT_DAYS = (0, 4)  # 0=Monday, 4=Friday (Python weekday())
+DAILY_TASK_HOUR_LOCAL = int(os.environ.get("DAILY_TASK_HOUR", "2"))  # 2 AM
+DAILY_TASK_TZ_OFFSET_HOURS = int(os.environ.get("DAILY_TASK_TZ_OFFSET", "-7"))  # MT (MDT=-6, MST=-7); user-approved 2am MT
 
 # Magic-link auth
 JWT_SECRET = os.environ.get("JWT_SECRET", "")
@@ -99,11 +111,12 @@ def _reset_failures(ip: str) -> None:
 
 # Sweep loop task handle (set in lifespan)
 _sweep_task: Optional[asyncio.Task] = None
+_daily_task: Optional[asyncio.Task] = None
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    global _sweep_task
+    global _sweep_task, _daily_task
     # Startup: re-seed if no v2 therapists exist
     has_v2 = await db.therapists.count_documents({"source": "seed_v2"})
     if has_v2 == 0:
@@ -115,16 +128,18 @@ async def lifespan(_app: FastAPI):
     asyncio.create_task(_backfill_therapist_geo())
     sweep_interval = int(os.environ.get("SWEEP_INTERVAL_SECONDS", "300"))
     _sweep_task = asyncio.create_task(_sweep_loop(sweep_interval))
-    logger.info("Started results sweep loop (every %ds)", sweep_interval)
+    _daily_task = asyncio.create_task(_daily_loop())
+    logger.info("Started results sweep loop (every %ds) + daily-task scheduler", sweep_interval)
     try:
         yield
     finally:
-        if _sweep_task:
-            _sweep_task.cancel()
-            try:
-                await _sweep_task
-            except (asyncio.CancelledError, Exception):
-                pass
+        for t in (_sweep_task, _daily_task):
+            if t:
+                t.cancel()
+                try:
+                    await t
+                except (asyncio.CancelledError, Exception):
+                    pass
         client.close()
 
 
@@ -546,6 +561,177 @@ async def _sweep_loop(interval_seconds: int = 300) -> None:
         await asyncio.sleep(interval_seconds)
 
 
+# ─── Daily cron tasks (billing, license expiry, availability prompt) ─────────
+
+def _now_local() -> datetime:
+    """Return 'wall clock' for the configured Mountain-Time office hour rule."""
+    return datetime.now(timezone.utc) + timedelta(hours=DAILY_TASK_TZ_OFFSET_HOURS)
+
+
+async def _run_daily_billing_charges() -> dict[str, int]:
+    """Charge therapists whose billing period has ended."""
+    now = datetime.now(timezone.utc)
+    cur = db.therapists.find(
+        {
+            "subscription_status": {"$in": ["trialing", "active"]},
+            "stripe_customer_id": {"$ne": None},
+            "current_period_end": {"$ne": None, "$lte": now.isoformat()},
+        },
+        {"_id": 0, "id": 1, "stripe_customer_id": 1, "stripe_payment_method_id": 1,
+         "subscription_status": 1, "name": 1, "email": 1},
+    )
+    charged = 0
+    failed = 0
+    async for t in cur:
+        res = stripe_service.charge_monthly_fee(
+            customer_id=t["stripe_customer_id"],
+            payment_method_id=t.get("stripe_payment_method_id"),
+        )
+        if res.get("error"):
+            await db.therapists.update_one(
+                {"id": t["id"]},
+                {"$set": {"subscription_status": "past_due", "updated_at": _now_iso()}},
+            )
+            logger.warning("Daily billing: %s charge failed (%s)", t.get("email"), res.get("error"))
+            failed += 1
+            continue
+        next_period = now + timedelta(days=30)
+        await db.therapists.update_one(
+            {"id": t["id"]},
+            {"$set": {
+                "subscription_status": "active",
+                "current_period_end": next_period.isoformat(),
+                "trial_ends_at": None,
+                "last_charged_at": _now_iso(),
+                "updated_at": _now_iso(),
+            }},
+        )
+        charged += 1
+    if charged or failed:
+        logger.info("Daily billing: charged=%d failed=%d", charged, failed)
+    return {"charged": charged, "failed": failed}
+
+
+async def _run_license_expiry_alerts() -> dict[str, int]:
+    """30 days before license expires: email both therapist + admin (idempotent)."""
+    now = datetime.now(timezone.utc)
+    cur = db.therapists.find(
+        {
+            "license_expires_at": {"$exists": True, "$ne": None},
+            "is_active": {"$ne": False},
+            "license_warn_30_sent_at": {"$exists": False},
+        },
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "license_expires_at": 1},
+    )
+    sent = 0
+    async for t in cur:
+        # Compare ISO dates (drop time component)
+        try:
+            exp_str = (t.get("license_expires_at") or "")[:10]
+            exp_dt = datetime.fromisoformat(exp_str + "T00:00:00+00:00")
+        except Exception:
+            continue
+        days = (exp_dt - now).days
+        if days > LICENSE_WARN_DAYS or days < 0:
+            continue
+        await send_license_expiring_to_therapist(
+            t["email"], t["name"], exp_str, days,
+        )
+        if ADMIN_NOTIFY_EMAIL:
+            await send_license_expiring_to_admin(
+                ADMIN_NOTIFY_EMAIL, t["name"], t["email"], exp_str, days,
+            )
+        await db.therapists.update_one(
+            {"id": t["id"]},
+            {"$set": {"license_warn_30_sent_at": _now_iso()}},
+        )
+        sent += 1
+    if sent:
+        logger.info("License expiry alerts sent: %d", sent)
+    return {"sent": sent}
+
+
+async def _run_availability_prompts() -> dict[str, int]:
+    """Mon/Fri prompt to therapists asking them to refresh availability."""
+    local = _now_local()
+    if local.weekday() not in AVAILABILITY_PROMPT_DAYS:
+        return {"sent": 0, "reason": "not Mon/Fri"}
+    today_iso = local.date().isoformat()
+    cur = db.therapists.find(
+        {
+            "is_active": {"$ne": False},
+            "pending_approval": {"$ne": True},
+            "subscription_status": {"$nin": ["canceled", "rejected"]},
+            "$or": [
+                {"availability_prompt_sent_date": {"$ne": today_iso}},
+                {"availability_prompt_sent_date": {"$exists": False}},
+            ],
+        },
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "phone": 1,
+         "phone_alert": 1, "notify_email": 1, "notify_sms": 1},
+    )
+    sent_email = 0
+    sent_sms = 0
+    public_url = os.environ.get("PUBLIC_APP_URL", "")
+    portal_url = f"{public_url}/portal/therapist"
+    async for t in cur:
+        if t.get("notify_email", True):
+            try:
+                await send_availability_prompt(t["email"], t["name"])
+                sent_email += 1
+            except Exception as e:
+                logger.warning("Availability email failed for %s: %s", t.get("email"), e)
+        sms_to = t.get("phone_alert") or t.get("phone") or ""
+        if sms_to and t.get("notify_sms", True):
+            try:
+                await send_availability_prompt_sms(sms_to, t["name"], portal_url)
+                sent_sms += 1
+            except Exception as e:
+                logger.warning("Availability SMS failed for %s: %s", t.get("email"), e)
+        await db.therapists.update_one(
+            {"id": t["id"]},
+            {"$set": {
+                "availability_prompt_sent_date": today_iso,
+                "availability_prompt_pending": True,
+            }},
+        )
+    if sent_email or sent_sms:
+        logger.info("Availability prompts sent: email=%d sms=%d", sent_email, sent_sms)
+    return {"sent_email": sent_email, "sent_sms": sent_sms}
+
+
+async def _daily_loop() -> None:
+    """Runs once a day at the configured local hour. Naively wakes every 30
+    minutes and only triggers when local-time hour == DAILY_TASK_HOUR_LOCAL
+    AND we haven't already run today (tracked in `cron_runs` collection)."""
+    while True:
+        try:
+            local = _now_local()
+            today_iso = local.date().isoformat()
+            if local.hour == DAILY_TASK_HOUR_LOCAL:
+                rec = await db.cron_runs.find_one(
+                    {"name": "daily_tasks", "date": today_iso}, {"_id": 0}
+                )
+                if not rec:
+                    logger.info("Running daily tasks for %s", today_iso)
+                    await db.cron_runs.insert_one(
+                        {"name": "daily_tasks", "date": today_iso, "started_at": _now_iso()}
+                    )
+                    bill = await _run_daily_billing_charges()
+                    lic = await _run_license_expiry_alerts()
+                    avail = await _run_availability_prompts()
+                    await db.cron_runs.update_one(
+                        {"name": "daily_tasks", "date": today_iso},
+                        {"$set": {
+                            "completed_at": _now_iso(),
+                            "billing": bill, "license": lic, "availability": avail,
+                        }},
+                    )
+        except Exception as e:
+            logger.exception("Daily-loop error: %s", e)
+        await asyncio.sleep(1800)  # 30 min
+
+
 # ─── Public Routes ────────────────────────────────────────────────────────────
 
 @api.get("/")
@@ -856,6 +1042,26 @@ async def therapist_sync_payment_method(therapist_id: str, payload: dict):
         "trial_ends_at": trial_end.isoformat(),
         "demo_mode": is_demo,
     }
+
+
+@api.post("/therapists/{therapist_id}/portal-session")
+async def therapist_portal_session(therapist_id: str):
+    """Return a Stripe Customer Portal URL so the therapist can manage their
+    payment method, view invoices, or cancel."""
+    t = await db.therapists.find_one(
+        {"id": therapist_id},
+        {"_id": 0, "id": 1, "stripe_customer_id": 1},
+    )
+    if not t:
+        raise HTTPException(404)
+    if not t.get("stripe_customer_id"):
+        raise HTTPException(400, "No Stripe customer on file. Add a payment method first.")
+    base = os.environ.get("PUBLIC_APP_URL", "")
+    return_url = f"{base}/portal/therapist"
+    res = stripe_service.create_billing_portal_session(t["stripe_customer_id"], return_url)
+    if not res:
+        raise HTTPException(502, "Could not create Stripe Customer Portal session")
+    return res
 
 
 @api.get("/therapists/{therapist_id}/subscription")
@@ -1232,9 +1438,68 @@ async def portal_therapist_referrals(
             "declined": bool(decline),
         })
     return {
-        "therapist": {"id": therapist["id"], "name": therapist["name"], "email": therapist["email"]},
+        "therapist": {
+            "id": therapist["id"],
+            "name": therapist["name"],
+            "email": therapist["email"],
+            "phone": therapist.get("phone"),
+            "phone_alert": therapist.get("phone_alert"),
+            "office_phone": therapist.get("office_phone"),
+            "credential_type": therapist.get("credential_type"),
+            "license_number": therapist.get("license_number"),
+            "license_expires_at": therapist.get("license_expires_at"),
+            "license_picture": therapist.get("license_picture"),
+            "primary_specialties": therapist.get("primary_specialties", []),
+            "secondary_specialties": therapist.get("secondary_specialties", []),
+            "general_treats": therapist.get("general_treats", []),
+            "modalities": therapist.get("modalities", []),
+            "modality_offering": therapist.get("modality_offering"),
+            "office_locations": therapist.get("office_locations", []),
+            "insurance_accepted": therapist.get("insurance_accepted", []),
+            "cash_rate": therapist.get("cash_rate"),
+            "sliding_scale": therapist.get("sliding_scale"),
+            "free_consult": therapist.get("free_consult"),
+            "years_experience": therapist.get("years_experience"),
+            "availability_windows": therapist.get("availability_windows", []),
+            "urgency_capacity": therapist.get("urgency_capacity"),
+            "style_tags": therapist.get("style_tags", []),
+            "bio": therapist.get("bio"),
+            "profile_picture": therapist.get("profile_picture"),
+            "pending_approval": bool(therapist.get("pending_approval")),
+            "is_active": therapist.get("is_active", True),
+            "availability_prompt_pending": bool(therapist.get("availability_prompt_pending")),
+            "last_availability_update_at": therapist.get("last_availability_update_at"),
+        },
         "referrals": out,
     }
+
+
+@api.post("/portal/therapist/availability-confirm")
+async def portal_therapist_availability_confirm(
+    payload: Optional[dict] = None,
+    session: dict[str, Any] = Depends(require_session(("therapist",))),
+):
+    """Therapist confirms their availability is current, optionally updating
+    `availability_windows` if they want to change it."""
+    therapist = await db.therapists.find_one(
+        {"email": {"$regex": f"^{re.escape(session['email'])}$", "$options": "i"}},
+        {"_id": 0, "id": 1},
+    )
+    if not therapist:
+        raise HTTPException(404, "Therapist profile not found")
+    update: dict[str, Any] = {
+        "availability_prompt_pending": False,
+        "last_availability_update_at": _now_iso(),
+        "updated_at": _now_iso(),
+    }
+    if payload and isinstance(payload.get("availability_windows"), list):
+        update["availability_windows"] = [
+            str(x) for x in payload["availability_windows"] if x
+        ][:10]
+    if payload and payload.get("urgency_capacity"):
+        update["urgency_capacity"] = str(payload["urgency_capacity"])[:50]
+    await db.therapists.update_one({"id": therapist["id"]}, {"$set": update})
+    return {"ok": True, "updated": list(update.keys())}
 
 
 # ─── Admin Routes ─────────────────────────────────────────────────────────────
@@ -1469,6 +1734,16 @@ async def admin_stats(_: bool = Depends(require_admin)):
         "applications": apps,
         "default_threshold": DEFAULT_THRESHOLD,
     }
+
+
+@api.post("/admin/run-daily-tasks")
+async def admin_run_daily_tasks(_: bool = Depends(require_admin)):
+    """Manual trigger for the daily cron — useful for testing without waiting
+    until 2am MT. Idempotent thanks to per-task tracking flags."""
+    bill = await _run_daily_billing_charges()
+    lic = await _run_license_expiry_alerts()
+    avail = await _run_availability_prompts()
+    return {"ok": True, "billing": bill, "license": lic, "availability": avail}
 
 
 # ─── Lifespan registered above; routes follow ────────────────────────────────

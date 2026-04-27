@@ -17,6 +17,7 @@ const AXIS_META = {
   gender: { max: 3, label: "Matches your gender preference" },
   style: { max: 2, label: "Aligns with your style preference" },
   payment_fit: { max: 3, label: "Open to your budget on a sliding scale" },
+  modality_pref: { max: 4, label: "Practices your preferred therapy approach" },
 };
 
 // Slug -> friendly label. Mirrors IntakeForm/TherapistSignup ISSUES list.
@@ -40,12 +41,13 @@ function topReasons(breakdown) {
   const entries = Object.entries(breakdown)
     .map(([k, v]) => {
       const meta = AXIS_META[k];
-      if (!meta) return null;
+      if (!meta || !v || v <= 0) return null;
       const pct = meta.max > 0 ? v / meta.max : 0;
       return { key: k, score: v, max: meta.max, pct, label: meta.label };
     })
-    .filter((x) => x && x.pct >= 0.5) // only surface meaningful matches
-    // Sort by raw score descending (issues=35 outranks gender=3 on a tie of 100%)
+    .filter(Boolean)
+    // Always surface the top 3 axes by raw score (no % threshold);
+    // higher-weighted axes (issues=35) outrank lighter ones on ties.
     .sort((a, b) => b.score - a.score || b.pct - a.pct);
   return entries.slice(0, 3);
 }

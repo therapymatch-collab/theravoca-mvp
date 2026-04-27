@@ -676,16 +676,91 @@ export default function AdminDashboard() {
                     data-testid="edit-email"
                   />
                 </FieldRow>
-                <FieldRow label="Phone">
+                <FieldRow label="Phone (private — alerts)">
                   <Input
-                    value={editTherapist.phone || ""}
+                    value={editTherapist.phone_alert || editTherapist.phone || ""}
                     onChange={(e) =>
-                      setEditTherapist({ ...editTherapist, phone: e.target.value })
+                      setEditTherapist({ ...editTherapist, phone_alert: e.target.value, phone: e.target.value })
                     }
                     data-testid="edit-phone"
                   />
                 </FieldRow>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <FieldRow label="Office phone (public)">
+                  <Input
+                    value={editTherapist.office_phone || ""}
+                    onChange={(e) =>
+                      setEditTherapist({ ...editTherapist, office_phone: e.target.value })
+                    }
+                    data-testid="edit-office-phone"
+                  />
+                </FieldRow>
+                <FieldRow label="Credential type">
+                  <select
+                    value={editTherapist.credential_type || ""}
+                    onChange={(e) =>
+                      setEditTherapist({ ...editTherapist, credential_type: e.target.value })
+                    }
+                    className="w-full bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg p-2 text-sm"
+                    data-testid="edit-credential-type"
+                  >
+                    <option value="">Select…</option>
+                    <option value="psychologist">Psychologist (PhD/PsyD)</option>
+                    <option value="lcsw">LCSW</option>
+                    <option value="lpc">LPC / LCPC / LPCC</option>
+                    <option value="lmft">LMFT</option>
+                    <option value="lmhc">LMHC</option>
+                    <option value="psychiatrist">Psychiatrist (MD)</option>
+                    <option value="other">Other</option>
+                  </select>
+                </FieldRow>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <FieldRow label="License #">
+                  <Input
+                    value={editTherapist.license_number || ""}
+                    onChange={(e) =>
+                      setEditTherapist({ ...editTherapist, license_number: e.target.value })
+                    }
+                    data-testid="edit-license-number"
+                  />
+                </FieldRow>
+                <FieldRow label="License expires">
+                  <Input
+                    type="date"
+                    value={(editTherapist.license_expires_at || "").slice(0, 10)}
+                    onChange={(e) =>
+                      setEditTherapist({ ...editTherapist, license_expires_at: e.target.value })
+                    }
+                    data-testid="edit-license-expires"
+                  />
+                </FieldRow>
+              </div>
+              <FieldRow label="License upload (image admin uses to verify the number)">
+                {editTherapist.license_picture ? (
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={editTherapist.license_picture}
+                      alt="License"
+                      className="max-h-32 rounded-lg border border-[#E8E5DF]"
+                      data-testid="edit-license-picture"
+                    />
+                    <button
+                      type="button"
+                      className="text-sm text-[#D45D5D] hover:underline"
+                      onClick={() =>
+                        setEditTherapist({ ...editTherapist, license_picture: null })
+                      }
+                      data-testid="edit-license-remove"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-[#6D6A65]">No license image on file.</p>
+                )}
+              </FieldRow>
               <div className="grid grid-cols-2 gap-3">
                 <FieldRow label="Cash rate ($)">
                   <Input

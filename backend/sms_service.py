@@ -118,3 +118,16 @@ async def send_therapist_referral_sms(
         f"Tap to review & apply within 24h: {apply_url}"
     )
     return await send_sms(to, body)
+
+
+
+async def send_availability_prompt_sms(
+    to: str, therapist_first_name: str, portal_url: str
+) -> dict[str, Any] | None:
+    """Mon/Fri SMS reminder asking the therapist to refresh availability."""
+    first = (therapist_first_name or "there").split(" ")[0]
+    body = (
+        f"TheraVoca: Hi {first} — quick check, is your same-week availability "
+        f"still current? Confirm or update in 10 sec: {portal_url}?confirmAvailability=1"
+    )
+    return await send_sms(to, body)

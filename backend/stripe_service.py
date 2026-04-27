@@ -143,6 +143,27 @@ def charge_monthly_fee(
         return {"error": "stripe_error", "message": str(e)}
 
 
+# ─── Customer Portal (self-service subscription management) ────────────────
+
+def create_billing_portal_session(
+    customer_id: str,
+    return_url: str,
+) -> Optional[dict[str, Any]]:
+    """Create a Stripe Customer Portal session so a therapist can update their
+    card, view invoices, or cancel. Returns {url} or None on failure."""
+    if not _configure():
+        return None
+    try:
+        session = stripe.billing_portal.Session.create(
+            customer=customer_id,
+            return_url=return_url,
+        )
+        return {"url": session.url, "id": session.id}
+    except stripe.error.StripeError as e:
+        logger.warning("Stripe portal session creation failed: %s", e)
+        return None
+
+
 def construct_event(payload: bytes, sig_header: str) -> Any:
     if not _configure():
         raise RuntimeError("STRIPE_API_KEY not configured")

@@ -196,9 +196,9 @@ async def send_patient_results(to: str, request_id: str, applications: list[dict
             (
                 (k, v, axis_meta[k][1])
                 for k, v in bd.items()
-                if k in axis_meta and axis_meta[k][0] > 0 and v / axis_meta[k][0] >= 0.5
+                if k in axis_meta and axis_meta[k][0] > 0 and v > 0
             ),
-            # Sort by raw score desc — heavier-weighted axes win on ties
+            # Always show the top 3 highest-raw-score axes (no % threshold)
             key=lambda x: x[1],
             reverse=True,
         )[:3]
@@ -295,3 +295,66 @@ async def send_magic_code(to: str, code: str, role: str) -> None:
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">{footer_note}</p>
     """
     await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner))
+
+
+
+async def send_license_expiring_to_therapist(
+    to: str, therapist_name: str, expires_at: str, days_remaining: int
+) -> None:
+    """Email therapist 30 days before license expiration."""
+    first_name = _first_name(therapist_name)
+    portal_url = f"{_get_app_url()}/portal/therapist"
+    subject = f"Your TheraVoca license expires in {days_remaining} days"
+    inner = f"""
+    <p style="font-size:16px;line-height:1.6;">Hi {first_name},</p>
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      Our records show your professional license is set to expire on
+      <strong>{expires_at}</strong> — about <strong>{days_remaining} days</strong> from today.
+    </p>
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      To keep receiving referrals without interruption, please renew with your state board
+      and upload an updated copy via your therapist portal.
+    </p>
+    <p style="margin:28px 0;">
+      <a href="{portal_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">Update license</a>
+    </p>
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">
+      If you've already renewed, you can ignore this email — we'll stop reminding you once the new expiration date is on file.
+    </p>
+    """
+    await _send(to, subject, _wrap("License renewal reminder", inner))
+
+
+async def send_license_expiring_to_admin(
+    to: str, therapist_name: str, therapist_email: str, expires_at: str, days_remaining: int
+) -> None:
+    subject = f"[TheraVoca] {therapist_name} license expiring in {days_remaining}d"
+    inner = f"""
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      Heads-up: <strong>{therapist_name}</strong> ({therapist_email}) has a license that expires
+      on <strong>{expires_at}</strong>. We've notified the therapist directly. Verify renewal documentation
+      lands in their profile before that date.
+    </p>
+    """
+    await _send(to, subject, _wrap("License renewal alert", inner))
+
+
+async def send_availability_prompt(to: str, therapist_name: str) -> None:
+    """Mon/Fri reminder asking the therapist to refresh their availability."""
+    first_name = _first_name(therapist_name)
+    portal_url = f"{_get_app_url()}/portal/therapist"
+    subject = "Quick check — is your TheraVoca availability still current?"
+    inner = f"""
+    <p style="font-size:16px;line-height:1.6;">Hi {first_name},</p>
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      Twice a week we ping you to keep your <strong>same-week availability</strong> accurate.
+      A 10-second update keeps you on top of patient match results.
+    </p>
+    <p style="margin:28px 0;">
+      <a href="{portal_url}?confirmAvailability=1" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">Confirm or update availability</a>
+    </p>
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">
+      If your availability hasn't changed, just hit "Yes, still current" in the portal.
+    </p>
+    """
+    await _send(to, subject, _wrap("Availability check-in", inner))
