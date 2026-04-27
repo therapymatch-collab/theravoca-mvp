@@ -75,7 +75,14 @@ export default function Landing() {
             <h1 className="font-serif-display text-5xl sm:text-6xl lg:text-7xl text-[#2D4A3E] leading-[1.05] tracking-tight">
               Let therapists <em className="not-italic text-[#C87965]">come to you</em>.
             </h1>
-            <p className="mt-6 text-lg text-[#2B2A29]/80 leading-relaxed max-w-xl">
+            <p
+              className="mt-5 text-2xl sm:text-3xl text-[#2D4A3E] font-serif-display leading-snug"
+              data-testid="hero-promise"
+            >
+              <span className="font-semibold">3+ matched therapists in 24 hours</span>
+              <span className="text-[#C87965]">, guaranteed.</span>
+            </p>
+            <p className="mt-5 text-lg text-[#2B2A29]/80 leading-relaxed max-w-xl">
               No more searching, cold-calls, or waiting to hear back. Pick what
               matters, and we'll route your request to therapists in your
               network who actually want to work with you.
@@ -125,29 +132,6 @@ export default function Landing() {
                 <div className="text-[#6D6A65]">guaranteed</div>
               </div>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* OUR PROMISE — patient-facing guarantee */}
-      <section className="py-12 bg-[#FDFBF7]">
-        <div className="max-w-3xl mx-auto px-5 sm:px-8">
-          <div
-            className="bg-[#2D4A3E] text-white rounded-2xl px-7 py-7 text-center"
-            data-testid="patient-guarantee"
-          >
-            <p className="text-[10px] uppercase tracking-[0.25em] text-[#C8B7A6] font-semibold">
-              Our promise to you
-            </p>
-            <p className="font-serif-display text-2xl sm:text-3xl mt-1.5 leading-tight">
-              3+ matched therapists in 24 hours,{" "}
-              <em className="not-italic text-[#E8B89D]">guaranteed</em>.
-            </p>
-            <p className="text-sm text-white/75 mt-2 leading-relaxed max-w-md mx-auto">
-              You'll see at least three pre-screened therapists who fit your
-              needs — within a day of submitting your referral. No long waitlists,
-              no generic directory.
-            </p>
           </div>
         </div>
       </section>
