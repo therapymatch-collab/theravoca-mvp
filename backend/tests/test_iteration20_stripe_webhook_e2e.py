@@ -1,16 +1,16 @@
-"""End-to-end Stripe simulation that does NOT require a real Stripe key.
+"""End-to-end Stripe webhook simulation.
 
-We pivot from driving Stripe's hosted Checkout (which blocks programmatic form
-fills for security) to simulating the post-checkout webhook directly.
-
-This validates the *end of the funnel*: the `customer.subscription.created`
-event flips a therapist's `subscription_status` from `incomplete` to `trialing`,
-which is the exact state change a real `4242 4242 4242 4242` checkout produces.
+Sends real Stripe-shaped events (with `"object": "event"` at top level so the
+SDK's `construct_event` accepts them). When `STRIPE_WEBHOOK_SECRET` is set we
+sign the payload with HMAC-SHA256; otherwise we POST unsigned and the handler
+accepts it (development-only path, logs a warning).
 
 Skipped automatically if the backend isn't reachable.
 """
 from __future__ import annotations
 
+import hmac
+import hashlib
 import json
 import os
 import time
@@ -27,6 +27,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=True)
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 API = f"{BASE_URL}/api"
 ADMIN_HEADERS = {"X-Admin-Password": "admin123!"}
+WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
 
 
 def _backend_up() -> bool:
@@ -39,6 +40,21 @@ def _backend_up() -> bool:
 
 
 pytestmark = pytest.mark.skipif(not _backend_up(), reason="Backend not reachable")
+
+
+def _post_event(event: dict) -> requests.Response:
+    """POST a Stripe-shaped event with a valid signature header (if secret set)."""
+    payload = json.dumps(event).encode()
+    headers = {"Content-Type": "application/json"}
+    if WEBHOOK_SECRET:
+        ts = int(time.time())
+        sig = hmac.new(
+            WEBHOOK_SECRET.encode(),
+            f"{ts}.{payload.decode()}".encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        headers["Stripe-Signature"] = f"t={ts},v1={sig}"
+    return requests.post(f"{API}/stripe/webhook", data=payload, headers=headers, timeout=10)
 
 
 @pytest.fixture(scope="module")
@@ -61,14 +77,8 @@ def test_initial_status_is_incomplete(therapist_id: str):
 
 
 def test_subscription_created_webhook_flips_to_trialing(therapist_id: str):
-    """Simulate the exact webhook Stripe sends after a successful test-card checkout.
-
-    This is the equivalent of a user typing `4242 4242 4242 4242` and clicking
-    `Subscribe` on the hosted checkout page — Stripe then POSTs this event to
-    our `/api/stripe/webhook` endpoint, which is what we're verifying here.
-    """
+    """Equivalent of a user typing 4242 4242 4242 4242 on Stripe-hosted Checkout."""
     trial_end_unix = int(time.time()) + 30 * 24 * 60 * 60
-    period_end_unix = trial_end_unix
     event = {
         "id": f"evt_test_{int(time.time())}",
         "object": "event",
@@ -80,23 +90,15 @@ def test_subscription_created_webhook_flips_to_trialing(therapist_id: str):
                 "status": "trialing",
                 "customer": f"cus_test_{int(time.time())}",
                 "trial_end": trial_end_unix,
-                "current_period_end": period_end_unix,
+                "current_period_end": trial_end_unix,
                 "metadata": {"theravoca_therapist_id": therapist_id},
             },
         },
     }
-    # When STRIPE_WEBHOOK_SECRET is unset (default in test env) the webhook
-    # accepts unverified events — this lets us exercise the handler logic end-to-end.
-    res = requests.post(
-        f"{API}/stripe/webhook",
-        data=json.dumps(event),
-        headers={"Content-Type": "application/json"},
-        timeout=10,
-    )
+    res = _post_event(event)
     assert res.status_code == 200, res.text
     assert res.json().get("received") is True
 
-    # Verify the therapist record actually flipped
     res2 = requests.get(f"{API}/admin/therapists", headers=ADMIN_HEADERS, timeout=10)
     found = next(t for t in res2.json() if t["id"] == therapist_id)
     assert found["subscription_status"] == "trialing", found
@@ -105,27 +107,53 @@ def test_subscription_created_webhook_flips_to_trialing(therapist_id: str):
 
 
 def test_subscription_canceled_webhook_flips_to_canceled(therapist_id: str):
-    """And a cancellation event flips the same therapist to `canceled`."""
+    """Cancellation event flips the same therapist to `canceled`."""
     event = {
         "id": f"evt_cancel_{int(time.time())}",
+        "object": "event",
         "type": "customer.subscription.deleted",
         "data": {
             "object": {
                 "id": f"sub_test_{int(time.time())}",
+                "object": "subscription",
                 "status": "canceled",
                 "customer": f"cus_test_{int(time.time())}",
                 "metadata": {"theravoca_therapist_id": therapist_id},
             },
         },
     }
-    res = requests.post(
-        f"{API}/stripe/webhook",
-        data=json.dumps(event),
-        headers={"Content-Type": "application/json"},
-        timeout=10,
-    )
+    res = _post_event(event)
     assert res.status_code == 200
 
     res2 = requests.get(f"{API}/admin/therapists", headers=ADMIN_HEADERS, timeout=10)
     found = next(t for t in res2.json() if t["id"] == therapist_id)
     assert found["subscription_status"] == "canceled", found
+
+
+@pytest.mark.skipif(not WEBHOOK_SECRET, reason="STRIPE_WEBHOOK_SECRET not set")
+def test_unsigned_event_is_rejected_when_secret_set():
+    """When the secret IS set, missing/invalid signatures must return 400."""
+    res = requests.post(
+        f"{API}/stripe/webhook",
+        data=b'{"id":"x","object":"event","type":"x","data":{"object":{}}}',
+        headers={"Content-Type": "application/json"},
+        timeout=10,
+    )
+    assert res.status_code == 400
+
+
+@pytest.mark.skipif(not WEBHOOK_SECRET, reason="STRIPE_WEBHOOK_SECRET not set")
+def test_tampered_signature_is_rejected():
+    """Hand-rolled bad signature must return 400."""
+    payload = b'{"id":"evt_tamper","object":"event","type":"customer.subscription.created","data":{"object":{}}}'
+    ts = int(time.time())
+    res = requests.post(
+        f"{API}/stripe/webhook",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Stripe-Signature": f"t={ts},v1=deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+        },
+        timeout=10,
+    )
+    assert res.status_code == 400

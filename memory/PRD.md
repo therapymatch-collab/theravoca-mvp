@@ -134,8 +134,8 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 ## Backlog
 
 ### P0 (next 1–2 sessions)
-- ✅ Stripe webhook E2E (done iter-22 via simulation; real card path is verified separately by iter-19 setup-intent test when `STRIPE_API_KEY` is real)
-- Real-Stripe webhook signature secret in `.env` (so production webhooks work)
+- ✅ Stripe webhook E2E (done iter-22 via simulation)
+- ✅ Real-Stripe webhook signature secret in `.env` (done iter-23 — `whsec_…` configured + signed/tampered tests green)
 
 ### P1
 - Multi-state expansion (Idaho → WA, OR, MT, UT, WY, NV)
