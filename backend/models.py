@@ -92,6 +92,8 @@ class RequestCreate(BaseModel):
     gender_required: bool = False
     style_preference: list[str] = Field(default_factory=list)
     referral_source: Optional[str] = ""
+    phone: Optional[str] = ""  # patient phone — only used for SMS receipt
+    sms_opt_in: bool = False  # patient explicitly opted into SMS receipt
 
 
 class RequestOut(BaseModel):

@@ -14,6 +14,11 @@ from email_service import send_verification_email
 from geocoding import geocode_city, geocode_zip
 from helpers import _now_iso, _parse_iso, _trigger_matching
 from models import FollowupResponse, RequestCreate
+from sms_service import send_patient_intake_receipt_sms
+from validation import (
+    email_is_plausible, is_disposable_email,
+    validate_zip_city_consistent, validate_zip_for_state,
+)
 
 router = APIRouter()
 
@@ -25,6 +30,28 @@ async def root():
 
 @router.post("/requests", response_model=dict)
 async def create_request(payload: RequestCreate):
+    # ─── Spam / sanity gates (run before any DB writes) ────────────────
+    if not email_is_plausible(payload.email):
+        raise HTTPException(400, "That email address doesn't look right. Please double-check it.")
+    if is_disposable_email(payload.email):
+        raise HTTPException(
+            400, "Please use a personal email — disposable / temp-mail addresses aren't accepted.",
+        )
+    if payload.location_zip and not validate_zip_for_state(
+        payload.location_zip, payload.location_state,
+    ):
+        raise HTTPException(
+            400,
+            f"ZIP {payload.location_zip} doesn't belong to {payload.location_state}. "
+            "Please correct the ZIP or state.",
+        )
+    if payload.location_zip and payload.location_city:
+        msg = await validate_zip_city_consistent(
+            db, payload.location_zip, payload.location_city, payload.location_state,
+        )
+        if msg:
+            raise HTTPException(400, msg)
+
     rid = str(uuid.uuid4())
     token = secrets.token_urlsafe(24)
     patient_geo = None
@@ -53,6 +80,13 @@ async def create_request(payload: RequestCreate):
     }
     await db.requests.insert_one(doc.copy())
     await send_verification_email(payload.email, rid, token)
+    # Optional SMS receipt — only if patient gave a phone AND opted in
+    if payload.sms_opt_in and (payload.phone or "").strip():
+        try:
+            await send_patient_intake_receipt_sms(payload.phone)
+        except Exception:
+            # Never let SMS failures block the intake flow
+            pass
     return {"id": rid, "status": "pending_verification"}
 
 
@@ -192,6 +226,7 @@ async def public_request_results(request_id: str):
 
     enriched = []
     breakdowns = req.get("notified_breakdowns") or {}
+    distances = req.get("notified_distances") or {}
     for a in apps:
         t = await db.therapists.find_one({"id": a["therapist_id"]}, {"_id": 0})
         if t:
@@ -199,6 +234,7 @@ async def public_request_results(request_id: str):
                 **a,
                 "therapist": t,
                 "match_breakdown": breakdowns.get(a["therapist_id"]) or {},
+                "distance_miles": distances.get(a["therapist_id"]),
             })
     return {
         "request": req,

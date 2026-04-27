@@ -370,6 +370,51 @@ async def admin_list_outreach(_: bool = Depends(require_admin)):
     return {"invites": docs, "total": len(docs)}
 
 
+@router.get("/admin/referral-sources")
+async def admin_referral_sources(
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    _: bool = Depends(require_admin),
+):
+    """Aggregate patient requests by `referral_source` between optional ISO
+    dates. Empty source is bucketed as `(unspecified)`.
+
+    Returns: {sources: [{source, count}, ...], total, range: {start, end}}
+    """
+    from helpers import _parse_iso
+    query: dict[str, Any] = {}
+    if start or end:
+        rng: dict[str, str] = {}
+        if start:
+            s_dt = _parse_iso(start)
+            if s_dt:
+                rng["$gte"] = s_dt.isoformat()
+        if end:
+            e_dt = _parse_iso(end)
+            if e_dt:
+                rng["$lte"] = e_dt.isoformat()
+        if rng:
+            query["created_at"] = rng
+    docs = await db.requests.find(
+        query, {"_id": 0, "referral_source": 1, "created_at": 1, "id": 1, "email": 1},
+    ).sort("created_at", -1).to_list(2000)
+    counts: dict[str, int] = {}
+    for d in docs:
+        src = (d.get("referral_source") or "").strip() or "(unspecified)"
+        counts[src] = counts.get(src, 0) + 1
+    sources = sorted(
+        ({"source": k, "count": v} for k, v in counts.items()),
+        key=lambda x: x["count"],
+        reverse=True,
+    )
+    return {
+        "sources": sources,
+        "total": len(docs),
+        "range": {"start": start, "end": end},
+        "samples": docs[:50],
+    }
+
+
 @router.post("/admin/therapists/{therapist_id}/reviews")
 async def admin_update_therapist_reviews(
     therapist_id: str, payload: dict, _: bool = Depends(require_admin),

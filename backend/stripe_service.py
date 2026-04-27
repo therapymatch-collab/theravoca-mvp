@@ -178,5 +178,6 @@ def construct_event(payload: bytes, sig_header: str) -> Any:
     if not secret:
         import json
         logger.warning("STRIPE_WEBHOOK_SECRET not set — accepting unverified event")
-        return stripe.Event.construct_from(json.loads(payload), stripe.api_key)
+        # Return a plain dict so route handlers can use .get() uniformly.
+        return json.loads(payload)
     return stripe.Webhook.construct_event(payload, sig_header, secret)

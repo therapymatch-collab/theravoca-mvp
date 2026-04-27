@@ -7,6 +7,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Check, X, Sparkles } from "lucide-react";
+import { useEffect } from "react";
 
 const HERO_IMAGE =
   "https://images.unsplash.com/photo-1760702591586-a46969be7de9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzB8MHwxfHNlYXJjaHwzfHxjYWxtJTIwbmF0dXJlJTIwZm9yZXN0JTIwc3Vuc2V0fGVufDB8fHx8MTc3NzIwNjYzM3ww&ixlib=rb-4.1.0&q=85";
@@ -41,6 +42,24 @@ const FAQS = [
 ];
 
 export default function Landing() {
+  // Cross-page anchor links (`/#start`) need a manual scroll on mount because
+  // React Router's hashchange handling doesn't fire when content is rendered
+  // post-mount. This makes "Get matched" buttons from any page reliably land
+  // on the intake form.
+  useEffect(() => {
+    const hash = window.location.hash?.replace("#", "");
+    if (!hash) return;
+    const tryScroll = () => {
+      const el = document.getElementById(hash);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    // Run once after first paint, and once after a short delay to catch
+    // sections rendered behind lazy boundaries (e.g. IntakeForm bottom).
+    requestAnimationFrame(tryScroll);
+    const t = setTimeout(tryScroll, 250);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
       <Header />

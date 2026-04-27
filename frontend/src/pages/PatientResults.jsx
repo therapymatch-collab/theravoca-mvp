@@ -218,6 +218,13 @@ export default function PatientResults() {
                             value={t.free_consult ? "Yes" : "—"}
                             highlight={t.free_consult}
                           />
+                          {typeof app.distance_miles === "number" && (
+                            <Detail
+                              label="Travel distance"
+                              value={`${Math.round(app.distance_miles)} mi`}
+                              highlight={app.distance_miles <= 10}
+                            />
+                          )}
                           {t.office_addresses && t.office_addresses.length > 0 ? (
                             <Detail
                               label="Office"

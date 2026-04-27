@@ -130,7 +130,7 @@ export default function TherapistSignup() {
   const [officeAddress, setOfficeAddress] = useState("");
   const [showPreview, setShowPreview] = useState(false);
   const [step, setStep] = useState(1);
-  const totalSteps = 5;
+  const totalSteps = 6;
   const set = (k, v) => setData((d) => ({ ...d, [k]: v }));
   const toggleArr = (k, v, max) =>
     setData((d) => {
@@ -366,6 +366,28 @@ export default function TherapistSignup() {
                   <span className="text-[#6D6A65]"> · 30-day free trial · cancel anytime</span>
                 </div>
               </div>
+              <div className="mt-7 flex flex-wrap gap-3 items-center">
+                <a
+                  href="#signup-form"
+                  className="tv-btn-primary"
+                  data-testid="hero-signup-cta"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    document
+                      .getElementById("signup-form")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                >
+                  Sign up — start free trial <ArrowRight size={18} />
+                </a>
+                <a
+                  href="/sign-in?role=therapist"
+                  className="text-sm text-[#2D4A3E] underline underline-offset-4 hover:text-[#3A5E50]"
+                  data-testid="hero-signin-link"
+                >
+                  Already a member? Sign in
+                </a>
+              </div>
             </div>
             <div className="relative">
               <div
@@ -428,7 +450,7 @@ export default function TherapistSignup() {
           </div>
         </section>
 
-        <section className="py-14">
+        <section id="signup-form" className="py-14 scroll-mt-24">
           <div className="max-w-3xl mx-auto px-5 sm:px-8">
             <div className="bg-white border border-[#E8E5DF] rounded-3xl p-6 sm:p-10">
               {(inviteRequestId || inviteCode) && (
@@ -465,7 +487,8 @@ export default function TherapistSignup() {
                   <span>Step {step} of {totalSteps}</span>
                   <span>
                     {[
-                      "Basics + license",
+                      "Basics",
+                      "License & verification",
                       "Who you see",
                       "Format & insurance",
                       "Rates & style",
@@ -485,8 +508,7 @@ export default function TherapistSignup() {
               <div className="mt-8 space-y-7">
                 {step === 1 && (<>
                 <Group title="Basics">
-                  <Field label="Profile photo (optional)">
-                    <div className="flex items-center gap-4">
+                  <Field label="Profile photo (optional)">                    <div className="flex items-center gap-4">
                       <div className="relative w-20 h-20 rounded-full bg-[#FDFBF7] border border-[#E8E5DF] overflow-hidden flex items-center justify-center">
                         {data.profile_picture ? (
                           <img
@@ -609,7 +631,9 @@ export default function TherapistSignup() {
                     />
                   </Field>
                 </Group>
+                </>)}
 
+                {step === 2 && (<>
                 <Group
                   title="License & verification"
                   hint="We verify every therapist's license before they go live."
@@ -707,7 +731,7 @@ export default function TherapistSignup() {
                 </Group>
                 </>)}
 
-                {step === 2 && (<>
+                {step === 3 && (<>
                 <Group
                   title="Who do you see?"
                   hint="Required — patients are pre-filtered by these"
@@ -795,7 +819,7 @@ export default function TherapistSignup() {
                 </Group>
                 </>)}
 
-                {step === 3 && (<>
+                {step === 4 && (<>
                 <Group title="Modalities you practice (pick 1–6)">
                   <div className="flex flex-wrap gap-2">
                     {MODALITIES.map((m) => {
@@ -908,7 +932,7 @@ export default function TherapistSignup() {
                 </Group>
                 </>)}
 
-                {step === 4 && (<>
+                {step === 5 && (<>
                 <Group title="Rates & experience">
                   <div className="grid grid-cols-2 gap-4">
                     <Field label="Cash rate per session ($)">
@@ -991,7 +1015,7 @@ export default function TherapistSignup() {
                 </Group>
                 </>)}
 
-                {step === 5 && (<>
+                {step === 6 && (<>
                 <Group title="Notifications">
                   <p className="text-xs text-[#6D6A65] -mt-1 mb-2">
                     Choose how you'd like to be alerted when a new referral matches you.
@@ -1291,12 +1315,17 @@ function Group({ title, hint, children }) {
   );
 }
 
-function Field({ label, children }) {
+function Field({ label, hint, children }) {
   return (
     <div>
-      <label className="block text-xs font-semibold text-[#6D6A65] mb-1.5 uppercase tracking-wider">
+      <label className="block text-xs font-semibold text-[#6D6A65] mb-1.5 uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">
         {label}
       </label>
+      {hint && (
+        <div className="text-[11px] text-[#6D6A65] -mt-1 mb-1.5 normal-case tracking-normal">
+          {hint}
+        </div>
+      )}
       {children}
     </div>
   );

@@ -23,7 +23,14 @@ async def stripe_webhook(request: Request):
         logger.warning("Stripe webhook signature verification failed: %s", e)
         raise HTTPException(400, "invalid signature")
     etype = event.get("type") if isinstance(event, dict) else event.type
-    obj = (event.get("data") or {}).get("object") if isinstance(event, dict) else event.data.object
+    if isinstance(event, dict):
+        obj = (event.get("data") or {}).get("object") or {}
+    else:
+        # Stripe Event object — coerce its data.object to a plain dict
+        try:
+            obj = dict(event.data.object)
+        except (AttributeError, TypeError):
+            obj = {}
     tid: Optional[str] = None
 
     async def _set(fields: dict[str, Any]):

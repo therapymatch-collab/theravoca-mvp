@@ -145,6 +145,8 @@ export default function IntakeForm() {
     style_preference: [],
     referral_source: "",
     email: "",
+    phone: "",
+    sms_opt_in: false,
   });
   const set = (k, v) => setData((d) => ({ ...d, [k]: v }));
   const toggleArr = (k, v, max) =>
@@ -154,6 +156,17 @@ export default function IntakeForm() {
       if (max && arr.length >= max) return d;
       return { ...d, [k]: [...arr, v] };
     });
+
+  // Cheap client-side guard against typos / disposable inboxes — backend
+  // does the real validation, but this catches obvious mistakes early.
+  const DISPOSABLE_HINT = /(mailinator|guerrillamail|10minutemail|tempmail|temp-mail|yopmail|throwawaymail|trashmail|fakeinbox|getnada)/i;
+  const emailLooksOk = (email) => {
+    if (!email) return false;
+    const m = /^[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9.\-]{1,255}\.[A-Za-z]{2,}$/.test(email);
+    if (!m) return false;
+    if (DISPOSABLE_HINT.test(email)) return false;
+    return true;
+  };
 
   const canNext = () => {
     if (step === 0) return data.client_type && data.age_group && data.location_state;
@@ -183,7 +196,7 @@ export default function IntakeForm() {
       );
     if (step === 5) return true;
     if (step === 6)
-      return data.email && agreed && confirmAdult && confirmNotEmergency;
+      return emailLooksOk(data.email) && agreed && confirmAdult && confirmNotEmergency;
     return false;
   };
 
@@ -525,6 +538,48 @@ export default function IntakeForm() {
                     placeholder="you@example.com"
                     className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                     data-testid="email-input"
+                  />
+                  {data.email && !emailLooksOk(data.email) && (
+                    <p
+                      className="mt-1.5 text-xs text-[#D45D5D]"
+                      data-testid="email-error"
+                    >
+                      Please use a valid personal email — disposable / temp addresses
+                      aren't accepted.
+                    </p>
+                  )}
+                </Field>
+                <Field label="Phone (optional — for an instant text receipt)">
+                  <Input
+                    type="tel"
+                    value={data.phone}
+                    onChange={(e) => set("phone", e.target.value)}
+                    placeholder="(208) 555-0123"
+                    className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                    data-testid="phone-input"
+                  />
+                  {data.phone && (
+                    <label className="flex items-start gap-3 mt-2 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5 cursor-pointer hover:border-[#2D4A3E] transition">
+                      <Checkbox
+                        checked={data.sms_opt_in}
+                        onCheckedChange={(v) => set("sms_opt_in", !!v)}
+                        className="mt-0.5 border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
+                        data-testid="sms-opt-in"
+                      />
+                      <span className="text-sm text-[#2B2A29] leading-relaxed">
+                        Text me a quick receipt confirming my referral was received.
+                        We'll never share your number. Reply STOP anytime.
+                      </span>
+                    </label>
+                  )}
+                </Field>
+                <Field label="How did you hear about us? (optional)">
+                  <Input
+                    value={data.referral_source}
+                    onChange={(e) => set("referral_source", e.target.value)}
+                    placeholder="e.g. Instagram, Google, friend"
+                    className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                    data-testid="referral-source-input"
                   />
                 </Field>
                 <div className="space-y-3 pt-2">

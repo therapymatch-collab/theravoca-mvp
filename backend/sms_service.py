@@ -121,6 +121,17 @@ async def send_therapist_referral_sms(
 
 
 
+async def send_patient_intake_receipt_sms(to: str) -> dict[str, Any] | None:
+    """Confirmation text to a patient right after they submit a referral.
+    Tells them we'll email matches inside 24h and how to reach support."""
+    body = (
+        "TheraVoca: Got your referral — we're routing it to therapists in your "
+        "state right now. You'll see your matches by email within 24 hours. "
+        "Reply STOP to opt out."
+    )
+    return await send_sms(to, body)
+
+
 async def send_availability_prompt_sms(
     to: str, therapist_first_name: str, portal_url: str
 ) -> dict[str, Any] | None:

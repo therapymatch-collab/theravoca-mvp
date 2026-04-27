@@ -114,6 +114,11 @@ export default function AdminDashboard() {
   const [editingTplKey, setEditingTplKey] = useState(null);
   const [tplFields, setTplFields] = useState({});
   const [savingTpl, setSavingTpl] = useState(false);
+  // Referral source analytics
+  const [refSources, setRefSources] = useState(null);
+  const [refStart, setRefStart] = useState("");
+  const [refEnd, setRefEnd] = useState("");
+  const [refLoading, setRefLoading] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -306,6 +311,26 @@ export default function AdminDashboard() {
     }
   };
 
+  const loadReferralSources = useCallback(
+    async (s = refStart, e = refEnd) => {
+      setRefLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (s) params.set("start", new Date(s).toISOString());
+        if (e) params.set("end", new Date(e + "T23:59:59").toISOString());
+        const res = await client.get(
+          `/admin/referral-sources${params.toString() ? `?${params}` : ""}`,
+        );
+        setRefSources(res.data);
+      } catch (err) {
+        toast.error(err?.response?.data?.detail || "Failed to load referral sources");
+      } finally {
+        setRefLoading(false);
+      }
+    },
+    [client, refStart, refEnd],
+  );
+
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
       <Header minimal />
@@ -404,6 +429,17 @@ export default function AdminDashboard() {
                   count={emailTemplates.length || null}
                   testid="tab-email-templates"
                 />
+                <TabBtn
+                  active={tab === "referral_sources"}
+                  onClick={() => {
+                    setTab("referral_sources");
+                    if (!refSources) loadReferralSources();
+                  }}
+                  icon={<Sliders size={14} />}
+                  label="Referral sources"
+                  count={refSources?.sources?.length || null}
+                  testid="tab-referral-sources"
+                />
               </div>
 
               {tab === "requests" && (
@@ -414,6 +450,7 @@ export default function AdminDashboard() {
                       <Th>Email</Th>
                       <Th>Age / State</Th>
                       <Th>Status</Th>
+                      <Th>Source</Th>
                       <Th>Notified</Th>
                       <Th>Apps</Th>
                       <Th>Threshold</Th>
@@ -424,7 +461,7 @@ export default function AdminDashboard() {
                   <tbody>
                     {requests.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="p-10 text-center text-[#6D6A65]">
+                        <td colSpan={9} className="p-10 text-center text-[#6D6A65]">
                           No requests yet.
                         </td>
                       </tr>
@@ -447,6 +484,15 @@ export default function AdminDashboard() {
                         </td>
                         <td className="p-4">
                           <StatusBadge s={r.status} verified={r.verified} />
+                        </td>
+                        <td
+                          className="p-4 text-xs text-[#2B2A29] max-w-[140px] truncate"
+                          title={r.referral_source || ""}
+                          data-testid={`request-referral-source-${r.id}`}
+                        >
+                          {r.referral_source || (
+                            <span className="text-[#C8C4BB] italic">—</span>
+                          )}
                         </td>
                         <td className="p-4">{r.notified_count || 0}</td>
                         <td className="p-4 font-semibold text-[#2D4A3E]">
@@ -594,6 +640,128 @@ export default function AdminDashboard() {
                   </table>
                 </div>
               )}
+              {tab === "referral_sources" && (
+                <div className="mt-6 space-y-4" data-testid="referral-sources-panel">
+                  <div className="bg-white border border-[#E8E5DF] rounded-2xl p-5 flex flex-wrap items-end gap-3">
+                    <div className="flex-1 min-w-[160px]">
+                      <label className="block text-[11px] uppercase tracking-wider text-[#6D6A65] mb-1">
+                        Start date
+                      </label>
+                      <Input
+                        type="date"
+                        value={refStart}
+                        onChange={(e) => setRefStart(e.target.value)}
+                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                        data-testid="ref-source-start"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-[160px]">
+                      <label className="block text-[11px] uppercase tracking-wider text-[#6D6A65] mb-1">
+                        End date
+                      </label>
+                      <Input
+                        type="date"
+                        value={refEnd}
+                        onChange={(e) => setRefEnd(e.target.value)}
+                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                        data-testid="ref-source-end"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="tv-btn-primary !py-2 !px-4 text-sm"
+                      onClick={() => loadReferralSources()}
+                      disabled={refLoading}
+                      data-testid="ref-source-apply"
+                    >
+                      {refLoading ? "Loading…" : "Apply filter"}
+                    </button>
+                    {(refStart || refEnd) && (
+                      <button
+                        type="button"
+                        className="text-sm text-[#6D6A65] hover:text-[#2D4A3E] underline"
+                        onClick={() => {
+                          setRefStart("");
+                          setRefEnd("");
+                          loadReferralSources("", "");
+                        }}
+                        data-testid="ref-source-clear"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
+                    {refLoading || !refSources ? (
+                      <div className="p-12 text-center text-[#6D6A65]">
+                        <Loader2 className="animate-spin mx-auto mb-3 text-[#2D4A3E]" />
+                        Loading referral sources…
+                      </div>
+                    ) : (
+                      <>
+                        <div className="px-5 py-4 border-b border-[#E8E5DF] flex items-baseline justify-between">
+                          <h3 className="font-medium text-[#2B2A29]">
+                            {refSources.sources.length} source
+                            {refSources.sources.length === 1 ? "" : "s"}
+                          </h3>
+                          <span className="text-xs text-[#6D6A65]">
+                            {refSources.total} requests in range
+                          </span>
+                        </div>
+                        {refSources.sources.length === 0 ? (
+                          <div className="p-10 text-center text-[#6D6A65]">
+                            No referrals captured in this range yet.
+                          </div>
+                        ) : (
+                          <table className="w-full text-sm" data-testid="ref-source-table">
+                            <thead className="bg-[#FDFBF7] text-[#6D6A65]">
+                              <tr className="text-left">
+                                <Th>Source</Th>
+                                <Th>Count</Th>
+                                <Th>% of total</Th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {refSources.sources.map((s) => {
+                                const pct = refSources.total
+                                  ? Math.round((s.count / refSources.total) * 100)
+                                  : 0;
+                                return (
+                                  <tr
+                                    key={s.source}
+                                    className="border-t border-[#E8E5DF]"
+                                    data-testid={`ref-source-row-${s.source}`}
+                                  >
+                                    <td className="p-4 text-[#2B2A29] font-medium">
+                                      {s.source}
+                                    </td>
+                                    <td className="p-4 text-[#2D4A3E] font-semibold">
+                                      {s.count}
+                                    </td>
+                                    <td className="p-4">
+                                      <div className="flex items-center gap-2">
+                                        <div className="h-1.5 w-32 bg-[#E8E5DF] rounded-full overflow-hidden">
+                                          <div
+                                            className="h-full bg-[#C87965]"
+                                            style={{ width: `${pct}%` }}
+                                          />
+                                        </div>
+                                        <span className="text-xs text-[#6D6A65]">{pct}%</span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {tab === "email_templates" && (
                 <div className="mt-6 space-y-3" data-testid="email-templates-list">
                   {emailTemplates.length === 0 ? (
