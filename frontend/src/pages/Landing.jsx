@@ -121,8 +121,8 @@ export default function Landing() {
                 <div className="text-base font-semibold">24h</div>
               </div>
               <div className="text-sm">
-                <div className="font-semibold text-[#2B2A29]">24-hour turnaround</div>
-                <div className="text-[#6D6A65]">to therapist matches</div>
+                <div className="font-semibold text-[#2B2A29]">3+ matches in 24 hours</div>
+                <div className="text-[#6D6A65]">guaranteed</div>
               </div>
             </div>
           </div>

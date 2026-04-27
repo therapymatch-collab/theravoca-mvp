@@ -625,10 +625,20 @@ export default function TherapistSignup() {
                 </li>
               ))}
             </ul>
-            <div className="mt-10 grid sm:grid-cols-3 gap-4">
-              <Stat label="Match score floor" value="70%" caption="No noise. No 30%-fit Hail Marys." />
-              <Stat label="Free trial" value="30 days" caption="Plenty of time to see if we fit your practice." />
-              <Stat label="Per-referral fee" value="$0" caption="Flat $45/mo · no hidden costs ever." />
+            <div
+              className="mt-10 max-w-2xl mx-auto bg-[#2D4A3E] text-white rounded-2xl px-7 py-6 text-center"
+              data-testid="therapist-guarantee"
+            >
+              <p className="text-[10px] uppercase tracking-[0.25em] text-[#C8B7A6] font-semibold">
+                Our promise
+              </p>
+              <p className="font-serif-display text-2xl sm:text-3xl mt-1.5 leading-tight">
+                3+ matched referrals in 24 hours,{" "}
+                <em className="not-italic text-[#E8B89D]">guaranteed</em>.
+              </p>
+              <p className="text-sm text-white/75 mt-2 leading-relaxed">
+                If we don't deliver, your next month is free.
+              </p>
             </div>
           </div>
         </section>
@@ -1683,24 +1693,6 @@ function Req() {
     <span className="text-[#D45D5D] ml-0.5" aria-label="required">
       *
     </span>
-  );
-}
-
-// Big-number stat tile used in the Why-Join section. Light card, accent
-// number, tiny caption — keeps the tone calm and not "marketing-y."
-function Stat({ label, value, caption }) {
-  return (
-    <div className="bg-[#FDF7EC] border border-[#E8DCC1] rounded-2xl p-5">
-      <div className="text-[10px] uppercase tracking-[0.2em] text-[#C87965] font-semibold">
-        {label}
-      </div>
-      <div className="font-serif-display text-3xl text-[#2D4A3E] mt-1">
-        {value}
-      </div>
-      <div className="text-xs text-[#6D6A65] mt-1.5 leading-relaxed">
-        {caption}
-      </div>
-    </div>
   );
 }
 
