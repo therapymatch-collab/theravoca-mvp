@@ -57,6 +57,16 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+### iter-25 — Multi-experience preference, invite-link routing, apply UX, admin LLM transparency, alignment fixes (Apr 27, 2026)
+- **Patient intake**: Therapist experience preference is now multi-select (was single) — `no_pref` becomes mutually exclusive when other prefs are picked. Backend accepts list OR legacy string.
+- **Therapist invite-link landing**: `/therapists/join?invite_request_id=…` auto-scrolls to `#signup-form` so non-registered therapists land directly on the signup wizard.
+- **Therapist apply page**: New highlighted Payment hero card shows actual insurance plan name + dollar budget (e.g. "Insurance: Blue Cross of Idaho · Cash backup up to $200") instead of generic "Insurance".
+- **Post-apply redirect**: After submitting interest, therapist is auto-redirected to `/portal/therapist` (~1.2s) so they land on their dashboard with all their referrals.
+- **Admin "Invited therapists" tab**: New top-level admin tab explaining the LLM outreach flow (Claude Sonnet 4.5 via Emergent LLM key) + table showing each invite with candidate name, email status, specialties, estimated score, match rationale, and the linked referral. Differentiates self-signups from LLM-invited therapists.
+- **Therapist signup field alignment**: Field component restructured — hints render BELOW inputs (was above), so grid columns stay vertically aligned. Email + Website now share the same baseline; License state + License number align side-by-side.
+- **Inline "why is Next disabled" errors**: Both patient intake and therapist signup wizards now surface a contextual red error (`signup-step-error` / `intake-step-error`) above the Next/Continue button so users know exactly what's missing.
+- **Tests**: 4 new pytest cases (test_iteration25) — multi-select experience_preference, legacy-string back-compat, payment summary formatting, outreach endpoint shape. Plus testing agent verified all 17 review items green via Playwright DOM + alignment checks.
+
 ### iter-24 — Therapist signup hardening + intake spam controls + admin-managed options + Try-again (Apr 27, 2026)
 - 8-step therapist wizard (one card per step) with red-asterisk required fields and per-step `Next` validation
 - License state Idaho-only · license photo upload required · website URL validator + reachability check
