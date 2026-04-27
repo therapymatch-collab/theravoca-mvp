@@ -194,10 +194,11 @@ async def send_patient_results(to: str, request_id: str, applications: list[dict
         bd = app.get("match_breakdown") or {}
         reasons = sorted(
             (
-                (k, v / axis_meta[k][0], axis_meta[k][1])
+                (k, v, axis_meta[k][1])
                 for k, v in bd.items()
                 if k in axis_meta and axis_meta[k][0] > 0 and v / axis_meta[k][0] >= 0.5
             ),
+            # Sort by raw score desc — heavier-weighted axes win on ties
             key=lambda x: x[1],
             reverse=True,
         )[:3]

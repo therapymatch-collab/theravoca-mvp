@@ -45,7 +45,8 @@ function topReasons(breakdown) {
       return { key: k, score: v, max: meta.max, pct, label: meta.label };
     })
     .filter((x) => x && x.pct >= 0.5) // only surface meaningful matches
-    .sort((a, b) => b.pct - a.pct);
+    // Sort by raw score descending (issues=35 outranks gender=3 on a tie of 100%)
+    .sort((a, b) => b.score - a.score || b.pct - a.pct);
   return entries.slice(0, 3);
 }
 

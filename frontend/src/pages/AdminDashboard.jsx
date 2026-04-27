@@ -15,6 +15,7 @@ import {
   UserCheck,
   Pencil,
   MessageSquare,
+  Mail,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
