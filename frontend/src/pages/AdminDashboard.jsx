@@ -516,6 +516,21 @@ export default function AdminDashboard() {
     }
   }, [client, loadRecruitDrafts]);
 
+  const sendPreviewRecruitDrafts = useCallback(async () => {
+    if (!confirm(
+      "Send 3 SAMPLE preview recruit emails via Resend?\n\n" +
+      "These go to the draft's fake therapymatch+recruitNNN@gmail.com address — they'll land in your therapymatch@gmail.com inbox via Gmail's +alias trick. Subject prefixed [PREVIEW] for easy filtering."
+    )) return;
+    try {
+      const res = await client.post("/admin/gap-recruit/send-preview", { limit: 3 });
+      const names = (res.data.previewed || []).map((p) => p.name).join(", ");
+      toast.success(`Sent ${res.data.sent} preview email(s): ${names}`);
+      await loadRecruitDrafts();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Preview send failed");
+    }
+  }, [client, loadRecruitDrafts]);
+
   const convertInvite = useCallback(
     async (invite) => {
       const inviteId = invite?.id;
@@ -1329,6 +1344,7 @@ export default function AdminDashboard() {
                     onGenerate={generateRecruitDrafts}
                     onDelete={deleteRecruitDraft}
                     onSendAll={sendAllRecruitDrafts}
+                    onSendPreview={sendPreviewRecruitDrafts}
                   />
                 </>
               )}
@@ -2317,7 +2333,7 @@ function FactStat({ label, value }) {
 }
 
 function RecruitDraftsPanel({
-  data, loading, generating, search, onLoad, onGenerate, onDelete, onSendAll,
+  data, loading, generating, search, onLoad, onGenerate, onDelete, onSendAll, onSendPreview,
 }) {
   const drafts = (data?.drafts || []).filter((d) => {
     if (!search) return true;
@@ -2391,6 +2407,15 @@ TheraVoca team`;
           </button>
           <button
             type="button"
+            onClick={onSendPreview}
+            className="bg-[#C87965] text-white rounded-lg px-3 py-2 text-xs font-medium hover:bg-[#B86855]"
+            data-testid="recruit-drafts-send-preview"
+            title="Send 3 sample emails to fake therapymatch+recruitNNN@gmail.com — lands in your therapymatch@gmail.com inbox"
+          >
+            Preview 3 emails
+          </button>
+          <button
+            type="button"
             onClick={onSendAll}
             className="bg-[#2D4A3E] text-white rounded-lg px-3 py-2 text-xs font-medium hover:bg-[#3A5E50] disabled:opacity-50"
             data-testid="recruit-drafts-send-all"
@@ -2444,10 +2469,39 @@ TheraVoca team`;
                             dry-run
                           </span>
                         )}
+                        {d.google_verified && (
+                          <span
+                            className="text-[10px] uppercase tracking-wider bg-[#2D4A3E]/15 text-[#2D4A3E] rounded-full px-2 py-0.5"
+                            title={d.google_place?.address || "Verified via Google Business Profile"}
+                          >
+                            ✓ Google verified
+                          </span>
+                        )}
+                        {d.name_match_directory && (
+                          <span
+                            className="text-[10px] uppercase tracking-wider bg-[#D45D5D]/15 text-[#D45D5D] rounded-full px-2 py-0.5"
+                            title="A therapist with a similar name already exists in your directory — likely duplicate"
+                          >
+                            ⚠ name in directory
+                          </span>
+                        )}
+                        {d.sent_at_preview && (
+                          <span
+                            className="text-[10px] uppercase tracking-wider bg-[#FDFBF7] text-[#6D6A65] border border-[#E8E5DF] rounded-full px-2 py-0.5"
+                            title={`Preview email sent at ${d.sent_at_preview}`}
+                          >
+                            preview sent
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-[#6D6A65] mt-1 break-all">
                         {c.email}
                       </div>
+                      {d.google_place?.address && (
+                        <div className="text-[11px] text-[#2D4A3E] mt-1">
+                          📍 {d.google_place.address}
+                        </div>
+                      )}
                       {c.match_rationale && (
                         <p className="text-xs text-[#6D6A65] mt-1.5 italic leading-relaxed">
                           &ldquo;{c.match_rationale}&rdquo;

@@ -983,6 +983,27 @@ async def admin_send_gap_drafts(_: bool = Depends(require_admin)):
     return await send_pending_drafts()
 
 
+@router.post("/admin/gap-recruit/send-preview")
+async def admin_send_gap_preview(
+    payload: dict | None = None, _: bool = Depends(require_admin),
+):
+    """Send a small sample of pre-launch DRY-RUN drafts via Resend so the
+    admin can see what the actual recruit email looks like in their inbox.
+
+    Sends ALWAYS to the draft's fake `therapymatch+recruitNNN@gmail.com`
+    address — the user controls `therapymatch@gmail.com`, so the email lands
+    in their own inbox via Gmail's plus-aliasing trick.
+
+    Body: `{"limit": 3, "draft_ids": [...]}`. If `draft_ids` is empty, picks
+    one draft per gap dimension up to `limit`."""
+    from gap_recruiter import send_draft_preview
+    body = payload or {}
+    limit = max(1, min(int(body.get("limit") or 3), 10))
+    return await send_draft_preview(
+        limit=limit, ids=body.get("draft_ids") or [],
+    )
+
+
 @router.post("/admin/seed/reset")
 async def admin_seed_reset(_: bool = Depends(require_admin)):
     """DESTRUCTIVE — clears requests/applications/declines/therapists/magic_codes

@@ -202,6 +202,38 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 - Iter-38 added 4 new tests for the outreach-invite → therapist conversion flow.
 
 ## Recent Changes Log
+- **Iter-45 (Feb 2026) — Google Places integration + draft preview + name-match flag**:
+  - **Google Places API (New) integrated** (`places_client.py`). Two-call
+    workflow (Text Search → Place Details) with field-mask cost control.
+    `GOOGLE_PLACES_API_KEY` set in `/app/backend/.env`.
+  - **Review research now Places-first**: `review_research_for_therapist`
+    queries Google Places before falling back to LLM. Real-data hits land
+    `review_research_source="google_places"`, with `review_avg`, `review_count`,
+    and `google_place_id` persisted on the therapist row. Smoke test:
+    "Whitney Hebbert" → 5.0★ from 3 Google reviews, auto-folded into
+    matching ranking.
+  - **Gap recruiter Places-first**: every LLM-proposed candidate is now
+    grounded against Google Places. Drafts that get a Place hit are flagged
+    `google_verified=true` with the real business address (`google_place`).
+  - **Fuzzy name-match flag** on every draft: if the LLM proposes someone
+    whose first+last name overlaps with an existing therapist in our
+    directory, the draft is flagged `name_match_directory=true`. Renders
+    as a `⚠ name in directory` badge on the card.
+  - **Email preview**: new endpoint `POST /admin/gap-recruit/send-preview`
+    sends 1-per-gap-dimension drafts via Resend to the draft's fake
+    `therapymatch+recruitNNN@gmail.com` address. The user controls
+    `therapymatch@gmail.com`, so emails land in their own inbox via Gmail's
+    `+alias` trick. Subject prefixed `[PREVIEW]` for filtering.
+  - **Admin UI**: new "Preview 3 emails" button in the Recruit list
+    section. Each draft card shows badges: `dry-run` · `✓ Google verified`
+    (with hover tooltip showing real address) · `⚠ name in directory` ·
+    `preview sent`.
+  - End-to-end: 10 fresh drafts generated, **all 10 Google-verified** with
+    real Idaho practice addresses; 3 preview emails delivered to user's
+    inbox.
+  - Tests: `tests/test_iteration45_places_integration.py` (5 cases — config
+    check, real-business search, graceful no-match, preview endpoint
+    structure, drafts schema migration).
 - **Iter-44 (Feb 2026) — Pre-launch gap recruiter + admin search + UX fixes**:
   - **Pre-launch gap recruiter** (`gap_recruiter.py`): every day at 2am MT
     (and on-demand via "Generate more drafts" button), Claude finds real

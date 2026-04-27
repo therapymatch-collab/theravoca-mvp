@@ -143,10 +143,73 @@ def _summarize(sources: list[dict]) -> dict:
 
 
 async def research_reviews_for_therapist(therapist_id: str) -> dict[str, Any]:
-    """Run the LLM agent against one therapist and persist the result."""
+    """Run the Google Places + LLM agent against one therapist.
+
+    Strategy:
+    1. Try Google Places first (real data, cheap, conservative). If found, persist.
+    2. Only fall back to LLM if Google has no business profile match.
+    """
     t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0})
     if not t:
         return {"error": "therapist_not_found"}
+
+    name = t.get("name") or ""
+    city = (t.get("office_locations") or [None])[0] or "Boise"
+    state = ((t.get("licensed_states") or ["ID"])[0] or "ID").upper()
+
+    # Lazy-import to avoid loading httpx at module load time when key is unset.
+    from places_client import is_configured, lookup_therapist_reviews
+    google_data = None
+    if is_configured():
+        google_data = await lookup_therapist_reviews(name, city, state)
+
+    if google_data and google_data.get("found"):
+        await db.therapists.update_one(
+            {"id": therapist_id},
+            {"$set": {
+                "review_avg": google_data["review_avg"],
+                "review_count": google_data["review_count"],
+                "review_sources": google_data["review_sources"],
+                "google_place_id": google_data["place_id"],
+                "google_place_name": google_data["place_name"],
+                "google_place_address": google_data["address"],
+                "review_research_attempted_at": _now_iso(),
+                "review_research_source": "google_places",
+                "review_research_notes": "",
+                "review_updated_at": _now_iso(),
+                "updated_at": _now_iso(),
+            }},
+        )
+        return {
+            "ok": True, "therapist_id": therapist_id, "found": True,
+            "source": "google_places",
+            "review_avg": google_data["review_avg"],
+            "review_count": google_data["review_count"],
+        }
+
+    # If Google found a business but had no reviews, persist the linkage
+    # but don't fall back to LLM (Google's "0 reviews" is more trustworthy
+    # than LLM-recall).
+    if google_data and not google_data.get("found"):
+        await db.therapists.update_one(
+            {"id": therapist_id},
+            {"$set": {
+                "google_place_id": google_data["place_id"],
+                "google_place_name": google_data["place_name"],
+                "google_place_address": google_data["address"],
+                "review_research_attempted_at": _now_iso(),
+                "review_research_source": "google_places_no_reviews",
+                "review_research_notes": "Google business found, no public reviews",
+                "review_avg": 0.0,
+                "review_count": 0,
+                "updated_at": _now_iso(),
+            }},
+        )
+        return {
+            "ok": True, "therapist_id": therapist_id, "found": False,
+            "source": "google_places_no_reviews",
+            "review_avg": 0.0, "review_count": 0,
+        }
 
     raw = await _ask_llm(t)
     if not raw or not raw.get("found"):

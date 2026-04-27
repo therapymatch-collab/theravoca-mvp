@@ -185,6 +185,15 @@ async def run_gap_recruitment(dry_run: bool = True, max_drafts: int = DRAFT_LIMI
     drafts_created = 0
     candidates_seen = 0
 
+    # Pre-fetch real-name set so we can flag fuzzy duplicates against the
+    # imported directory.
+    real_names: list[str] = []
+    async for t in db.therapists.find({}, {"_id": 0, "name": 1}):
+        real_names.append((t.get("name") or "").lower())
+
+    from places_client import is_configured, search_therapist_business
+    use_google = is_configured()
+
     for gap in gaps:
         if drafts_created >= max_drafts:
             break
@@ -213,6 +222,33 @@ async def run_gap_recruitment(dry_run: bool = True, max_drafts: int = DRAFT_LIMI
                     continue
                 send_to = real_email
 
+            # Fuzzy name-match flag: did the LLM propose someone whose name
+            # already lives in our therapists directory?
+            cand_lower = name.lower()
+            cand_last = cand_lower.split(",")[0].split()[-1] if cand_lower else ""
+            cand_first = cand_lower.split()[0] if cand_lower else ""
+            name_match = any(
+                cand_last and cand_last in r and cand_first and cand_first in r
+                for r in real_names
+            )
+
+            # Optional grounding via Google Places: confirm this person has a
+            # real Google Business Profile in our state.
+            google_meta: dict | None = None
+            if use_google:
+                try:
+                    place = await search_therapist_business(
+                        name, c.get("city") or "Boise", c.get("state") or "ID",
+                    )
+                    if place:
+                        google_meta = {
+                            "place_id": place.get("id"),
+                            "place_name": (place.get("displayName") or {}).get("text", ""),
+                            "address": place.get("formattedAddress", ""),
+                        }
+                except Exception as e:
+                    logger.warning("Places lookup failed for %s: %s", name, e)
+
             await db.recruit_drafts.insert_one({
                 "id": str(uuid.uuid4()),
                 "gap": {
@@ -233,6 +269,9 @@ async def run_gap_recruitment(dry_run: bool = True, max_drafts: int = DRAFT_LIMI
                     "match_rationale": c.get("match_rationale") or "",
                     "estimated_score": int(c.get("estimated_score") or 75),
                 },
+                "name_match_directory": name_match,
+                "google_place": google_meta,
+                "google_verified": bool(google_meta),
                 "dry_run": bool(dry_run),
                 "sent": False,
                 "sent_at": None,
@@ -252,9 +291,43 @@ async def run_gap_recruitment(dry_run: bool = True, max_drafts: int = DRAFT_LIMI
     }
 
 
+def _build_recruit_email(candidate: dict) -> tuple[str, str]:
+    """Render the recruit email subject + HTML body for a single candidate."""
+    from email_service import _wrap, BRAND, _get_app_url
+
+    first = (candidate.get("name") or "there").split(" ")[0]
+    rationale = candidate.get("match_rationale") or "Your specialties align with where we're growing."
+    signup_url = (
+        f"{_get_app_url()}/therapists/join"
+        f"?utm_source=gap_recruit&utm_campaign=pre_launch"
+    )
+    inner = f"""
+    <p style="font-size:16px;line-height:1.6;">Hi {first},</p>
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      I'm reaching out from TheraVoca, a small Idaho-based therapist matching service.
+      We're building our directory ahead of launch, and your practice came up as a strong fit
+      for an underserved area we're trying to fill.
+    </p>
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      <em>{rationale}</em>
+    </p>
+    <p style="margin:28px 0;">
+      <a href="{signup_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;
+        text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">
+        See if TheraVoca is a fit
+      </a>
+    </p>
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">
+      30-day free trial, $45/mo after — no clients, no charge. We don't sell your email.
+    </p>
+    """
+    subject = "Idaho therapist outreach — joining TheraVoca's launch network"
+    return subject, _wrap("Pre-launch invite", inner)
+
+
 async def send_pending_drafts() -> dict[str, Any]:
     """Post-launch: send all unsent, non-dry-run drafts via Resend."""
-    from email_service import _send, _wrap, BRAND, _get_app_url
+    from email_service import _send
 
     cur = db.recruit_drafts.find(
         {"sent": False, "dry_run": False}, {"_id": 0},
@@ -263,38 +336,9 @@ async def send_pending_drafts() -> dict[str, Any]:
     failed = 0
     async for d in cur:
         c = d.get("candidate") or {}
-        signup_url = (
-            f"{_get_app_url()}/therapists/join"
-            f"?utm_source=gap_recruit&utm_campaign=pre_launch"
-        )
-        first = (c.get("name") or "there").split(" ")[0]
-        rationale = c.get("match_rationale") or "Your specialties align with where we're growing."
-        inner = f"""
-        <p style="font-size:16px;line-height:1.6;">Hi {first},</p>
-        <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-          I'm reaching out from TheraVoca, a small Idaho-based therapist matching service.
-          We're building our directory ahead of launch, and your practice came up as a strong fit
-          for an underserved area we're trying to fill.
-        </p>
-        <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-          <em>{rationale}</em>
-        </p>
-        <p style="margin:28px 0;">
-          <a href="{signup_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;
-            text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">
-            See if TheraVoca is a fit
-          </a>
-        </p>
-        <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">
-          30-day free trial, $45/mo after — no clients, no charge. We don't sell your email.
-        </p>
-        """
+        subject, html = _build_recruit_email(c)
         try:
-            await _send(
-                c.get("email"),
-                "Idaho therapist outreach — joining TheraVoca's launch network",
-                _wrap("Pre-launch invite", inner),
-            )
+            await _send(c.get("email"), subject, html)
             await db.recruit_drafts.update_one(
                 {"id": d["id"]},
                 {"$set": {
@@ -307,3 +351,51 @@ async def send_pending_drafts() -> dict[str, Any]:
             logger.warning("Recruit-draft send failed for %s: %s", c.get("email"), e)
             failed += 1
     return {"sent": sent, "failed": failed}
+
+
+async def send_draft_preview(limit: int = 3, ids: list[str] | None = None) -> dict[str, Any]:
+    """Send a small sample of dry-run drafts to their fake recipient address
+    so the admin can preview the email's look-and-feel in their own inbox
+    (via the Gmail `+alias` trick). Marks the draft `sent_at_preview`."""
+    from email_service import _send
+
+    if ids:
+        cur = db.recruit_drafts.find({"id": {"$in": ids}}, {"_id": 0})
+        rows = await cur.to_list(length=limit * 2)
+    else:
+        # One per gap dimension up to limit.
+        seen_dims: set[str] = set()
+        rows: list[dict] = []
+        async for d in db.recruit_drafts.find(
+            {"sent_at_preview": {"$exists": False}, "dry_run": True}, {"_id": 0},
+        ).sort("created_at", -1):
+            dim = (d.get("gap") or {}).get("dimension") or ""
+            if dim in seen_dims:
+                continue
+            seen_dims.add(dim)
+            rows.append(d)
+            if len(rows) >= limit:
+                break
+
+    sent = 0
+    failed: list[dict] = []
+    for d in rows:
+        c = d.get("candidate") or {}
+        subject, html = _build_recruit_email(c)
+        try:
+            await _send(c.get("email"), f"[PREVIEW] {subject}", html)
+            await db.recruit_drafts.update_one(
+                {"id": d["id"]},
+                {"$set": {"sent_at_preview": _now_iso()}},
+            )
+            sent += 1
+        except Exception as e:
+            failed.append({"id": d["id"], "name": c.get("name"), "error": str(e)})
+
+    return {
+        "sent": sent,
+        "failed": len(failed),
+        "errors": failed,
+        "previewed": [{"id": d["id"], "name": (d.get("candidate") or {}).get("name"),
+                       "email": (d.get("candidate") or {}).get("email")} for d in rows],
+    }
