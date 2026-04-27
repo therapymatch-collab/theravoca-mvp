@@ -1,0 +1,36 @@
+{
+  "summary": "Iter-25 end-to-end verification: 4/4 new backend pytest cases pass (multi-select experience_preference list + legacy string, _safe_summary_for_therapist payment formatting surfaces actual insurance plan + $budget, /api/admin/outreach returns invites[] with expected candidate shape). Frontend verified via Playwright: admin Invited-therapists tab (data-testid=tab-invited-therapists) renders with explainer card describing the LLM (Claude Sonnet 4.5) outreach flow + a populated table of 500 invites with match_rationale, specialties, score, referral_id and sent date. Therapist signup page (with ?invite_request_id=abc123) auto-scrolls (scrollY=913) and the invite banner is displayed. EMAIL/WEBSITE inputs share top=917 (diff=0 → aligned on one row); PHONE/OFFICE_PHONE inputs share top (diff=0); the 'We'll auto-prefix https://' hint renders BELOW the website input (visually confirmed). Inline error data-testid=signup-step-error is visible with contextual text ('Enter your full name + title (e.g. Sarah Lin, LCSW).') rendered above the disabled Next button. Patient intake step 1 also shows data-testid=intake-step-error with 'Pick who this referral is for.' when Next is disabled. Multi-select experience_preference on step 5 is source-verified in IntakeForm.jsx lines 571-598 — PillRow multi-select selected array, toggling 'no_pref' clears others and toggling any other value removes no_pref. TherapistApply.jsx source confirms data-testid=apply-payment-hero renders a highlighted hero card at the top of the Referral summary when summary['Payment'] exists, and submitInterest() redirects via window.location.href='/portal/therapist' after ~2s (line 84).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration25_multi_exp_outreach.py",
+    "/app/test_reports/pytest/iteration25_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "IntakeForm.jsx L577-595: PillRow multi-select logic for experience_preference correctly enforces the 'no_pref is exclusive' invariant and falls back to ['no_pref'] when the user deselects the last concrete pick — clean state handling.",
+    "TherapistApply.jsx L211-223: apply-payment-hero is rendered only when data.summary['Payment'] is truthy; backend helper _safe_summary_for_therapist is confirmed to emit 'Insurance: Blue Cross of Idaho · Cash backup up to $200' when payment_type='either' with insurance_name + budget, so the hero card will show actual values (not a generic 'Insurance' label).",
+    "AdminDashboard 'Invited therapists' tab: explainer card + data-table render even when outreach data is present (500 invites currently seeded). Empty-state fallback exists in source; couldn't exercise it because backend already has 500 invites. Not a blocker.",
+    "TherapistSignup.jsx: hint 'We'll auto-prefix https:// and check the link works.' renders after the website input; there's also a stale 'We'll auto-prefix https://...' legacy string rendered above in the JS evaluate, but visually the live DOM shows it BELOW the input (confirmed via screenshot). Consider dedup grep if hot-reload artifacts remain.",
+    "Backend models.py experience_preference: list|str union is accepted, matching.py _score_experience correctly scores best-of-any for lists — backend test_iteration25 passes both list + legacy string.",
+    "Pre-existing failures in test_iteration7_intake_matching (score_breakdown_structure has extra 'reviews' key) and test_iteration9_match_breakdown (notified_breakdowns persistence) pre-date iter-25 per agent-to-agent note; not regressions."
+  ],
+  "updated_files": [
+    "/app/test_reports/pytest/iteration25_results.xml",
+    "/app/test_reports/iteration_13.json"
+  ],
+  "success_rate": {"backend": "100% (4/4 new iter-25 tests)", "frontend": "100% (all 11 frontend review items verified via Playwright DOM inspection, bounding-rect alignment checks, and source review)"},
+  "test_credentials": "Admin password admin123! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "test_iteration25 creates 2 patient requests (multiexp_*@example.com, legacyexp_*@example.com) via POST /api/requests for multi-select + legacy-string persistence checks.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: `REACT_APP_BACKEND_URL=https://care-matcher-1.preview.emergentagent.com ADMIN_PASSWORD='admin123!' pytest /app/backend/tests/test_iteration25_multi_exp_outreach.py -v`. Admin Invited-therapists tab testids: tab-invited-therapists, invited-therapists-panel. Therapist signup testids: signup-email, signup-website, signup-phone-alert, signup-office-phone, signup-step-error, signup-next, invite-banner. Intake testids: intake-step-error, next-btn, step-label. TherapistApply testids: apply-payment-hero, apply-submit-btn, therapist-apply-page. Multi-select experience_preference logic lives in IntakeForm.jsx L571-598 (PillRow selected array). Post-apply redirect is window.location.href='/portal/therapist' at TherapistApply.jsx L84. Note: pre-existing failures in test_iteration7/9/10/12 are not regressions per the main agent — do NOT chase them as iter-25 issues. Admin backend has 500 outreach invites seeded so empty-state cannot be exercised live; source has it.",
+  "rca_of_the_issue": "N/A — all iter-25 review items verified green."
+}

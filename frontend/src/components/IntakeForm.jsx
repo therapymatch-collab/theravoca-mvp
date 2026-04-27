@@ -139,7 +139,7 @@ export default function IntakeForm() {
     urgency: "",
     prior_therapy: "",
     prior_therapy_notes: "",
-    experience_preference: "no_pref",
+    experience_preference: ["no_pref"],
     gender_preference: "no_pref",
     gender_required: false,
     style_preference: [],
@@ -256,6 +256,61 @@ export default function IntakeForm() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const stepBlockReason = () => {
+    if (step === 0) {
+      if (!data.client_type) return "Pick who this referral is for.";
+      if (!data.age_group) return "Pick the client's age group.";
+      if (!data.location_state) return "Pick a state.";
+      return "";
+    }
+    if (step === 1 && data.presenting_issues.length === 0)
+      return "Pick at least one issue you'd like help with.";
+    if (step === 2) {
+      if (!data.modality_preference) return "Choose how the client prefers to meet.";
+      if (
+        ["in_person_only", "prefer_inperson", "hybrid"].includes(
+          data.modality_preference,
+        )
+      ) {
+        if (!data.location_city && !data.location_zip)
+          return "Add your city or ZIP for in-person matching.";
+        if (
+          data.location_zip &&
+          !zipMatchesState(data.location_zip, data.location_state)
+        )
+          return `ZIP ${data.location_zip} doesn't appear to be in ${data.location_state}.`;
+      }
+      return "";
+    }
+    if (step === 3) {
+      if (!data.payment_type) return "Pick how the client will pay.";
+      if (data.payment_type === "cash" && !data.budget)
+        return "Enter the per-session cash budget.";
+      if (data.payment_type === "insurance" && !data.insurance_name)
+        return "Pick the insurance plan.";
+      if (data.payment_type === "either" && (!data.insurance_name || !data.budget))
+        return "Pick the insurance plan and a cash budget for backup.";
+      return "";
+    }
+    if (step === 4) {
+      if (data.availability_windows.length === 0)
+        return "Pick at least one availability window.";
+      if (!data.urgency) return "Pick how urgent this is.";
+      if (!data.prior_therapy) return "Tell us about prior therapy experience.";
+      return "";
+    }
+    if (step === 6) {
+      if (!emailLooksOk(data.email))
+        return "Enter a valid personal email — disposable / temp addresses aren't accepted.";
+      if (!data.referral_source) return "Pick how you heard about us.";
+      if (!agreed) return "Agree to the terms of use to continue.";
+      if (!confirmAdult) return "Confirm you are 18 or older.";
+      if (!confirmNotEmergency) return "Confirm this is not an emergency.";
+      return "";
+    }
+    return "";
   };
 
   const progressPct = ((step + 1) / STEPS.length) * 100;
@@ -515,11 +570,29 @@ export default function IntakeForm() {
 
             {step === 5 && (
               <div className="space-y-6">
-                <Group label="Therapist experience preference">
+                <Group label="Therapist experience preference (pick all that apply)">
                   <PillRow
                     items={EXPERIENCE}
-                    selected={[data.experience_preference]}
-                    onSelect={(v) => set("experience_preference", v)}
+                    selected={data.experience_preference}
+                    onSelect={(v) => {
+                      // "no_pref" is mutually exclusive with concrete picks
+                      if (v === "no_pref") {
+                        set("experience_preference", ["no_pref"]);
+                        return;
+                      }
+                      const cur = (data.experience_preference || []).filter(
+                        (x) => x !== "no_pref",
+                      );
+                      if (cur.includes(v)) {
+                        const next = cur.filter((x) => x !== v);
+                        set(
+                          "experience_preference",
+                          next.length === 0 ? ["no_pref"] : next,
+                        );
+                      } else {
+                        set("experience_preference", [...cur, v]);
+                      }
+                    }}
                     testid="experience"
                   />
                 </Group>
@@ -692,7 +765,16 @@ export default function IntakeForm() {
             )}
           </div>
 
-          <div className="mt-8 flex items-center justify-between">
+          <div className="mt-8 flex flex-col gap-3">
+            {!canNext() && stepBlockReason() && (
+              <p
+                className="text-xs text-[#D45D5D] text-right leading-relaxed"
+                data-testid="intake-step-error"
+              >
+                {stepBlockReason()}
+              </p>
+            )}
+            <div className="flex items-center justify-between">
             <button
               type="button"
               disabled={step === 0}
@@ -724,6 +806,7 @@ export default function IntakeForm() {
                 <Check size={18} strokeWidth={1.8} />
               </button>
             )}
+            </div>
           </div>
         </div>
       </div>

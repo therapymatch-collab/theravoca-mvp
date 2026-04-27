@@ -267,27 +267,30 @@ def _score_prior_therapy(t: dict, r: dict) -> float:
 
 
 def _score_experience(t: dict, r: dict) -> float:
-    pref = r.get("experience_preference") or "no_pref"
-    if pref == "no_pref":
-        return 0.0
-    rng = EXPERIENCE_RANGES.get(pref)
-    if not rng:
+    """Patient may pass `experience_preference` as a list (preferred) or legacy
+    string. Score returns the BEST match across any of their selections."""
+    raw = r.get("experience_preference") or "no_pref"
+    prefs = raw if isinstance(raw, list) else [raw]
+    prefs = [p for p in prefs if p and p != "no_pref"]
+    if not prefs:
         return 0.0
     years = t.get("years_experience") or 0
-    if rng[0] <= years <= rng[1]:
-        return MAX_EXPERIENCE
-    # Adjacent range
+    best = 0.0
     keys = list(EXPERIENCE_RANGES.keys())
-    if pref in keys:
-        i = keys.index(pref)
-        adjacent = []
-        if i - 1 >= 0:
-            adjacent.append(EXPERIENCE_RANGES[keys[i - 1]])
-        if i + 1 < len(keys):
-            adjacent.append(EXPERIENCE_RANGES[keys[i + 1]])
-        for lo, hi in adjacent:
-            if lo <= years <= hi:
-                return 3.0
+    for pref in prefs:
+        rng = EXPERIENCE_RANGES.get(pref)
+        if not rng:
+            continue
+        if rng[0] <= years <= rng[1]:
+            return MAX_EXPERIENCE  # exact match short-circuits
+        if pref in keys:
+            i = keys.index(pref)
+            for adj_i in (i - 1, i + 1):
+                if 0 <= adj_i < len(keys):
+                    lo, hi = EXPERIENCE_RANGES[keys[adj_i]]
+                    if lo <= years <= hi:
+                        best = max(best, 3.0)
+    return best
     return 0.0
 
 
@@ -516,9 +519,12 @@ def gap_axes(
         return None
 
     def _experience() -> Optional[tuple[str, str]]:
-        pref = (request.get("experience_preference") or "").lower()
+        raw = request.get("experience_preference")
+        prefs = raw if isinstance(raw, list) else [raw or ""]
+        prefs = [str(p).lower() for p in prefs if p]
         years = therapist.get("years_experience") or 0
-        if pref in ("seasoned", "15+", "10+") and years < 10:
+        seasoned = {"seasoned", "15+", "10+"}
+        if any(p in seasoned for p in prefs) and years < 10:
             return (
                 f"Patient prefers a seasoned therapist; you have {years} years.",
                 "If you've handled cases with similar complexity, lead with those.",

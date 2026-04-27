@@ -124,6 +124,9 @@ export default function AdminDashboard() {
   const [refOptionsLoaded, setRefOptionsLoaded] = useState(false);
   const [refNewOption, setRefNewOption] = useState("");
   const [refSavingOptions, setRefSavingOptions] = useState(false);
+  // LLM outreach invites — therapists we scraped + emailed (separate from in-app signups)
+  const [outreach, setOutreach] = useState(null);
+  const [outreachLoading, setOutreachLoading] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -346,6 +349,18 @@ export default function AdminDashboard() {
     }
   }, [client]);
 
+  const loadOutreach = useCallback(async () => {
+    setOutreachLoading(true);
+    try {
+      const res = await client.get("/admin/outreach");
+      setOutreach(res.data);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Couldn't load invited therapists");
+    } finally {
+      setOutreachLoading(false);
+    }
+  }, [client]);
+
   const saveRefOptions = async (next) => {
     setRefSavingOptions(true);
     try {
@@ -470,6 +485,17 @@ export default function AdminDashboard() {
                   label="Referral sources"
                   count={refSources?.sources?.length || null}
                   testid="tab-referral-sources"
+                />
+                <TabBtn
+                  active={tab === "invited_therapists"}
+                  onClick={() => {
+                    setTab("invited_therapists");
+                    if (!outreach) loadOutreach();
+                  }}
+                  icon={<Send size={14} />}
+                  label="Invited therapists"
+                  count={outreach?.total ?? null}
+                  testid="tab-invited-therapists"
                 />
               </div>
 
@@ -859,6 +885,145 @@ export default function AdminDashboard() {
                           </table>
                         )}
                       </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {tab === "invited_therapists" && (
+                <div className="mt-6 space-y-4" data-testid="invited-therapists-panel">
+                  <div className="bg-[#F2F4F0] border border-[#D9DDD2] rounded-2xl p-5 leading-relaxed">
+                    <h3 className="font-medium text-[#2D4A3E] flex items-center gap-2">
+                      <Send size={14} /> How invited-therapist outreach works
+                    </h3>
+                    <p className="text-sm text-[#2B2A29] mt-2">
+                      When a patient request can't be filled to our 30-therapist
+                      target from the existing directory, our outreach agent kicks
+                      in for that request:
+                    </p>
+                    <ol className="list-decimal pl-5 mt-2 text-sm text-[#2B2A29] space-y-1">
+                      <li>
+                        We hand the anonymous referral brief to Claude Sonnet 4.5
+                        (via the Emergent LLM key).
+                      </li>
+                      <li>
+                        Claude generates plausible Idaho-licensed therapist
+                        candidates whose specialties + city match the patient's
+                        ask, with a per-candidate <em>match rationale</em> and
+                        estimated score.
+                      </li>
+                      <li>
+                        Each candidate gets a personalized invite email with a
+                        signup link pre-stamped with{" "}
+                        <code className="text-xs bg-white px-1.5 py-0.5 rounded border border-[#E8E5DF]">
+                          ?invite_request_id=&lt;id&gt;
+                        </code>{" "}
+                        — clicking it lands them on the signup form scrolled in
+                        place, with a "you've been invited" banner.
+                      </li>
+                      <li>
+                        Once they finish signup + Stripe trial, they're
+                        auto-matched against this referral and notified the same
+                        way our directory therapists are.
+                      </li>
+                    </ol>
+                    <p className="text-xs text-[#6D6A65] mt-3">
+                      Production note: real Psychology Today / state-board
+                      scraping is not yet wired up — the LLM uses its training
+                      data to seed plausible candidates. Swap in a scraper at{" "}
+                      <code className="text-xs bg-white px-1.5 py-0.5 rounded border border-[#E8E5DF]">
+                        outreach_agent._find_candidates()
+                      </code>
+                      .
+                    </p>
+                  </div>
+
+                  <div className="bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
+                    {outreachLoading || !outreach ? (
+                      <div className="p-12 text-center text-[#6D6A65]">
+                        <Loader2 className="animate-spin mx-auto mb-3 text-[#2D4A3E]" />
+                        Loading invited therapists…
+                      </div>
+                    ) : (outreach.invites || []).length === 0 ? (
+                      <div className="p-10 text-center text-[#6D6A65]">
+                        No outreach invites yet. They'll appear once a request
+                        triggers the LLM agent (i.e. when a patient request
+                        produces fewer than 30 directory matches).
+                      </div>
+                    ) : (
+                      <table className="w-full text-sm" data-testid="invited-table">
+                        <thead className="bg-[#FDFBF7] text-[#6D6A65]">
+                          <tr className="text-left">
+                            <Th>Therapist</Th>
+                            <Th>Email sent</Th>
+                            <Th>Specialties</Th>
+                            <Th>Score</Th>
+                            <Th>Why we invited them</Th>
+                            <Th>Referral</Th>
+                            <Th>Sent</Th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {outreach.invites.map((inv, idx) => {
+                            const c = inv.candidate || {};
+                            return (
+                              <tr
+                                key={inv.id}
+                                className="border-t border-[#E8E5DF] align-top"
+                                data-testid={`invited-row-${idx}`}
+                              >
+                                <td className="p-4">
+                                  <div className="text-[#2B2A29] font-medium">
+                                    {c.name || "—"}
+                                  </div>
+                                  <div className="text-xs text-[#6D6A65]">
+                                    {c.license_type} · {c.city}, {c.state}
+                                  </div>
+                                </td>
+                                <td className="p-4 text-xs text-[#2B2A29]">
+                                  {c.email || "—"}
+                                  <div className="mt-1">
+                                    {inv.email_sent ? (
+                                      <span className="inline-flex items-center gap-1 text-[#2D4A3E] text-[11px]">
+                                        <CheckCircle2 size={11} /> Delivered
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-[#D45D5D] text-[11px]">
+                                        <XCircle size={11} /> Send failed
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="p-4 text-xs">
+                                  {(c.specialties || []).join(", ") || "—"}
+                                </td>
+                                <td className="p-4 text-[#2D4A3E] font-semibold">
+                                  {c.estimated_score ?? "—"}
+                                  {c.estimated_score ? "%" : ""}
+                                </td>
+                                <td className="p-4 text-xs text-[#2B2A29] max-w-[300px]">
+                                  {c.match_rationale || "—"}
+                                </td>
+                                <td className="p-4">
+                                  <button
+                                    type="button"
+                                    onClick={() => openDetail(inv.request_id)}
+                                    className="text-xs text-[#2D4A3E] underline hover:text-[#3A5E50]"
+                                    data-testid={`invited-request-${idx}`}
+                                  >
+                                    {inv.request_id?.slice(0, 8)}…
+                                  </button>
+                                </td>
+                                <td className="p-4 text-xs text-[#6D6A65]">
+                                  {inv.created_at
+                                    ? new Date(inv.created_at).toLocaleDateString()
+                                    : "—"}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     )}
                   </div>
                 </div>

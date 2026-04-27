@@ -203,9 +203,14 @@ export default function TherapistSignup() {
     });
   };
 
-  // Honor /therapists/join#signup-form anchor links from /sign-in etc.
+  // Honor /therapists/join#signup-form anchor links from /sign-in etc., AND
+  // auto-scroll invite-link landings (?invite_request_id) straight to the
+  // signup form so non-registered therapists don't waste time scrolling.
   useEffect(() => {
-    if (window.location.hash === "#signup-form") {
+    const hasInvite = new URLSearchParams(window.location.search).get(
+      "invite_request_id",
+    );
+    if (window.location.hash === "#signup-form" || hasInvite) {
       setTimeout(() => {
         document
           .getElementById("signup-form")
@@ -277,6 +282,65 @@ export default function TherapistSignup() {
   // Aggregate validity across all steps (used by the Preview button on the
   // final step + the Submit button inside the modal).
   const valid = [1, 2, 3, 4, 5, 6, 7, 8].every(canAdvance);
+
+  // Human-readable reason why the current step's Next is disabled — surfaced
+  // under the Next button so therapists aren't left guessing.
+  const stepBlockReason = (s) => {
+    if (s === 1) {
+      if (!data.name || data.name.trim().length < 3)
+        return "Enter your full name + title (e.g. Sarah Lin, LCSW).";
+      if (!data.email.includes("@")) return "Enter a valid email address.";
+      if (!data.credential_type) return "Select your credential type.";
+      if (!(data.phone_alert?.trim() || data.phone?.trim()))
+        return "Enter a private alert phone number.";
+      if (!data.office_phone?.trim())
+        return "Enter your public office phone number.";
+      if (!data.gender) return "Select your gender.";
+      if (data.website && !websiteIsValid(data.website))
+        return "That website doesn't look valid — fix or leave blank.";
+      return "";
+    }
+    if (s === 2) {
+      if (!(data.licensed_states && data.licensed_states.length > 0))
+        return "Select your license state.";
+      if (!data.license_number?.trim()) return "Enter your license number.";
+      if (!data.license_expires_at) return "Pick your license expiration date.";
+      if (!data.license_picture)
+        return "Upload a photo of your license — required for manual verification.";
+      return "";
+    }
+    if (s === 3) {
+      if (data.client_types.length === 0)
+        return "Pick at least one client type you see.";
+      if (data.age_groups.length === 0)
+        return "Pick at least one age group you see.";
+      return "";
+    }
+    if (s === 4 && data.primary_specialties.length === 0)
+      return "Mark at least one issue as a Primary specialty.";
+    if (s === 5) {
+      if (data.modalities.length === 0)
+        return "Pick at least one modality you practice.";
+      if (!data.modality_offering)
+        return "Choose where you see clients (telehealth / in-person / both).";
+      if (
+        data.modality_offering !== "telehealth" &&
+        data.office_addresses.length === 0
+      )
+        return "Add at least one office address (street + city + ZIP).";
+      if (data.availability_windows.length === 0)
+        return "Pick at least one session availability window.";
+      return "";
+    }
+    if (s === 6) {
+      if (!data.cash_rate || data.cash_rate <= 0)
+        return "Enter your cash session rate.";
+      return "";
+    }
+    if (s === 7 && data.style_tags.length === 0)
+      return "Pick at least one style tag.";
+    return "";
+  };
 
   const [therapistId, setTherapistId] = useState(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -741,7 +805,10 @@ export default function TherapistSignup() {
                         </p>
                       )}
                     </Field>
-                    <Field label={<>Phone (private, alerts) <Req /></>}>
+                    <Field
+                      label={<>Phone (private, alerts) <Req /></>}
+                      hint="SMS alerts only — never shown to patients."
+                    >
                       <Input
                         value={data.phone_alert || data.phone}
                         onChange={(e) => set("phone_alert", e.target.value)}
@@ -749,11 +816,11 @@ export default function TherapistSignup() {
                         className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                         data-testid="signup-phone-alert"
                       />
-                      <p className="mt-1.5 text-[11px] text-[#6D6A65]">
-                        SMS alerts only — never shown to patients.
-                      </p>
                     </Field>
-                    <Field label={<>Office phone (public) <Req /></>}>
+                    <Field
+                      label={<>Office phone (public) <Req /></>}
+                      hint="Patients see this on your profile."
+                    >
                       <Input
                         value={data.office_phone}
                         onChange={(e) => set("office_phone", e.target.value)}
@@ -761,9 +828,6 @@ export default function TherapistSignup() {
                         className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                         data-testid="signup-office-phone"
                       />
-                      <p className="mt-1.5 text-[11px] text-[#6D6A65]">
-                        Patients see this on your profile.
-                      </p>
                     </Field>
                   </div>
                   <Field label={<>Gender <Req /></>} hint="Used only when patients have a stated preference.">
@@ -795,8 +859,7 @@ export default function TherapistSignup() {
                       >
                         <option value="ID">Idaho (ID)</option>
                       </select>
-                    </Field>
-                    <Field label={<>License number <Req /></>}>
+                    </Field>                    <Field label={<>License number <Req /></>}>
                       <Input
                         value={data.license_number}
                         onChange={(e) => set("license_number", e.target.value)}
@@ -1270,6 +1333,23 @@ export default function TherapistSignup() {
                     Your profile is reviewed before going live. You can edit anything later.
                   </p>
                 )}
+                <div className="flex flex-col items-end gap-2">
+                  {!canAdvance(step) && stepBlockReason(step) && (
+                    <p
+                      className="text-xs text-[#D45D5D] max-w-xs text-right leading-relaxed"
+                      data-testid="signup-step-error"
+                    >
+                      {stepBlockReason(step)}
+                    </p>
+                  )}
+                  {websiteError && step === 1 && (
+                    <p
+                      className="text-xs text-[#D45D5D] max-w-xs text-right"
+                      data-testid="signup-website-block-error"
+                    >
+                      {websiteError}
+                    </p>
+                  )}
                 {step < totalSteps ? (
                   <button
                     type="button"
@@ -1302,6 +1382,7 @@ export default function TherapistSignup() {
                     Preview profile <ArrowRight size={18} />
                   </button>
                 )}
+                </div>
               </div>
             </div>
           </div>
@@ -1537,18 +1618,27 @@ function Group({ title, hint, children }) {
   );
 }
 
-function Field({ label, hint, children }) {
+// Field with optional hint. Hint renders BELOW the input so labels in a grid
+// row stay vertically aligned (otherwise a hint inflates the label height and
+// only that column's input drops down). Use `hint` for SMS / public-disclosure
+// disclaimers and `topHint` only when explicit pre-input context is essential.
+function Field({ label, hint, topHint, children }) {
   return (
-    <div>
+    <div className="flex flex-col">
       <label className="block text-xs font-semibold text-[#6D6A65] mb-1.5 uppercase tracking-wider">
         {label}
       </label>
-      {hint && (
+      {topHint && (
         <div className="text-[11px] text-[#6D6A65] -mt-1 mb-1.5 normal-case tracking-normal">
-          {hint}
+          {topHint}
         </div>
       )}
       {children}
+      {hint && (
+        <p className="mt-1.5 text-[11px] text-[#6D6A65] leading-relaxed">
+          {hint}
+        </p>
+      )}
     </div>
   );
 }

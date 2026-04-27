@@ -87,7 +87,10 @@ class RequestCreate(BaseModel):
     urgency: str = "flexible"
     prior_therapy: str = "not_sure"
     prior_therapy_notes: Optional[str] = ""
-    experience_preference: str = "no_pref"
+    # Patients can pick multiple experience preferences (e.g. ["seasoned",
+    # "mid_career"]); legacy clients sending a single string still work via
+    # the field validator below.
+    experience_preference: list[str] | str = Field(default_factory=list)
     gender_preference: str = "no_pref"
     gender_required: bool = False
     style_preference: list[str] = Field(default_factory=list)
