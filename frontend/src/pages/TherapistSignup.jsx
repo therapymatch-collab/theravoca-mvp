@@ -625,21 +625,6 @@ export default function TherapistSignup() {
                 </li>
               ))}
             </ul>
-            <div
-              className="mt-10 max-w-2xl mx-auto bg-[#2D4A3E] text-white rounded-2xl px-7 py-6 text-center"
-              data-testid="therapist-guarantee"
-            >
-              <p className="text-[10px] uppercase tracking-[0.25em] text-[#C8B7A6] font-semibold">
-                Our promise
-              </p>
-              <p className="font-serif-display text-2xl sm:text-3xl mt-1.5 leading-tight">
-                3+ matched referrals in 24 hours,{" "}
-                <em className="not-italic text-[#E8B89D]">guaranteed</em>.
-              </p>
-              <p className="text-sm text-white/75 mt-2 leading-relaxed">
-                If we don't deliver, your next month is free.
-              </p>
-            </div>
           </div>
         </section>
 

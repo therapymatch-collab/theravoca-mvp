@@ -129,6 +129,29 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* OUR PROMISE — patient-facing guarantee */}
+      <section className="py-12 bg-[#FDFBF7]">
+        <div className="max-w-3xl mx-auto px-5 sm:px-8">
+          <div
+            className="bg-[#2D4A3E] text-white rounded-2xl px-7 py-7 text-center"
+            data-testid="patient-guarantee"
+          >
+            <p className="text-[10px] uppercase tracking-[0.25em] text-[#C8B7A6] font-semibold">
+              Our promise to you
+            </p>
+            <p className="font-serif-display text-2xl sm:text-3xl mt-1.5 leading-tight">
+              3+ matched therapists in 24 hours,{" "}
+              <em className="not-italic text-[#E8B89D]">guaranteed</em>.
+            </p>
+            <p className="text-sm text-white/75 mt-2 leading-relaxed max-w-md mx-auto">
+              You'll see at least three pre-screened therapists who fit your
+              needs — within a day of submitting your referral. No long waitlists,
+              no generic directory.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* HOW IT WORKS */}
       <section id="how" className="py-20 md:py-28">
         <div className="max-w-7xl mx-auto px-5 sm:px-8">

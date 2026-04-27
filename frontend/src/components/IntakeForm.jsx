@@ -369,7 +369,7 @@ export default function IntakeForm() {
                   />
                 </Group>
                 <p className="text-xs text-[#6D6A65]">
-                  We're currently licensed in <strong>Idaho</strong>.
+                  Our therapists are currently licensed in <strong>Idaho</strong> only during our beta launch.
                 </p>
               </div>
             )}
