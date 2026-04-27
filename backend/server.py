@@ -172,16 +172,21 @@ class TherapistOut(BaseModel):
 class TherapistSignup(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     email: EmailStr
-    phone: Optional[str] = ""
-    gender: Optional[str] = ""  # female | male | nonbinary
+    phone: Optional[str] = ""  # legacy alias for phone_alert
+    phone_alert: Optional[str] = ""  # private — SMS alerts
+    office_phone: Optional[str] = ""  # public — visible to patients
+    gender: Optional[str] = ""
     licensed_states: list[str] = Field(default_factory=lambda: ["ID"])
+    license_number: Optional[str] = ""
+    license_expires_at: Optional[str] = None  # ISO date
+    license_picture: Optional[str] = None  # base64 data URL
     client_types: list[str] = Field(default_factory=lambda: ["individual"])
     age_groups: list[str] = Field(default_factory=list)
     primary_specialties: list[str] = Field(default_factory=list, max_length=2)
     secondary_specialties: list[str] = Field(default_factory=list, max_length=3)
     general_treats: list[str] = Field(default_factory=list, max_length=5)
     modalities: list[str] = Field(default_factory=list, max_length=6)
-    modality_offering: str = "both"  # telehealth | in_person | both
+    modality_offering: str = "both"
     office_locations: list[str] = Field(default_factory=list)
     insurance_accepted: list[str] = Field(default_factory=list)
     cash_rate: int = Field(ge=0, le=1000, default=150)
@@ -192,8 +197,8 @@ class TherapistSignup(BaseModel):
     style_tags: list[str] = Field(default_factory=list)
     free_consult: bool = False
     bio: Optional[str] = ""
-    profile_picture: Optional[str] = None  # base64 data URL, max ~500KB
-    credential_type: Optional[str] = ""  # psychologist | lcsw | lpc | lmft | psychiatrist | other
+    profile_picture: Optional[str] = None
+    credential_type: Optional[str] = ""
     notify_email: bool = True
     notify_sms: bool = True
 
@@ -1352,7 +1357,9 @@ async def admin_update_therapist(
 ):
     """Admin update of a therapist profile. Only whitelisted fields are persisted."""
     allowed = {
-        "name", "email", "phone", "gender", "licensed_states",
+        "name", "email", "phone", "phone_alert", "office_phone",
+        "gender", "licensed_states",
+        "license_number", "license_expires_at", "license_picture",
         "client_types", "age_groups",
         "primary_specialties", "secondary_specialties", "general_treats",
         "modalities", "modality_offering", "office_locations",
@@ -1360,6 +1367,7 @@ async def admin_update_therapist(
         "years_experience", "availability_windows", "urgency_capacity",
         "style_tags", "bio", "is_active", "pending_approval",
         "profile_picture", "credential_type", "notify_email", "notify_sms",
+        "next_7_day_capacity", "responsiveness_score", "top_responder",
     }
     update = {k: v for k, v in (payload or {}).items() if k in allowed}
     if not update:
