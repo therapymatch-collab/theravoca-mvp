@@ -311,6 +311,13 @@ export default function PatientResults() {
                             }
                             span={2}
                           />
+                          {(t.languages_spoken || []).length > 0 && (
+                            <Detail
+                              label="Languages"
+                              value={["English", ...t.languages_spoken].join(", ")}
+                              span={2}
+                            />
+                          )}
                         </div>
 
                         {topReasons(app.match_breakdown).length > 0 && (

@@ -442,10 +442,22 @@ def row_to_therapist(row: tuple, idx: int) -> tuple[dict | None, list[str]]:
         f"{full_name}-{license_number}-{idx}".encode()
     ).hexdigest()[:8].upper()
 
+    # Languages spoken (col21) — "None" / "english only" / etc map to []
+    raw_lang = (row[20] or "").strip()
+    languages_spoken: list[str] = []
+    if raw_lang:
+        low = raw_lang.lower()
+        if low not in ("none", "n/a", "english only", "english", "no", ""):
+            for piece in re.split(r"[,;/&]| and ", raw_lang):
+                p = piece.strip()
+                if p and p.lower() not in ("none", "english"):
+                    languages_spoken.append(p[:50])
+
     now_iso = datetime.now(timezone.utc).isoformat()
-    trial_end = (
-        datetime.now(timezone.utc) + timedelta(days=30)
-    ).isoformat()
+    # Indefinite trial — they aren't going through Stripe checkout. Setting
+    # `trial_ends_at` and `current_period_end` to null keeps the daily billing
+    # cron from charging them (it requires `stripe_customer_id != null`).
+    trial_end = None
 
     doc = {
         "id": str(uuid.uuid4()),
@@ -497,6 +509,7 @@ def row_to_therapist(row: tuple, idx: int) -> tuple[dict | None, list[str]]:
         "stripe_subscription_id": None,
         "trial_ends_at": trial_end,
         "current_period_end": trial_end,
+        "languages_spoken": languages_spoken,
         "created_at": now_iso,
     }
     return doc, warnings

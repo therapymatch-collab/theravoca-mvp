@@ -202,6 +202,25 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 - Iter-38 added 4 new tests for the outreach-invite → therapist conversion flow.
 
 ## Recent Changes Log
+- **Iter-42 (Feb 2026) — Real-therapist directory import**:
+  - Imported **122 real Idaho therapists** from user's Excel
+    (`/app/backend/scripts/import_therapists_xlsx.py`).
+  - DB wiped + re-seeded: emails faked as
+    `therapymatch+t101@gmail.com`...`+t222@gmail.com`; real emails kept in
+    `real_email` for reference. All `is_active=True, pending_approval=False,
+    subscription_status="trialing", trial_ends_at=null, current_period_end=null`
+    (indefinite trial — billing cron skips them since `stripe_customer_id=null`).
+  - Distribution: LPC×58, LCSW×31, LMFT×22, PsyD×6, Other×5; top specialties
+    anxiety×98, relationship_issues×80, life_transitions×77, depression×77,
+    trauma_ptsd×75. 30 with Idaho offices (geocoded), 92 telehealth-only.
+  - **New `languages_spoken` field** on therapists, populated from the Excel
+    col21 + surfaced on patient match cards.
+  - **LLM outreach prompt tightened** (Item D, Option 2): Claude now told
+    "ONLY return therapists you have HIGH CONFIDENCE actually exist; if
+    unsure, return fewer." Reduces hallucination risk.
+  - End-to-end smoke test: a patient request for `anxiety + trauma_ptsd +
+    EMDR + Boise + cash $200` matched 30/30 therapists with scores 80–87%,
+    notifications sent via Resend + Twilio.
 - **Iter-41 (Feb 2026)**:
   - **LLM review-research agent** (`review_research_agent.py`) — Claude
     Sonnet 4.5 is asked to recall *high-confidence* public review data for a
