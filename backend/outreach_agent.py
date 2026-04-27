@@ -1,18 +1,19 @@
-"""LLM-powered outreach agent.
+"""LLM-powered + PT-scraped outreach agent.
 
 When a patient request has `outreach_needed_count > 0` (we couldn't fill 30 quality
 matches from our directory), this module:
 
-1. Generates synthetic candidates for the patient's brief — therapists licensed in
-   the patient's state who plausibly match the brief — using Claude Sonnet 4.5
-   via the Emergent LLM key.
-2. Sends each candidate a personalized invite email asking them to sign up + apply
-   for this specific referral.
+1. Scrapes Psychology Today's public directory for the patient's state + city
+   to gather REAL therapist candidates (name, phone, license, specialties,
+   website). See `pt_scraper.py`.
+2. Falls back to Claude Sonnet 4.5 via the Emergent LLM key when PT yields
+   too few or fails (network blocked, geo with no listings).
+3. Sends each candidate a personalized invite — email when we can guess one
+   from their published website, else SMS via Twilio to the listed phone.
 
-NOTE: Real production scraping of Psychology Today / state board sites requires
-headless browser + IP rotation and is out of scope for this sprint. The LLM here
-generates plausible candidates from its training data + reasoning. To swap in a
-real scraper, replace `_find_candidates()` — everything else stays the same.
+To swap in a different scraper or add another data source (state board /
+group-practice sites), edit `pt_scraper.scrape_pt_candidates` or add a new
+function and merge results in `_find_candidates`.
 """
 from __future__ import annotations
 
@@ -29,18 +30,90 @@ from emergentintegrations.llm.chat import LlmChat, UserMessage
 from deps import db
 from email_service import _get_app_url, _send, _wrap, BRAND
 from helpers import _now_iso, _safe_summary_for_therapist
+from pt_scraper import scrape_pt_candidates
+from sms_service import send_therapist_referral_sms
 
 logger = logging.getLogger("theravoca.outreach")
 
 EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+PT_SCRAPING_ENABLED = os.environ.get("PT_SCRAPING_ENABLED", "true").lower() == "true"
 
 
-async def _find_candidates(
+def _score_pt_candidate(c: dict, request: dict) -> tuple[int, str]:
+    """Lightweight scorer for PT-scraped candidates.
+
+    We can't run our full 100-point matching engine because PT doesn't expose
+    fee / insurance / availability publicly. So we estimate with what we have:
+    specialty overlap (60pt), license-type match (20pt), location signal
+    (20pt). Returns `(score, rationale)` for use in the invite email.
+    """
+    patient_specs = set(request.get("presenting_issues") or [])
+    cand_specs = set(c.get("specialties") or [])
+    overlap = patient_specs & cand_specs
+
+    spec_score = min(60, len(overlap) * 20) if overlap else 0
+    license_score = 20 if c.get("license_types") else 10
+    loc_score = 20 if c.get("city") and c.get("state") else 10
+
+    score = max(70, min(95, 50 + spec_score + license_score + loc_score - 30))
+    if overlap:
+        rationale = (
+            f"Public PT profile lists {', '.join(sorted(overlap)).replace('_', ' ')} as a "
+            f"specialty — matches this patient's primary concern."
+        )
+    else:
+        rationale = (
+            f"Licensed in {c.get('state', 'ID')} per PT directory; "
+            f"located in {c.get('city') or 'the requested area'} for in-person availability."
+        )
+    return score, rationale
+
+
+def _normalize_pt_to_outreach(c: dict, request: dict) -> dict:
+    """Reshape a PT-scraped card into our outreach-invite candidate schema."""
+    score, rationale = _score_pt_candidate(c, request)
+    licenses = c.get("license_types") or []
+    primary_license = c.get("primary_license") or (licenses[0] if licenses else "")
+    return {
+        "name": c.get("name", "").strip(),
+        "email": (c.get("email") or "").strip(),
+        "phone": c.get("phone") or "",
+        "license_type": primary_license,
+        "specialties": c.get("specialties") or [],
+        "modalities": [],  # PT doesn't expose modality slugs reliably
+        "city": c.get("city") or "",
+        "state": c.get("state") or request.get("location_state") or "ID",
+        "match_rationale": rationale,
+        "estimated_score": score,
+        "source": "psychology_today",
+        "profile_url": c.get("profile_url") or "",
+        "website": c.get("website") or "",
+    }
+
+
+async def _find_candidates_pt(request: dict, count: int) -> list[dict]:
+    """Real PT directory scrape, normalized into outreach candidate shape."""
+    state = request.get("location_state") or "ID"
+    city = request.get("location_city") or ""
+    try:
+        raw = await scrape_pt_candidates(
+            state_code=state, city=city, needed=count, max_pages=3,
+        )
+    except Exception as e:
+        logger.exception("PT scrape failed: %s", e)
+        return []
+    out = [_normalize_pt_to_outreach(c, request) for c in raw]
+    # Sort highest-confidence first so we send invites to the best fits within `count`
+    out.sort(key=lambda c: c.get("estimated_score") or 0, reverse=True)
+    return out
+
+
+async def _find_candidates_llm(
     request: dict, count: int = 30,
 ) -> list[dict]:
     """Ask Claude to generate `count` plausible Idaho therapist candidates that
-    match this patient's brief. Returns a list of {name, email, license_type,
-    specialties, modalities, city, state, score, rationale}."""
+    match this patient's brief. Used as a fallback when PT scraping yields too
+    few real candidates."""
     if not EMERGENT_KEY:
         logger.warning("EMERGENT_LLM_KEY missing — skipping outreach")
         return []
@@ -114,120 +187,231 @@ Return ONLY a JSON array. No prose, no markdown fences. Empty array `[]` is acce
     return candidates[:count]
 
 
+async def _find_candidates(request: dict, count: int = 30) -> list[dict]:
+    """Hybrid: try Psychology Today scraping first (real, grounded data),
+    then fall back / top-up via the LLM agent if we still need more.
+
+    Honours the `PT_SCRAPING_ENABLED` env flag so we can disable scraping
+    quickly if PT changes their HTML or starts rate-limiting us.
+    """
+    pt_results: list[dict] = []
+    if PT_SCRAPING_ENABLED:
+        pt_results = await _find_candidates_pt(request, count=count)
+        logger.info("PT scrape returned %d candidates (need %d)", len(pt_results), count)
+
+    if len(pt_results) >= count:
+        return pt_results[:count]
+
+    # Top up with LLM-generated candidates so the request gets full coverage
+    needed_extra = count - len(pt_results)
+    llm_results = await _find_candidates_llm(request, count=needed_extra)
+    logger.info("LLM fallback returned %d candidates (needed %d more)",
+                len(llm_results), needed_extra)
+    return (pt_results + llm_results)[:count]
+
+
+def _send_invite_sms_body(candidate: dict, request: dict, score: int) -> str:
+    """Short Twilio-friendly SMS body for PT-scraped candidates without an email."""
+    public_url = _get_app_url()
+    signup_url = f"{public_url}/therapists/join?invite_request_id={request['id']}"
+    location = (request.get("location_city") or "Idaho")
+    issues = request.get("presenting_issues") or []
+    issue_str = ", ".join(i.replace("_", " ") for i in issues[:2]) or "general care"
+    return (
+        f"TheraVoca: we have a {location} patient looking for help with {issue_str} — "
+        f"estimated {score}% match for your practice. Apply (free 30-day trial): {signup_url}. "
+        f"Reply STOP to opt out."
+    )
+
+
 async def _send_outreach_invite(
     candidate: dict, request: dict,
-) -> bool:
-    """Email a single candidate inviting them to sign up + apply for this referral."""
-    if not candidate.get("email"):
-        return False
+) -> dict:
+    """Send the outreach via email when we have one, else SMS via Twilio.
+    Returns a dict with `{ok, channel, error}` so callers can record the
+    attempt for analytics + audit.
+    """
     summary = _safe_summary_for_therapist(request)
     first = (candidate.get("name") or "there").split(" ")[0]
     rationale = candidate.get("match_rationale") or "Your specialties align with this patient's needs."
     score = candidate.get("estimated_score") or 75
-    signup_url = (
-        f"{_get_app_url()}/therapists/join"
-        f"?invite_request_id={request['id']}&utm_source=outreach&utm_campaign=referral_invite"
-    )
-    summary_rows = "".join(
-        f'<tr><td style="padding:5px 0;color:{BRAND["muted"]};font-size:13px;width:140px;">{k}</td>'
-        f'<td style="padding:5px 0;color:{BRAND["text"]};font-size:14px;">{v}</td></tr>'
-        for k, v in summary.items()
-    )
+    email = (candidate.get("email") or "").strip()
+    phone = (candidate.get("phone") or "").strip()
 
-    inner = f"""
-    <p style="font-size:16px;line-height:1.6;">Hi {first},</p>
-    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-      I run TheraVoca, a small Idaho-based therapist matching service. We just received
-      a referral request that looks like a strong fit for your practice — estimated
-      <strong>{score}% match</strong> based on the specialties listed in your public profile.
-    </p>
-    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-      <em>{rationale}</em>
-    </p>
-    <div style="background:{BRAND['bg']};border:1px solid {BRAND['border']};border-radius:12px;padding:16px 20px;margin:18px 0;">
-      <div style="font-size:13px;color:{BRAND['muted']};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">
-        Anonymous referral summary
-      </div>
-      <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-        {summary_rows}
-      </table>
-    </div>
-    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-      To apply, create your free profile (30-day free trial, $45/mo after). You'll be
-      auto-matched with this referral the moment your profile is live, and you'll only
-      get notifications for future patients who score 70%+ on your specialties and schedule.
-    </p>
-    <p style="margin:28px 0;">
-      <a href="{signup_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">
-        Apply for this referral
-      </a>
-    </p>
-    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">
-      If this isn't a fit, no need to reply — we won't contact you again unless we get
-      another high-fit patient. We don't sell or share your email.
-    </p>
-    """
-    try:
-        await _send(
-            candidate["email"],
-            f"TheraVoca referral request — {score}% estimated match",
-            _wrap("New referral inquiry", inner),
+    if not email and not phone:
+        return {"ok": False, "channel": None, "error": "no_contact_info"}
+
+    if email:
+        signup_url = (
+            f"{_get_app_url()}/therapists/join"
+            f"?invite_request_id={request['id']}&utm_source=outreach&utm_campaign=referral_invite"
         )
-        return True
+        summary_rows = "".join(
+            f'<tr><td style="padding:5px 0;color:{BRAND["muted"]};font-size:13px;width:140px;">{k}</td>'
+            f'<td style="padding:5px 0;color:{BRAND["text"]};font-size:14px;">{v}</td></tr>'
+            for k, v in summary.items()
+        )
+        source_note = ""
+        if candidate.get("source") == "psychology_today" and candidate.get("profile_url"):
+            source_note = (
+                f'<p style="color:{BRAND["muted"]};font-size:12px;line-height:1.5;'
+                f'margin-top:6px;">We found your practice via your '
+                f'<a href="{candidate["profile_url"]}" style="color:{BRAND["primary"]};">'
+                f'Psychology Today profile</a>.</p>'
+            )
+
+        inner = f"""
+        <p style="font-size:16px;line-height:1.6;">Hi {first},</p>
+        <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+          I run TheraVoca, a small Idaho-based therapist matching service. We just received
+          a referral request that looks like a strong fit for your practice — estimated
+          <strong>{score}% match</strong> based on the specialties listed in your public profile.
+        </p>
+        <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+          <em>{rationale}</em>
+        </p>
+        {source_note}
+        <div style="background:{BRAND['bg']};border:1px solid {BRAND['border']};border-radius:12px;padding:16px 20px;margin:18px 0;">
+          <div style="font-size:13px;color:{BRAND['muted']};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">
+            Anonymous referral summary
+          </div>
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+            {summary_rows}
+          </table>
+        </div>
+        <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+          To apply, create your free profile (30-day free trial, $45/mo after). You'll be
+          auto-matched with this referral the moment your profile is live, and you'll only
+          get notifications for future patients who score 70%+ on your specialties and schedule.
+        </p>
+        <p style="margin:28px 0;">
+          <a href="{signup_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">
+            Apply for this referral
+          </a>
+        </p>
+        <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">
+          If this isn't a fit, no need to reply — we won't contact you again unless we get
+          another high-fit patient. We don't sell or share your email.
+        </p>
+        """
+        try:
+            await _send(
+                email,
+                f"TheraVoca referral request — {score}% estimated match",
+                _wrap("New referral inquiry", inner),
+            )
+            return {"ok": True, "channel": "email", "error": None}
+        except Exception as e:
+            logger.warning("Outreach email failed for %s: %s", email, e)
+            if not phone:
+                return {"ok": False, "channel": "email", "error": str(e)}
+
+    # SMS path (no email or email send failed but we have a phone)
+    body = _send_invite_sms_body(candidate, request, score)
+    try:
+        sent_ok = await _send_outreach_sms(phone, body)
+        if sent_ok:
+            return {"ok": True, "channel": "sms", "error": None}
+        return {"ok": False, "channel": "sms", "error": "twilio_not_configured_or_failed"}
     except Exception as e:
-        logger.warning("Outreach email failed for %s: %s", candidate.get("email"), e)
-        return False
+        logger.warning("Outreach SMS failed for %s: %s", phone, e)
+        return {"ok": False, "channel": "sms", "error": str(e)}
 
 
-async def _filter_existing_emails(candidates: list[dict]) -> tuple[list[dict], dict]:
-    """Drop candidates whose email already lives in `therapists` or in any prior
-    `outreach_invites`. Email match is case-insensitive.
+async def _send_outreach_sms(phone: str, body: str) -> bool:
+    """Wrap the existing Twilio helper to send a generic invite SMS."""
+    from sms_service import send_sms
+    res = await send_sms(phone, body)
+    return bool(res)
+
+
+async def _filter_existing_contacts(candidates: list[dict]) -> tuple[list[dict], dict]:
+    """Drop candidates whose email OR phone already lives in `therapists` or in any
+    prior `outreach_invites`. Match is case-insensitive for email; phone is matched
+    on its E.164-normalized digits.
 
     Returns `(filtered, stats)` where `stats` reports how many were skipped and why.
     """
     if not candidates:
         return [], {"skipped_existing_therapist": 0, "skipped_prior_invite": 0}
 
+    from sms_service import normalize_us_phone
+
     emails = sorted(
         {(c.get("email") or "").strip().lower() for c in candidates if c.get("email")}
     )
-    if not emails:
-        return [], {"skipped_existing_therapist": 0, "skipped_prior_invite": 0}
+    phones_norm = {
+        normalize_us_phone(c.get("phone") or "")
+        for c in candidates
+        if c.get("phone")
+    }
+    phones_norm.discard(None)
+    phones = sorted(phones_norm)
 
-    # Existing therapists in our directory.
+    if not emails and not phones:
+        # Nothing to dedupe against — keep all (e.g. LLM stub candidates without contact)
+        return candidates, {"skipped_existing_therapist": 0, "skipped_prior_invite": 0}
+
+    therapist_query = {"$or": []}
+    if emails:
+        therapist_query["$or"].append({"email": {"$in": emails}})
+    if phones:
+        therapist_query["$or"].append({"phone": {"$in": phones}})
+        therapist_query["$or"].append({"phone_alert": {"$in": phones}})
     therapist_rows = await db.therapists.find(
-        {"email": {"$in": emails}}, {"_id": 0, "email": 1},
-    ).to_list(length=len(emails))
+        therapist_query, {"_id": 0, "email": 1, "phone": 1, "phone_alert": 1},
+    ).to_list(length=len(emails) + len(phones))
     therapist_emails = {(r.get("email") or "").lower() for r in therapist_rows}
+    therapist_phones = {
+        normalize_us_phone(r.get(k) or "")
+        for r in therapist_rows
+        for k in ("phone", "phone_alert")
+    }
+    therapist_phones.discard(None)
 
-    # Already-sent outreach invites (any request).
+    invite_query = {"$or": []}
+    if emails:
+        invite_query["$or"].append({"candidate.email": {"$in": emails}})
+    if phones:
+        invite_query["$or"].append({"candidate.phone": {"$in": phones}})
     invite_rows = await db.outreach_invites.find(
-        {"candidate.email": {"$in": emails}}, {"_id": 0, "candidate.email": 1},
+        invite_query, {"_id": 0, "candidate.email": 1, "candidate.phone": 1},
     ).to_list(length=10_000)
     invite_emails = {
         ((r.get("candidate") or {}).get("email") or "").lower() for r in invite_rows
     }
+    invite_phones = {
+        normalize_us_phone((r.get("candidate") or {}).get("phone") or "")
+        for r in invite_rows
+    }
+    invite_phones.discard(None)
 
     skip_t = 0
     skip_i = 0
     out: list[dict] = []
     for c in candidates:
         e = (c.get("email") or "").strip().lower()
-        if not e:
-            continue
-        if e in therapist_emails:
+        p = normalize_us_phone(c.get("phone") or "")
+        if (e and e in therapist_emails) or (p and p in therapist_phones):
             skip_t += 1
-            logger.info("Outreach: skipping %s (already in therapists directory)", e)
+            logger.info("Outreach: skipping %s/%s (already in therapists)", e, p)
             continue
-        if e in invite_emails:
+        if (e and e in invite_emails) or (p and p in invite_phones):
             skip_i += 1
-            logger.info("Outreach: skipping %s (already invited previously)", e)
+            logger.info("Outreach: skipping %s/%s (already invited)", e, p)
+            continue
+        if not e and not p:
+            # No contact info — drop silently, can't reach them
             continue
         out.append(c)
     return out, {
         "skipped_existing_therapist": skip_t,
         "skipped_prior_invite": skip_i,
     }
+
+
+# Backwards-compat alias kept for existing tests that import the old name.
+_filter_existing_emails = _filter_existing_contacts
 
 
 async def run_outreach_for_request(request_id: str) -> dict[str, Any]:
@@ -244,38 +428,51 @@ async def run_outreach_for_request(request_id: str) -> dict[str, Any]:
     if needed <= 0:
         return {"skipped": "no_outreach_needed"}
 
-    # Over-fetch from the LLM so dedupe doesn't shrink us below `needed`. Cap at 2x.
+    # Over-fetch so dedupe doesn't shrink us below `needed`. Cap at 2x.
     raw_candidates = await _find_candidates(req, count=min(needed * 2, 60))
-    candidates, dedupe_stats = await _filter_existing_emails(raw_candidates)
+    candidates, dedupe_stats = await _filter_existing_contacts(raw_candidates)
     candidates = candidates[:needed]
 
-    sent = 0
+    sent_email = 0
+    sent_sms = 0
     for c in candidates:
-        ok = await _send_outreach_invite(c, req)
-        if ok:
-            sent += 1
+        result = await _send_outreach_invite(c, req)
+        ok = bool(result.get("ok"))
+        channel = result.get("channel")
+        if ok and channel == "email":
+            sent_email += 1
+        elif ok and channel == "sms":
+            sent_sms += 1
         # Persist the outreach record for analytics + audit
         await db.outreach_invites.insert_one({
             "id": str(uuid.uuid4()),
             "request_id": request_id,
             "candidate": c,
-            "email_sent": ok,
+            "email_sent": ok and channel == "email",
+            "sms_sent": ok and channel == "sms",
+            "channel": channel,
+            "send_error": result.get("error"),
+            "source": c.get("source") or "llm",
             "created_at": _now_iso(),
         })
-        # Resend's free tier caps at 5 req/sec; throttle to 4/sec for safety
-        await asyncio.sleep(0.25)
+        # Resend free tier caps at 5/sec; Twilio at ~1/sec for trial — throttle for both
+        await asyncio.sleep(0.5)
     await db.requests.update_one(
         {"id": request_id},
         {"$set": {
             "outreach_run_at": _now_iso(),
-            "outreach_sent_count": sent,
+            "outreach_sent_count": sent_email + sent_sms,
+            "outreach_sent_email_count": sent_email,
+            "outreach_sent_sms_count": sent_sms,
         }},
     )
     return {
         "ok": True,
         "candidates_found": len(candidates),
         "candidates_raw": len(raw_candidates),
-        "emails_sent": sent,
+        "emails_sent": sent_email,
+        "sms_sent": sent_sms,
+        "total_sent": sent_email + sent_sms,
         "skipped_existing_therapist": dedupe_stats["skipped_existing_therapist"],
         "skipped_prior_invite": dedupe_stats["skipped_prior_invite"],
         "request_id": request_id,
@@ -300,5 +497,5 @@ async def run_outreach_for_all_pending() -> dict[str, int]:
         result = await run_outreach_for_request(r["id"])
         if result.get("ok"):
             runs += 1
-            sent_total += result.get("emails_sent", 0)
+            sent_total += result.get("total_sent", result.get("emails_sent", 0))
     return {"requests_processed": runs, "total_emails_sent": sent_total}

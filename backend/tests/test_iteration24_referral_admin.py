@@ -8,6 +8,7 @@ ADMIN_PW = os.environ.get("ADMIN_PASSWORD", "admin123!")
 
 DEFAULT_OPTIONS = [
     "Google search",
+    "ChatGPT / AI assistant",
     "Instagram",
     "Friend / family",
     "Therapist referred me",
@@ -53,6 +54,9 @@ class TestPublicReferralOptions:
         assert r.status_code == 200
         body = r.json()
         assert "options" in body
+        # Backend auto-injects 'ChatGPT / AI assistant' on read if missing — so
+        # whether the saved set has it or not, the public response must include
+        # it (after Google) and end with Other → Prefer not to say.
         assert body["options"] == DEFAULT_OPTIONS
 
 

@@ -415,6 +415,48 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
   admin save endpoint. IntakeForm also reorders client-side as defense in
   depth. Custom admin orderings of other items are preserved.
 
+### Iteration 48 (2026-04-27) — Live PT scraping + invited column + convert-from-detail + AI assistant option + payment-label hardening
+- **Live Psychology Today scraper** (`pt_scraper.py`): real-time directory
+  scrape via JSON-LD parsing of PT search-result pages — no JS rendering
+  required. Returns name, profile URL, phone, full address, lat/lng, license
+  types (extracted from profile body), specialties, and best-guess email
+  (info@<published-website>). Rate-limited (1 req/sec, max 60 req/run).
+  `outreach_agent._find_candidates()` now tries PT first and tops up with
+  LLM-generated candidates only if scraping yields <30 results. Toggleable
+  via `PT_SCRAPING_ENABLED=false`.
+- **SMS fallback for PT candidates without published email**: when PT
+  doesn't expose a website domain to guess an email from, the outreach
+  agent sends a Twilio SMS using the listed phone (with STOP-to-opt-out
+  copy). Tracking now records `channel` ("email"/"sms"), `sms_sent`,
+  `send_error`, and `source` ("psychology_today"/"llm") on every
+  `outreach_invites` row.
+- **Dedupe by phone too**: `_filter_existing_contacts()` (renamed from
+  `_filter_existing_emails`, alias kept for back-compat) now skips PT
+  candidates whose phone already lives in `therapists.phone`/`phone_alert`
+  or in any prior `outreach_invites.candidate.phone` (E.164 normalized).
+- **"Invited" column in admin requests table**: `GET /api/admin/requests`
+  rows now include `invited_count` from `outreach_invites`. New orange
+  column appears between "Apps" and "Threshold" in the admin UI so admins
+  can see notified / apps / invited at a single glance.
+- **"Convert" button on each invited card in detail panel**: mirrors the
+  Invited Therapists tab action so admins can promote a hot LLM lead to a
+  draft therapist profile without leaving the request view. Auto-refreshes
+  the open dialog so the card flips to "Converted" inline.
+- **"ChatGPT / AI assistant" referral source**: added to defaults; the
+  read-side normalizer auto-injects it into well-known referral lists that
+  miss it (without touching arbitrary admin custom lists or test fixtures).
+- **Payment label hardening** in `_safe_summary_for_therapist()`: every
+  therapist referral & invitation email now shows the actual amount or
+  carrier (e.g., "Cash — up to $200/session", "Insurance — Aetna",
+  "Either — Insurance: BlueCross · Cash up to $175/session"). Explicit
+  fallback strings ("amount not specified" / "carrier not specified") for
+  legacy records missing required fields, so generic "Cash"/"Insurance"
+  labels never appear in outbound emails again.
+- Tests: `tests/test_iteration47_pt_scraper.py` covers JSON-LD parsing,
+  license/specialty extraction, website filtering, email guessing, scoring,
+  payment-label fallbacks, admin list `invited_count`, detail `invited`,
+  and AI-assistant injection. 43/43 tests pass.
+
 ## Key DB Schemas
 
 **requests**: `{id, email, location_state, location_city, location_zip, patient_geo, client_type, age_group, payment_type, insurance_name, budget, sliding_scale_ok, presenting_issues:[…], modality_preferences:[…], availability_windows, urgency, prior_therapy, gender_preference, gender_required, style_preference, threshold, notified_therapist_ids, notified_scores, notified_breakdowns, notified_distances, results_released_at, results_sent_at, status, verified, verified_at, created_at, matched_at}`

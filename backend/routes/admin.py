@@ -53,8 +53,12 @@ async def admin_list_requests(_: bool = Depends(require_admin)):
     out = []
     for d in docs:
         app_count = await db.applications.count_documents({"request_id": d["id"]})
+        invited_count = await db.outreach_invites.count_documents(
+            {"request_id": d["id"]},
+        )
         d["application_count"] = app_count
         d["notified_count"] = len(d.get("notified_therapist_ids") or [])
+        d["invited_count"] = invited_count
         out.append(d)
     return out
 
@@ -555,6 +559,7 @@ async def admin_referral_sources(
 
 DEFAULT_REFERRAL_SOURCE_OPTIONS = [
     "Google search",
+    "ChatGPT / AI assistant",
     "Instagram",
     "Friend / family",
     "Therapist referred me",
@@ -564,9 +569,9 @@ DEFAULT_REFERRAL_SOURCE_OPTIONS = [
 ]
 
 
-def _reorder_referral_options(options: list[str]) -> list[str]:
-    """Always send 'Other' and 'Prefer not to say' to the end of the list,
-    in that order, regardless of how the admin saved them."""
+def _normalize_tail_order(options: list[str]) -> list[str]:
+    """Push 'Other' and 'Prefer not to say' to the end (in that order).
+    Used at save time so we don't mutate admin's intent beyond ordering."""
     tail_keys = {"other", "prefer not to say"}
     head = [o for o in options if o.strip().lower() not in tail_keys]
     other = next((o for o in options if o.strip().lower() == "other"), None)
@@ -574,6 +579,41 @@ def _reorder_referral_options(options: list[str]) -> list[str]:
         (o for o in options if o.strip().lower() == "prefer not to say"), None,
     )
     tail = [o for o in (other, prefer) if o]
+    return head + tail
+
+
+def _reorder_referral_options(options: list[str]) -> list[str]:
+    """Read-time normalizer: enforces tail order AND ensures an 'AI assistant'
+    option exists so patients arriving from ChatGPT/Claude/Gemini have a clean
+    attribution choice. Only injects when the list looks like a real referral
+    options set (contains at least one well-known default like 'Google search'
+    or 'Instagram'), so arbitrary admin-custom or test lists are left alone."""
+    ordered = _normalize_tail_order(options)
+
+    well_known = ("google", "instagram", "friend", "podcast", "therapist referred")
+    looks_like_referral_set = any(
+        any(kw in (o or "").lower() for kw in well_known) for o in ordered
+    )
+    if not looks_like_referral_set:
+        return ordered
+
+    ai_keywords = ("chatgpt", "ai assistant", "ai tool", "llm", "claude", "gemini")
+    has_ai = any(
+        any(kw in (o or "").lower() for kw in ai_keywords) for o in ordered
+    )
+    if has_ai:
+        return ordered
+
+    # Inject right after Google search if present, else at the top of head
+    tail_keys = {"other", "prefer not to say"}
+    head = [o for o in ordered if o.strip().lower() not in tail_keys]
+    tail = [o for o in ordered if o.strip().lower() in tail_keys]
+    google_idx = next(
+        (i for i, o in enumerate(head) if "google" in (o or "").lower()),
+        -1,
+    )
+    insert_at = google_idx + 1 if google_idx >= 0 else 0
+    head = head[:insert_at] + ["ChatGPT / AI assistant"] + head[insert_at:]
     return head + tail
 
 
@@ -597,7 +637,7 @@ async def admin_set_referral_source_options(payload: dict) -> dict[str, Any]:
         or not all(isinstance(o, str) and o.strip() for o in options)
     ):
         raise HTTPException(400, "options must be a non-empty list of strings")
-    cleaned = _reorder_referral_options([o.strip() for o in options])
+    cleaned = _normalize_tail_order([o.strip() for o in options])
     await db.app_config.update_one(
         {"key": "referral_source_options"},
         {"$set": {"key": "referral_source_options", "options": cleaned}},

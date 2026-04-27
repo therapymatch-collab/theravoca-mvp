@@ -82,24 +82,47 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
         issues_display = str(issues)
     if req.get("other_issue"):
         issues_display = (issues_display + " · " if issues_display else "") + req["other_issue"]
-    payment_label = (req.get("payment_type") or "either").title()
-    if req.get("payment_type") == "insurance" and req.get("insurance_name"):
-        payment_label = f"Insurance — {req['insurance_name']}"
-    elif req.get("payment_type") == "cash":
-        if req.get("budget"):
-            payment_label = f"Cash — up to ${req['budget']}/session"
-        if req.get("sliding_scale_ok"):
+    payment_type_raw = (req.get("payment_type") or "either").lower()
+    insurance_name = (req.get("insurance_name") or "").strip()
+    budget = req.get("budget")
+    sliding = bool(req.get("sliding_scale_ok"))
+
+    def _budget_str(b):
+        try:
+            n = int(b)
+            return f"${n}/session" if n > 0 else None
+        except (TypeError, ValueError):
+            return None
+
+    if payment_type_raw == "insurance":
+        if insurance_name:
+            payment_label = f"Insurance — {insurance_name}"
+        else:
+            payment_label = "Insurance — carrier not specified"
+    elif payment_type_raw == "cash":
+        b = _budget_str(budget)
+        if b:
+            payment_label = f"Cash — up to {b}"
+        else:
+            payment_label = "Cash — amount not specified"
+        if sliding:
             payment_label += " (open to sliding scale)"
-    elif req.get("payment_type") == "either":
+    elif payment_type_raw == "either":
         bits = []
-        if req.get("insurance_name"):
-            bits.append(f"Insurance: {req['insurance_name']}")
-        if req.get("budget"):
-            bits.append(f"Cash up to ${req['budget']}")
-        if req.get("sliding_scale_ok"):
+        if insurance_name:
+            bits.append(f"Insurance: {insurance_name}")
+        else:
+            bits.append("Insurance: carrier not specified")
+        b = _budget_str(budget)
+        if b:
+            bits.append(f"Cash up to {b}")
+        else:
+            bits.append("Cash: amount not specified")
+        if sliding:
             bits.append("open to sliding scale")
-        if bits:
-            payment_label = "Either — " + " · ".join(bits)
+        payment_label = "Either — " + " · ".join(bits)
+    else:
+        payment_label = payment_type_raw.title() or "Not specified"
     avail = req.get("availability_windows") or []
     avail_display = ", ".join(a.replace("_", " ") for a in avail) or "—"
     style = req.get("style_preference") or []

@@ -266,14 +266,20 @@ export default function AdminDashboard() {
   const runOutreachNow = async (id) => {
     if (!confirm(
       "Run LLM outreach for this patient now?\n\n" +
-      "Searches Google Places + Claude for additional Idaho therapists who match this patient's brief, " +
-      "and queues invite emails to fill the gap. Use this if the auto-trigger didn't run or the directory had < 30 matches."
+      "Searches Psychology Today's live directory + Claude for additional Idaho therapists who match this patient's brief, " +
+      "then queues invite emails (or SMS for therapists with no public email) to fill the gap. " +
+      "Use this if the auto-trigger didn't run or the directory had < 30 matches."
     )) return;
     try {
       const res = await client.post(`/admin/requests/${id}/run-outreach`);
-      const sent = res.data?.emails_sent ?? 0;
+      const emails = res.data?.emails_sent ?? 0;
+      const smsCt = res.data?.sms_sent ?? 0;
       const found = res.data?.candidates_found ?? 0;
-      toast.success(`Outreach: ${found} candidate(s) found, ${sent} email(s) queued`);
+      const parts = [];
+      if (emails > 0) parts.push(`${emails} email${emails === 1 ? "" : "s"}`);
+      if (smsCt > 0) parts.push(`${smsCt} SMS`);
+      const sentDesc = parts.join(" + ") || "0 sent";
+      toast.success(`Outreach: ${found} candidate(s) found, ${sentDesc}`);
       refresh();
       if (openId === id) openDetail(id);
     } catch (e) {
@@ -583,13 +589,22 @@ export default function AdminDashboard() {
           `Converted to therapist (id ${(res.data?.therapist_id || "").slice(0, 8)}…)`,
         );
         await loadOutreach();
+        // Also refresh the open detail dialog so the inline card flips to "Converted"
+        if (openId) {
+          try {
+            const r = await client.get(`/admin/requests/${openId}`);
+            setDetail(r.data);
+          } catch {
+            // non-fatal — dialog will re-fetch on next open
+          }
+        }
       } catch (err) {
         toast.error(err?.response?.data?.detail || "Conversion failed");
       } finally {
         setConvertingInviteId(null);
       }
     },
-    [client, loadOutreach],
+    [client, loadOutreach, openId],
   );
 
   const saveRefOptions = async (next) => {
@@ -812,6 +827,7 @@ export default function AdminDashboard() {
                       <Th>Source</Th>
                       <Th>Notified</Th>
                       <Th>Apps</Th>
+                      <Th>Invited</Th>
                       <Th>Threshold</Th>
                       <Th>Created</Th>
                       <Th></Th>
@@ -820,7 +836,7 @@ export default function AdminDashboard() {
                   <tbody>
                     {requests.length === 0 && (
                       <tr>
-                        <td colSpan={9} className="p-10 text-center text-[#6D6A65]">
+                        <td colSpan={10} className="p-10 text-center text-[#6D6A65]">
                           No requests yet.
                         </td>
                       </tr>
@@ -856,6 +872,13 @@ export default function AdminDashboard() {
                         <td className="p-4">{r.notified_count || 0}</td>
                         <td className="p-4 font-semibold text-[#2D4A3E]">
                           {r.application_count || 0}
+                        </td>
+                        <td
+                          className="p-4 font-semibold text-[#C87965]"
+                          data-testid={`request-invited-count-${r.id}`}
+                          title="LLM outreach invites sent for this request"
+                        >
+                          {r.invited_count || 0}
                         </td>
                         <td className="p-4">{r.threshold}%</td>
                         <td className="p-4 text-xs text-[#6D6A65]">
@@ -2180,14 +2203,41 @@ export default function AdminDashboard() {
                                 <span className="inline-flex items-center gap-1 text-[11px] text-[#2D4A3E] bg-[#F2F4F0] border border-[#D9DDD2] rounded-full px-2 py-0.5">
                                   <CheckCircle2 size={11} /> Converted
                                 </span>
+                              ) : inv.channel === "sms" && inv.sms_sent ? (
+                                <span
+                                  className="inline-flex items-center gap-1 text-[11px] text-[#2D4A3E]"
+                                  title="Sent via Twilio SMS (PT scrape — no public email)"
+                                >
+                                  <CheckCircle2 size={11} /> SMS sent
+                                </span>
                               ) : inv.email_sent ? (
                                 <span className="inline-flex items-center gap-1 text-[11px] text-[#2D4A3E]">
                                   <CheckCircle2 size={11} /> Emailed
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 text-[11px] text-[#D45D5D]">
+                                <span
+                                  className="inline-flex items-center gap-1 text-[11px] text-[#D45D5D]"
+                                  title={inv.send_error || "Send failed"}
+                                >
                                   <XCircle size={11} /> Send failed
                                 </span>
+                              )}
+                              {inv.status !== "converted" && (
+                                <button
+                                  type="button"
+                                  onClick={() => convertInvite(inv)}
+                                  disabled={convertingInviteId === inv.id}
+                                  className="inline-flex items-center gap-1 text-[11px] bg-[#2D4A3E] text-white rounded-md px-2.5 py-1 hover:bg-[#3A5E50] disabled:opacity-60 disabled:cursor-not-allowed transition"
+                                  data-testid={`detail-invited-convert-${idx}`}
+                                  title="Create a draft therapist profile from this invite without leaving the request view"
+                                >
+                                  {convertingInviteId === inv.id ? (
+                                    <Loader2 size={11} className="animate-spin" />
+                                  ) : (
+                                    <UserPlus size={11} />
+                                  )}
+                                  Convert
+                                </button>
                               )}
                             </div>
                           </div>
@@ -2202,8 +2252,26 @@ export default function AdminDashboard() {
                               "{c.match_rationale}"
                             </p>
                           )}
-                          <div className="text-[11px] text-[#6D6A65] mt-2">
-                            Sent {inv.created_at ? new Date(inv.created_at).toLocaleString() : "—"}
+                          <div className="text-[11px] text-[#6D6A65] mt-2 flex items-center gap-2 flex-wrap">
+                            <span>Sent {inv.created_at ? new Date(inv.created_at).toLocaleString() : "—"}</span>
+                            {(inv.source || c.source) === "psychology_today" && (
+                              <span className="inline-flex items-center gap-1 bg-[#F2F4F0] text-[#2D4A3E] border border-[#D9DDD2] rounded-full px-2 py-0.5">
+                                Psychology Today
+                              </span>
+                            )}
+                            {c.profile_url && (
+                              <a
+                                href={c.profile_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[#2D4A3E] underline hover:text-[#3A5E50]"
+                              >
+                                View PT profile ↗
+                              </a>
+                            )}
+                            {c.phone && (
+                              <span className="text-[#6D6A65]">· {c.phone}</span>
+                            )}
                           </div>
                         </div>
                       );
