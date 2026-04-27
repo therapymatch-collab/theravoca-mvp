@@ -192,41 +192,30 @@ def _get_token_from_db(request_id: str) -> str:
 
 
 def test_pending_therapist_excluded_from_matching(s):
+    from tests.conftest import v2_request_payload, v2_therapist_signup_payload
     # 1) Create a pending therapist with broad specialties to maximise match likelihood
     email = _unique_email("TEST_pending_match")
-    signup = {
-        "name": "TEST Pending Matcher",
-        "email": email,
-        "licensed_states": ["ID"],
-        "office_locations": ["Boise"],
-        "telehealth": True,
-        "specialties": [
-            {"name": "Anxiety", "weight": 30},
-            {"name": "Depression", "weight": 30},
-            {"name": "Trauma/PTSD", "weight": 20},
-        ],
-        "modalities": ["CBT", "DBT", "EMDR"],
-        "ages_served": ["Child", "Teen", "Adult", "Older Adult"],
-        "insurance_accepted": ["Aetna", "BCBS", "Cigna", "Self-pay"],
-        "cash_rate": 100,
-        "years_experience": 10,
-        "free_consult": True,
-    }
+    signup = v2_therapist_signup_payload(
+        name="TEST Pending Matcher",
+        email=email,
+        primary_specialties=["anxiety", "depression"],
+        secondary_specialties=["trauma_ptsd"],
+        modalities=["CBT", "DBT", "EMDR"],
+        age_groups=["child", "teen", "adult", "older_adult"],
+        insurance_accepted=["Aetna", "BCBS", "Cigna"],
+        cash_rate=100,
+        years_experience=10,
+        free_consult=True,
+    )
     sj = s.post(f"{BASE}/api/therapists/signup", json=signup).json()
     pending_tid = sj["id"]
 
     # 2) Create + verify a request that this therapist would naturally match
-    payload = {
-        "email": "TEST_match_patient@example.com",
-        "client_age": 30,
-        "location_state": "ID",
-        "location_city": "Boise",
-        "session_format": "virtual",
-        "payment_type": "cash",
-        "budget": 200,
-        "presenting_issues": "Anxiety, depression, trauma — looking for CBT support",
-        "preferred_modality": "CBT",
-    }
+    payload = v2_request_payload(
+        email="TEST_match_patient@example.com",
+        presenting_issues=["anxiety", "depression"],
+        modality_preferences=["CBT"],
+    )
     r = s.post(f"{BASE}/api/requests", json=payload)
     assert r.status_code == 200
     rid = r.json()["id"]
@@ -238,8 +227,12 @@ def test_pending_therapist_excluded_from_matching(s):
     assert token, "could not retrieve verification token"
     assert s.get(f"{BASE}/api/requests/verify/{token}").status_code == 200
 
-    # Wait briefly for background matching task
+    # Wait for background matching task. Verification triggers matching with the
+    # current threshold; sometimes the task is dispatched before the PUT lands,
+    # so we explicitly resend after the wait to guarantee threshold=30 was used.
     time.sleep(4)
+    s.post(f"{BASE}/api/admin/requests/{rid}/resend-notifications", headers=ADMIN)
+    time.sleep(2)
 
     detail = s.get(f"{BASE}/api/admin/requests/{rid}", headers=ADMIN).json()
     notified_ids = [n["id"] for n in detail.get("notified", [])]
@@ -249,8 +242,13 @@ def test_pending_therapist_excluded_from_matching(s):
     # Sanity: at least some seed therapists were notified
     assert len(notified_ids) >= 1
 
-    # 3) Approve the pending therapist and resend notifications — they should now be eligible
+    # 3) Approve the pending therapist + set them to trialing (so matching gate passes)
     s.post(f"{BASE}/api/admin/therapists/{pending_tid}/approve", headers=ADMIN)
+    s.put(
+        f"{BASE}/api/admin/therapists/{pending_tid}",
+        headers=ADMIN,
+        json={"subscription_status": "trialing"},
+    )
     rs = s.post(f"{BASE}/api/admin/requests/{rid}/resend-notifications", headers=ADMIN)
     assert rs.status_code == 200
     detail2 = s.get(f"{BASE}/api/admin/requests/{rid}", headers=ADMIN).json()

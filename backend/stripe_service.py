@@ -24,13 +24,20 @@ from typing import Any, Optional
 import stripe
 from dotenv import load_dotenv
 
-load_dotenv()
+# `override=True` ensures the real key in /app/backend/.env wins over any stale
+# `sk_test_emergent` left in the supervisor process environment.
+load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
 
 
 def _configure() -> bool:
     """Idempotent — set api_key + api_base each call so hot-reload picks up env changes."""
+    # Re-load .env on every call with override=True so the real key in
+    # /app/backend/.env consistently wins over any stale `sk_test_emergent`
+    # left in the supervisor process environment.
+    from pathlib import Path
+    load_dotenv(Path(__file__).parent / ".env", override=True)
     key = os.environ.get("STRIPE_API_KEY", "").strip()
     if not key:
         return False

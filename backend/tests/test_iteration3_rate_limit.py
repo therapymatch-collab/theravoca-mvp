@@ -145,16 +145,8 @@ def test_regression_therapist_signup_then_approve(s):
 
 
 def test_regression_request_create_and_verify(s):
-    payload = {
-        "email": f"TEST_iter3_{uuid.uuid4().hex[:6]}@example.com",
-        "client_age": 30,
-        "location_state": "ID",
-        "location_city": "Boise",
-        "session_format": "virtual",
-        "payment_type": "cash",
-        "budget": 200,
-        "presenting_issues": "iter3 regression: anxiety and stress",
-    }
+    from tests.conftest import v2_request_payload
+    payload = v2_request_payload(email=f"TEST_iter3_{uuid.uuid4().hex[:6]}@example.com")
     r = s.post(f"{BASE}/api/requests", json=payload)
     assert r.status_code == 200, r.text
     rid = r.json()["id"]

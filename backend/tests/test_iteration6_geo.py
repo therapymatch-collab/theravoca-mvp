@@ -68,10 +68,14 @@ class TestBackfill:
         assert r.status_code == 200, r.text
         ts = r.json()
         assert len(ts) >= 100, f"Expected >=100 therapists, got {len(ts)}"
-        with_geos = [t for t in ts if t.get("office_geos")]
-        # Allow small slack: backfill could be in-progress on first run, but on a warm container should be complete.
-        ratio = len(with_geos) / len(ts)
-        assert ratio >= 0.8, f"Only {len(with_geos)}/{len(ts)} therapists have office_geos"
+        # Only check therapists who declared at least one office (telehealth-only signups
+        # have no offices to geocode by design).
+        with_offices = [t for t in ts if t.get("office_locations")]
+        with_geos = [t for t in with_offices if t.get("office_geos")]
+        ratio = len(with_geos) / max(1, len(with_offices))
+        assert ratio >= 0.8, (
+            f"Only {len(with_geos)}/{len(with_offices)} office-having therapists have geos"
+        )
 
 
 # ─── Request creation + geocoding ────────────────────────────────────────────
@@ -79,18 +83,13 @@ class TestBackfill:
 @pytest.fixture(scope="session")
 def created_inperson_eagle_request(s):
     """In-person Eagle (83616) request, verified, with notified therapists."""
-    payload = {
-        "email": "TEST_iter6_eagle@example.com",
-        "client_age": 30,
-        "location_state": "ID",
-        "location_city": "Eagle",
-        "location_zip": "83616",
-        "session_format": "in-person",
-        "payment_type": "cash",
-        "budget": 200,
-        "presenting_issues": "anxiety and stress",
-        "preferred_modality": "CBT",
-    }
+    from tests.conftest import v2_request_payload
+    payload = v2_request_payload(
+        email="TEST_iter6_eagle@example.com",
+        location_city="Eagle",
+        location_zip="83616",
+        modality_preference="in_person_only",
+    )
     r = s.post(f"{BASE_URL}/api/requests", json=payload, timeout=30)
     assert r.status_code == 200, r.text
     rid = r.json()["id"]
@@ -116,14 +115,14 @@ def created_inperson_eagle_request(s):
 
 class TestRequestGeocoding:
     def test_create_with_known_city_no_zip(self, s):
+        from tests.conftest import v2_request_payload
         # Boise is in KNOWN_CITY_GEOS — should NOT need Nominatim, fast.
         t0 = time.time()
-        r = s.post(f"{BASE_URL}/api/requests", json={
-            "email": "TEST_iter6_boise@example.com",
-            "client_age": 30, "location_state": "ID", "location_city": "Boise",
-            "session_format": "in-person", "payment_type": "cash", "budget": 200,
-            "presenting_issues": "anxiety",
-        }, timeout=15)
+        r = s.post(f"{BASE_URL}/api/requests", json=v2_request_payload(
+            email="TEST_iter6_boise@example.com",
+            location_zip="",
+            modality_preference="in_person_only",
+        ), timeout=15)
         elapsed = time.time() - t0
         assert r.status_code == 200, r.text
         rid = r.json()["id"]
@@ -150,19 +149,19 @@ class TestRequestGeocoding:
         assert -116.6 <= pgeo["lng"] <= -116.2
 
     def test_virtual_request_geo_set_but_matching_ignores(self, s):
-        r = s.post(f"{BASE_URL}/api/requests", json={
-            "email": "TEST_iter6_virtual@example.com",
-            "client_age": 30, "location_state": "ID", "location_city": "Boise",
-            "session_format": "virtual", "payment_type": "cash", "budget": 200,
-            "presenting_issues": "depression",
-        }, timeout=15)
+        from tests.conftest import v2_request_payload
+        r = s.post(f"{BASE_URL}/api/requests", json=v2_request_payload(
+            email="TEST_iter6_virtual@example.com",
+            location_zip="",
+            modality_preference="telehealth_only",
+            presenting_issues=["depression"],
+        ), timeout=15)
         assert r.status_code == 200
         rid = r.json()["id"]
         d = s.get(f"{BASE_URL}/api/admin/requests/{rid}",
                   headers={"x-admin-password": ADMIN_PASSWORD}, timeout=15).json()
         # Either patient_geo set or null; matching path doesn't depend on it for virtual.
-        # We only assert request was created with virtual format.
-        assert d["request"]["session_format"] == "virtual"
+        assert d["request"]["modality_preference"] == "telehealth_only"
 
 
 class TestAdminRequestDetailDistance:
@@ -196,22 +195,14 @@ class TestAdminRequestDetailDistance:
 
 class TestTherapistSignupGeo:
     def test_signup_geocodes_offices(self, s):
+        from tests.conftest import v2_therapist_signup_payload
         unique = uuid.uuid4().hex[:8]
         email = f"TEST_iter6_t_{unique}@example.com"
-        r = s.post(f"{BASE_URL}/api/therapists/signup", json={
-            "name": "TEST Iter6 Geo Therapist",
-            "email": email,
-            "phone": "208-555-0100",
-            "licensed_states": ["ID"],
-            "office_locations": ["Boise", "Meridian"],
-            "telehealth": True,
-            "specialties": [{"name": "anxiety", "weight": 30}],
-            "modalities": ["CBT"],
-            "ages_served": ["adult-18-64"],
-            "insurance_accepted": [],
-            "cash_rate": 150,
-            "years_experience": 5,
-        }, timeout=10)
+        r = s.post(f"{BASE_URL}/api/therapists/signup", json=v2_therapist_signup_payload(
+            name="TEST Iter6 Geo Therapist",
+            email=email,
+            office_locations=["Boise", "Meridian"],
+        ), timeout=10)
         assert r.status_code == 200, r.text
         # Verify office_geos via admin (find pending therapist)
         ts = s.get(f"{BASE_URL}/api/admin/therapists?pending=true",

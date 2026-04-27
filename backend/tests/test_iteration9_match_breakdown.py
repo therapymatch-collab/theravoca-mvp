@@ -172,7 +172,7 @@ class TestBackwardsCompatLegacyRequest:
             )
             c.close()
 
-        asyncio.get_event_loop().run_until_complete(_unset())
+        asyncio.new_event_loop().run_until_complete(_unset())
 
         # Iter-13: 24h hold — release so apps are visible
         session.post(f"{API}/admin/requests/{rid}/release-results",
@@ -191,6 +191,17 @@ class TestBackwardsCompatLegacyRequest:
 
 
 # ─── Email service: send_patient_results renders chips when bd present ────────
+class _MockDb:
+    """Stand-in for Motor's AsyncIOMotorDatabase. Returns no overrides so
+    email_service falls back to DEFAULTS (no event loop binding required)."""
+
+    class _Coll:
+        async def find_one(self, *args, **kwargs):
+            return None
+
+    email_templates = _Coll()
+
+
 class TestEmailRendering:
     def test_send_patient_results_renders_why_chips(self):
         captured = {}
@@ -230,8 +241,9 @@ class TestEmailRendering:
             }
         ]
 
-        with patch.object(email_service, "_send", new=fake_send):
-            asyncio.get_event_loop().run_until_complete(
+        with patch.object(email_service, "_send", new=fake_send), \
+             patch.object(email_service, "_db", new=lambda: _MockDb()):
+            asyncio.run(
                 email_service.send_patient_results("p@x.com", "r1", applications)
             )
 
@@ -267,8 +279,9 @@ class TestEmailRendering:
             }
         ]
 
-        with patch.object(email_service, "_send", new=fake_send):
-            asyncio.get_event_loop().run_until_complete(
+        with patch.object(email_service, "_send", new=fake_send), \
+             patch.object(email_service, "_db", new=lambda: _MockDb()):
+            asyncio.run(
                 email_service.send_patient_results("p@x.com", "r1", applications)
             )
         html = captured["html"]

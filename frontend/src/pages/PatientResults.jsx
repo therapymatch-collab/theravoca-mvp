@@ -124,18 +124,6 @@ export default function PatientResults() {
             Reach out to whoever feels right — many offer a free consult.
           </p>
 
-          <div className="mt-8 bg-white border border-[#E8E5DF] rounded-2xl p-5 grid sm:grid-cols-3 gap-4 text-sm">
-            <Stat label="Status" value={request.status?.replace("_", " ")} />
-            <Stat
-              label="Therapists notified"
-              value={(request.notified_therapist_ids || []).length}
-            />
-            <Stat
-              label="Responses received"
-              value={hold_active ? applications_pending_count : applications.length}
-            />
-          </div>
-
           {hold_active && (
             <div
               className="mt-6 bg-[#FDF7EC] border border-[#E8DCC1] rounded-2xl p-5 flex items-start gap-3"
@@ -310,17 +298,6 @@ export default function PatientResults() {
         </div>
       </main>
       <Footer />
-    </div>
-  );
-}
-
-function Stat({ label, value }) {
-  return (
-    <div>
-      <div className="text-xs uppercase tracking-[0.15em] text-[#6D6A65]">{label}</div>
-      <div className="font-serif-display text-2xl text-[#2D4A3E] mt-1 capitalize">
-        {value}
-      </div>
     </div>
   );
 }

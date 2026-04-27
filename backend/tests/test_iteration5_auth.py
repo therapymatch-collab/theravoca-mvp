@@ -221,20 +221,8 @@ class TestRegression:
 
     def test_create_request_then_verify_smoke(self):
         # quick e2e to ensure /api/requests still creates + verifies
-        payload = {
-            "name": "TEST_iter5_user",
-            "email": "TEST_iter5_smoke@example.com",
-            "phone": "208-555-0100",
-            "client_age": 30,
-            "location_state": "ID",
-            "state": "ID",
-            "city": "Boise",
-            "presenting_issues": "anxiety, mild depression",
-            "preferred_modality": "telehealth",
-            "payment_type": "cash",
-            "cash_budget": 150,
-            "consent": True,
-        }
+        from tests.conftest import v2_request_payload
+        payload = v2_request_payload(email="TEST_iter5_smoke@example.com")
         r = requests.post(f"{API}/requests", json=payload, timeout=20)
         assert r.status_code in (200, 201), r.text
         body = r.json()

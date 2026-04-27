@@ -1,0 +1,144 @@
+"""Pydantic models for TheraVoca API."""
+from __future__ import annotations
+
+from typing import Optional
+
+from pydantic import BaseModel, EmailStr, Field
+
+
+class Specialty(BaseModel):
+    name: str
+    weight: int = 20
+
+
+class TherapistOut(BaseModel):
+    id: str
+    name: str
+    email: str
+    phone: Optional[str] = None
+    licensed_states: list[str]
+    office_locations: list[str]
+    telehealth: bool
+    specialties: list[Specialty]
+    modalities: list[str]
+    ages_served: list[str]
+    insurance_accepted: list[str]
+    cash_rate: int
+    years_experience: int
+    free_consult: bool
+    bio: Optional[str] = None
+
+
+class TherapistSignup(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    email: EmailStr
+    phone: Optional[str] = ""  # legacy alias for phone_alert
+    phone_alert: Optional[str] = ""  # private — SMS alerts
+    office_phone: Optional[str] = ""  # public — visible to patients
+    gender: Optional[str] = ""
+    licensed_states: list[str] = Field(default_factory=lambda: ["ID"])
+    license_number: Optional[str] = ""
+    license_expires_at: Optional[str] = None  # ISO date
+    license_picture: Optional[str] = None  # base64 data URL
+    client_types: list[str] = Field(default_factory=lambda: ["individual"])
+    age_groups: list[str] = Field(default_factory=list)
+    primary_specialties: list[str] = Field(default_factory=list, max_length=2)
+    secondary_specialties: list[str] = Field(default_factory=list, max_length=3)
+    general_treats: list[str] = Field(default_factory=list, max_length=5)
+    modalities: list[str] = Field(default_factory=list, max_length=6)
+    modality_offering: str = "both"
+    office_locations: list[str] = Field(default_factory=list)
+    insurance_accepted: list[str] = Field(default_factory=list)
+    cash_rate: int = Field(ge=0, le=1000, default=150)
+    sliding_scale: bool = False
+    years_experience: int = Field(ge=0, le=70, default=1)
+    availability_windows: list[str] = Field(default_factory=list)
+    urgency_capacity: str = "within_month"
+    style_tags: list[str] = Field(default_factory=list)
+    free_consult: bool = False
+    bio: Optional[str] = ""
+    profile_picture: Optional[str] = None
+    credential_type: Optional[str] = ""
+    notify_email: bool = True
+    notify_sms: bool = True
+
+
+class RequestCreate(BaseModel):
+    email: EmailStr
+    location_state: str
+    location_city: Optional[str] = ""
+    location_zip: Optional[str] = ""
+    client_type: str
+    age_group: str
+    client_age: Optional[int] = None
+    payment_type: str = "either"
+    insurance_name: Optional[str] = ""
+    budget: Optional[int] = None
+    sliding_scale_ok: bool = False
+    presenting_issues: list[str] = Field(default_factory=list, max_length=3)
+    other_issue: Optional[str] = ""
+    availability_windows: list[str] = Field(default_factory=list)
+    modality_preference: str = "hybrid"
+    modality_preferences: list[str] = Field(default_factory=list)
+    urgency: str = "flexible"
+    prior_therapy: str = "not_sure"
+    prior_therapy_notes: Optional[str] = ""
+    experience_preference: str = "no_pref"
+    gender_preference: str = "no_pref"
+    gender_required: bool = False
+    style_preference: list[str] = Field(default_factory=list)
+    referral_source: Optional[str] = ""
+
+
+class RequestOut(BaseModel):
+    id: str
+    email: str
+    client_age: int
+    location_state: str
+    location_city: Optional[str] = ""
+    location_zip: Optional[str] = ""
+    session_format: str
+    payment_type: str
+    insurance_name: Optional[str] = ""
+    budget: Optional[int] = None
+    presenting_issues: str
+    preferred_gender: Optional[str] = ""
+    preferred_modality: Optional[str] = ""
+    other_notes: Optional[str] = ""
+    referral_source: Optional[str] = ""
+    verified: bool
+    status: str
+    threshold: float
+    notified_count: int = 0
+    created_at: str
+    results_sent_at: Optional[str] = None
+
+
+class TherapistApplyIn(BaseModel):
+    message: str = Field(default="", max_length=1500)
+
+
+class TherapistDeclineIn(BaseModel):
+    reason_codes: list[str] = Field(default_factory=list, max_length=6)
+    notes: str = Field(default="", max_length=500)
+
+
+class ApplicationOut(BaseModel):
+    id: str
+    request_id: str
+    therapist_id: str
+    therapist_name: str
+    match_score: float
+    message: str
+    created_at: str
+
+
+class MagicCodeRequest(BaseModel):
+    email: EmailStr
+    role: str  # patient | therapist
+
+
+class MagicCodeVerify(BaseModel):
+    email: EmailStr
+    role: str
+    code: str

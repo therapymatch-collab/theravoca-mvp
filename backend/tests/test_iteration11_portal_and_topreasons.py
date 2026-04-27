@@ -43,7 +43,7 @@ def _therapist_session(email: str) -> str | None:
     )
     if r.status_code != 200:
         return None
-    code = asyncio.get_event_loop().run_until_complete(_latest_code(email, "therapist"))
+    code = asyncio.new_event_loop().run_until_complete(_latest_code(email, "therapist"))
     if not code:
         return None
     r2 = requests.post(

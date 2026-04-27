@@ -360,8 +360,11 @@ class TestRegression:
         assert r.json().get("status") == "ok"
 
     def test_request_code_patient(self, session):
+        # Use a unique email each run to avoid the 5-per-hour magic-code rate limit
+        import uuid
+        email = f"test_rc_{uuid.uuid4().hex[:8]}@example.com"
         r = session.post(f"{API}/auth/request-code",
-                         json={"email": "test+rc@example.com", "role": "patient"}, timeout=10)
+                         json={"email": email, "role": "patient"}, timeout=10)
         assert r.status_code == 200
         assert r.json().get("ok") is True
 
