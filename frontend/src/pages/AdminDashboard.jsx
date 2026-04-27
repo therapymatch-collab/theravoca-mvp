@@ -16,6 +16,7 @@ import {
   Pencil,
   MessageSquare,
   Mail,
+  UserPlus,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
@@ -128,6 +129,7 @@ export default function AdminDashboard() {
   const [outreach, setOutreach] = useState(null);
   const [outreachLoading, setOutreachLoading] = useState(false);
   const [outreachShowAll, setOutreachShowAll] = useState(false);
+  const [convertingInviteId, setConvertingInviteId] = useState(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -361,6 +363,33 @@ export default function AdminDashboard() {
       setOutreachLoading(false);
     }
   }, [client]);
+
+  const convertInvite = useCallback(
+    async (invite) => {
+      const inviteId = invite?.id;
+      const cand = invite?.candidate || {};
+      if (!inviteId) return;
+      const ok = window.confirm(
+        `Convert "${cand.name || "this invite"}" to a draft therapist profile?\n\n` +
+        `This creates an INVITED therapist record (carries name/email/license/specialties), ` +
+        `which the admin can then approve once they finish onboarding.`,
+      );
+      if (!ok) return;
+      setConvertingInviteId(inviteId);
+      try {
+        const res = await client.post(`/admin/outreach/${inviteId}/convert`);
+        toast.success(
+          `Converted to therapist (id ${(res.data?.therapist_id || "").slice(0, 8)}…)`,
+        );
+        await loadOutreach();
+      } catch (err) {
+        toast.error(err?.response?.data?.detail || "Conversion failed");
+      } finally {
+        setConvertingInviteId(null);
+      }
+    },
+    [client, loadOutreach],
+  );
 
   const saveRefOptions = async (next) => {
     setRefSavingOptions(true);
@@ -982,6 +1011,7 @@ export default function AdminDashboard() {
                                 <Th>Why we invited them</Th>
                                 <Th>Referral</Th>
                                 <Th>Sent</Th>
+                                <Th>Action</Th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1039,6 +1069,32 @@ export default function AdminDashboard() {
                                       {inv.created_at
                                         ? new Date(inv.created_at).toLocaleDateString()
                                         : "—"}
+                                    </td>
+                                    <td className="p-4">
+                                      {inv.status === "converted" ? (
+                                        <span
+                                          className="inline-flex items-center gap-1 text-[11px] text-[#2D4A3E] bg-[#F2F4F0] border border-[#D9DDD2] rounded-full px-2 py-0.5"
+                                          data-testid={`invited-converted-${idx}`}
+                                        >
+                                          <CheckCircle2 size={11} /> Converted
+                                        </span>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => convertInvite(inv)}
+                                          disabled={convertingInviteId === inv.id}
+                                          className="inline-flex items-center gap-1 text-[11px] bg-[#2D4A3E] text-white rounded-md px-2.5 py-1 hover:bg-[#3A5E50] disabled:opacity-60 disabled:cursor-not-allowed transition"
+                                          data-testid={`invited-convert-${idx}`}
+                                          title="Create a draft therapist profile from this invite"
+                                        >
+                                          {convertingInviteId === inv.id ? (
+                                            <Loader2 size={11} className="animate-spin" />
+                                          ) : (
+                                            <UserPlus size={11} />
+                                          )}
+                                          Convert to signup
+                                        </button>
+                                      )}
                                     </td>
                                   </tr>
                                 );

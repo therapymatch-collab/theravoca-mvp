@@ -251,11 +251,20 @@ export default function PatientResults() {
                             />
                           )}
                           {t.office_addresses && t.office_addresses.length > 0 ? (
-                            <Detail
-                              label="Office"
-                              value={t.office_addresses.slice(0, 1).join(" · ")}
-                              span={2}
-                            />
+                            <div className="col-span-2 text-xs">
+                              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">
+                                Office
+                              </div>
+                              <a
+                                href={`https://maps.google.com/?q=${encodeURIComponent(t.office_addresses[0])}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-medium text-[#2D4A3E] underline decoration-dotted underline-offset-2 hover:text-[#C87965] break-words"
+                                data-testid={`therapist-office-map-${i}`}
+                              >
+                                {t.office_addresses[0]}
+                              </a>
+                            </div>
                           ) : t.office_locations && t.office_locations.length > 0 ? (
                             <Detail
                               label="Offices"

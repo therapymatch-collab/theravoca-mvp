@@ -196,9 +196,24 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 - A11y polish (DialogDescription on remaining dialogs)
 
 ## Test Status
-- **148 tests passing** locally (post iter-17): `pytest tests/ -p no:cacheprovider`
+- **152+ tests passing** locally (post iter-38): `pytest tests/ -p no:cacheprovider`
 - 1 skip (network-dependent geocoding warm-up)
 - 0 failures
+- Iter-38 added 4 new tests for the outreach-invite → therapist conversion flow.
+
+## Recent Changes Log
+- **Iter-38 (Feb 2026)**:
+  - Added clickable Google Maps link on patient results for therapists with full
+    `office_addresses` (`PatientResults.jsx` → `data-testid="therapist-office-map-{i}"`).
+  - New endpoint `POST /api/admin/outreach/{invite_id}/convert` migrates an
+    `outreach_invites` row into a draft `therapists` doc with
+    `source="invited"`, `signup_status="invited"`, `pending_approval=True`,
+    `is_active=False`. Original invite gets `status="converted"` +
+    `converted_therapist_id` for audit.
+  - Admin Invited Therapists tab gets a new "Action" column with
+    "Convert to signup" button (shows "Converted" badge after success).
+  - Tests: `tests/test_iteration38_outreach_convert.py` covers happy path,
+    duplicate convert (409), pre-existing therapist email (409), unknown id (404).
 
 ## Key DB Schemas
 

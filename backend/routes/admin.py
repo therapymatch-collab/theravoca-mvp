@@ -370,6 +370,123 @@ async def admin_list_outreach(_: bool = Depends(require_admin)):
     return {"invites": docs, "total": len(docs)}
 
 
+@router.post("/admin/outreach/{invite_id}/convert")
+async def admin_convert_outreach_invite(
+    invite_id: str, _: bool = Depends(require_admin),
+):
+    """Convert an LLM-invited candidate (`outreach_invites`) into a draft
+    therapist profile (`therapists`). Carries over name/email/license/city/state
+    /specialties/modalities. The new therapist starts in an `invited` state —
+    invisible to matching, awaiting therapist completion + admin approval.
+    The original `outreach_invites` row is kept and flagged as `converted` for
+    audit trail, with `converted_therapist_id` pointing to the new profile."""
+    import uuid as _uuid
+
+    invite = await db.outreach_invites.find_one({"id": invite_id}, {"_id": 0})
+    if not invite:
+        raise HTTPException(404, "Outreach invite not found")
+    if invite.get("status") == "converted":
+        raise HTTPException(
+            409,
+            f"Already converted to therapist {invite.get('converted_therapist_id', '')}",
+        )
+
+    candidate = invite.get("candidate") or {}
+    email = (candidate.get("email") or "").strip().lower()
+    name = (candidate.get("name") or "").strip()
+    if not email or not name:
+        raise HTTPException(400, "Invite missing name or email")
+
+    existing = await db.therapists.find_one(
+        {"email": email}, {"_id": 0, "id": 1, "name": 1},
+    )
+    if existing:
+        raise HTTPException(
+            409,
+            f"A therapist with email {email} already exists (id={existing['id']}).",
+        )
+
+    # Map LLM credential abbreviation → our credential_type values.
+    license_type = (candidate.get("license_type") or "").upper().strip()
+    credential_type = license_type if license_type else "Other"
+
+    state = (candidate.get("state") or "ID").upper()
+    city = (candidate.get("city") or "").strip()
+    office_locations = [city] if city else []
+    specialties = candidate.get("specialties") or []
+    modalities = candidate.get("modalities") or []
+
+    tid = str(_uuid.uuid4())
+    referral_code = _uuid.uuid4().hex[:8].upper()
+    therapist_doc = {
+        "id": tid,
+        "name": name,
+        "email": email,
+        "phone": "",
+        "phone_alert": "",
+        "office_phone": "",
+        "gender": "",
+        "credential_type": credential_type,
+        "licensed_states": [state],
+        "license_number": "",
+        "license_expires_at": None,
+        "license_picture": "",
+        "client_types": [],
+        "age_groups": [],
+        "primary_specialties": specialties,
+        "secondary_specialties": [],
+        "general_treats": [],
+        "modalities": modalities,
+        "modality_offering": "telehealth",
+        "telehealth": True,
+        "offers_in_person": False,
+        "office_locations": office_locations,
+        "office_addresses": [],
+        "office_geos": [],
+        "website": "",
+        "insurance_accepted": [],
+        "cash_rate": None,
+        "sliding_scale": False,
+        "free_consult": False,
+        "years_experience": None,
+        "availability_windows": [],
+        "urgency_capacity": False,
+        "style_tags": [],
+        "bio": "",
+        "profile_picture": "",
+        "notify_email": True,
+        "notify_sms": False,
+        "referral_code": referral_code,
+        "source": "invited",
+        "signup_status": "invited",
+        "is_active": False,
+        "pending_approval": True,
+        "subscription_status": "incomplete",
+        "stripe_customer_id": None,
+        "stripe_subscription_id": None,
+        "trial_ends_at": None,
+        "current_period_end": None,
+        "outreach_invite_id": invite_id,
+        "outreach_request_id": invite.get("request_id"),
+        "created_at": _now_iso(),
+    }
+    await db.therapists.insert_one(therapist_doc.copy())
+    await db.outreach_invites.update_one(
+        {"id": invite_id},
+        {"$set": {
+            "status": "converted",
+            "converted_therapist_id": tid,
+            "converted_at": _now_iso(),
+        }},
+    )
+    return {
+        "ok": True,
+        "therapist_id": tid,
+        "invite_id": invite_id,
+        "status": "invited",
+    }
+
+
 @router.get("/admin/referral-sources")
 async def admin_referral_sources(
     start: Optional[str] = None,
