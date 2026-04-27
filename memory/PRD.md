@@ -202,6 +202,16 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 - Iter-38 added 4 new tests for the outreach-invite → therapist conversion flow.
 
 ## Recent Changes Log
+- **Iter-39 (Feb 2026)**:
+  - Outreach agent now **dedupes LLM candidates** against (a) existing
+    `therapists.email` and (b) all prior `outreach_invites.candidate.email`.
+    Email match is case-insensitive. Over-fetches 2× from the LLM (cap 60) so
+    dedupe doesn't shrink the final invite count below the requested target.
+  - `run_outreach_for_request` response now includes
+    `skipped_existing_therapist`, `skipped_prior_invite`, `candidates_raw` for
+    visibility/audit.
+  - Tests: `tests/test_iteration39_outreach_dedupe.py` (3 cases — therapist
+    dedupe, prior-invite dedupe, empty/missing email handling).
 - **Iter-38 (Feb 2026)**:
   - Added clickable Google Maps link on patient results for therapists with full
     `office_addresses` (`PatientResults.jsx` → `data-testid="therapist-office-map-{i}"`).

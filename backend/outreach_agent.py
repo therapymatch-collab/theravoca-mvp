@@ -167,6 +167,57 @@ async def _send_outreach_invite(
         return False
 
 
+async def _filter_existing_emails(candidates: list[dict]) -> tuple[list[dict], dict]:
+    """Drop candidates whose email already lives in `therapists` or in any prior
+    `outreach_invites`. Email match is case-insensitive.
+
+    Returns `(filtered, stats)` where `stats` reports how many were skipped and why.
+    """
+    if not candidates:
+        return [], {"skipped_existing_therapist": 0, "skipped_prior_invite": 0}
+
+    emails = sorted(
+        {(c.get("email") or "").strip().lower() for c in candidates if c.get("email")}
+    )
+    if not emails:
+        return [], {"skipped_existing_therapist": 0, "skipped_prior_invite": 0}
+
+    # Existing therapists in our directory.
+    therapist_rows = await db.therapists.find(
+        {"email": {"$in": emails}}, {"_id": 0, "email": 1},
+    ).to_list(length=len(emails))
+    therapist_emails = {(r.get("email") or "").lower() for r in therapist_rows}
+
+    # Already-sent outreach invites (any request).
+    invite_rows = await db.outreach_invites.find(
+        {"candidate.email": {"$in": emails}}, {"_id": 0, "candidate.email": 1},
+    ).to_list(length=10_000)
+    invite_emails = {
+        ((r.get("candidate") or {}).get("email") or "").lower() for r in invite_rows
+    }
+
+    skip_t = 0
+    skip_i = 0
+    out: list[dict] = []
+    for c in candidates:
+        e = (c.get("email") or "").strip().lower()
+        if not e:
+            continue
+        if e in therapist_emails:
+            skip_t += 1
+            logger.info("Outreach: skipping %s (already in therapists directory)", e)
+            continue
+        if e in invite_emails:
+            skip_i += 1
+            logger.info("Outreach: skipping %s (already invited previously)", e)
+            continue
+        out.append(c)
+    return out, {
+        "skipped_existing_therapist": skip_t,
+        "skipped_prior_invite": skip_i,
+    }
+
+
 async def run_outreach_for_request(request_id: str) -> dict[str, Any]:
     """Top-level entrypoint. Idempotent via `outreach_run_at` flag."""
     req = await db.requests.find_one(
@@ -181,7 +232,11 @@ async def run_outreach_for_request(request_id: str) -> dict[str, Any]:
     if needed <= 0:
         return {"skipped": "no_outreach_needed"}
 
-    candidates = await _find_candidates(req, count=needed)
+    # Over-fetch from the LLM so dedupe doesn't shrink us below `needed`. Cap at 2x.
+    raw_candidates = await _find_candidates(req, count=min(needed * 2, 60))
+    candidates, dedupe_stats = await _filter_existing_emails(raw_candidates)
+    candidates = candidates[:needed]
+
     sent = 0
     for c in candidates:
         ok = await _send_outreach_invite(c, req)
@@ -207,7 +262,10 @@ async def run_outreach_for_request(request_id: str) -> dict[str, Any]:
     return {
         "ok": True,
         "candidates_found": len(candidates),
+        "candidates_raw": len(raw_candidates),
         "emails_sent": sent,
+        "skipped_existing_therapist": dedupe_stats["skipped_existing_therapist"],
+        "skipped_prior_invite": dedupe_stats["skipped_prior_invite"],
         "request_id": request_id,
     }
 
