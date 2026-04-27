@@ -511,13 +511,14 @@ export default function TherapistSignup() {
                 For licensed therapists
               </p>
               <h1 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] leading-[1.05]">
-                <em className="not-italic text-[#C87965]">Grow</em> your practice
-                without the marketing grind.
+                You focus on <em className="not-italic text-[#C87965]">care</em> —
+                we provide the referrals.
               </h1>
               <p className="mt-5 text-[#2B2A29]/80 leading-relaxed">
-                We send you pre-screened referrals so you can save billable hours
-                while growing your private practice. You focus on care — we handle
-                the matching.
+                Marketing yourself to attract the right patients can feel
+                frustrating and time-consuming. We do all the work by sending
+                pre-screened referrals straight to your inbox — so you can spend
+                your hours on clients, not on SEO.
               </p>
               <div className="mt-6 inline-flex items-center gap-3 bg-white border border-[#E8E5DF] rounded-2xl px-4 py-3">
                 <div className="w-2 h-2 rounded-full bg-[#2D4A3E]" />
@@ -580,19 +581,19 @@ export default function TherapistSignup() {
               {[
                 {
                   t: "Only ideal-fit referrals",
-                  d: "We notify you when a patient scores ≥ 70% on your specialties, schedule, and preferences.",
-                },
-                {
-                  t: "30-day free trial, then $45/month",
-                  d: "Cancel anytime. No setup fees, no per-referral charges, no hidden costs.",
+                  d: "You'll receive patient leads aligned with your specialties, schedule, and preferences — every match scores ≥ 70% before we even tell you about it.",
                 },
                 {
                   t: "You're always in control",
-                  d: "Review each referral and opt-in (or pass) — no obligations, no explanation needed.",
+                  d: "Review each referral and choose whether to opt in. No pressure, no obligations, no explanations needed.",
                 },
                 {
-                  t: "Patients reach out directly",
-                  d: "When you opt-in, the patient sees your full profile and contact info.",
+                  t: "No public profile, no spam",
+                  d: "Your information stays private unless you say \"yes\" to a specific match. No directory listing, no cold outreach from anyone but us.",
+                },
+                {
+                  t: "30-day free trial, then $45/month",
+                  d: "Cancel anytime. No setup fees, no per-referral charges, no hidden costs — and patients reach out directly once you opt in.",
                 },
               ].map((b) => (
                 <li
@@ -624,9 +625,9 @@ export default function TherapistSignup() {
                 Get more <em className="not-italic text-[#C87965]">targeted</em> patient referrals.
               </h2>
               <p className="mt-4 text-[#2B2A29]/80 leading-relaxed max-w-xl mx-auto">
-                Build your TheraVoca profile below — patients pre-screened by your
-                specialties, schedule, and rates will land directly in your inbox.
-                Approval typically takes 1 business day.
+                Build your TheraVoca profile below — patients pre-screened by
+                your specialties, schedule, and rates land directly in your
+                inbox. Most profiles approved within 1 business day.
               </p>
             </div>
             <div
