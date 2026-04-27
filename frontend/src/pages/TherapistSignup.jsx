@@ -603,7 +603,10 @@ export default function TherapistSignup() {
                         data-testid="signup-website"
                       />
                     </Field>
-                    <Field label="Phone — private (SMS alerts only)">
+                    <Field
+                      label="Phone (private, alerts)"
+                      hint="We use this only for SMS alerts — never shown to patients."
+                    >
                       <Input
                         value={data.phone_alert || data.phone}
                         onChange={(e) => set("phone_alert", e.target.value)}
@@ -612,7 +615,10 @@ export default function TherapistSignup() {
                         data-testid="signup-phone-alert"
                       />
                     </Field>
-                    <Field label="Office phone — public (patients see this)">
+                    <Field
+                      label="Office phone (public)"
+                      hint="Patients see this number on your profile."
+                    >
                       <Input
                         value={data.office_phone}
                         onChange={(e) => set("office_phone", e.target.value)}

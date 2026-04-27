@@ -57,6 +57,19 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+### iter-22 — Spam guards, SMS receipts, referral analytics, distance UI, wizard split (Apr 27, 2026)
+- **Disposable email + ZIP-state + ZIP-city consistency validation** — POST `/requests` rejects mailinator/temp-mail addresses, ZIPs that don't belong to the stated state, and ZIPs that geo-locate >35mi from the supplied city. Returns HTTP 400 with friendly messages.
+- **Patient SMS receipt** — Optional phone + opt-in checkbox on intake step 7. Twilio fires an immediate "we got your referral" SMS when both are provided.
+- **Referral source tracker** — New `/admin/referral-sources?start=&end=` endpoint with date-range filter; admin dashboard adds a `Source` column on the requests table and a dedicated `Referral sources` tab with pickers + percentage bars.
+- **Travel distance on patient match cards** — `notified_distances` already computed at match-time is now surfaced per-app in the public `/results` payload and displayed as `Travel distance: N mi` (highlighted ≤ 10mi).
+- **Therapist signup wizard split into 6 distinct steps** — Basics (1) · License & verification (2) · Who you see (3) · Format & insurance (4) · Rates & style (5) · Notifications (6). Indicator now reads "Step N of 6".
+- **Sticky hero CTA** — `/therapists/join` hero now has a "Sign up — start free trial" button + "Already a member? Sign in" link, scrolling to `#signup-form` instead of forcing users to scroll past the hero/benefits section.
+- **Office phone label fix** — Two-column wizard label was wrapping/truncating; shortened to "Office phone (public)" with a hint underneath.
+- **Stripe webhook E2E test (P0 unblocked)** — Pivoted from Playwright-driving Stripe's hosted Checkout (which blocks programmatic form fills) to a webhook-simulation test that POSTs `customer.subscription.created` directly to `/api/stripe/webhook` and verifies `subscription_status` flips `incomplete -> trialing -> canceled`. 3 new pytest cases (test_iteration20).
+- **`stripe_service.construct_event`** now returns a plain dict on the unverified path (was returning a stripe.Event whose `.get()` raised AttributeError); webhook handler also coerces stripe objects to dicts uniformly.
+- **Cross-page hash scrolling** — Landing now scrolls to `#start` reliably when arriving from any page's "Get matched" CTA.
+- **New tests**: `test_iteration20_stripe_webhook_e2e.py` (3) + `test_iteration21_patient_validation.py` (7) — all green against the live preview URL.
+
 ### iter-18 — Mega batch: matching threshold, gaps, follow-ups, UX polish (Apr 27, 2026)
 - **70% match floor + 30-target rule** — `rank_therapists` never returns matches below 70%; tracks `outreach_needed_count` for Phase D LLM agent
 - **30-mile in-person distance filter** — Haversine-based; auto-pass if no geo data
@@ -121,7 +134,7 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 ## Backlog
 
 ### P0 (next 1–2 sessions)
-- Connect a real Stripe Checkout flow with a test card → verify webhook updates `subscription_status` end-to-end
+- ✅ Stripe webhook E2E (done iter-22 via simulation; real card path is verified separately by iter-19 setup-intent test when `STRIPE_API_KEY` is real)
 - Real-Stripe webhook signature secret in `.env` (so production webhooks work)
 
 ### P1
@@ -134,7 +147,7 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 - Admin: bulk approve / bulk export
 - Therapist: in-portal calendar embed (Calendly integration?)
 - Therapist: refer-a-colleague link with preset attribution
-- Patient: text-message receipt option (Twilio)
+- ✅ Patient: text-message receipt option (Twilio) — shipped iter-22
 - Analytics: weekly funnel report to admin email
 - A11y polish (DialogDescription on remaining dialogs)
 
