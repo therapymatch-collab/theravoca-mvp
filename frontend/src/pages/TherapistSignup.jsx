@@ -597,20 +597,20 @@ export default function TherapistSignup() {
             <ul className="grid sm:grid-cols-2 gap-4 text-sm text-[#2B2A29]">
               {[
                 {
-                  t: "Only ideal-fit, transparent referrals",
-                  d: "You'll only hear about patient leads aligned with your specialties, schedule, and preferences — every match scores ≥ 70% before we even tell you about it. Each referral comes with a plain-English breakdown of why we matched you, plus a Gaps section showing exactly what kept the score from hitting 100%.",
+                  t: "Only ideal-fit referrals",
+                  d: "Pre-screened patient leads aligned with your specialties and schedule. Every match scores ≥ 70%.",
                 },
                 {
-                  t: "You're always in control — and private by default",
-                  d: "Review each referral and choose whether to opt in. No pressure, no obligations, no explanations needed. Your information stays private unless you say \"yes\" to a specific match — no public directory listing, no cold outreach from anyone but us.",
+                  t: "You're always in control",
+                  d: "Review each referral and opt in — or pass. No pressure, no obligations.",
                 },
                 {
-                  t: "Save your billable hours — peers you can trust",
-                  d: "No SEO content to write, no paid ads to run, no profile to maintain. We handle pre-screening, intake, and routing — you handle the session. Every TheraVoca therapist is license-verified by our team before going live, so you're sharing the network with vetted clinicians, not bots or unlicensed life-coaches.",
+                  t: "No public profile, no spam",
+                  d: "Your info stays private until you say yes to a specific match.",
                 },
                 {
                   t: "30-day free trial, then $45/month",
-                  d: "Cancel anytime. No setup fees, no per-referral charges, no hidden costs — and patients reach out directly once you opt in.",
+                  d: "Cancel anytime. No setup fees, no per-referral charges, no hidden costs.",
                 },
               ].map((b) => (
                 <li

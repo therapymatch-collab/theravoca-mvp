@@ -117,11 +117,11 @@ export default function Landing() {
               />
             </div>
             <div className="absolute -bottom-6 -left-6 bg-white border border-[#E8E5DF] rounded-2xl px-5 py-4 shadow-sm hidden sm:flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#2D4A3E] text-white flex items-center justify-center font-serif-display text-lg">
-                24
+              <div className="w-12 h-12 rounded-full bg-[#2D4A3E] text-white flex flex-col items-center justify-center font-serif-display leading-none">
+                <div className="text-base font-semibold">24h</div>
               </div>
               <div className="text-sm">
-                <div className="font-semibold text-[#2B2A29]">hour turnaround</div>
+                <div className="font-semibold text-[#2B2A29]">24-hour turnaround</div>
                 <div className="text-[#6D6A65]">to therapist matches</div>
               </div>
             </div>
