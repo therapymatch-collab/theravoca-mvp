@@ -167,6 +167,20 @@ export default function IntakeForm() {
       .catch(() => setReferralSourceOptions([]));
   }, []);
 
+  // ── Refer-a-friend capture: `?ref=PATXXXXX` on the landing URL — we
+  // forward this to the backend as `referred_by_patient_code`, and pre-select
+  // "Friend / family" for `referral_source` if no value has been chosen yet.
+  const [referredByPatientCode, setReferredByPatientCode] = useState(null);
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get("ref");
+    if (ref && /^[A-Z0-9]{4,16}$/i.test(ref)) {
+      setReferredByPatientCode(ref.toUpperCase());
+      setData((d) =>
+        d.referral_source ? d : { ...d, referral_source: "Friend / family" },
+      );
+    }
+  }, []);
+
   // ── ZIP validation: state-prefix sanity (catches "10001 in Idaho" before
   // the user moves on, instead of failing at final submit). Mirrors the
   // backend's zip3-prefix table.
@@ -246,6 +260,7 @@ export default function IntakeForm() {
       const payload = {
         ...data,
         referral_source: refSrc,
+        referred_by_patient_code: referredByPatientCode,
         budget: data.budget ? parseInt(data.budget, 10) : null,
       };
       delete payload.referral_source_other;

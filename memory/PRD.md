@@ -202,6 +202,34 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 - Iter-38 added 4 new tests for the outreach-invite → therapist conversion flow.
 
 ## Recent Changes Log
+- **Iter-41 (Feb 2026)**:
+  - **LLM review-research agent** (`review_research_agent.py`) — Claude
+    Sonnet 4.5 is asked to recall *high-confidence* public review data for a
+    therapist across Psychology Today / Google / Yelp / Healthgrades. We
+    sanitize aggressively: drop sources with `count < 10`, weight-average
+    rating by count, persist `review_avg`, `review_count`, `review_sources`,
+    `review_research_source: "llm_estimate"`. The matching engine's existing
+    `reviews` axis (+5 max) automatically picks them up — top-rated
+    therapists get a small ranking boost.
+  - Admin endpoints: `POST /admin/therapists/{id}/research-reviews` (single)
+    and `POST /admin/therapists/research-reviews-all` (cron-friendly bulk).
+  - Admin "Research reviews" toolbar button wired to bulk run.
+  - Patient match cards now show a small `4.7★ · 80 reviews` badge under the
+    therapist name when `review_count >= 10` and `review_avg >= 4.0`.
+  - Tests: `tests/test_iteration41_review_research.py` (5 cases — weight
+    averaging, low-volume drop, empty input, invalid rating, matching axis
+    integration).
+- **Iter-40 (Feb 2026)**:
+  - **Patient refer-a-friend** attribution: every new request gets a unique
+    8-char `patient_referral_code` issued on creation. The `?ref=` query param
+    on the landing page is captured by `IntakeForm.jsx` and posted as
+    `referred_by_patient_code`. PatientResults shows a "Copy invite link"
+    tile (`data-testid="refer-friend-tile"`). Plain attribution — no
+    incentives wired (per user direction).
+  - Therapist refer-a-colleague tile already shipped earlier (TherapistPortal).
+  - Tests: `tests/test_iteration40_patient_referral.py` (4 cases — code
+    issuance, uniqueness, persistence on referred patients, results-endpoint
+    exposure).
 - **Iter-39 (Feb 2026)**:
   - Outreach agent now **dedupes LLM candidates** against (a) existing
     `therapists.email` and (b) all prior `outreach_invites.candidate.email`.

@@ -17,6 +17,7 @@ import {
   MessageSquare,
   Mail,
   UserPlus,
+  Star,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
@@ -269,6 +270,27 @@ export default function AdminDashboard() {
     }
   };
 
+  const [researchingReviews, setResearchingReviews] = useState(false);
+  const runReviewResearch = async () => {
+    if (!confirm(
+      "Run LLM review research across all active therapists who haven't been researched in 30+ days?\n\n" +
+      "This calls Claude Sonnet 4.5 to recall public review data (Psychology Today, Google, Yelp, Healthgrades). " +
+      "It can take several minutes for large batches. Found data is folded into the matching score automatically."
+    )) return;
+    setResearchingReviews(true);
+    try {
+      const res = await client.post("/admin/therapists/research-reviews-all", { limit: 100 });
+      toast.success(
+        `Researched ${res.data.researched} therapists — ${res.data.with_data} had verifiable review data.`,
+      );
+      refresh();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Review research failed");
+    } finally {
+      setResearchingReviews(false);
+    }
+  };
+
   const releaseResults = async (rid) => {
     try {
       await client.post(`/admin/requests/${rid}/release-results`, {});
@@ -428,6 +450,20 @@ export default function AdminDashboard() {
                 title="Complete every therapist profile with realistic fake data"
               >
                 Backfill profiles
+              </button>
+              <button
+                className="tv-btn-secondary !py-2 !px-4 text-sm disabled:opacity-60"
+                onClick={runReviewResearch}
+                disabled={researchingReviews}
+                data-testid="research-reviews-btn"
+                title="LLM-research public reviews for therapists (folds into match score)"
+              >
+                {researchingReviews ? (
+                  <Loader2 size={14} className="inline mr-1.5 animate-spin" />
+                ) : (
+                  <Star size={14} className="inline mr-1.5" />
+                )}
+                Research reviews
               </button>
               <button
                 className="tv-btn-secondary !py-2 !px-4 text-sm"

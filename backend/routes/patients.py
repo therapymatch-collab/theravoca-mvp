@@ -54,6 +54,8 @@ async def create_request(payload: RequestCreate):
 
     rid = str(uuid.uuid4())
     token = secrets.token_urlsafe(24)
+    # 8-char base32-ish referral code patients can share with friends.
+    patient_referral_code = uuid.uuid4().hex[:8].upper()
     patient_geo = None
     if payload.location_zip:
         coords = await geocode_zip(db, payload.location_zip)
@@ -67,6 +69,7 @@ async def create_request(payload: RequestCreate):
     doc = {
         "id": rid,
         **payload.model_dump(),
+        "patient_referral_code": patient_referral_code,
         "patient_geo": patient_geo,
         "verification_token": token,
         "verified": False,

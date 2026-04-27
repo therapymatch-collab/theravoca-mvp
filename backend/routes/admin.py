@@ -607,6 +607,29 @@ async def admin_update_therapist_reviews(
     return {"ok": True, "review_avg": avg, "review_count": cnt}
 
 
+@router.post("/admin/therapists/{therapist_id}/research-reviews")
+async def admin_research_therapist_reviews(
+    therapist_id: str, _: bool = Depends(require_admin),
+):
+    """Run the LLM review-research agent against one therapist. Persists
+    `review_avg` / `review_count` / `review_sources` if the agent finds high-
+    confidence data; otherwise records `review_research_attempted_at` so we
+    don't re-run for 30 days."""
+    from review_research_agent import research_reviews_for_therapist
+    return await research_reviews_for_therapist(therapist_id)
+
+
+@router.post("/admin/therapists/research-reviews-all")
+async def admin_research_all_reviews(
+    payload: dict | None = None, _: bool = Depends(require_admin),
+):
+    """Bulk-run review research across all active therapists not researched in
+    the last 30 days. Optional `limit` (default 100) caps the batch."""
+    from review_research_agent import research_reviews_for_all
+    limit = int((payload or {}).get("limit") or 100)
+    return await research_reviews_for_all(limit=limit)
+
+
 @router.post("/admin/seed/reset")
 async def admin_seed_reset(_: bool = Depends(require_admin)):
     """DESTRUCTIVE — clears requests/applications/declines/therapists/magic_codes

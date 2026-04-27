@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Loader2, Phone, Mail, Star, Sparkles, CalendarPlus, Send, Inbox, CheckCircle2, Clock, ArrowRight } from "lucide-react";
+import { toast } from "sonner";
+import { Loader2, Phone, Mail, Star, Sparkles, CalendarPlus, Send, Inbox, CheckCircle2, Clock, ArrowRight, Share2 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { api } from "@/lib/api";
 import { RESULTS_POLL_INTERVAL_MS } from "@/lib/constants";
@@ -14,6 +15,7 @@ const AXIS_META = {
   urgency: { max: 10, label: "Can take you on quickly" },
   prior_therapy: { max: 10, label: "Right fit for your therapy history" },
   experience: { max: 5, label: "Matches your experience preference" },
+  reviews: { max: 5, label: "Highly rated online" },
   gender: { max: 3, label: "Matches your gender preference" },
   style: { max: 2, label: "Aligns with your style preference" },
   payment_fit: { max: 3, label: "Open to your budget on a sliding scale" },
@@ -229,6 +231,16 @@ export default function PatientResults() {
                         <div className="text-xs text-[#6D6A65] mt-0.5">
                           {t.years_experience || "—"} yrs •{" "}
                           {(t.modalities || []).slice(0, 3).join(" · ") || "—"}
+                          {t.review_count >= 10 && t.review_avg >= 4.0 && (
+                            <span
+                              className="ml-2 inline-flex items-center gap-1 text-[10px] text-[#C87965] bg-[#FDFBF7] border border-[#E8E5DF] rounded-full px-1.5 py-0.5 align-middle"
+                              data-testid={`review-badge-${i}`}
+                              title={`Aggregated from ${(t.review_sources || []).map((s) => s.platform).join(", ") || "online sources"}`}
+                            >
+                              <Star size={9} fill="currentColor" />
+                              {t.review_avg.toFixed(1)} · {t.review_count} reviews
+                            </span>
+                          )}
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 mt-3 text-xs">
                           <Detail label="Format" value={formatStr} />
@@ -359,6 +371,12 @@ export default function PatientResults() {
             </div>
           )}
 
+          {/* Refer-a-friend — quietly suggest the patient share TheraVoca with
+              someone they know who's looking. Plain attribution, no incentive. */}
+          {request?.patient_referral_code && (
+            <ReferFriendTile code={request.patient_referral_code} />
+          )}
+
           {/* "Try again" — give patients a way to re-run intake if matches don't feel right.
               We send them back to /#start — the homepage's intake form is the canonical entry. */}
           {!hold_active && applications.length > 0 && (
@@ -394,6 +412,43 @@ export default function PatientResults() {
       </main>
       <Footer />
     </div>
+  );
+}
+
+function ReferFriendTile({ code }) {
+  const link = `${window.location.origin}/?ref=${code}`;
+  const copy = () => {
+    navigator.clipboard
+      .writeText(link)
+      .then(() => toast.success("Invite link copied!"))
+      .catch(() => toast.error("Couldn't copy link"));
+  };
+  return (
+    <section
+      className="mt-8 bg-white border border-[#E8E5DF] rounded-2xl p-5 sm:p-6 flex items-start justify-between gap-4 flex-wrap"
+      data-testid="refer-friend-tile"
+    >
+      <div className="flex items-start gap-3 flex-1 min-w-[220px]">
+        <Share2 size={18} className="text-[#C87965] mt-1 shrink-0" />
+        <div>
+          <div className="text-sm font-semibold text-[#2B2A29]">
+            Know someone else looking for a therapist?
+          </div>
+          <p className="text-xs text-[#6D6A65] mt-1 leading-relaxed">
+            Share TheraVoca with a friend or family member. They'll get the same
+            anonymous matching service — no signup, no spam.
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={copy}
+        className="inline-flex items-center gap-1.5 bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg px-3 py-2 text-xs font-medium text-[#2D4A3E] hover:border-[#2D4A3E] transition shrink-0"
+        data-testid="refer-friend-copy-btn"
+      >
+        Copy invite link
+      </button>
+    </section>
   );
 }
 
