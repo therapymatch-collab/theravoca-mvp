@@ -54,6 +54,20 @@ Tech: FastAPI + MongoDB + React. Email via Resend. ~100 seeded Idaho therapists.
 - **`/app/frontend/src/lib/insurers.js`** — single source of truth for Idaho insurer lists (`IDAHO_INSURERS`, `PATIENT_INSURER_OPTIONS`).
 - 10/10 backend pytest pass, frontend Playwright validated. Test file: `/app/backend/tests/test_iteration8_payment_insurance.py`.
 
+## Iteration 12 (2026-04-26) — Email-template editor + decline flow + photo upload + payment detail
+
+**7 user-requested features**:
+- Patient intake Step 2 helper text now reads "**No contact or personally identifiable info**".
+- Patient intake Step 5 — new optional **Preferred therapy approach** chip group (CBT, DBT, EMDR, Mindfulness-Based, Psychodynamic, ACT, Solution-Focused, Gottman, IFS, Somatic Experiencing, Person-Centered) scored as new `modality_pref` axis (max 4 pts) → breakdown is now **10 keys**, total still capped at 100.
+- **Editable email templates** stored in `email_templates` MongoDB collection. Admin Dashboard 4th tab "Email templates" lists 7 templates (verification, therapist_notification, patient_results, patient_results_empty, therapist_signup_received, therapist_approved, magic_code) with editable subject/heading/greeting/intro/cta_label/footer_note + available_vars hint. Backed by `GET /api/admin/email-templates` and `PUT /api/admin/email-templates/{key}`. Wraps the HTML branding code-side; only wording is editable.
+- Therapist email greeting normalized to "**Hi {first_name},**" via new `_first_name` helper that strips license suffix + last name.
+- **"Not interested" button in the therapist notification email** — appears next to "I'm interested" CTA. Links to `/therapist/apply/{rid}/{tid}?decline=1` which auto-opens the decline dialog (6 reason checkboxes + optional notes).
+- Therapist application **message is now optional** (was min_length=10). Patient results card shows "_This therapist submitted interest without a personal note..._" placeholder when blank.
+- **Therapist profile picture upload** — PNG/JPEG/WebP files resized to 256×256 / 80% JPEG / <500KB → base64 stored on therapist doc. Available on `/therapists/join` form, admin Edit Provider dialog. Patient results render avatar circle (initials fallback when no photo).
+- **Richer therapist email summary** — payment line now shows actual insurance carrier name, exact cash budget, and "(open to sliding scale)" tag. New row "Preferred therapy approach" lists patient's selected modalities.
+
+**Tests**: 16/16 new iter-12 tests pass + iter-7/8/9/10 regression updated and aligned. Pre-existing v1-schema tests in `backend_test.py` continue to fail (unrelated to iter-12 — they use the old `client_age`/free-text schema from before iter-7).
+
 ## Iteration 11 (2026-04-26) — Twilio SMS notifications for therapists
 - **`/app/backend/sms_service.py`** — new module with `send_sms`, `send_therapist_referral_sms`, US phone E.164 normalizer. Honors `TWILIO_ENABLED` kill-switch and `TWILIO_DEV_OVERRIDE_TO` (mirrors email override pattern).
 - **Matching flow** — `_trigger_matching` now sends a 1-line SMS to every newly notified therapist alongside the email. Best-effort (try/except wrapped) so SMS failure never breaks matching.

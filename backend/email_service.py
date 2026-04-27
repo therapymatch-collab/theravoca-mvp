@@ -130,15 +130,16 @@ async def send_therapist_notification(
     tpl = await get_template(_db(), "therapist_notification")
     first_name = _first_name(therapist_name)
     apply_url = f"{_get_app_url()}/therapist/apply/{request_id}/{therapist_id}"
+    decline_url = f"{_get_app_url()}/therapist/apply/{request_id}/{therapist_id}?decline=1"
     summary_rows = "".join(
         f'<tr><td style="padding:6px 0;color:{BRAND["muted"]};font-size:13px;width:140px;">{k}</td>'
         f'<td style="padding:6px 0;color:{BRAND["text"]};font-size:14px;">{v}</td></tr>'
         for k, v in summary.items()
     )
-    vars_ = {"first_name": first_name, "match_score": int(match_score), "apply_url": apply_url}
+    vars_ = {"first_name": first_name, "match_score": int(match_score), "apply_url": apply_url, "decline_url": decline_url}
     greeting = render(tpl["greeting"], **vars_)
     intro = render(tpl["intro"], **vars_)
-    cta_label = render(tpl["cta_label"], **vars_)
+    cta_label = render(tpl["cta_label"], **vars_) or "I'm interested"
     footer_note = render(tpl["footer_note"], **vars_)
     inner = f"""
     {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
@@ -150,7 +151,16 @@ async def send_therapist_notification(
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:8px 0 24px;">
       {summary_rows}
     </table>
-    {f'<p style="margin:28px 0;"><a href="{apply_url}" style="display:inline-block;background:{BRAND["primary"]};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">{cta_label}</a></p>' if cta_label else ''}
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:28px 0;">
+      <tr>
+        <td style="padding-right:10px;">
+          <a href="{apply_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">{cta_label}</a>
+        </td>
+        <td>
+          <a href="{decline_url}" style="display:inline-block;background:#ffffff;color:{BRAND['muted']};text-decoration:none;padding:13px 22px;border:1px solid {BRAND['border']};border-radius:999px;font-weight:500;">Not interested</a>
+        </td>
+      </tr>
+    </table>
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">{footer_note}</p>
     """
     subject = render(tpl["subject"], **vars_)

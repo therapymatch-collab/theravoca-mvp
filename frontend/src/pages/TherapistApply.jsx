@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { Loader2, CheckCircle2, AlertCircle, ThumbsDown } from "lucide-react";
 import { toast } from "sonner";
 import { Header, Footer } from "@/components/SiteShell";
@@ -26,6 +26,7 @@ const DECLINE_REASONS = [
 
 export default function TherapistApply() {
   const { requestId, therapistId } = useParams();
+  const [searchParams] = useSearchParams();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState("");
@@ -46,9 +47,13 @@ export default function TherapistApply() {
           setMessage(res.data.existing_message || "");
           setSubmitted(true);
         }
+        // Auto-open decline dialog when therapist clicks "Not interested" in email
+        if (searchParams.get("decline") === "1" && !res.data.already_applied) {
+          setDeclineOpen(true);
+        }
       })
       .catch((e) => setError(e?.response?.data?.detail || "Could not load this referral."));
-  }, [requestId, therapistId]);
+  }, [requestId, therapistId, searchParams]);
 
   const submit = async () => {
     setSubmitting(true);
@@ -259,7 +264,7 @@ export default function TherapistApply() {
             rows={3}
             value={declineNotes}
             onChange={(e) => setDeclineNotes(e.target.value)}
-            placeholder="Anything else (optional, no PII)"
+            placeholder="Anything else (optional, no contact or personally identifiable info)"
             className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl mt-3"
             data-testid="decline-notes"
           />

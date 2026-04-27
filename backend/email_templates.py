@@ -33,7 +33,7 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "intro": "We have an anonymous referral that looks like a strong fit for your practice.",
         "cta_label": "I'm interested",
         "footer_note": "Click above to view the full anonymous referral and write a short note to the patient. No action is needed if this isn't a fit.",
-        "available_vars": "first_name, match_score, apply_url",
+        "available_vars": "first_name, match_score, apply_url, decline_url",
     },
     "patient_results": {
         "title": "Patient results",

@@ -300,22 +300,38 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
         issues_display = (issues_display + " · " if issues_display else "") + req["other_issue"]
     payment_label = (req.get("payment_type") or "either").title()
     if req.get("payment_type") == "insurance" and req.get("insurance_name"):
-        payment_label += f" ({req['insurance_name']})"
-    elif req.get("payment_type") == "cash" and req.get("budget"):
-        payment_label += f" — up to ${req['budget']}/session"
+        payment_label = f"Insurance — {req['insurance_name']}"
+    elif req.get("payment_type") == "cash":
+        if req.get("budget"):
+            payment_label = f"Cash — up to ${req['budget']}/session"
+        if req.get("sliding_scale_ok"):
+            payment_label += " (open to sliding scale)"
+    elif req.get("payment_type") == "either":
+        bits = []
+        if req.get("insurance_name"):
+            bits.append(f"Insurance: {req['insurance_name']}")
+        if req.get("budget"):
+            bits.append(f"Cash up to ${req['budget']}")
+        if req.get("sliding_scale_ok"):
+            bits.append("open to sliding scale")
+        if bits:
+            payment_label = "Either — " + " · ".join(bits)
     avail = req.get("availability_windows") or []
     avail_display = ", ".join(a.replace("_", " ") for a in avail) or "—"
     style = req.get("style_preference") or []
     style_display = ", ".join(s.replace("_", " ") for s in style if s and s != "no_pref") or "—"
+    modality_prefs = req.get("modality_preferences") or []
+    modality_prefs_display = ", ".join(modality_prefs) if modality_prefs else "—"
 
     summary = {
         "Client type": (req.get("client_type") or "").title(),
         "Age group": (req.get("age_group") or "").replace("_", " ").title(),
         "State": req.get("location_state"),
         "Location": location_str,
-        "Modality preference": (req.get("modality_preference") or "").replace("_", " ").title(),
+        "Session format": (req.get("modality_preference") or "").replace("_", " ").title(),
         "Payment": payment_label,
         "Presenting issues": issues_display or "—",
+        "Preferred therapy approach": modality_prefs_display,
         "Availability": avail_display,
         "Urgency": (req.get("urgency") or "flexible").replace("_", " ").title(),
         "Prior therapy": (req.get("prior_therapy") or "").replace("_", " ").title(),

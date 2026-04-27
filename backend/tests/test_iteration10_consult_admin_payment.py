@@ -29,6 +29,7 @@ ADMIN_HEADERS = {"X-Admin-Password": ADMIN_PASSWORD, "Content-Type": "applicatio
 AXIS_KEYS = {
     "issues", "availability", "modality", "urgency",
     "prior_therapy", "experience", "gender", "style", "payment_fit",
+    "modality_pref",
 }
 
 
@@ -143,11 +144,13 @@ class TestInsuranceOtherSkip:
         assert res.get("filter_failed") == "payment"
 
     def test_breakdown_has_9_keys_regression(self):
+        # Iter-12: breakdown now has 10 keys (added 'modality_pref'). This test
+        # name is kept for git history but the assertion follows the new contract.
         t = _therapist(sliding_scale=False)
         r = _request()
         res = score_therapist(t, r)
         assert set(res["breakdown"].keys()) == AXIS_KEYS
-        assert len(res["breakdown"]) == 9
+        assert len(res["breakdown"]) == 10
 
 
 # ─── 3. Existing hard filters still work ─────────────────────────────────────

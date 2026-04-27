@@ -125,9 +125,8 @@ class TestEmailTemplatesAPI:
     def test_list_returns_seven_templates(self, session):
         resp = session.get(f"{API}/admin/email-templates", headers=ADMIN_HEADERS)
         assert resp.status_code == 200
-        data = resp.json()
-        assert "templates" in data
-        templates = data["templates"]
+        templates = resp.json()
+        assert isinstance(templates, list)
         assert len(templates) == 7
         keys = {t["key"] for t in templates}
         assert keys == EXPECTED_TEMPLATE_KEYS
@@ -140,7 +139,7 @@ class TestEmailTemplatesAPI:
         # Save originals to restore later
         list_resp = session.get(f"{API}/admin/email-templates", headers=ADMIN_HEADERS)
         original = next(
-            t for t in list_resp.json()["templates"] if t["key"] == "magic_code"
+            t for t in list_resp.json() if t["key"] == "magic_code"
         )
 
         marker = f"TEST_{uuid.uuid4().hex[:6]}"
@@ -154,7 +153,7 @@ class TestEmailTemplatesAPI:
         assert put.status_code == 200
 
         # Verify via list
-        list2 = session.get(f"{API}/admin/email-templates", headers=ADMIN_HEADERS).json()["templates"]
+        list2 = session.get(f"{API}/admin/email-templates", headers=ADMIN_HEADERS).json()
         magic = next(t for t in list2 if t["key"] == "magic_code")
         assert magic["subject"] == new_subject
         assert magic["intro"] == new_intro
@@ -199,10 +198,11 @@ class TestEmailGreetingFirstName:
         async def go():
             await email_service.send_therapist_notification(
                 to="t@example.com",
-                name="Sarah Anderson, LCSW",
+                therapist_name="Sarah Anderson, LCSW",
                 request_id="rid-x",
                 therapist_id="tid-x",
                 match_score=85,
+                summary={"Client type": "Individual", "State": "ID"},
             )
 
         asyncio.run(go())
@@ -240,22 +240,24 @@ class TestApplyAndDecline:
         r = session.post(f"{API}/requests", json=payload)
         assert r.status_code == 200, r.text
         rid = r.json()["id"]
-        # Verify
-        v = session.post(f"{API}/requests/{rid}/verify", json={})
-        assert v.status_code in (200, 204)
-        # Trigger matching
+        # Trigger matching directly via admin (skip verification)
         m = session.post(
-            f"{API}/admin/requests/{rid}/trigger-matching", headers=ADMIN_HEADERS
+            f"{API}/admin/requests/{rid}/resend-notifications", headers=ADMIN_HEADERS
         )
         assert m.status_code == 200, m.text
-        notified = m.json().get("notified_scores") or m.json().get("notified") or {}
+        # resend-notifications returns {"matches":[{id, name, email, match_score}, ...]}
+        matches = m.json().get("matches") or []
+        notified = {x["id"]: x.get("match_score") for x in matches}
         # Fall back: re-fetch the request to read notified_scores
         if not notified:
             req = session.get(
                 f"{API}/admin/requests/{rid}", headers=ADMIN_HEADERS
             )
             if req.status_code == 200:
-                notified = req.json().get("notified_scores") or {}
+                body = req.json()
+                # admin/requests/{id} returns {"request": {...}, "applications": [...]}
+                inner = body.get("request") or body
+                notified = inner.get("notified_scores") or {}
         if not notified:
             pytest.skip("No therapists notified — cannot test apply/decline")
         tid = next(iter(notified.keys()))
