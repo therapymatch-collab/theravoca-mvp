@@ -200,9 +200,11 @@ function StatusBadge({ s, verified }) {
 }
 
 /**
- * Visual 5-step timeline: Submitted → Verified → Matched → Applied → Results ready.
+ * Visual 4-step timeline: Submitted → Email verified → Matches → Results ready.
  * Steps light up based on the request's flags so patients can see where they
- * are in the process at a glance.
+ * are in the process at a glance. The earlier "Matched" + "Responses" axes
+ * were collapsed into a single "Matches" stage so we don't expose internal
+ * notify/application counts to patients.
  */
 function StatusTimeline({ req }) {
   const verified = !!req.verified;
