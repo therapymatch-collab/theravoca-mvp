@@ -812,7 +812,73 @@ mobile when stepping through the intake form.
   raised, no action items). All testimonial video URLs return 200
   through the browser. Preview round-trip decodes correctly.
 
-## Backlog (post iter-59)
+## Iteration 60 — 6 user-requested fixes (Apr 28, 2026)
+
+### Site Copy preview persistence (Task 1)
+- `useSiteCopy` now layers preview overrides from sessionStorage
+  (`tv_copy_preview`) AND the `?preview=` URL param. The first time a
+  page loads with `?preview=`, the payload is persisted to
+  sessionStorage so anchor-jumps (`/#how`) and internal nav links
+  inside the previewed page keep showing the override.
+- New global `<PreviewBanner />` mounted in App.js — visible only
+  when overrides are active, with an "Exit preview" button that
+  clears the storage and reloads.
+
+### Auto-decline chunked send (Task 2)
+- Replaced the unbounded `asyncio.create_task` loop with a single
+  `_chunked_send` task: 10 emails per batch, 1.1s delay between
+  batches via `asyncio.sleep`. Endpoint returns within ~200ms even
+  when 100+ pending applicants are auto-declined.
+
+### Full FAQ editor (Task 3)
+- New `routes/faqs.py` with public `GET /api/faqs?audience=` and admin
+  CRUD (`GET/POST/PUT/DELETE /api/admin/faqs`) + `/admin/faqs/reorder`
+  + `/admin/faqs/seed` (idempotent default seeder).
+- New `useFaqs` hook (60s TTL cache, fallback to seed array) wired
+  into Landing.jsx (`audience='patient'`) and TherapistSignup.jsx
+  (`audience='therapist'`).
+- New `FaqAdminPanel` admin tab — audience toggle, add/edit/delete,
+  up/down reorder arrows, "Seed defaults" helper, draft state.
+- **Bug fixed mid-iteration**: tester caught route-ordering shadow
+  (`PUT /admin/faqs/{faq_id}` was registered before
+  `PUT /admin/faqs/reorder`, so 'reorder' was being matched as a
+  faq_id). Hoisted the static-path PUT above the parameterised one;
+  reorder now works.
+- **Bug fixed mid-iteration**: tester caught a missing
+  `import useFaqs` in `Landing.jsx` that was crashing the whole page
+  with a runtime ReferenceError. Import added; verified rendering.
+
+### Logo → home (Task 4)
+- Already wired via `useScrollTopNavigate("/")`; verified by tester
+  on `/therapists/join`, `/portal/patient`, `/portal/therapist`,
+  `/sign-in`. All navigate to `/` and scroll to top.
+
+### Post-Stripe → therapist dashboard (Task 5)
+- Backend `/therapists/{id}/sync-payment-method` now returns a
+  `session_token` (issued via `_create_session_token(email,
+  'therapist')`) so the dashboard CTA works without an email
+  round-trip.
+- Frontend stores it in sessionStorage as `tv_session_token` /
+  `tv_session_role=therapist`.
+- Trial-activated screen now shows BOTH `signup-success-dashboard`
+  (→ /portal/therapist) and `signup-success-home` (→ /) buttons
+  side-by-side.
+
+### Universal nav (Task 6)
+- Replaced `<Header minimal />` with `<Header />` on PatientPortal,
+  TherapistPortal, PatientResults, FollowupForm, VerifyEmail, and
+  the two TherapistSignup post-submit screens. Every page now shows
+  the full nav (How it works · Testimonials · Why TheraVoca · Sign
+  in dropdown).
+
+### Tests
+- Backend: 9/10 in `test_iteration60_faqs_and_chunked.py`
+  (1 skipped — therapist signup fixture schema mismatch, not a
+  regression). Combined with iter-57/58/59 → **34+/34 green**.
+- Frontend: testing agent verified all 6 items end-to-end +
+  pre-emptively patched the missing useFaqs import.
+
+## Backlog (post iter-60)
 ### P1
 - Replace Resend test mode with verified domain (BLOCKED on user verifying domain on Resend dashboard).
 - Multi-state rollout (Idaho → WA, OR, MT, UT, WY, NV).

@@ -103,6 +103,18 @@ async def admin_create_faq(payload: FaqIn) -> dict[str, Any]:
     return {"item": {k: v for k, v in doc.items() if k != "_id"}}
 
 
+@router.put("/admin/faqs/reorder", dependencies=[Depends(require_admin)])
+async def admin_reorder_faqs(payload: ReorderIn) -> dict[str, Any]:
+    if payload.audience not in ALLOWED_AUDIENCES:
+        raise HTTPException(400, "invalid audience")
+    for idx, faq_id in enumerate(payload.ids):
+        await db.faqs.update_one(
+            {"id": faq_id, "audience": payload.audience},
+            {"$set": {"position": idx, "updated_at": _now()}},
+        )
+    return {"reordered": len(payload.ids)}
+
+
 @router.put("/admin/faqs/{faq_id}", dependencies=[Depends(require_admin)])
 async def admin_update_faq(faq_id: str, payload: FaqUpdate) -> dict[str, Any]:
     update: dict[str, Any] = {"updated_at": _now()}
@@ -125,18 +137,6 @@ async def admin_update_faq(faq_id: str, payload: FaqUpdate) -> dict[str, Any]:
 async def admin_delete_faq(faq_id: str) -> dict[str, Any]:
     res = await db.faqs.delete_one({"id": faq_id})
     return {"deleted": res.deleted_count}
-
-
-@router.put("/admin/faqs/reorder", dependencies=[Depends(require_admin)])
-async def admin_reorder_faqs(payload: ReorderIn) -> dict[str, Any]:
-    if payload.audience not in ALLOWED_AUDIENCES:
-        raise HTTPException(400, "invalid audience")
-    for idx, faq_id in enumerate(payload.ids):
-        await db.faqs.update_one(
-            {"id": faq_id, "audience": payload.audience},
-            {"$set": {"position": idx, "updated_at": _now()}},
-        )
-    return {"reordered": len(payload.ids)}
 
 
 @router.post("/admin/faqs/seed", dependencies=[Depends(require_admin)])
