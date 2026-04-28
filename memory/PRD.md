@@ -773,5 +773,76 @@ mobile when stepping through the intake form.
 - Multi-state rollout (Idaho → WA, OR, MT, UT, WY, NV).
 ### P2
 - Live DOPL JSON API integration (when Idaho DOPL publishes).
-- Extract `MasterQueryPanel`, `BlogAdminPanel`, `ProfileCompletionPanel`, `TeamPanel`, etc. from the now ~5550-line `AdminDashboard.jsx` into `src/pages/admin/panels/` (maintainability — non-functional).
+- Continue admin panel refactor: extract Requests / Therapists / All-Providers tabs to `src/pages/admin/panels/` for consistency (AdminDashboard.jsx is now 4448 lines after iter-56 refactor — still large).
+
+## Iteration 56 — Refactor + intake rate limit + 7 UX polishes (Apr 28, 2026)
+
+User asked for 8 changes; all shipped in one batch.
+
+### Refactor (Task 1)
+- Extracted 5 admin panels from `AdminDashboard.jsx` into
+  `src/pages/admin/panels/`: `OptOutsPanel.jsx`,
+  `ProfileCompletionPanel.jsx`, `TeamPanel.jsx`, `MasterQueryPanel.jsx`,
+  `BlogAdminPanel.jsx`, plus a tiny `_shared.jsx` exporting the `<Th>`
+  helper. New `SettingsPanel.jsx` added (see rate limit below).
+- `AdminDashboard.jsx` shrank from **5555 → 4448 lines** (-1107 lines,
+  -20%). Each panel imports its own deps; no behavioural changes.
+
+### Therapist signup (Tasks 2 + 3 + 4)
+- Help text now reads "Enter your full name + degree (e.g. Sarah Lin,
+  LCSW)." (was "title (e.g. ... LCSW)").
+- Field label & placeholder shortened to "Sarah Lin, LCSW" so it
+  doesn't wrap on narrow screens.
+- `phone_alert` (private SMS alert phone) is now **optional**: removed
+  the `<Req />` marker, dropped the requirement from `canAdvance(1)` and
+  `stepBlockReason`, and updated hint text to "Optional — for SMS alerts
+  when new referrals match. Never shown to patients."
+
+### Intake checkout (Task 5)
+- Final-step agreement checkbox label is now JSX with two anchor
+  links — `agree-terms-link` → `/terms` and `agree-privacy-link` →
+  `/privacy`, both `target="_blank"`.
+
+### Patient intake rate limit (Task 6)
+- Backend gate inside `POST /api/requests`: counts existing requests
+  for the same email within a rolling window; returns HTTP 429 with a
+  friendly message when exceeded. Bounds are stored in
+  `app_config.intake_rate_limit` (default `{max_requests_per_window: 1,
+  window_minutes: 60}`).
+- New admin endpoints `GET /api/admin/intake-rate-limit` and
+  `PUT /api/admin/intake-rate-limit` (1≤limit≤50, 1≤window≤7 days).
+- New **Settings** admin tab (under "More" dropdown) with input fields
+  for both values and a "Save rate limit" button. Live "Currently
+  allowing X requests per Y minutes" preview updates as the admin
+  types.
+- Removed the persistent "Submit another request" CTA from
+  `PatientPortal.jsx`.
+
+### Patient portal sign-out (Task 7)
+- `signOut()` now navigates to `/sign-in?role=patient` (was `/`) so
+  users land on a useful page rather than the marketing homepage.
+
+### SignIn password section (Task 8)
+- When the typed email has a password set, the page now shows a clear
+  divider — uppercase "Sign in with password" between two horizontal
+  rules — plus a "Welcome back — we found an account for {email}"
+  paragraph above the password input. Testid:
+  `signin-password-section`.
+- When the typed email does NOT have a password, a small hint
+  (`signin-no-password-hint`) appears above "Send me a code"
+  explaining that a one-time code will be sent and a password can be
+  set after.
+
+### Tests / verification
+- Backend testing agent (iteration_18.json):
+  - 11/11 new tests in `tests/test_iteration55_rate_limit.py` (GET
+    defaults, PUT validation, PUT round-trip, 429 trigger, raised
+    limit unblocks, admin auth gating).
+  - 11/11 prior `test_iteration3_rate_limit.py` regression.
+- Frontend testing agent: every refactored panel still mounts with
+  the right testid; therapist signup labels/placeholder/optional phone
+  verified; intake checkout terms+privacy links verified; patient
+  portal sign-out + missing "Submit another" verified; signin password
+  divider + no-password hint verified. **100% pass on all 8 items.**
+
 
