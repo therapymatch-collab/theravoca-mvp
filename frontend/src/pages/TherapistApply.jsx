@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
-import { Loader2, CheckCircle2, AlertCircle, ThumbsDown } from "lucide-react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Loader2, CheckCircle2, AlertCircle, ThumbsDown, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { Header, Footer } from "@/components/SiteShell";
-import { api } from "@/lib/api";
+import { api, getSession } from "@/lib/api";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -23,6 +23,40 @@ const DECLINE_REASONS = [
   { v: "location_mismatch", l: "Location/format mismatch" },
   { v: "other", l: "Other" },
 ];
+
+// Small "← Back to dashboard" affordance shown on the apply page so a
+// signed-in therapist can bail out of the referral and return to their
+// portal without using the browser back button. Renders to a Sign-in link
+// when the visitor isn't signed in (e.g. clicked the email link from a
+// fresh device).
+function BackToDashboardLink() {
+  const session = getSession();
+  const role = session?.role;
+  const target = role === "patient" ? "/portal/patient"
+    : role === "therapist" ? "/portal/therapist"
+    : null;
+  return (
+    <div className="mb-6">
+      {target ? (
+        <Link
+          to={target}
+          className="inline-flex items-center gap-1.5 text-sm text-[#6D6A65] hover:text-[#2D4A3E]"
+          data-testid="apply-back-to-dashboard"
+        >
+          <ArrowLeft size={14} /> Back to my dashboard
+        </Link>
+      ) : (
+        <Link
+          to="/sign-in?role=therapist"
+          className="inline-flex items-center gap-1.5 text-sm text-[#6D6A65] hover:text-[#2D4A3E]"
+          data-testid="apply-back-to-signin"
+        >
+          <ArrowLeft size={14} /> Sign in to your dashboard
+        </Link>
+      )}
+    </div>
+  );
+}
 
 export default function TherapistApply() {
   const { requestId, therapistId } = useParams();
@@ -128,6 +162,9 @@ export default function TherapistApply() {
               Cannot load referral
             </h1>
             <p className="text-[#6D6A65] mt-2">{error}</p>
+            <div className="mt-6">
+              <BackToDashboardLink />
+            </div>
           </div>
         </main>
         <Footer />
@@ -148,6 +185,7 @@ export default function TherapistApply() {
       <Header minimal />
       <main className="flex-1 px-5 py-12 md:py-16" data-testid="therapist-apply-page">
         <div className="max-w-3xl mx-auto">
+          <BackToDashboardLink />
           <p className="text-xs uppercase tracking-[0.2em] text-[#C87965]">
             Anonymous referral
           </p>

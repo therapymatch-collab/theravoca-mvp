@@ -1,0 +1,42 @@
+{
+  "summary": "Iter-66 testing complete. Backend pytest 5/7 passed; the 2 'failures' are environmental (test ordering — the count=9999 test queued 122 deep-research jobs that saturated the LiteLLM workers and made subsequent POSTs time out at 10s). Manual curl verification of the warmup endpoints with restarts in between confirmed: POST {count:9999} → queued=122 (correctly capped at min(200, active_count=122)), GET status returns full progress doc {running, total, done, failed, current_name}. Magic-link verify-code returns valid token+role+email+has_password. Rate-limit returns 429 with 'You've already submitted a referral in the last hour' AND 'about N minute' wait phrasing; different emails do NOT share the limit. Frontend Playwright: (T1) /sign-in?role=therapist&email=...&code=<valid> auto-redirects to /portal/therapist within ~3s ✅. (T2) Same URL with code=000000 stays on /sign-in ✅. (T3) /therapist/apply/fake/fake while signed-out shows testid=apply-back-to-signin text='Sign in to your dashboard' href=/sign-in?role=therapist ✅. (T4) Same URL with therapist session shows testid=apply-back-to-dashboard text='Back to my dashboard' href=/portal/therapist ✅. (T5) Admin → More → Settings → 'Pre-warm deep-research cache' → entered 2 in warmup-count-input → confirm() auto-accepted → toast 'Warmup started — 2 therapists queued' appeared → warmup-status div rendered '0 / 2 done · currently: Timothy Andrew Hughes, LPC' ✅. ONE BACKEND BUG FOUND: POST {count:0} returns queued=30 (default) instead of clamped-to-1 — the spec explicitly says count:0 should clamp to 1.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/admin/research-enrichment/warmup", "issue": "count=0 is treated as falsy by `int(payload.get('count') or 30)` and falls through to default 30 instead of being clamped to 1 as the spec/feature description requires. Verified live: POST {count:0} → {queued:30}. Fix: `target_count = int(payload.get('count') if payload.get('count') is not None else 30)` then max(1, min(target_count, 200))."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration66_magic_link_warmup.py",
+    "/app/test_reports/pytest/iter66_results.xml"
+  ],
+  "action_items": [
+    "Fix the count=0 clamping in /app/backend/routes/admin.py:1676 — replace `int(payload.get('count') or 30)` with a None-check so 0 is clamped to 1 per spec. Low priority since the admin UI defaults the input to 30 and validates min=1, but the backend should still honour the contract.",
+    "(Optional) Stop tests from queueing long-running warmups by accepting an environment override or providing a 'cancel/abort' endpoint. As-is, accidentally POSTing count=200 in dev pins the LiteLLM workers for ~15-30 minutes."
+  ],
+  "critical_code_review_comments": [
+    "admin.py:1676 — `int(payload.get('count') or 30)` silently swallows count=0 and treats negatives as default-30 too. Should use `if payload.get('count') is None`.",
+    "admin.py:1702 _run() catches `except Exception: pass` — same anti-pattern flagged in iter-65 (test-sms): silently losing visibility into deep-research failures. Should at minimum logger.warning the exception.",
+    "admin.py warmup endpoint has no cancel/abort path. Once 200 jobs are queued the admin can only wait or restart the backend pod.",
+    "AdminDashboard.jsx is now ~4060+ lines (carry-over from iter-65) — still needs splitting per panel. SettingsPanel.jsx is reasonable at ~330 lines.",
+    "SignIn.jsx auto-verify effect (lines 52-80) re-enters when role changes via the dependency array — if a user toggles patient/therapist with magic-link params still in URL, autoVerifyTried is reset only after the first call. Edge case but worth noting."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration66_magic_link_warmup.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% on stated acceptance criteria EXCEPT the count=0 clamp bug; pytest reports 5/7 due to test-ordering saturation (not a product issue)",
+    "frontend": "100% (5/5 flows verified: magic-link valid, magic-link invalid, apply-back-to-signin signed-out, apply-back-to-dashboard signed-in, warmup UI start+toast+status)"
+  },
+  "test_credentials": "Admin master pwd admin123! via X-Admin-Password header / 'Master password' tab. Therapist therapymatch+t101@gmail.com (Ann Omodt). Magic-code request-code is 1/hour limited; bypass for testing by inserting a code directly into db.magic_codes.",
+  "seed_data_creation": "Inserted one synthetic magic_codes doc (code=654321, used:false, ~15min TTL) for therapymatch+t101@gmail.com to bypass the per-hour request rate limit during the signed-in TherapistApply test. Also created ~7 ratelimit_test_*@gmail.com referral rows in db.requests via the rate-limit pytest cases.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file test_iteration66_magic_link_warmup.py has a known ordering issue: TestWarmup.test_warmup_count_clamped_high queues 122 deep-research jobs that take ~30+ minutes total, blocking the LLM workers for subsequent tests. Either run that class with `-k 'not Warmup'` and only run TestWarmup individually, or split warmup tests into a slow tier. The clamping ASSERTION in test_warmup_count_clamped_low (`assert queued == 1`) WILL FAIL until the count=0 backend bug is fixed — adjust the assertion AFTER the fix is in. Reset stuck warmup with `db.app_config.update_one({key:'deep_research_warmup'},{$set:{running:False}})` then `supervisorctl restart backend`.",
+  "rca of the issue": "POST /api/admin/research-enrichment/warmup with count=0 → queued=30 instead of 1. Root cause: admin.py line 1676 uses Python-truthy fallback `int(payload.get('count') or 30)` — since 0 is falsy, the OR-clause selects 30. Fix: replace with explicit None-check `count = payload.get('count'); target_count = int(count) if count is not None else 30; target_count = max(1, min(target_count, 200))`. Reproduction: `curl -X POST $BASE/api/admin/research-enrichment/warmup -H 'X-Admin-Password: admin123!' -H 'Content-Type: application/json' -d '{\"count\":0}'` → `{started:true,queued:30}`."
+}

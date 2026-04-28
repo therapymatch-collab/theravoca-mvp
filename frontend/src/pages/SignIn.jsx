@@ -41,6 +41,43 @@ export default function SignIn() {
   const effectiveMethod = method || (hasPassword ? "password" : "code");
   const nextPath = params.get("next");
   const setupFlag = params.get("setup") === "1";
+  // Magic-link auto-sign-in: when the user clicks the CTA button in the
+  // sign-in code email, the link looks like
+  //   /sign-in?role=therapist&email=foo@bar.com&code=123456
+  // We auto-call verify on mount so the user lands directly on their
+  // dashboard without ever typing the code.
+  const magicCode = params.get("code");
+  const magicEmail = params.get("email");
+  const [autoVerifyTried, setAutoVerifyTried] = useState(false);
+  useEffect(() => {
+    if (autoVerifyTried) return;
+    if (!magicCode || !/^\d{6}$/.test(magicCode)) return;
+    if (!magicEmail || !magicEmail.includes("@")) return;
+    if (getSession()?.role) return; // already signed in
+    setAutoVerifyTried(true);
+    setEmail(magicEmail);
+    setCode(magicCode);
+    setStep("code");
+    (async () => {
+      setSubmitting(true);
+      try {
+        const res = await api.post("/auth/verify-code", {
+          email: magicEmail,
+          role,
+          code: magicCode,
+        });
+        finishLogin(res.data);
+      } catch (e) {
+        toast.error(
+          e?.response?.data?.detail ||
+            "That sign-in link expired — request a new code below.",
+        );
+      } finally {
+        setSubmitting(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [magicCode, magicEmail, autoVerifyTried, role]);
 
   // If already signed in, bounce straight to the portal (or the requested
   // `next` path).

@@ -122,6 +122,27 @@ async def create_request(payload: RequestCreate):
             },
         )
         if recent >= max_per_window:
+            # Compute the minutes until they can submit again so the error
+            # message tells them exactly when, not just "wait".
+            most_recent = await db.requests.find_one(
+                {
+                    "email": {
+                        "$regex": f"^{_re.escape(payload.email.strip())}$",
+                        "$options": "i",
+                    },
+                },
+                sort=[("created_at", -1)],
+                projection={"_id": 0, "created_at": 1},
+            )
+            wait_minutes = window_minutes
+            if most_recent and most_recent.get("created_at"):
+                from helpers import _parse_iso
+                last_dt = _parse_iso(most_recent["created_at"])
+                if last_dt:
+                    elapsed = (
+                        datetime.now(timezone.utc) - last_dt
+                    ).total_seconds() / 60.0
+                    wait_minutes = max(1, int(window_minutes - elapsed) + 1)
             window_label = (
                 "hour"
                 if window_minutes == 60
@@ -130,8 +151,11 @@ async def create_request(payload: RequestCreate):
             plural = "request" if max_per_window == 1 else "requests"
             raise HTTPException(
                 429,
-                f"You can submit up to {max_per_window} {plural} per {window_label}. "
-                "Please wait before sending another referral — we'll get to your existing one.",
+                f"You've already submitted a referral in the last {window_label}. "
+                "We're working on matching you now — check your email for "
+                "next steps. You can submit a new referral in about "
+                f"{wait_minutes} minute{'s' if wait_minutes != 1 else ''}. "
+                f"(Limit: {max_per_window} {plural} per {window_label}.)",
             )
 
     rid = str(uuid.uuid4())

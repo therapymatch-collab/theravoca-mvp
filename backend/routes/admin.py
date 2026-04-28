@@ -1660,6 +1660,96 @@ async def admin_deep_research_therapist(therapist_id: str) -> dict[str, Any]:
     }
 
 
+# Tracks the warmup state in app_config so the admin sees progress.
+_WARMUP_KEY = "deep_research_warmup"
+
+
+@router.post(
+    "/admin/research-enrichment/warmup",
+    dependencies=[Depends(require_admin)],
+)
+async def admin_warmup_deep_research(payload: dict) -> dict[str, Any]:
+    """Pre-warm the deep-research cache for the top N therapists by
+    rolling deep research over each of them in the background. The
+    warmup runs sequentially under a 60s/therapist budget so we don't
+    flood DDG; expect ~30 minutes for 30 therapists."""
+    target_count = int(payload.get("count") or 30)
+    target_count = max(1, min(target_count, 200))
+
+    # Pick the top N therapists by review count + active status.
+    cursor = db.therapists.find(
+        {"is_active": {"$ne": False}, "pending_approval": {"$ne": True}},
+        {"_id": 0, "id": 1, "name": 1},
+    ).sort([("review_count", -1), ("years_experience", -1)]).limit(target_count)
+    targets = await cursor.to_list(target_count)
+
+    started = datetime.now(timezone.utc).isoformat()
+    await db.app_config.update_one(
+        {"key": _WARMUP_KEY},
+        {"$set": {
+            "key": _WARMUP_KEY,
+            "running": True,
+            "started_at": started,
+            "completed_at": None,
+            "total": len(targets),
+            "done": 0,
+            "failed": 0,
+            "current_name": None,
+        }},
+        upsert=True,
+    )
+
+    async def _run() -> None:
+        from research_enrichment import get_or_build_research
+        done = 0
+        failed = 0
+        for t_lite in targets:
+            t = await db.therapists.find_one(
+                {"id": t_lite["id"]}, {"_id": 0},
+            )
+            if not t:
+                failed += 1
+                continue
+            await db.app_config.update_one(
+                {"key": _WARMUP_KEY},
+                {"$set": {"current_name": t.get("name")}},
+            )
+            try:
+                await get_or_build_research(t, force=True, deep=True)
+                done += 1
+            except Exception:
+                failed += 1
+            await db.app_config.update_one(
+                {"key": _WARMUP_KEY},
+                {"$set": {"done": done, "failed": failed}},
+            )
+        await db.app_config.update_one(
+            {"key": _WARMUP_KEY},
+            {"$set": {
+                "running": False,
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "current_name": None,
+            }},
+        )
+
+    import asyncio as _asyncio
+    _asyncio.create_task(_run())
+    return {
+        "started": True,
+        "queued": len(targets),
+        "started_at": started,
+    }
+
+
+@router.get(
+    "/admin/research-enrichment/warmup",
+    dependencies=[Depends(require_admin)],
+)
+async def admin_get_warmup_status() -> dict[str, Any]:
+    doc = await db.app_config.find_one({"key": _WARMUP_KEY}, {"_id": 0})
+    return doc or {"running": False, "total": 0, "done": 0, "failed": 0}
+
+
 # Public endpoint — patient intake calls this to populate its dropdown.
 public_router = APIRouter()
 

@@ -461,6 +461,11 @@ async def send_therapist_stale_profile_nag(to: str, name: str, days_stale: int) 
 async def send_magic_code(to: str, code: str, role: str) -> None:
     tpl = await get_template(_db(), "magic_code")
     ttl = int(os.environ.get("MAGIC_CODE_TTL_MINUTES", "30"))
+    # Magic link — one click signs the user in. SignIn.jsx auto-verifies
+    # when both ?email= and ?code= are present.
+    from urllib.parse import urlencode
+    qs = urlencode({"role": role, "email": to, "code": code})
+    magic_url = f"{_get_app_url()}/sign-in?{qs}"
     vars_ = {"code": code, "ttl_minutes": ttl, "role": role}
     intro = render(tpl["intro"], **vars_)
     footer_note = render(tpl["footer_note"], **vars_)
@@ -472,6 +477,12 @@ async def send_magic_code(to: str, code: str, role: str) -> None:
         <div style="font-size:11px;color:{BRAND['muted']};margin-top:8px;text-transform:uppercase;letter-spacing:0.15em;">Expires in {ttl} minutes</div>
       </div>
     </div>
+    <p style="margin:8px 0 28px 0;text-align:center;">
+      <a href="{magic_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">Sign in with one click</a>
+    </p>
+    <p style="text-align:center;color:{BRAND['muted']};font-size:13px;margin:-12px 0 24px 0;">
+      Or copy the 6-digit code above into the sign-in page.
+    </p>
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">{footer_note}</p>
     """
     await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner))

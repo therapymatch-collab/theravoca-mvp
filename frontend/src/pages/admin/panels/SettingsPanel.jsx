@@ -18,6 +18,11 @@ export default function SettingsPanel({ client }) {
   const [reStats, setReStats] = useState(null);
   const [reSaving, setReSaving] = useState(false);
 
+  // Deep-research warmup state (pre-fills cache for top N therapists)
+  const [warmup, setWarmup] = useState(null);
+  const [warmupStarting, setWarmupStarting] = useState(false);
+  const [warmupCount, setWarmupCount] = useState(30);
+
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -45,9 +50,25 @@ export default function SettingsPanel({ client }) {
       } catch (e) {
         // Soft fail — toggle simply hidden if the endpoint isn't reachable.
       }
+      try {
+        const r3 = await client.get("/admin/research-enrichment/warmup");
+        if (!alive) return;
+        setWarmup(r3.data || null);
+      } catch (_e) {
+        // Soft fail
+      }
     })();
+    // Poll the warmup status every 5s while it's running so the admin
+    // sees live progress without manual refresh.
+    const id = setInterval(async () => {
+      try {
+        const r = await client.get("/admin/research-enrichment/warmup");
+        setWarmup(r.data || null);
+      } catch (_e) {}
+    }, 5000);
     return () => {
       alive = false;
+      clearInterval(id);
     };
   }, [client]);
 
@@ -65,6 +86,25 @@ export default function SettingsPanel({ client }) {
       toast.error(e?.response?.data?.detail || e.message || "Save failed");
     } finally {
       setReSaving(false);
+    }
+  };
+
+  const startWarmup = async () => {
+    if (!window.confirm(
+      `Pre-warm deep research for the top ${warmupCount} therapists?\n\nThis runs in the background (~30 minutes for 30 therapists). Each therapist's research is cached for 30 days, so future patient requests get the bonus instantly.\n\nProceed?`,
+    )) return;
+    setWarmupStarting(true);
+    try {
+      const r = await client.post("/admin/research-enrichment/warmup", {
+        count: Number(warmupCount),
+      });
+      toast.success(
+        `Warmup started — ${r.data?.queued} therapists queued. Refresh this card to track progress.`,
+      );
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message || "Warmup failed to start");
+    } finally {
+      setWarmupStarting(false);
     }
   };
 
@@ -223,6 +263,69 @@ export default function SettingsPanel({ client }) {
               {reEnabled ? "Enabled" : "Disabled"}
             </span>
           </label>
+        </div>
+
+        {/* Deep-research warmup */}
+        <div className="mt-6 pt-5 border-t border-[#E8E5DF]">
+          <h4 className="text-sm font-semibold text-[#2D4A3E]">
+            Pre-warm deep-research cache
+          </h4>
+          <p className="text-xs text-[#6D6A65] mt-1.5 max-w-2xl leading-relaxed">
+            Run deep research on your top N therapists in the background
+            (DDG search + 5 page fetches + LLM extraction per therapist).
+            Cached for 30 days — once done, every patient request that
+            matches one of these therapists gets the enrichment bonus
+            instantly with no extra latency.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <Input
+              type="number"
+              min={1}
+              max={200}
+              value={warmupCount}
+              onChange={(e) => setWarmupCount(e.target.value)}
+              className="w-24"
+              data-testid="warmup-count-input"
+              disabled={warmup?.running}
+            />
+            <span className="text-xs text-[#6D6A65]">therapists</span>
+            <button
+              type="button"
+              onClick={startWarmup}
+              disabled={warmupStarting || warmup?.running}
+              className="tv-btn-primary !py-2 !px-4 text-sm disabled:opacity-50"
+              data-testid="warmup-start-btn"
+            >
+              {warmupStarting || warmup?.running ? (
+                <Loader2 size={14} className="inline mr-1.5 animate-spin" />
+              ) : null}
+              {warmup?.running ? "Running…" : "Start warmup"}
+            </button>
+          </div>
+          {warmup ? (
+            <div
+              className="mt-3 text-xs text-[#2B2A29] bg-[#FDFBF7] border border-[#E8E5DF] rounded-md px-3 py-2"
+              data-testid="warmup-status"
+            >
+              {warmup.running ? (
+                <>
+                  <strong>{warmup.done}</strong> / {warmup.total} done
+                  {warmup.failed ? ` (${warmup.failed} failed)` : ""} ·
+                  currently:{" "}
+                  <em>{warmup.current_name || "starting…"}</em>
+                </>
+              ) : warmup.completed_at ? (
+                <>
+                  Last run: <strong>{warmup.done}</strong> /{" "}
+                  {warmup.total} done
+                  {warmup.failed ? ` · ${warmup.failed} failed` : ""} · finished{" "}
+                  {new Date(warmup.completed_at).toLocaleString()}
+                </>
+              ) : (
+                <>No warmup runs yet.</>
+              )}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
