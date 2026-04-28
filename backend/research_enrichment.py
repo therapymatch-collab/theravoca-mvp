@@ -26,6 +26,7 @@ Toggle: `app_config.research_enrichment.enabled` (bool, default False).
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -408,7 +409,14 @@ async def enrich_matches_for_request(request_id: str) -> dict[str, Any]:
     """Background task: for every notified therapist on this request,
     compute the research axes and store them under
     `requests.research_scores[<therapist_id>]` along with the delta vs
-    the raw match score so the admin and patient can see the change."""
+    the raw match score so the admin and patient can see the change.
+
+    Therapists are processed in parallel (semaphore=4) — each one needs
+    a website fetch + LLM call, so serial iteration over 30 notified
+    therapists would take >5 min. With concurrency=4 we typically finish
+    in <90s for a fresh batch and <10s when most therapists' research
+    is already cached.
+    """
     if not await is_enabled():
         return {"skipped": "enrichment disabled"}
 
@@ -423,32 +431,45 @@ async def enrich_matches_for_request(request_id: str) -> dict[str, Any]:
         k: float(v) for k, v in (req.get("notified_scores") or {}).items()
     }
     research_scores: dict[str, dict] = req.get("research_scores") or {}
+    todo = [tid for tid in notified_ids if tid not in research_scores]
+    if not todo:
+        return {"enriched": len(research_scores), "request_id": request_id}
 
-    for tid in notified_ids:
-        if tid in research_scores:
-            continue  # already enriched
-        t = await db.therapists.find_one({"id": tid}, {"_id": 0})
-        if not t:
+    sem = asyncio.Semaphore(4)
+
+    async def one(tid: str) -> Optional[tuple[str, dict]]:
+        async with sem:
+            t = await db.therapists.find_one({"id": tid}, {"_id": 0})
+            if not t:
+                return None
+            try:
+                axes = await score_research_axes(t, req)
+            except Exception as e:
+                logger.warning("research scoring failed for %s: %s", tid, e)
+                return None
+            raw = raw_scores.get(tid, 0.0)
+            bonus = (axes.get("evidence_depth") or 0) + (
+                axes.get("approach_alignment") or 0
+            )
+            enriched = round(min(120.0, raw + bonus), 1)
+            delta = round(enriched - raw, 1)
+            return tid, {
+                "raw_score": raw,
+                "enriched_score": enriched,
+                "delta": delta,
+                "evidence_depth": axes.get("evidence_depth") or 0,
+                "approach_alignment": axes.get("approach_alignment") or 0,
+                "rationale": axes.get("rationale") or "",
+                "themes": axes.get("themes") or {},
+                "computed_at": datetime.now(timezone.utc).isoformat(),
+            }
+
+    results = await asyncio.gather(*(one(tid) for tid in todo), return_exceptions=False)
+    for r in results:
+        if r is None:
             continue
-        try:
-            axes = await score_research_axes(t, req)
-        except Exception as e:
-            logger.warning("research scoring failed for %s: %s", tid, e)
-            continue
-        raw = raw_scores.get(tid, 0.0)
-        bonus = (axes.get("evidence_depth") or 0) + (axes.get("approach_alignment") or 0)
-        enriched = round(min(120.0, raw + bonus), 1)
-        delta = round(enriched - raw, 1)
-        research_scores[tid] = {
-            "raw_score": raw,
-            "enriched_score": enriched,
-            "delta": delta,
-            "evidence_depth": axes.get("evidence_depth") or 0,
-            "approach_alignment": axes.get("approach_alignment") or 0,
-            "rationale": axes.get("rationale") or "",
-            "themes": axes.get("themes") or {},
-            "computed_at": datetime.now(timezone.utc).isoformat(),
-        }
+        tid, score_dict = r
+        research_scores[tid] = score_dict
 
     await db.requests.update_one(
         {"id": request_id},

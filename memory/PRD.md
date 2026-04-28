@@ -1199,3 +1199,30 @@ User asked for 8 changes; all shipped in one batch.
   ≥10 cards, graceful fail on invalid hosts, 400/auth errors, 30s
   budget honoured, dedup across PT+external verified.
 - Iter-24 testing report at `/app/test_reports/iteration_24.json`.
+
+
+## Iteration 63 — DB cleanup + LLM web-research enrichment (2026-04-28)
+
+### DB cleanup (one-shot, RAN)
+- Script `/app/backend/scripts/cleanup_db_keep_real_therapists.py`.
+- Kept: 122 `source='imported_xlsx'` therapists + 1 gap_recruit_signup
+  → 123 total. Plus site_copy, faqs, email_templates, app_config,
+  blog_posts, real admin_users.
+- Wiped: 121 test requests, 16 applications, 48 recruit_drafts, 441
+  outreach_invites, 19 feedback, 15 patient_accounts, 12 magic_codes,
+  `jane@theravoca.test` admin fixture.
+
+### LLM web-research enrichment (NEW)
+- New module `/app/backend/research_enrichment.py`.
+- Toggle: `app_config.research_enrichment.enabled` (default false).
+- Three new score axes layered on top of the 100-point match:
+  evidence_depth (0-10), approach_alignment (0-5), apply_fit (0-5).
+  Each axis carries a 1-sentence rationale citing the source evidence.
+- Caching: research summary on therapist doc, 30-day TTL.
+- Wired into match flow + apply flow + delivery; surfaced in admin
+  request brief + PatientResults "Why we recommend" callout.
+- Concurrency: semaphore=4 — 30-therapist request finishes ~90s cold.
+
+### Tests
+- `tests/test_iteration63_research_enrichment.py`: **16/16 pass.**
+- Iter-25 testing report at `/app/test_reports/iteration_25.json`.
