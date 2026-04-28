@@ -767,7 +767,52 @@ mobile when stepping through the intake form.
   79.9px from viewport top after a `next-btn` click on a 390×844
   viewport.
 
-## Backlog (post iter-58)
+## Iteration 59 — 4 user-reported fixes (Apr 28, 2026)
+
+### Email footer support address (Task 1)
+- `email_service._wrap()` footer cell now ends with: "Questions? Reach
+  us at [support@theravoca.com](mailto:support@theravoca.com)" — every
+  transactional email (verification, match-results, opt-out
+  confirmations, therapist approval/rejection, etc.) inherits this.
+
+### Section-internal CTAs (Task 2)
+- Removed the recently-added `<DualCTA />` blocks; deleted the file.
+- New tiny `<GetMatchedCTA />` component injected at the bottom of each
+  patient-facing landing section: How it works (`how-cta-btn`),
+  Testimonials (`testimonials-cta-btn`), Why TheraVoca
+  (`different-cta-btn`), FAQ (`faq-cta-btn`). All link to `/#start`.
+- Therapist signup page got "Get more referrals" CTAs at the end of
+  the Why-Join section (`why-join-cta-btn`) and FAQ section
+  (`therapist-faq-cta-btn`); both smooth-scroll to `#signup-form`.
+
+### Testimonials playback + scroll (Task 3)
+- Fixed broken video URLs — user's WordPress library uses single-dot
+  filenames (`W.Z.mp4`, `D.A.mp4`, `N.N.mp4`); the previous code had
+  double-dots which 404'd. All 5 videos now load.
+- Added prev/next chevron buttons (`testimonials-prev` /
+  `testimonials-next`) visible at sm+ that scroll the track by exactly
+  one card width via `scrollBy({ behavior: "smooth" })`.
+- The play-overlay is now a real `<button>` that calls
+  `videoRef.play()` instead of a non-interactive div, so playback
+  works on first click.
+
+### Site Copy "Preview on landing" (Task 4)
+- New per-row `Preview` button (`copy-preview-{key}`) in
+  `SiteCopyAdminPanel` opens the seed's `previewPath` (e.g. `/`,
+  `/#how`, `/therapists/join`) in a new tab with `?preview=base64-of-
+  {key:value}`.
+- `useSiteCopy` hook now parses `?preview=` from the URL and short-
+  circuits the resolver before falling back to the saved map — so
+  admins see the draft live without committing.
+
+### Tests
+- Backend: 4/4 new in `tests/test_iteration59_email_footer.py` + 12/12
+  iter-57/58 regression. **16/16 total green**.
+- Frontend: testing agent verified all 4 items end-to-end (no issues
+  raised, no action items). All testimonial video URLs return 200
+  through the browser. Preview round-trip decodes correctly.
+
+## Backlog (post iter-59)
 ### P1
 - Replace Resend test mode with verified domain (BLOCKED on user verifying domain on Resend dashboard).
 - Multi-state rollout (Idaho → WA, OR, MT, UT, WY, NV).
