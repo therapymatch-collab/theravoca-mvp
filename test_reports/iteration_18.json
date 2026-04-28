@@ -1,0 +1,53 @@
+{
+  "summary": "Iteration 55 review (admin panel refactor + intake rate limit + UX polish). All 8 changes verified end-to-end via pytest (intake-rate-limit endpoint suite) and Playwright (admin panels render, settings save toast, therapist signup labels/placeholder/optional phone, signin password divider, patient portal signout). Backend 11/11 new + 11/11 regression passing. Frontend smoke for every requested testid passing.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration55_rate_limit.py",
+    "/app/test_reports/pytest/iter55_results.xml",
+    "/app/backend/tests/test_iteration3_rate_limit.py"
+  ],
+  "verifications": {
+    "admin_dashboard_panels": {
+      "tab-master_query": "exists; master-query-panel rendered=True",
+      "tab-completion": "exists",
+      "more-tab-opt_outs": "opt-outs-panel rendered=True",
+      "more-tab-team": "exists",
+      "more-tab-blog": "blog-admin-panel rendered=True",
+      "more-tab-settings": "settings-panel rendered=True; rate-limit-max-input/window-input/save-btn all present; defaults max=1, window=60; save toast='Rate limit saved'"
+    },
+    "intake_rate_limit_pytest": "11/11 PASSED — GET defaults, PUT validation (5 invalid payloads), PUT round-trip + GET, second POST returns 429 with 'You can submit up to 1 request per hour' detail, raised limit allows second POST, admin auth required on GET/PUT.",
+    "therapist_signup": {
+      "name_label": "'Full name + degree (e.g. Sarah Lin, LCSW) *' — no 'MA, '",
+      "name_placeholder": "exactly 'Sarah Lin, LCSW'",
+      "phone_alert": "label 'Phone (private, alerts)' — no Req asterisk; helper text mentions 'Optional — for SMS alerts'"
+    },
+    "intake_checkout_terms_privacy": "Code-confirmed in IntakeForm.jsx 832-862: agree-terms-link href='/terms', agree-privacy-link href='/privacy', both target='_blank' rel='noreferrer'. Both routes return 200 over the public URL.",
+    "patient_portal_signout": "/portal/patient with no/invalid session redirects to /sign-in?role=patient (replace) — confirmed via live navigation. PatientPortal.jsx has NO 'patient-portal-new-request' testid anywhere (grep clean); signOut() navigates to /sign-in?role=patient.",
+    "signin_password_divider": "On /sign-in?role=therapist, typing portaltest@example.com surfaces signin-password-section ('Sign in with password' divider, 'Welcome back — we found an account for portaltest@example.com'). Typing nobody-<ts>@example.com hides that section and shows signin-no-password-hint with one-time code copy."
+  },
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AdminDashboard.jsx is still 4448 lines after refactor — recommended next iteration to extract Requests/Therapists/Pending/All Providers tabs into /pages/admin/panels for consistency.",
+    "patients.py rate-limit gate uses string-isoformat compare on `created_at` (line 121). Works because created_at is stored as ISO string, but a typed `datetime` index would scale better. Low priority.",
+    "PUT /admin/intake-rate-limit accepts `payload: dict` instead of a Pydantic model — current manual validation is fine but a Pydantic IntakeRateLimitConfig with Field(ge=1, le=50) etc would self-document the schema."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration55_rate_limit.py (NEW)",
+    "/app/test_reports/pytest/iter55_results.xml (NEW)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin master password admin123! (Master password tab on /admin). Therapist password account: portaltest@example.com / testpass123 (used only to verify signin-password-section render — no actual login attempted).",
+  "seed_data_creation": "Test rate-limit fixture toggles app_config.intake_rate_limit and always restores default (1 / 60min) on teardown. Each POST /api/requests test uses a unique TEST_iter55_<uuid> email to avoid cross-test rate-limit pollution.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 55 is fully green: per-email intake rate limit (1/hr default, admin-tunable via Settings panel + GET/PUT /api/admin/intake-rate-limit), admin panels refactor into /pages/admin/panels (master-query, opt-outs, team, blog, settings), therapist signup label/placeholder/optional phone, signin password divider + welcome-back, patient portal signout to /sign-in?role=patient, intake checkout terms/privacy links. Regression: test_iteration3_rate_limit.py 11/11 passing. New file test_iteration55_rate_limit.py covers GET/PUT/429 round-trips. AdminDashboard.jsx still 4448 lines — candidate for next refactor pass.",
+  "rca of the issue": "N/A — review iteration, no bugs found."
+}

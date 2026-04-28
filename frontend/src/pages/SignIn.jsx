@@ -220,6 +220,18 @@ export default function SignIn() {
               {/* Password input — shown when the email has a password set */}
               {hasPassword && (
                 <>
+                  <div
+                    className="mt-5 flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-[#C87965]"
+                    data-testid="signin-password-section"
+                  >
+                    <span className="h-px flex-1 bg-[#E8E5DF]" />
+                    <span>Sign in with password</span>
+                    <span className="h-px flex-1 bg-[#E8E5DF]" />
+                  </div>
+                  <p className="text-xs text-[#6D6A65] text-center mt-2">
+                    Welcome back — we found an account for{" "}
+                    <span className="text-[#2D4A3E] font-medium">{email}</span>.
+                  </p>
                   <label className="mt-4 block text-xs uppercase tracking-wider text-[#6D6A65] mb-2">
                     Password
                   </label>
@@ -270,16 +282,28 @@ export default function SignIn() {
 
               {/* Magic-code primary path — when no password is set */}
               {!hasPassword && (
-                <button
-                  type="button"
-                  onClick={sendCode}
-                  disabled={submitting || !email}
-                  className="tv-btn-primary w-full mt-5 justify-center disabled:opacity-50"
-                  data-testid="signin-send-code"
-                >
-                  {submitting ? "Sending..." : "Send me a code"}{" "}
-                  <ArrowRight size={16} />
-                </button>
+                <>
+                  {hasPassword === false && email.includes("@") && (
+                    <p
+                      className="text-xs text-[#6D6A65] text-center mt-3"
+                      data-testid="signin-no-password-hint"
+                    >
+                      No password yet for this email — we'll send a one-time
+                      sign-in code instead. You can set a password after
+                      signing in.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={sendCode}
+                    disabled={submitting || !email}
+                    className="tv-btn-primary w-full mt-5 justify-center disabled:opacity-50"
+                    data-testid="signin-send-code"
+                  >
+                    {submitting ? "Sending..." : "Send me a code"}{" "}
+                    <ArrowRight size={16} />
+                  </button>
+                </>
               )}
 
               {role === "therapist" && (

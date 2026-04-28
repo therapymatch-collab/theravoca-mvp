@@ -95,6 +95,45 @@ async def create_request(payload: RequestCreate):
         if msg:
             raise HTTPException(400, msg)
 
+    # ─── Per-email rate limit ─────────────────────────────────────────
+    # We cap how many times the same email can submit within a rolling
+    # window so a single user can't fire dozens of referrals before we
+    # finish matching the first one. Both the limit and the window are
+    # admin-configurable (app_config / intake_rate_limit).
+    rate_doc = await db.app_config.find_one(
+        {"key": "intake_rate_limit"}, {"_id": 0},
+    )
+    max_per_window = int(
+        (rate_doc or {}).get("max_requests_per_window") or 1
+    )
+    window_minutes = int((rate_doc or {}).get("window_minutes") or 60)
+    if max_per_window > 0 and window_minutes > 0:
+        import re as _re
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        ).isoformat()
+        recent = await db.requests.count_documents(
+            {
+                "email": {
+                    "$regex": f"^{_re.escape(payload.email.strip())}$",
+                    "$options": "i",
+                },
+                "created_at": {"$gte": cutoff},
+            },
+        )
+        if recent >= max_per_window:
+            window_label = (
+                "hour"
+                if window_minutes == 60
+                else f"{window_minutes} minutes"
+            )
+            plural = "request" if max_per_window == 1 else "requests"
+            raise HTTPException(
+                429,
+                f"You can submit up to {max_per_window} {plural} per {window_label}. "
+                "Please wait before sending another referral — we'll get to your existing one.",
+            )
+
     rid = str(uuid.uuid4())
     token = secrets.token_urlsafe(24)
     # 8-char base32-ish referral code patients can share with friends.

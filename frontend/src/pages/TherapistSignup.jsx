@@ -298,7 +298,6 @@ export default function TherapistSignup() {
         data.name.trim().length >= 3 &&
         data.email.includes("@") &&
         !!data.credential_type &&
-        !!(data.phone_alert?.trim() || data.phone?.trim()) &&
         !!data.office_phone?.trim() &&
         !!data.gender &&
         websiteIsValid(data.website)
@@ -338,7 +337,7 @@ export default function TherapistSignup() {
   const stepBlockReason = (s) => {
     if (s === 1) {
       if (!data.name || data.name.trim().length < 3)
-        return "Enter your full name + title (e.g. Sarah Lin, LCSW).";
+        return "Enter your full name + degree (e.g. Sarah Lin, LCSW).";
       if (!data.email.includes("@")) return "Enter a valid email address.";
       if (!data.credential_type) return "Select your credential type.";
       if (!(data.phone_alert?.trim() || data.phone?.trim()))
@@ -841,11 +840,11 @@ export default function TherapistSignup() {
                     </div>
                   </Field>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Field label={<>Full name + degree (e.g. Sarah Lin, MA, LCSW) <Req /></>}>
+                    <Field label={<>Full name + degree (e.g. Sarah Lin, LCSW) <Req /></>}>
                       <Input
                         value={data.name}
                         onChange={(e) => set("name", e.target.value)}
-                        placeholder="Sarah Lin, MA, LCSW"
+                        placeholder="Sarah Lin, LCSW"
                         className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                         data-testid="signup-name"
                       />
@@ -905,8 +904,8 @@ export default function TherapistSignup() {
                       )}
                     </Field>
                     <Field
-                      label={<>Phone (private, alerts) <Req /></>}
-                      hint="SMS alerts only — never shown to patients."
+                      label={<>Phone (private, alerts)</>}
+                      hint="Optional — for SMS alerts when new referrals match. Never shown to patients."
                     >
                       <Input
                         type="tel"

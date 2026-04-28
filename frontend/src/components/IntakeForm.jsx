@@ -833,7 +833,31 @@ export default function IntakeForm() {
                     id="agree"
                     checked={agreed}
                     onChange={setAgreed}
-                    label="I agree to the terms of use and privacy notice."
+                    label={
+                      <>
+                        I agree to the{" "}
+                        <a
+                          href="/terms"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[#2D4A3E] underline hover:no-underline"
+                          data-testid="agree-terms-link"
+                        >
+                          terms of use
+                        </a>{" "}
+                        and{" "}
+                        <a
+                          href="/privacy"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[#2D4A3E] underline hover:no-underline"
+                          data-testid="agree-privacy-link"
+                        >
+                          privacy notice
+                        </a>
+                        .
+                      </>
+                    }
                     testid="agree-terms"
                   />
                   <CheckRow

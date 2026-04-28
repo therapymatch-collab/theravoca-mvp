@@ -10,7 +10,6 @@ import {
   Users,
   Sparkles,
   ClipboardCheck,
-  Plus,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import SetPasswordPrompt from "@/components/SetPasswordPrompt";
@@ -50,7 +49,7 @@ export default function PatientPortal() {
 
   const signOut = () => {
     clearSession();
-    navigate("/");
+    navigate("/sign-in?role=patient");
   };
 
   return (
@@ -143,29 +142,6 @@ export default function PatientPortal() {
                   <StatusTimeline req={r} />
                 </Link>
               ))}
-
-              {/* Persistent CTA so a returning patient can quickly start a new
-                  request without having to navigate back to the marketing
-                  homepage. */}
-              <div className="pt-4 text-center">
-                <Link
-                  to="/#start"
-                  className="tv-btn-primary inline-flex items-center gap-2"
-                  data-testid="patient-portal-new-request"
-                  onClick={() => {
-                    setTimeout(() => {
-                      document
-                        .getElementById("start")
-                        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                    }, 250);
-                  }}
-                >
-                  <Plus size={16} /> Submit another request
-                </Link>
-                <p className="text-xs text-[#6D6A65] mt-2">
-                  Need a therapist for a different concern, or for someone else?
-                </p>
-              </div>
             </div>
           )}
         </div>
