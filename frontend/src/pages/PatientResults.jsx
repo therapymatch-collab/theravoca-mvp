@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, Phone, Mail, Star, Sparkles, CalendarPlus, Send, Inbox, CheckCircle2, Clock, ArrowRight, Share2 } from "lucide-react";
+import { Loader2, Phone, Mail, Star, Sparkles, CalendarPlus, Send, Inbox, CheckCircle2, Clock, ArrowRight, ArrowLeft, Share2, FileText, AlertCircle, ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { api, getSession } from "@/lib/api";
 import { RESULTS_POLL_INTERVAL_MS } from "@/lib/constants";
@@ -82,6 +82,187 @@ function buildConsultMailto(therapist, request) {
   const q = `subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   return `mailto:${therapist?.email || ""}?${q}`;
 }
+
+// Computes "where you may not align" gaps from a per-therapist match breakdown.
+// Returns at most 4 short, patient-friendly bullets describing what wasn't
+// fully covered. We only surface gaps where the score on a meaningful axis
+// is < 50% of max — small (≥50%) gaps would just create noise.
+function matchGaps(breakdown, request, therapist) {
+  if (!breakdown || !request) return [];
+  const out = [];
+  const issuesAsked = request.presenting_issues || [];
+  const therapistIssues = new Set([
+    ...(therapist?.primary_specialties || []),
+    ...(therapist?.secondary_specialties || []),
+    ...(therapist?.general_treats || []),
+  ]);
+
+  // Issue coverage — explicit bullet listing any concern the therapist
+  // doesn't mark as a specialty. This is the highest-signal gap.
+  const uncovered = issuesAsked.filter((iss) => !therapistIssues.has(iss));
+  if (uncovered.length > 0 && issuesAsked.length > 0) {
+    const labels = uncovered
+      .slice(0, 3)
+      .map((s) => ISSUE_LABELS[s] || s.replace(/_/g, " "))
+      .join(", ");
+    out.push({
+      key: "issues",
+      label: `Doesn't list ${labels} as a specialty`,
+    });
+  }
+
+  // Generic axis-based gaps (score < 50% of max on a meaningful axis).
+  const axisGapLabels = {
+    availability: "Schedule may be limited compared to what you need",
+    modality: "Doesn't fully cover your preferred session format",
+    urgency: "May not be able to start as quickly as you'd like",
+    payment_fit: "Cash rate is above what you indicated as comfortable",
+    modality_pref: "Doesn't primarily practice your preferred therapy approach",
+    gender: "Different gender than you preferred",
+    style: "Different working style than you preferred",
+  };
+  Object.entries(breakdown).forEach(([k, v]) => {
+    const meta = AXIS_META[k];
+    if (!meta || !axisGapLabels[k]) return;
+    const pct = meta.max > 0 ? v / meta.max : 1;
+    if (pct < 0.5) out.push({ key: k, label: axisGapLabels[k] });
+  });
+
+  // Insurance gap — patient asked for a specific plan and the therapist
+  // doesn't accept any of them.
+  const insAsked = (request.insurance_plans || []).filter(Boolean);
+  const insAccepted = (therapist?.insurance_accepted || []).map((s) =>
+    String(s).toLowerCase(),
+  );
+  if (insAsked.length > 0) {
+    const matchAny = insAsked.some((p) =>
+      insAccepted.includes(String(p).toLowerCase()),
+    );
+    if (!matchAny && insAccepted.length > 0) {
+      out.push({
+        key: "insurance",
+        label: `Doesn't accept your insurance plan(s): ${insAsked
+          .slice(0, 2)
+          .join(", ")}`,
+      });
+    } else if (!matchAny) {
+      out.push({
+        key: "insurance",
+        label: "Cash-only practice — no in-network insurance",
+      });
+    }
+  }
+
+  // De-dupe by key, cap at 4 items.
+  const seen = new Set();
+  return out
+    .filter((g) => {
+      if (seen.has(g.key)) return false;
+      seen.add(g.key);
+      return true;
+    })
+    .slice(0, 4);
+}
+
+// Compact summary panel of the patient's original referral so they can
+// scan their inputs side-by-side with the matches below.
+function YourReferralPanel({ request }) {
+  const [open, setOpen] = useState(false);
+  const issues = (request.presenting_issues || [])
+    .map((s) => ISSUE_LABELS[s] || s.replace(/_/g, " "))
+    .join(", ");
+  const insurances = (request.insurance_plans || []).join(", ");
+  const summary = [
+    request.client_age && `Age ${request.client_age}`,
+    request.location_state,
+    request.session_format,
+    issues && `concerns: ${issues}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <section
+      className="mt-7 bg-white border border-[#E8E5DF] rounded-2xl p-5 sm:p-6"
+      data-testid="your-referral-panel"
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((s) => !s)}
+        className="w-full text-left flex items-start justify-between gap-4 group"
+        data-testid="referral-toggle"
+      >
+        <div className="flex items-start gap-3 min-w-0">
+          <FileText size={18} className="text-[#2D4A3E] mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-wider text-[#C87965] font-semibold">
+              Your referral
+            </div>
+            <div className="font-serif-display text-lg text-[#2D4A3E] leading-tight mt-0.5">
+              What you asked for
+            </div>
+            {!open && (
+              <div className="text-xs text-[#6D6A65] mt-1.5 line-clamp-1">
+                {summary}
+              </div>
+            )}
+          </div>
+        </div>
+        <span className="text-xs text-[#6D6A65] hover:text-[#2D4A3E] inline-flex items-center gap-1 shrink-0">
+          {open ? (
+            <>
+              Collapse <ChevronUp size={14} />
+            </>
+          ) : (
+            <>
+              Expand <ChevronDown size={14} />
+            </>
+          )}
+        </span>
+      </button>
+
+      {open && (
+        <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+          <RefDetail label="Age" value={request.client_age} />
+          <RefDetail label="State" value={request.location_state} />
+          <RefDetail label="ZIP" value={request.zip_code} />
+          <RefDetail label="Format" value={request.session_format} />
+          <RefDetail label="Insurance" value={insurances || "—"} />
+          <RefDetail label="Cash-budget / session" value={request.budget_per_session ? `$${request.budget_per_session}` : "—"} />
+          <RefDetail label="Therapy history" value={request.previous_therapy ? "Has prior therapy" : "First-time"} />
+          <RefDetail label="Urgency" value={request.urgency} />
+          <RefDetail label="Preferred gender" value={request.gender_preference || "Any"} />
+          <RefDetail label="Preferred language" value={request.preferred_language || "English"} />
+          <RefDetail label="Concerns" value={issues || "—"} span={2} />
+          {(request.preferred_modalities || []).length > 0 && (
+            <RefDetail
+              label="Preferred therapy approaches"
+              value={(request.preferred_modalities || []).join(", ")}
+              span={2}
+            />
+          )}
+          {request.notes && (
+            <RefDetail label="Notes you shared" value={request.notes} span={2} />
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function RefDetail({ label, value, span = 1 }) {
+  return (
+    <div className={span === 2 ? "sm:col-span-2" : ""}>
+      <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">
+        {label}
+      </div>
+      <div className="text-[#2B2A29] font-medium leading-snug break-words">
+        {value || "—"}
+      </div>
+    </div>
+  );
+}
+
+
 
 export default function PatientResults() {
   const { requestId } = useParams();
@@ -179,16 +360,34 @@ export default function PatientResults() {
       <Header minimal />
       <main className="flex-1 px-5 py-12 md:py-16" data-testid="patient-results-page">
         <div className="max-w-4xl mx-auto">
-          <p className="text-xs uppercase tracking-[0.2em] text-[#C87965]">
-            Your matches
-          </p>
-          <h1 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] mt-2 leading-tight">
-            Therapists who want to work with you
-          </h1>
-          <p className="text-[#6D6A65] mt-3 max-w-2xl leading-relaxed text-pretty">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-[#C87965]">
+                Your matches
+              </p>
+              <h1 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] mt-2 leading-tight">
+                Therapists who want to work with you
+              </h1>
+            </div>
+            {session?.role === "patient" && (
+              <Link
+                to="/portal/patient"
+                className="tv-btn-secondary !py-2 !px-4 text-sm inline-flex items-center gap-1.5"
+                data-testid="back-to-dashboard"
+              >
+                <ArrowLeft size={14} /> Back to dashboard
+              </Link>
+            )}
+          </div>
+          <p className="text-[#6D6A65] mt-3 max-w-3xl leading-relaxed">
             These therapists read your anonymous referral and submitted interest.
             Reach out to whoever feels right — many offer a free consult.
           </p>
+
+          {/* Show patient their original request so they can compare */}
+          {request && (
+            <YourReferralPanel request={request} />
+          )}
 
           {hold_active && (
             <StatusTimeline
@@ -383,6 +582,36 @@ export default function PatientResults() {
                           </ul>
                         )}
 
+                        {/* Match gaps — what's missing from a 100% fit. Helps the
+                            patient understand why this isn't a perfect match. */}
+                        {(() => {
+                          const gaps = matchGaps(app.match_breakdown, request, t);
+                          if (gaps.length === 0) return null;
+                          return (
+                            <div
+                              className="mt-3 bg-[#FDF7EC] border border-[#E8DCC1] rounded-lg p-3"
+                              data-testid={`gaps-${i}`}
+                            >
+                              <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-[#C87965] font-semibold">
+                                <AlertCircle size={11} />
+                                Where you may not align ({Math.round(100 - app.match_score)}% gap)
+                              </div>
+                              <ul className="mt-1.5 space-y-0.5">
+                                {gaps.map((g) => (
+                                  <li
+                                    key={g.key}
+                                    className="text-xs text-[#6D6A65] leading-relaxed flex items-start gap-1.5"
+                                    data-testid={`gap-${i}-${g.key}`}
+                                  >
+                                    <span className="text-[#C87965] mt-0.5">•</span>
+                                    <span>{g.label}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          );
+                        })()}
+
                         {app.message && app.message.trim().length > 0 && (
                           <p className="mt-3 text-sm text-[#2B2A29] leading-snug border-l-2 border-[#C87965] pl-3 italic line-clamp-3">
                             "{app.message}"
@@ -449,7 +678,6 @@ export default function PatientResults() {
                 className="tv-btn-primary mt-5 inline-flex"
                 data-testid="results-try-again-btn"
                 onClick={() => {
-                  // Force a hash-scroll on the destination
                   setTimeout(() => {
                     document
                       .getElementById("start")
@@ -461,6 +689,30 @@ export default function PatientResults() {
               </Link>
             </div>
           )}
+
+          {/* Submit-another-request CTA — always visible at the very bottom of the results page */}
+          <div
+            className="mt-10 text-center"
+            data-testid="submit-another-request-section"
+          >
+            <Link
+              to="/#start"
+              className="tv-btn-primary inline-flex items-center gap-2"
+              data-testid="submit-another-request-btn"
+              onClick={() => {
+                setTimeout(() => {
+                  document
+                    .getElementById("start")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }, 250);
+              }}
+            >
+              <Plus size={16} /> Submit another request
+            </Link>
+            <p className="text-xs text-[#6D6A65] mt-2">
+              Looking for a different therapist for someone else, or for a separate concern?
+            </p>
+          </div>
         </div>
       </main>
       <Footer />

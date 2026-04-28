@@ -10,6 +10,7 @@ import {
   Users,
   Sparkles,
   ClipboardCheck,
+  Plus,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import SetPasswordPrompt from "@/components/SetPasswordPrompt";
@@ -142,6 +143,29 @@ export default function PatientPortal() {
                   <StatusTimeline req={r} />
                 </Link>
               ))}
+
+              {/* Persistent CTA so a returning patient can quickly start a new
+                  request without having to navigate back to the marketing
+                  homepage. */}
+              <div className="pt-4 text-center">
+                <Link
+                  to="/#start"
+                  className="tv-btn-primary inline-flex items-center gap-2"
+                  data-testid="patient-portal-new-request"
+                  onClick={() => {
+                    setTimeout(() => {
+                      document
+                        .getElementById("start")
+                        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }, 250);
+                  }}
+                >
+                  <Plus size={16} /> Submit another request
+                </Link>
+                <p className="text-xs text-[#6D6A65] mt-2">
+                  Need a therapist for a different concern, or for someone else?
+                </p>
+              </div>
             </div>
           )}
         </div>
@@ -203,31 +227,27 @@ function StatusTimeline({ req }) {
       pending: !verified,
     },
     {
-      key: "matched",
-      label: "Matched",
-      sublabel: notified
-        ? `${req.notified_count} therapist${req.notified_count === 1 ? "" : "s"} notified`
-        : verified ? "In progress" : "Waiting",
-      icon: Users,
-      done: notified,
-      pending: verified && !notified,
-    },
-    {
-      key: "applied",
-      label: "Responses",
+      key: "matches",
+      label: "Matches",
       sublabel: applied
-        ? `${req.application_count} therapist${req.application_count === 1 ? "" : "s"} applied`
-        : notified ? "Awaiting" : "—",
-      icon: CheckCircle2,
-      done: applied,
-      pending: notified && !applied,
+        ? "We found your therapists"
+        : notified
+          ? "Looking now"
+          : verified
+            ? "Starting"
+            : "Waiting",
+      icon: Users,
+      done: applied || resultsReady,
+      pending: verified && !applied && !resultsReady,
     },
     {
       key: "results",
       label: "Results ready",
       sublabel: resultsReady
         ? shortDate(req.results_sent_at)
-        : applied ? "Sending soon" : "—",
+        : applied
+          ? "Sending soon"
+          : "—",
       icon: Sparkles,
       done: resultsReady,
       pending: applied && !resultsReady,
@@ -239,7 +259,7 @@ function StatusTimeline({ req }) {
 
   return (
     <div className="mt-5 pt-5 border-t border-[#E8E5DF]" data-testid="status-timeline">
-      <div className="grid grid-cols-5 gap-1 sm:gap-2">
+      <div className="grid grid-cols-4 gap-1 sm:gap-2">
         {steps.map((step, i) => {
           const Icon = step.icon;
           const isActive = i === activeIdx;

@@ -672,3 +672,18 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 ### Tests
 - `tests/test_iteration51_password_auth.py` — 9 new tests covering password-status, set-password, login-password, patient_accounts lazy create, admin patients endpoint contract, verify-endpoint email echo, prefill has_password_account flag.
 - `tests/test_iteration5_auth.py` — updated for the new dict-shaped `/portal/patient/requests` response.
+
+## Iteration 53 — 9-feature batch (Apr 28, 2026)
+1. **Admin Team management**: `admin_users` collection + `POST /api/admin/team` (invite with email/name/initial password), `GET /api/admin/team`, `DELETE /api/admin/team/{id}` (soft deactivate), `POST /api/admin/team/{id}/reset-password`, `POST /api/admin/login-with-email`. `require_admin` now accepts EITHER `X-Admin-Password` header OR Bearer admin JWT. New "Team" admin tab with invite form + member roster.
+2. **Patient portal timeline**: removed "Matched" and "Responses" labels — now just "Submitted → Email verified → Matches → Results ready" (4 steps, no notify/application counts exposed). Added persistent "+ Submit another request" CTA at bottom.
+3. **Intake review modal**: clicking the final-step submit button now opens a `ReviewPreviewModal` showing every answer the patient gave with "Edit answers" / "Confirm & find my matches" buttons.
+4. **Patient results: "Your referral" panel** at top of /results/{id} — collapsible card listing age, state, ZIP, format, insurance, budget, urgency, gender pref, language, concerns, modalities, notes. Patients can compare what they asked for vs. what each match offers.
+5. **Match gaps display**: per-therapist `<gaps-{i}>` callout showing "Where you may not align ({100-score}% gap)" — listing missing specialties, schedule mismatch, unsupported modality, cash above budget, insurance not accepted, etc. Computed client-side from `match_breakdown` + request fields.
+6. **Therapist preview button**: `Eye` button on /portal/therapist/edit opens `ProfilePreviewModal` showing the therapist exactly how patients see them on the results page (avatar, bio, fees, format, insurance, languages).
+7. **Therapist data migration recommendation** (analysis result, not code): seeded directory has 100% missing profile_picture/license_picture/general_treats/style_tags, 89% missing languages_spoken, 78% missing office_addresses, 57% missing sliding_scale, 55% missing insurance_accepted. Recommended self-edit (NOT re-signup) — see finish summary.
+8. **Provider table column editor**: All-Providers table refactored around a `PROVIDER_COLUMNS` registry (14 columns). Columns dropdown lets admin toggle each column on/off; "Save as default" persists their preferred set in `localStorage` under `tv_admin_provider_default_cols`; "Reset to default" restores. Table now wraps in `overflow-x-auto` so horizontal scrolling kicks in when needed (per user spec).
+9. **Patient results header wrapping** fixed by widening `max-w-2xl` → `max-w-3xl` and removing `text-pretty` so "Reach out to whoever feels right — many offer a free consult." flows on a wider line.
+
+### Tests
+- `tests/test_iteration53_admin_team.py` — 13 tests covering invite/list/login-with-email/JWT-grants-admin/wrong-password-401/reset/deactivate/master-password-still-works/no-creds-401/invalid-bearer-401.
+- All 47 prior tests still passing (12 + 22 + 13).

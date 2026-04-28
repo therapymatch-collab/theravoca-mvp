@@ -81,10 +81,26 @@ def _reset_failures(ip: str) -> None:
 
 
 # ─── Auth deps ───────────────────────────────────────────────────────────────
-def require_admin(x_admin_password: Optional[str] = Header(None)) -> bool:
-    if not x_admin_password or x_admin_password != ADMIN_PASSWORD:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin password")
-    return True
+def require_admin(
+    x_admin_password: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
+) -> bool:
+    """Admin authentication accepts EITHER:
+      • the legacy `X-Admin-Password` header (matches `ADMIN_PASSWORD` env), OR
+      • a Bearer JWT with role=admin (issued by /admin/login-with-email when
+        a team member signs in with email + password).
+    """
+    if x_admin_password and x_admin_password == ADMIN_PASSWORD:
+        return True
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+        except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+            payload = None
+        if payload and payload.get("role") == "admin":
+            return True
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin credentials")
 
 
 def _create_session_token(email: str, role: str) -> str:

@@ -45,6 +45,133 @@ async def admin_login(payload: dict, request: Request):
     return {"ok": True}
 
 
+# ─── Admin team management ───────────────────────────────────────────────────
+import bcrypt as _bcrypt  # noqa: E402
+import uuid as _uuid  # noqa: E402
+
+from deps import _create_session_token  # noqa: E402
+
+
+def _hash_pw(plain: str) -> str:
+    return _bcrypt.hashpw(plain.encode("utf-8"), _bcrypt.gensalt()).decode("utf-8")
+
+
+def _verify_pw(plain: str, hashed: str) -> bool:
+    if not plain or not hashed:
+        return False
+    try:
+        return _bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except (ValueError, TypeError):
+        return False
+
+
+@router.post("/admin/login-with-email")
+async def admin_login_with_email(payload: dict, request: Request):
+    """Per-user admin login (email + password). Issues a Bearer JWT with
+    role=admin that the frontend stores like other sessions and sends as
+    `Authorization: Bearer ...` to admin endpoints. Accepted by
+    `require_admin` alongside the legacy X-Admin-Password header.
+    """
+    email = (payload.get("email") or "").strip().lower()
+    password = payload.get("password") or ""
+    ip = _client_ip(request)
+    key = f"adm:{ip}:{email}"
+    remaining = _check_lockout(key)
+    if remaining is not None:
+        raise HTTPException(
+            429, f"Too many failed attempts. Try again in {remaining // 60 + 1} minutes."
+        )
+    if "@" not in email or not password:
+        raise HTTPException(400, "Email and password required")
+    user = await db.admin_users.find_one(
+        {"email": email, "is_active": {"$ne": False}}, {"_id": 0}
+    )
+    if not user or not _verify_pw(password, user.get("password_hash", "")):
+        _record_failure(key)
+        raise HTTPException(401, "Email or password is incorrect")
+    _reset_failures(key)
+    await db.admin_users.update_one(
+        {"id": user["id"]}, {"$set": {"last_login_at": _now_iso()}}
+    )
+    token = _create_session_token(email, "admin")
+    return {
+        "token": token,
+        "role": "admin",
+        "email": email,
+        "name": user.get("name") or email,
+    }
+
+
+@router.get("/admin/team")
+async def admin_list_team(_: bool = Depends(require_admin)):
+    rows = await db.admin_users.find({}, {"_id": 0, "password_hash": 0}).sort("created_at", 1).to_list(200)
+    return {"team": rows, "total": len(rows)}
+
+
+@router.post("/admin/team")
+async def admin_invite_team_member(payload: dict, _: bool = Depends(require_admin)):
+    """Create a new team member with email + initial password. The inviter
+    shares the credentials out-of-band (Slack, secure DM). For lean MVP we
+    skip an email-based invite flow.
+    """
+    email = (payload.get("email") or "").strip().lower()
+    name = (payload.get("name") or "").strip()
+    password = payload.get("password") or ""
+    if "@" not in email:
+        raise HTTPException(400, "Valid email required")
+    if not name:
+        raise HTTPException(400, "Name required")
+    if len(password) < 8:
+        raise HTTPException(400, "Password must be at least 8 characters")
+    if await db.admin_users.find_one({"email": email}):
+        raise HTTPException(409, "A team member with that email already exists")
+    record = {
+        "id": str(_uuid.uuid4()),
+        "email": email,
+        "name": name,
+        "password_hash": _hash_pw(password),
+        "role": "staff",
+        "is_active": True,
+        "created_at": _now_iso(),
+        "last_login_at": None,
+    }
+    await db.admin_users.insert_one(record)
+    record.pop("password_hash", None)
+    record.pop("_id", None)
+    return record
+
+
+@router.delete("/admin/team/{member_id}")
+async def admin_remove_team_member(member_id: str, _: bool = Depends(require_admin)):
+    """Soft-delete: deactivates the user so future password-based admin
+    sign-ins are rejected, but their audit trail (created_at, last_login_at)
+    is preserved.
+    """
+    res = await db.admin_users.update_one(
+        {"id": member_id}, {"$set": {"is_active": False, "deactivated_at": _now_iso()}}
+    )
+    if res.matched_count == 0:
+        raise HTTPException(404, "Team member not found")
+    return {"ok": True}
+
+
+@router.post("/admin/team/{member_id}/reset-password")
+async def admin_reset_team_password(
+    member_id: str, payload: dict, _: bool = Depends(require_admin)
+):
+    """Allows any admin to reset another team member's password. The new
+    password is shared out-of-band like the initial invite."""
+    password = payload.get("password") or ""
+    if len(password) < 8:
+        raise HTTPException(400, "Password must be at least 8 characters")
+    res = await db.admin_users.update_one(
+        {"id": member_id}, {"$set": {"password_hash": _hash_pw(password)}}
+    )
+    if res.matched_count == 0:
+        raise HTTPException(404, "Team member not found")
+    return {"ok": True}
+
+
 @router.get("/admin/requests", response_model=list)
 async def admin_list_requests(_: bool = Depends(require_admin)):
     docs = await db.requests.find(

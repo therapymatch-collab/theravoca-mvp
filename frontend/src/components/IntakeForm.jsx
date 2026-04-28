@@ -119,6 +119,7 @@ export default function IntakeForm() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [confirmAdult, setConfirmAdult] = useState(false);
   const [confirmNotEmergency, setConfirmNotEmergency] = useState(false);
@@ -869,19 +870,148 @@ export default function IntakeForm() {
               <button
                 type="button"
                 disabled={!canNext() || submitting}
-                onClick={submit}
+                onClick={() => setShowPreview(true)}
                 className="tv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 data-testid="submit-btn"
               >
-                {submitting ? "Submitting..." : "Find my matches"}{" "}
-                <Check size={18} strokeWidth={1.8} />
+                Review & submit{" "}
+                <ArrowRight size={18} strokeWidth={1.8} />
               </button>
             )}
             </div>
           </div>
         </div>
       </div>
+      {showPreview && (
+        <ReviewPreviewModal
+          data={data}
+          submitting={submitting}
+          onClose={() => setShowPreview(false)}
+          onConfirm={async () => {
+            await submit();
+          }}
+        />
+      )}
     </section>
+  );
+}
+
+// Pre-submit review modal — shows the full request the patient is about to
+// send so they can scan it once before committing. Edit goes back to the
+// form (just closes the modal); Submit triggers the actual POST.
+function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
+  const issues = (data.presenting_issues || []).join(", ");
+  const insurance =
+    data.payment_type === "insurance" || data.payment_type === "either"
+      ? data.insurance_name || "—"
+      : "Not using insurance";
+  const cash =
+    data.payment_type === "cash" || data.payment_type === "either"
+      ? data.budget
+        ? `$${data.budget}/session`
+        : "—"
+      : "—";
+  const referralLine =
+    data.referral_source === "Other" && data.referral_source_other
+      ? `Other: ${data.referral_source_other}`
+      : data.referral_source || "—";
+  const notes = (data.notes || "").trim();
+  const rows = [
+    ["Who this referral is for", data.client_type],
+    ["Age group", data.age_group],
+    ["Location", `${data.location_city || "—"}${data.location_zip ? `, ${data.location_zip}` : ""} (${data.location_state})`],
+    ["Concerns", issues || "—"],
+    ["Session format", data.modality_preference],
+    ["Insurance", insurance],
+    ["Cash budget", cash],
+    ["Urgency", data.urgency],
+    ["Therapy history", data.previous_therapy ? "Has prior therapy" : "First-time"],
+    ["Preferred gender", data.gender_preference || "Any"],
+    ["Preferred therapist age", data.therapist_age_preference || "Any"],
+    ["Preferred language", data.preferred_language || "English"],
+    ["Style preferences", (data.style_preferences || []).join(", ") || "—"],
+    ["Therapy approaches", (data.preferred_modalities || []).join(", ") || "—"],
+    ["Referred by", referralLine],
+    ["Email", data.email || "—"],
+    ["Phone", data.phone || "—"],
+  ];
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-4"
+      onClick={onClose}
+      data-testid="intake-preview-modal"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-2xl border border-[#E8E5DF] w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+      >
+        <div className="sticky top-0 bg-white border-b border-[#E8E5DF] p-5 flex items-center justify-between">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-[#C87965] font-semibold">
+              Almost there
+            </p>
+            <h2 className="font-serif-display text-2xl text-[#2D4A3E] mt-0.5">
+              Review your referral
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-[#6D6A65] hover:text-[#2D4A3E] text-sm"
+            data-testid="intake-preview-close"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="p-5 sm:p-6">
+          <p className="text-sm text-[#6D6A65] leading-relaxed">
+            Take a quick look — therapists will only see this anonymized
+            version (no contact info shared until you reach out).
+          </p>
+          <dl className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            {rows.map(([label, value]) => (
+              <div key={label}>
+                <dt className="text-[10px] uppercase tracking-wider text-[#6D6A65]">
+                  {label}
+                </dt>
+                <dd className="text-[#2B2A29] font-medium leading-snug break-words">
+                  {value || "—"}
+                </dd>
+              </div>
+            ))}
+            {notes && (
+              <div className="sm:col-span-2">
+                <dt className="text-[10px] uppercase tracking-wider text-[#6D6A65]">
+                  Notes you shared
+                </dt>
+                <dd className="text-[#2B2A29] leading-relaxed mt-1 whitespace-pre-wrap">
+                  {notes}
+                </dd>
+              </div>
+            )}
+          </dl>
+        </div>
+        <div className="sticky bottom-0 bg-white border-t border-[#E8E5DF] p-5 flex items-center justify-between gap-3 flex-wrap">
+          <button
+            type="button"
+            onClick={onClose}
+            className="tv-btn-secondary"
+            data-testid="intake-preview-edit"
+          >
+            ← Edit answers
+          </button>
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={onConfirm}
+            className="tv-btn-primary disabled:opacity-50"
+            data-testid="intake-preview-submit"
+          >
+            {submitting ? "Submitting..." : "Confirm & find my matches"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

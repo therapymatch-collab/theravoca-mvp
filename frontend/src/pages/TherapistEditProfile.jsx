@@ -18,7 +18,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Save, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Loader2, Save, AlertTriangle, Eye } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -62,6 +62,7 @@ export default function TherapistEditProfile() {
   const [profile, setProfile] = useState(null);
   const [draft, setDraft] = useState({});
   const [saving, setSaving] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
 
   useEffect(() => {
     if (!session?.token) {
@@ -411,21 +412,37 @@ export default function TherapistEditProfile() {
           </div>
         </Section>
 
-        <div className="sticky bottom-4 mt-10 bg-white border border-[#E8E5DF] rounded-2xl px-5 py-4 flex items-center justify-between shadow-sm">
-          <div className="text-xs text-[#6D6A65]">
+        <div className="sticky bottom-4 mt-10 bg-white border border-[#E8E5DF] rounded-2xl px-5 py-4 flex items-center justify-between gap-3 flex-wrap shadow-sm">
+          <div className="text-xs text-[#6D6A65] flex-1 min-w-[180px]">
             Saved changes are visible to patients instantly (except
             specialty/license changes, which need a quick admin review).
           </div>
-          <button
-            onClick={save}
-            disabled={saving}
-            className="inline-flex items-center gap-2 bg-[#2D4A3E] text-white rounded-full px-5 py-2.5 text-sm font-medium hover:bg-[#3A5E50] disabled:opacity-60"
-            data-testid="save-profile-btn"
-          >
-            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            Save changes
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPreviewing(true)}
+              className="inline-flex items-center gap-2 bg-white border border-[#E8E5DF] text-[#2D4A3E] rounded-full px-4 py-2.5 text-sm font-medium hover:border-[#2D4A3E]"
+              data-testid="preview-profile-btn"
+            >
+              <Eye size={14} /> Preview as patient
+            </button>
+            <button
+              onClick={save}
+              disabled={saving}
+              className="inline-flex items-center gap-2 bg-[#2D4A3E] text-white rounded-full px-5 py-2.5 text-sm font-medium hover:bg-[#3A5E50] disabled:opacity-60"
+              data-testid="save-profile-btn"
+            >
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              Save changes
+            </button>
+          </div>
         </div>
+        {previewing && profile && (
+          <ProfilePreviewModal
+            profile={{ ...profile, ...draft }}
+            onClose={() => setPreviewing(false)}
+          />
+        )}
       </main>
       <Footer />
     </div>
@@ -488,3 +505,143 @@ function ChipRow({ options, labels, selected = [], onToggle, testidPrefix }) {
     </div>
   );
 }
+
+/**
+ * Modal that renders the therapist's profile EXACTLY the way patients see
+ * it on the results page. Helps therapists spot issues with bio length,
+ * missing fields, etc. before saving.
+ */
+function ProfilePreviewModal({ profile, onClose }) {
+  const t = profile;
+  const formats = [];
+  if (t.telehealth || t.modality_offering === "virtual" || t.modality_offering === "both")
+    formats.push("Virtual");
+  if (t.offers_in_person || t.modality_offering === "in_person" || t.modality_offering === "both")
+    formats.push("In-person");
+  const formatStr = formats.join(" + ") || "Virtual";
+  const initials = (t.name || "")
+    .split(",")[0]
+    .split(" ")
+    .filter(Boolean)
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-4"
+      onClick={onClose}
+      data-testid="profile-preview-modal"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-[#FDFBF7] rounded-2xl border border-[#E8E5DF] w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+      >
+        <div className="sticky top-0 bg-[#FDFBF7] border-b border-[#E8E5DF] p-5 flex items-center justify-between">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-[#C87965] font-semibold">
+              Patient view
+            </p>
+            <h2 className="font-serif-display text-2xl text-[#2D4A3E] mt-0.5">
+              How patients see your profile
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-[#6D6A65] hover:text-[#2D4A3E] text-sm"
+            data-testid="profile-preview-close"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="p-5 sm:p-6">
+          <article className="bg-white border border-[#E8E5DF] rounded-2xl p-5">
+            <div className="flex gap-4">
+              <div className="w-14 h-14 rounded-full bg-[#FDFBF7] border border-[#E8E5DF] overflow-hidden flex items-center justify-center shrink-0">
+                {t.profile_picture ? (
+                  <img src={t.profile_picture} alt={t.name || "therapist"} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="font-serif-display text-base text-[#2D4A3E]">
+                    {initials || "T"}
+                  </span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                  <h3 className="font-serif-display text-xl text-[#2D4A3E] leading-tight truncate">
+                    {t.name || "Your name"}
+                  </h3>
+                  <div className="inline-flex items-center gap-1 bg-[#2D4A3E] text-white text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0">
+                    <Eye size={10} /> 87%
+                  </div>
+                </div>
+                <div className="text-xs text-[#6D6A65] mt-0.5">
+                  {t.years_experience
+                    ? `${t.years_experience} year${t.years_experience === 1 ? "" : "s"} experience`
+                    : "Experience: —"}{" "}
+                  • {(t.modalities || []).slice(0, 3).join(" · ") || "—"}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 mt-3 text-xs">
+                  <PreviewKV label="Format" value={formatStr} />
+                  <PreviewKV
+                    label="Cash rate"
+                    value={t.cash_rate ? `$${t.cash_rate} / session` : "—"}
+                  />
+                  <PreviewKV label="Sliding scale" value={t.sliding_scale ? "Yes" : "No"} />
+                  <PreviewKV label="Free consult" value={t.free_consult ? "Yes" : "—"} />
+                  {t.office_addresses && t.office_addresses.length > 0 && (
+                    <PreviewKV
+                      label="Office"
+                      value={t.office_addresses[0]}
+                      span={2}
+                    />
+                  )}
+                  {t.website && (
+                    <PreviewKV label="Website" value={t.website} span={2} />
+                  )}
+                  {(t.insurance_accepted || []).length > 0 && (
+                    <PreviewKV
+                      label="Insurance"
+                      value={(t.insurance_accepted || []).slice(0, 4).join(", ")}
+                      span={2}
+                    />
+                  )}
+                  {(t.languages_spoken || []).length > 0 && (
+                    <PreviewKV
+                      label="Languages"
+                      value={["English", ...(t.languages_spoken || [])].join(", ")}
+                      span={2}
+                    />
+                  )}
+                </div>
+                {t.bio && (
+                  <p className="mt-4 text-sm text-[#2B2A29] leading-relaxed border-l-2 border-[#C87965] pl-3">
+                    {t.bio}
+                  </p>
+                )}
+              </div>
+            </div>
+          </article>
+          <div className="mt-5 text-xs text-[#6D6A65] leading-relaxed">
+            <strong className="text-[#2D4A3E]">Tip:</strong> A 2–4 sentence bio,
+            a friendly photo, and at least one office address dramatically
+            improve your patient response rate.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PreviewKV({ label, value, span = 1 }) {
+  return (
+    <div className={span === 2 ? "col-span-2" : ""}>
+      <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">
+        {label}
+      </div>
+      <div className="font-medium text-[#2B2A29] break-words">{value || "—"}</div>
+    </div>
+  );
+}
+

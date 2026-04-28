@@ -26,6 +26,8 @@ import {
   Copy,
   Share2,
   Ban,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
@@ -109,6 +111,9 @@ import {
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const pwd = sessionStorage.getItem("tv_admin_pwd");
+  const adminToken = sessionStorage.getItem("tv_admin_token");
+  const adminEmail = sessionStorage.getItem("tv_admin_email");
+  const adminName = sessionStorage.getItem("tv_admin_name");
   const client = adminClient(pwd);
   const [stats, setStats] = useState(null);
   const [requests, setRequests] = useState([]);
@@ -144,9 +149,11 @@ export default function AdminDashboard() {
   const [optOutsLoading, setOptOutsLoading] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [team, setTeam] = useState(null);
   const [showOnlyReapproval, setShowOnlyReapproval] = useState(false);
   const [providerPageSize, setProviderPageSize] = useState(20);
   const [providerPage, setProviderPage] = useState(0);
+  const { visibleCols, setVisibleCols, defaultCols, setDefaultCols } = useProviderColumnPrefs();
 
   // Coverage-gap analysis — recruiting recommendations.
   const [coverageGap, setCoverageGap] = useState(null);
@@ -222,6 +229,9 @@ export default function AdminDashboard() {
     } catch (e) {
       if (e?.response?.status === STATUS_UNAUTHORIZED) {
         sessionStorage.removeItem("tv_admin_pwd");
+        sessionStorage.removeItem("tv_admin_token");
+        sessionStorage.removeItem("tv_admin_email");
+        sessionStorage.removeItem("tv_admin_name");
         navigate("/admin");
       }
     } finally {
@@ -230,14 +240,15 @@ export default function AdminDashboard() {
   }, [client, navigate]);
 
   useEffect(() => {
-    if (!pwd) {
+    // Either auth mode is acceptable: master env password OR a per-user JWT.
+    if (!pwd && !adminToken) {
       navigate("/admin");
       return;
     }
     refresh();
     const intervalId = setInterval(refresh, ADMIN_POLL_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [pwd, navigate, refresh]);
+  }, [pwd, adminToken, navigate, refresh]);
 
   const openDetail = async (id) => {
     setOpenId(id);
@@ -515,6 +526,15 @@ export default function AdminDashboard() {
       setPatientsByEmail(res.data);
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Couldn't load patient list");
+    }
+  }, [client]);
+
+  const loadTeam = useCallback(async () => {
+    try {
+      const res = await client.get("/admin/team");
+      setTeam(res.data);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Couldn't load team list");
     }
   }, [client]);
 
@@ -833,6 +853,17 @@ export default function AdminDashboard() {
                   testid="tab-patients"
                 />
                 <TabBtn
+                  active={tab === "team"}
+                  onClick={() => {
+                    setTab("team");
+                    if (!team) loadTeam();
+                  }}
+                  icon={<Users size={14} />}
+                  label="Team"
+                  count={team?.total ?? null}
+                  testid="tab-team"
+                />
+                <TabBtn
                   active={tab === "coverage_gap"}
                   onClick={() => {
                     setTab("coverage_gap");
@@ -1011,23 +1042,27 @@ export default function AdminDashboard() {
                     pendingCount={
                       allTherapists.filter((t) => t.pending_reapproval).length
                     }
+                    visibleCols={visibleCols}
+                    setVisibleCols={setVisibleCols}
+                    defaultCols={defaultCols}
+                    setDefaultCols={setDefaultCols}
                   />
+                  <div className="overflow-x-auto">
                   <table className="w-full text-sm" data-testid="all-therapists-table">
                     <thead className="bg-[#FDFBF7] text-[#6D6A65]">
                       <tr className="text-left">
-                        <Th>Provider</Th>
-                        <Th>Status</Th>
-                        <Th>License</Th>
-                        <Th>Reviews</Th>
-                        <Th>Rate</Th>
-                        <Th>Specialties</Th>
+                        {PROVIDER_COLUMNS
+                          .filter((c) => visibleCols.includes(c.key))
+                          .map((c) => (
+                            <Th key={c.key}>{c.label}</Th>
+                          ))}
                         <Th></Th>
                       </tr>
                     </thead>
                     <tbody>
                       {allTherapists.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="p-10 text-center text-[#6D6A65]">
+                          <td colSpan={visibleCols.length + 1} className="p-10 text-center text-[#6D6A65]">
                             No providers in the directory yet.
                           </td>
                         </tr>
@@ -1045,10 +1080,12 @@ export default function AdminDashboard() {
                             key={t.id}
                             t={t}
                             onEdit={() => setEditTherapist({ ...t })}
+                            visibleCols={visibleCols}
                           />
                         ))}
                     </tbody>
                   </table>
+                  </div>
                   <ProviderTablePager
                     total={
                       (showOnlyReapproval
@@ -1464,6 +1501,15 @@ export default function AdminDashboard() {
                   data={patientsByEmail}
                   filter={search}
                   onReload={loadPatientsByEmail}
+                />
+              )}
+
+              {tab === "team" && (
+                <TeamPanel
+                  data={team}
+                  client={client}
+                  onReload={loadTeam}
+                  currentEmail={adminEmail}
                 />
               )}
 
@@ -3242,28 +3288,16 @@ function SubBadge({ t }) {
   );
 }
 
-function ProviderRow({ t, onEdit }) {
-  const offices = t.office_locations || [];
-  const inPerson = t.offers_in_person ?? (offices.length > 0);
-  const telehealth = t.telehealth ?? (t.modality_offering === "telehealth" || t.modality_offering === "both");
-  const specs = [
-    ...(t.primary_specialties || []),
-    ...(t.secondary_specialties || []),
-  ];
-  const insurances = t.insurance_accepted || [];
-
-  // Build a compact "format / location" hint for the rate column subtitle
-  const formatHint = inPerson && telehealth
-    ? "In-person + telehealth"
-    : inPerson
-      ? `In-person${offices[0] ? ` · ${offices[0]}` : ""}`
-      : "Telehealth only";
-
-  return (
-    <tr
-      className="border-t border-[#E8E5DF] hover:bg-[#FDFBF7] align-top"
-      data-testid={`provider-row-${t.id}`}
-    >
+// Column registry — single source of truth for the All-Providers table.
+// Each column knows how to render its cell from the therapist record so the
+// table body can be driven dynamically by the visible-columns array.
+const PROVIDER_COLUMNS = [
+  {
+    key: "provider",
+    label: "Provider",
+    required: true,
+    headClass: "",
+    render: (t) => (
       <td className="p-4 max-w-[320px]">
         <div className="font-medium text-[#2B2A29] truncate" title={t.name}>
           {t.name}
@@ -3277,7 +3311,12 @@ function ProviderRow({ t, onEdit }) {
           <div className="text-[11px] text-[#6D6A65] mt-0.5">{t.phone}</div>
         )}
       </td>
-
+    ),
+  },
+  {
+    key: "status",
+    label: "Status",
+    render: (t) => (
       <td className="p-4 whitespace-nowrap">
         <ProviderStatus t={t} />
         <SubBadge t={t} />
@@ -3291,15 +3330,25 @@ function ProviderRow({ t, onEdit }) {
           </span>
         )}
       </td>
-
+    ),
+  },
+  {
+    key: "license",
+    label: "License",
+    render: (t) => (
       <td className="p-4 whitespace-nowrap">
         <LicenseBadge t={t} />
       </td>
-
+    ),
+  },
+  {
+    key: "reviews",
+    label: "Reviews",
+    render: (t) => (
       <td className="p-4 whitespace-nowrap">
         {t.review_count > 0 ? (
           <>
-            <div className="font-medium text-[#C87965] text-sm" aria-label={`${(t.review_avg ?? 0).toFixed(1)} stars`}>
+            <div className="font-medium text-[#C87965] text-sm">
               {"★".repeat(Math.round(t.review_avg || 0))}
               <span className="text-[#E8E5DF]">
                 {"★".repeat(5 - Math.round(t.review_avg || 0))}
@@ -3314,43 +3363,241 @@ function ProviderRow({ t, onEdit }) {
           <span className="text-xs text-[#C8C4BB]">No reviews</span>
         )}
       </td>
-
-      <td className="p-4 whitespace-nowrap">
-        <div className="text-[#2B2A29] font-medium">
-          ${t.cash_rate ?? "—"}
-        </div>
-        <div className="text-[11px] text-[#6D6A65]">
-          {t.sliding_scale && (
-            <span className="text-[#C87965]">sliding scale</span>
-          )}
-          {t.free_consult && (
-            <span className={t.sliding_scale ? "ml-2" : ""}>free consult</span>
-          )}
-          {!t.sliding_scale && !t.free_consult && "per session"}
-        </div>
-        <div className="text-[10px] text-[#6D6A65] mt-1 truncate max-w-[160px]" title={formatHint}>
-          {formatHint}
-        </div>
-      </td>
-
-      <td className="p-4 text-xs text-[#2B2A29] max-w-[280px]">
-        {specs.length > 0 ? (
-          <div className="leading-snug" title={specs.join(", ")}>
-            {specs.slice(0, 2).map((s) => (typeof s === "string" ? s : s?.name || "")).filter(Boolean).join(", ")}
-            {specs.length > 2 && (
-              <span className="text-[#6D6A65]"> +{specs.length - 2}</span>
-            )}
+    ),
+  },
+  {
+    key: "rate",
+    label: "Rate",
+    render: (t) => {
+      const offices = t.office_locations || [];
+      const inPerson = t.offers_in_person ?? (offices.length > 0);
+      const telehealth = t.telehealth ?? (t.modality_offering === "telehealth" || t.modality_offering === "both");
+      const formatHint = inPerson && telehealth
+        ? "In-person + telehealth"
+        : inPerson
+          ? `In-person${offices[0] ? ` · ${offices[0]}` : ""}`
+          : "Telehealth only";
+      return (
+        <td className="p-4 whitespace-nowrap">
+          <div className="text-[#2B2A29] font-medium">
+            ${t.cash_rate ?? "—"}
           </div>
-        ) : (
-          <span className="text-[#C8C4BB]">—</span>
-        )}
-        <div className="text-[11px] text-[#6D6A65] mt-1 truncate" title={insurances.join(", ") || "Cash only"}>
-          {insurances.length > 0
-            ? `Insurance: ${insurances.slice(0, 2).join(", ")}${insurances.length > 2 ? ` +${insurances.length - 2}` : ""}`
-            : "Cash only"}
+          <div className="text-[11px] text-[#6D6A65]">
+            {t.sliding_scale && <span className="text-[#C87965]">sliding scale</span>}
+            {t.free_consult && (
+              <span className={t.sliding_scale ? "ml-2" : ""}>free consult</span>
+            )}
+            {!t.sliding_scale && !t.free_consult && "per session"}
+          </div>
+          <div className="text-[10px] text-[#6D6A65] mt-1 truncate max-w-[160px]" title={formatHint}>
+            {formatHint}
+          </div>
+        </td>
+      );
+    },
+  },
+  {
+    key: "specialties",
+    label: "Specialties",
+    render: (t) => {
+      const specs = [
+        ...(t.primary_specialties || []),
+        ...(t.secondary_specialties || []),
+      ];
+      const insurances = t.insurance_accepted || [];
+      return (
+        <td className="p-4 text-xs text-[#2B2A29] max-w-[280px]">
+          {specs.length > 0 ? (
+            <div className="leading-snug" title={specs.join(", ")}>
+              {specs.slice(0, 2).map((s) => (typeof s === "string" ? s : s?.name || "")).filter(Boolean).join(", ")}
+              {specs.length > 2 && <span className="text-[#6D6A65]"> +{specs.length - 2}</span>}
+            </div>
+          ) : (
+            <span className="text-[#C8C4BB]">—</span>
+          )}
+          <div className="text-[11px] text-[#6D6A65] mt-1 truncate" title={insurances.join(", ") || "Cash only"}>
+            {insurances.length > 0
+              ? `Insurance: ${insurances.slice(0, 2).join(", ")}${insurances.length > 2 ? ` +${insurances.length - 2}` : ""}`
+              : "Cash only"}
+          </div>
+        </td>
+      );
+    },
+  },
+  // Optional columns — admin can opt-in via the columns editor.
+  {
+    key: "phone",
+    label: "Phone",
+    render: (t) => (
+      <td className="p-4 whitespace-nowrap text-xs text-[#2B2A29]">
+        {t.phone || t.phone_alert || t.office_phone || "—"}
+      </td>
+    ),
+  },
+  {
+    key: "modality",
+    label: "Format",
+    render: (t) => (
+      <td className="p-4 whitespace-nowrap text-xs text-[#2B2A29]">
+        {t.modality_offering || (t.telehealth ? "telehealth" : "—")}
+      </td>
+    ),
+  },
+  {
+    key: "office_addresses",
+    label: "Office address",
+    render: (t) => (
+      <td className="p-4 text-xs text-[#2B2A29] max-w-[260px]">
+        <div className="truncate" title={(t.office_addresses || []).join(" | ")}>
+          {(t.office_addresses && t.office_addresses[0]) ||
+            (t.office_locations && t.office_locations[0]) || "—"}
         </div>
       </td>
+    ),
+  },
+  {
+    key: "languages",
+    label: "Languages",
+    render: (t) => {
+      const langs = ["English", ...(t.languages_spoken || [])];
+      return (
+        <td className="p-4 whitespace-nowrap text-xs text-[#2B2A29]">
+          {langs.join(", ")}
+        </td>
+      );
+    },
+  },
+  {
+    key: "age_groups",
+    label: "Age groups",
+    render: (t) => (
+      <td className="p-4 text-xs text-[#2B2A29] max-w-[220px]">
+        <div className="truncate" title={(t.age_groups || []).join(", ")}>
+          {(t.age_groups || []).join(", ") || "—"}
+        </div>
+      </td>
+    ),
+  },
+  {
+    key: "client_types",
+    label: "Client types",
+    render: (t) => (
+      <td className="p-4 whitespace-nowrap text-xs text-[#2B2A29]">
+        {(t.client_types || []).join(", ") || "—"}
+      </td>
+    ),
+  },
+  {
+    key: "modalities",
+    label: "Modalities",
+    render: (t) => (
+      <td className="p-4 text-xs text-[#2B2A29] max-w-[220px]">
+        <div className="truncate" title={(t.modalities || []).join(", ")}>
+          {(t.modalities || []).slice(0, 3).join(", ") || "—"}
+          {(t.modalities || []).length > 3 && (
+            <span className="text-[#6D6A65]"> +{(t.modalities || []).length - 3}</span>
+          )}
+        </div>
+      </td>
+    ),
+  },
+  {
+    key: "website",
+    label: "Website",
+    render: (t) => (
+      <td className="p-4 whitespace-nowrap text-xs text-[#2D4A3E] max-w-[220px]">
+        {t.website ? (
+          <a
+            href={t.website.startsWith("http") ? t.website : `https://${t.website}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline decoration-dotted truncate inline-block max-w-full align-bottom"
+          >
+            {t.website.replace(/^https?:\/\//, "")}
+          </a>
+        ) : "—"}
+      </td>
+    ),
+  },
+  {
+    key: "subscription",
+    label: "Subscription",
+    render: (t) => (
+      <td className="p-4 whitespace-nowrap text-xs text-[#2B2A29]">
+        {t.subscription_status || "—"}
+      </td>
+    ),
+  },
+  {
+    key: "created_at",
+    label: "Joined",
+    render: (t) => (
+      <td className="p-4 whitespace-nowrap text-xs text-[#6D6A65]">
+        {t.created_at
+          ? new Date(t.created_at).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            })
+          : "—"}
+      </td>
+    ),
+  },
+];
 
+const PROVIDER_DEFAULT_COLUMNS = [
+  "provider", "status", "license", "reviews", "rate", "specialties",
+];
+
+// Hook for persisting visible columns + an admin-saved default per browser.
+// Stored under two keys so an admin can override their working set without
+// losing the defaults they previously committed.
+function useProviderColumnPrefs() {
+  const [defaultCols, setDefaultColsState] = useState(() => {
+    try {
+      const raw = localStorage.getItem("tv_admin_provider_default_cols");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch { /* ignore */ }
+    return [...PROVIDER_DEFAULT_COLUMNS];
+  });
+  const [visibleCols, setVisibleColsState] = useState(() => {
+    try {
+      const raw = localStorage.getItem("tv_admin_provider_visible_cols");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch { /* ignore */ }
+    return [...PROVIDER_DEFAULT_COLUMNS];
+  });
+  const setVisibleCols = (next) => {
+    setVisibleColsState(next);
+    try {
+      localStorage.setItem("tv_admin_provider_visible_cols", JSON.stringify(next));
+    } catch { /* ignore */ }
+  };
+  const setDefaultCols = (next) => {
+    setDefaultColsState(next);
+    try {
+      localStorage.setItem("tv_admin_provider_default_cols", JSON.stringify(next));
+    } catch { /* ignore */ }
+  };
+  return { visibleCols, setVisibleCols, defaultCols, setDefaultCols };
+}
+
+function ProviderRow({ t, onEdit, visibleCols }) {
+  const cols = PROVIDER_COLUMNS.filter((c) => visibleCols.includes(c.key));
+  return (
+    <tr
+      className="border-t border-[#E8E5DF] hover:bg-[#FDFBF7] align-top"
+      data-testid={`provider-row-${t.id}`}
+    >
+      {cols.map((c) => (
+        <ProviderCell key={c.key} column={c} therapist={t} />
+      ))}
       <td className="p-4 text-right whitespace-nowrap">
         <button
           className="text-[#2D4A3E] hover:underline text-xs inline-flex items-center gap-1"
@@ -3364,10 +3611,18 @@ function ProviderRow({ t, onEdit }) {
   );
 }
 
+// Wrapper so React can key off `column.key` while still rendering the
+// real <td> element produced by `column.render(therapist)`.
+function ProviderCell({ column, therapist }) {
+  return column.render(therapist);
+}
+
 function ProviderTableControls({
   total, visibleTotal, showOnlyReapproval, setShowOnlyReapproval,
   pageSize, setPageSize, setPage, pendingCount,
+  visibleCols, setVisibleCols, defaultCols, setDefaultCols,
 }) {
+  const [showColMenu, setShowColMenu] = useState(false);
   return (
     <div className="flex items-center gap-3 p-4 border-b border-[#E8E5DF] flex-wrap">
       <span className="text-xs text-[#6D6A65]">
@@ -3387,7 +3642,94 @@ function ProviderTableControls({
       >
         ⚠ Needs re-review ({pendingCount})
       </button>
-      <div className="ml-auto flex items-center gap-2 text-xs text-[#6D6A65]">
+      <div className="ml-auto flex items-center gap-3 text-xs text-[#6D6A65]">
+        {/* Columns editor — open inline dropdown */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowColMenu((v) => !v)}
+            className="px-3 py-1 rounded-md border border-[#E8E5DF] hover:border-[#2D4A3E] text-[#2B2A29] inline-flex items-center gap-1.5"
+            data-testid="provider-columns-trigger"
+            aria-expanded={showColMenu}
+          >
+            Columns ({visibleCols.length})
+            {showColMenu ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </button>
+          {showColMenu && (
+            <div
+              className="absolute right-0 top-full mt-2 w-72 max-h-[60vh] overflow-y-auto bg-white border border-[#E8E5DF] rounded-xl shadow-lg z-30 p-3"
+              data-testid="provider-columns-menu"
+            >
+              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-2">
+                Choose columns
+              </div>
+              <div className="space-y-1">
+                {PROVIDER_COLUMNS.map((c) => {
+                  const checked = visibleCols.includes(c.key);
+                  return (
+                    <label
+                      key={c.key}
+                      className="flex items-center gap-2 text-sm text-[#2B2A29] py-1 px-2 rounded hover:bg-[#FDFBF7] cursor-pointer"
+                      data-testid={`col-toggle-${c.key}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          if (checked) {
+                            // Don't allow zero columns
+                            if (visibleCols.length <= 1) return;
+                            setVisibleCols(visibleCols.filter((x) => x !== c.key));
+                          } else {
+                            // Preserve registry order so the table reads naturally
+                            setVisibleCols(
+                              PROVIDER_COLUMNS
+                                .map((x) => x.key)
+                                .filter((k) => k === c.key || visibleCols.includes(k))
+                            );
+                          }
+                        }}
+                      />
+                      <span className="flex-1">{c.label}</span>
+                      {c.required && (
+                        <span className="text-[9px] uppercase text-[#C87965]">core</span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="mt-3 pt-3 border-t border-[#E8E5DF] flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setVisibleCols(defaultCols)}
+                  className="text-xs px-3 py-1 rounded-md border border-[#E8E5DF] hover:border-[#2D4A3E] text-[#2B2A29]"
+                  data-testid="cols-reset-default"
+                >
+                  Reset to default
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDefaultCols([...visibleCols]);
+                    toast.success("Default columns saved.");
+                  }}
+                  className="text-xs px-3 py-1 rounded-md bg-[#2D4A3E] text-white hover:bg-[#3A5E50]"
+                  data-testid="cols-save-default"
+                >
+                  Save as default
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowColMenu(false)}
+                  className="text-xs text-[#6D6A65] hover:text-[#2D4A3E] ml-auto"
+                  data-testid="cols-close"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
         <label htmlFor="provider-page-size">Rows per page:</label>
         <select
           id="provider-page-size"
@@ -3524,6 +3866,228 @@ function OptOutsPanel({ data, loading, onReload, filter }) {
           </tbody>
         </table>
       )}
+    </div>
+  );
+}
+
+
+function TeamPanel({ data, client, onReload, currentEmail }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [pwd, setPwd] = useState("");
+  const [busy, setBusy] = useState(false);
+  const rows = data?.team || [];
+
+  const submitInvite = async (e) => {
+    e.preventDefault();
+    if (!email.includes("@")) {
+      toast.error("Valid email required");
+      return;
+    }
+    if (pwd.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    setBusy(true);
+    try {
+      await client.post("/admin/team", { email: email.trim().toLowerCase(), name: name.trim(), password: pwd });
+      toast.success(`Added ${email}. Share the password with them out-of-band.`);
+      setName("");
+      setEmail("");
+      setPwd("");
+      onReload();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Invite failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeMember = async (member) => {
+    if (!window.confirm(`Remove access for ${member.email}?`)) return;
+    try {
+      await client.delete(`/admin/team/${member.id}`);
+      toast.success(`${member.email} deactivated`);
+      onReload();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Couldn't deactivate");
+    }
+  };
+
+  const resetPassword = async (member) => {
+    const next = window.prompt(`New password for ${member.email} (min 8 chars):`);
+    if (!next) return;
+    if (next.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    try {
+      await client.post(`/admin/team/${member.id}/reset-password`, { password: next });
+      toast.success(`Password reset for ${member.email}. Share it with them.`);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Couldn't reset password");
+    }
+  };
+
+  return (
+    <div className="mt-6 space-y-6" data-testid="team-panel">
+      <div className="bg-white border border-[#E8E5DF] rounded-2xl p-5 sm:p-6">
+        <h3 className="font-serif-display text-2xl text-[#2D4A3E]">Invite a teammate</h3>
+        <p className="text-sm text-[#6D6A65] mt-1">
+          Each team member gets their own login so you don't share a password. Share
+          the initial password securely (Slack DM, 1Password share link, etc.) — they
+          can change it later by asking another admin to reset it.
+        </p>
+        <form
+          onSubmit={submitInvite}
+          className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 items-end"
+          data-testid="team-invite-form"
+        >
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Name</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="mt-1 w-full px-3 py-2 bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg text-sm"
+              placeholder="Jane Doe"
+              data-testid="team-invite-name"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="mt-1 w-full px-3 py-2 bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg text-sm"
+              placeholder="jane@theravoca.com"
+              data-testid="team-invite-email"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Initial password</label>
+            <input
+              type="text"
+              value={pwd}
+              onChange={(e) => setPwd(e.target.value)}
+              className="mt-1 w-full px-3 py-2 bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg text-sm font-mono"
+              placeholder="min 8 chars"
+              data-testid="team-invite-password"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={busy}
+            className="tv-btn-primary !py-2 !px-4 text-sm sm:col-span-3 sm:justify-self-end disabled:opacity-50"
+            data-testid="team-invite-submit"
+          >
+            {busy ? "Adding..." : "Add team member"}
+          </button>
+        </form>
+      </div>
+
+      <div className="bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
+        <div className="p-5 border-b border-[#E8E5DF] flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="font-serif-display text-2xl text-[#2D4A3E]">Team members</h3>
+            <p className="text-sm text-[#6D6A65] mt-1">
+              {rows.length} active and inactive team member{rows.length === 1 ? "" : "s"}.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onReload}
+            className="text-xs text-[#2D4A3E] hover:underline"
+            data-testid="team-refresh"
+          >
+            Refresh
+          </button>
+        </div>
+        {!data && (
+          <div className="p-10 text-center text-[#6D6A65]">Loading team…</div>
+        )}
+        {data && rows.length === 0 && (
+          <div className="p-10 text-center text-[#6D6A65]">
+            No team members yet. Use the form above to add your first.
+          </div>
+        )}
+        {data && rows.length > 0 && (
+          <table className="w-full text-sm">
+            <thead className="bg-[#FDFBF7] text-[10px] uppercase tracking-wider text-[#6D6A65]">
+              <tr>
+                <th className="text-left px-4 py-3">Name</th>
+                <th className="text-left px-4 py-3">Email</th>
+                <th className="text-left px-4 py-3">Last login</th>
+                <th className="text-center px-4 py-3">Status</th>
+                <th className="text-right px-4 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((m) => {
+                const isMe = currentEmail && m.email === currentEmail;
+                return (
+                  <tr
+                    key={m.id}
+                    className="border-t border-[#E8E5DF]"
+                    data-testid={`team-row-${m.email}`}
+                  >
+                    <td className="px-4 py-3 text-[#2B2A29] font-medium">
+                      {m.name}
+                      {isMe && (
+                        <span className="ml-2 text-[10px] text-[#C87965]">(you)</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-[#6D6A65] break-all">{m.email}</td>
+                    <td className="px-4 py-3 text-[#6D6A65] whitespace-nowrap">
+                      {m.last_login_at
+                        ? new Date(m.last_login_at).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                          })
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {m.is_active ? (
+                        <span className="inline-flex text-[11px] px-2 py-0.5 rounded-full bg-[#2D4A3E]/10 text-[#2D4A3E]">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex text-[11px] px-2 py-0.5 rounded-full bg-[#E8E5DF] text-[#6D6A65]">
+                          Removed
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      {m.is_active && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => resetPassword(m)}
+                            className="text-xs text-[#2D4A3E] hover:underline mr-3"
+                            data-testid={`team-reset-${m.email}`}
+                          >
+                            Reset password
+                          </button>
+                          {!isMe && (
+                            <button
+                              type="button"
+                              onClick={() => removeMember(m)}
+                              className="text-xs text-[#D45D5D] hover:underline"
+                              data-testid={`team-remove-${m.email}`}
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
