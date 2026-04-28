@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -115,6 +116,17 @@ async def create_request(payload: RequestCreate, request: Request):
                 "Too many submissions from this network in the last hour. "
                 "Please try again later.",
             )
+
+    # 4. Cloudflare Turnstile (CAPTCHA replacement). Fail-soft: when the
+    #    secret key isn't configured this returns ok=True so dev/preview
+    #    keep working without keys. When configured, an invalid or
+    #    missing token rejects the submission with a clear 400.
+    from turnstile_service import verify_token as verify_turnstile
+    ok, ts_err = await verify_turnstile(
+        payload.turnstile_token, remote_ip=client_ip,
+    )
+    if not ok:
+        raise HTTPException(400, ts_err or "Security check failed.")
 
     # ─── Spam / sanity gates (run before any DB writes) ────────────────
     if not email_is_plausible(payload.email):
@@ -234,6 +246,7 @@ async def create_request(payload: RequestCreate, request: Request):
     # Bot-defense fields are interrogated above — never persist them.
     doc.pop("fax_number", None)
     doc.pop("form_started_at_ms", None)
+    doc.pop("turnstile_token", None)
     await db.requests.insert_one(doc.copy())
     # Log the IP for the rate-limit window. We only keep these for ~24h
     # via a TTL index on `ts_at` (BSON Date) — see server.py startup.
@@ -434,6 +447,9 @@ async def public_request_results(
 
     matched_at = req.get("matched_at") or req.get("created_at")
     matched_dt2 = _parse_iso(matched_at) if matched_at else None
+    patient_issues = [
+        i.lower() for i in (req.get("presenting_issues") or []) if i
+    ]
     for a in apps:
         ms = float(a.get("match_score") or 0)
         speed_bonus = 0.0
@@ -442,9 +458,50 @@ async def public_request_results(
             if applied_dt:
                 hours = max(0.0, (applied_dt - matched_dt2).total_seconds() / 3600.0)
                 speed_bonus = max(0.0, min(30.0, 30.0 * (24.0 - hours) / 24.0))
-        msg_len = len(a.get("message") or "")
-        quality_bonus = min(10.0, msg_len / 300.0 * 10.0)
+        # Response-quality signal: rewards therapists who actually engaged
+        # with the patient's anonymous summary, not generic boilerplate.
+        # Components:
+        #   1. Length (0-6): up to 6 points for a substantive 300-char reply
+        #   2. Issue match (0-3): mentions any of the patient's presenting
+        #      concerns by name → +3
+        #   3. Action signal (0-2): offers a concrete next step (slot,
+        #      free consult, available time) → +2
+        #   4. Personal voice (0-1): uses first-person pronoun → +1
+        # Capped at 12 total. Replaces the older length-only `/300 * 10`
+        # heuristic so a 300-char generic reply no longer outranks a
+        # 200-char specific reply.
+        msg = (a.get("message") or "").lower()
+        msg_len = len(msg)
+        len_score = min(6.0, msg_len / 300.0 * 6.0)
+        issue_score = 0.0
+        if patient_issues:
+            for issue in patient_issues:
+                # Match on the slug OR the human-readable form ("trauma_ptsd"
+                # in the slug list also matches "trauma" / "ptsd").
+                tokens = [issue] + issue.replace("_", " ").split()
+                if any(tok in msg for tok in tokens if len(tok) >= 4):
+                    issue_score = 3.0
+                    break
+        action_keywords = (
+            "consult", "available", "open slot", "schedule", "next week",
+            "this week", "free 15", "intake call", "appointment", "tomorrow",
+            "in-person", "telehealth", "offer", "i can see you",
+        )
+        action_score = 2.0 if any(k in msg for k in action_keywords) else 0.0
+        personal_score = 1.0 if re.search(
+            r"\b(i\s|i'd|i'll|i've|i'm|my\s)", msg,
+        ) else 0.0
+        quality_bonus = min(
+            12.0, len_score + issue_score + action_score + personal_score,
+        )
         a["patient_rank_score"] = round(min(100.0, ms * 0.6 + speed_bonus + quality_bonus), 1)
+        a["response_quality"] = {
+            "length": round(len_score, 1),
+            "issue_match": issue_score,
+            "action_signal": action_score,
+            "personal_voice": personal_score,
+            "total": round(quality_bonus, 1),
+        }
 
     apps.sort(key=lambda a: (a.get("patient_rank_score", 0), a.get("created_at", "")), reverse=True)
 

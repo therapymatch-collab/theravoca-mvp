@@ -30,6 +30,8 @@ import {
   ChevronUp,
   Sparkles,
   ExternalLink,
+  Eye,
+  Brain,
   MessageSquareWarning,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
@@ -47,6 +49,7 @@ import SettingsPanel from "@/pages/admin/panels/SettingsPanel";
 import ScrapeSourcesPanel from "@/pages/admin/panels/ScrapeSourcesPanel";
 import SmsStatusPanel from "@/pages/admin/panels/SmsStatusPanel";
 import SiteCopyAdminPanel from "@/pages/admin/panels/SiteCopyAdminPanel";
+import HowItWorksPanel from "@/pages/admin/panels/HowItWorksPanel";
 import FaqAdminPanel from "@/pages/admin/panels/FaqAdminPanel";
 import RequestsPanel from "@/pages/admin/panels/RequestsPanel";
 import PendingTherapistsPanel from "@/pages/admin/panels/PendingTherapistsPanel";
@@ -150,6 +153,9 @@ export default function AdminDashboard() {
   const [editingTplKey, setEditingTplKey] = useState(null);
   const [tplFields, setTplFields] = useState({});
   const [savingTpl, setSavingTpl] = useState(false);
+  // Email template preview modal — html string is the rendered email
+  // (full <html> doc) returned from POST /api/admin/email-templates/{key}/preview
+  const [previewTpl, setPreviewTpl] = useState(null); // {key, subject, html, loading}
   // Referral source analytics
   const [refSources, setRefSources] = useState(null);
   const [refStart, setRefStart] = useState("");
@@ -543,6 +549,29 @@ export default function AdminDashboard() {
       toast.error(e?.response?.data?.detail || "Save failed");
     } finally {
       setSavingTpl(false);
+    }
+  };
+
+  // Render the template (with the live draft, if the editor is open
+  // for this key) and surface the result in the preview modal. Used
+  // both from the row "Preview" button and from a button inside the
+  // edit dialog so admins can iterate on copy WYSIWYG-style.
+  const openTplPreview = async (key, draft) => {
+    setPreviewTpl({ key, subject: "", html: "", loading: true });
+    try {
+      const res = await client.post(
+        `/admin/email-templates/${key}/preview`,
+        { draft: draft || null },
+      );
+      setPreviewTpl({
+        key,
+        subject: res.data?.subject || "",
+        html: res.data?.html || "",
+        loading: false,
+      });
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Preview failed");
+      setPreviewTpl(null);
     }
   };
 
@@ -1449,6 +1478,8 @@ export default function AdminDashboard() {
 
               {tab === "sms_status" && <SmsStatusPanel client={client} />}
 
+              {tab === "how_it_works" && <HowItWorksPanel />}
+
               {tab === "email_templates" && (
                 <div className="mt-6 space-y-3" data-testid="email-templates-list">
                   {emailTemplates.length === 0 ? (
@@ -1488,13 +1519,22 @@ export default function AdminDashboard() {
                               </code>
                             </div>
                           </div>
-                          <button
-                            className="text-[#2D4A3E] hover:underline text-sm inline-flex items-center gap-1.5"
-                            onClick={() => startEditTpl(t.key)}
-                            data-testid={`edit-template-${t.key}`}
-                          >
-                            <Pencil size={14} /> Edit
-                          </button>
+                          <div className="flex flex-col items-end gap-1.5">
+                            <button
+                              className="text-[#2D4A3E] hover:underline text-sm inline-flex items-center gap-1.5"
+                              onClick={() => startEditTpl(t.key)}
+                              data-testid={`edit-template-${t.key}`}
+                            >
+                              <Pencil size={14} /> Edit
+                            </button>
+                            <button
+                              className="text-[#C87965] hover:underline text-sm inline-flex items-center gap-1.5"
+                              onClick={() => openTplPreview(t.key, null)}
+                              data-testid={`preview-template-${t.key}`}
+                            >
+                              <Eye size={14} /> Preview
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))
@@ -2056,7 +2096,15 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
-          <DialogFooter className="mt-4 flex gap-2 justify-end">
+          <DialogFooter className="mt-4 flex gap-2 justify-end flex-wrap">
+            <button
+              className="tv-btn-secondary !py-2 !px-4 text-sm inline-flex items-center gap-1.5"
+              onClick={() => openTplPreview(editingTplKey, tplFields)}
+              data-testid="tpl-preview-draft"
+              type="button"
+            >
+              <Eye size={14} /> Preview
+            </button>
             <button
               className="tv-btn-secondary !py-2 !px-4 text-sm"
               onClick={() => setEditingTplKey(null)}
@@ -2071,6 +2119,62 @@ export default function AdminDashboard() {
               data-testid="tpl-save"
             >
               {savingTpl ? "Saving..." : "Save template"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Email-template preview modal — full rendered HTML in an iframe.
+          Triggered from the "Preview" button on each row OR from inside
+          the edit dialog (re-renders with the live draft fields). */}
+      <Dialog
+        open={!!previewTpl}
+        onOpenChange={(o) => !o && setPreviewTpl(null)}
+      >
+        <DialogContent
+          className="max-w-3xl max-h-[90vh] overflow-hidden bg-white border-[#E8E5DF] flex flex-col"
+          data-testid="tpl-preview-modal"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-serif-display text-2xl text-[#2D4A3E]">
+              Preview: {previewTpl?.key}
+            </DialogTitle>
+            <DialogDescription className="text-sm text-[#6D6A65]">
+              Rendered with sample data (e.g. <code>first_name=Alex</code>,{" "}
+              <code>match_score=87</code>). Edits aren't saved until you
+              click "Save template".
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl p-3 mt-2">
+            <div className="text-xs uppercase tracking-wider text-[#6D6A65] mb-1">
+              Subject line
+            </div>
+            <div className="text-sm font-medium text-[#2B2A29] break-words" data-testid="tpl-preview-subject">
+              {previewTpl?.subject || "—"}
+            </div>
+          </div>
+          <div className="flex-1 mt-3 border border-[#E8E5DF] rounded-xl overflow-hidden bg-white">
+            {previewTpl?.loading ? (
+              <div className="flex items-center justify-center h-64">
+                <Loader2 className="animate-spin text-[#2D4A3E]" />
+              </div>
+            ) : (
+              <iframe
+                title="email-preview"
+                srcDoc={previewTpl?.html || ""}
+                className="w-full h-[60vh] bg-white"
+                sandbox=""
+                data-testid="tpl-preview-iframe"
+              />
+            )}
+          </div>
+          <DialogFooter className="mt-3">
+            <button
+              className="tv-btn-secondary !py-2 !px-4 text-sm"
+              onClick={() => setPreviewTpl(null)}
+              data-testid="tpl-preview-close"
+            >
+              Close
             </button>
           </DialogFooter>
         </DialogContent>
@@ -2660,6 +2764,11 @@ function AdminTabsBar({
       icon: <Mail size={14} />,
       count: emailTemplatesCount,
       onClick: onLoadEmailTemplates,
+    },
+    {
+      id: "how_it_works",
+      label: "How it works",
+      icon: <Brain size={14} />,
     },
   ];
 

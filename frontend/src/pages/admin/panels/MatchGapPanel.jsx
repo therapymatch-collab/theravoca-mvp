@@ -1,4 +1,4 @@
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, MailQuestion } from "lucide-react";
 
 export default function MatchGapPanel({ gap }) {
   if (!gap) return null;
@@ -8,22 +8,45 @@ export default function MatchGapPanel({ gap }) {
       : s === "warning"
       ? "bg-[#FBF3E8] border-[#EAD9B6] text-[#9A6E1A]"
       : "bg-[#F2F7F1] border-[#D2E2D0] text-[#3F6F4A]";
+  // If the patient never verified their email, matching never ran — so
+  // any low notify count is misleading. We swap the headline + icon to
+  // make that obvious BEFORE the admin draws conclusions about coverage.
+  const unverified = gap.patient_verified === false;
+  const headline = unverified
+    ? "Patient hasn't verified their email yet"
+    : "Why we couldn't fill 30 matches";
   return (
     <div
-      className="bg-white border border-[#E8E5DF] rounded-2xl p-5"
+      className={`border rounded-2xl p-5 ${
+        unverified
+          ? "bg-[#FBF3E8] border-[#EAD9B6]"
+          : "bg-white border-[#E8E5DF]"
+      }`}
       data-testid="match-gap-panel"
     >
       <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-full bg-[#FBF3E8] text-[#C87965] flex items-center justify-center shrink-0">
-          <AlertTriangle size={16} />
+        <div
+          className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+            unverified
+              ? "bg-[#FBE9C7] text-[#9A6E1A]"
+              : "bg-[#FBF3E8] text-[#C87965]"
+          }`}
+        >
+          {unverified ? <MailQuestion size={16} /> : <AlertTriangle size={16} />}
         </div>
         <div className="flex-1">
-          <h4 className="font-semibold text-[#2B2A29]">
-            Why we couldn&apos;t fill 30 matches
+          <h4 className="font-semibold text-[#2B2A29]" data-testid="match-gap-headline">
+            {headline}
           </h4>
           <p className="text-sm text-[#6D6A65] mt-1 leading-relaxed">
             {gap.summary}
           </p>
+          {unverified && (
+            <p className="text-xs text-[#9A6E1A] mt-2 leading-relaxed font-medium">
+              Tip: this isn't a directory problem. Matching runs as soon as
+              the patient clicks the verification link in their inbox.
+            </p>
+          )}
         </div>
       </div>
       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">

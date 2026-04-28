@@ -141,6 +141,64 @@ export default function IntakeForm() {
   // Honeypot field — kept off-screen via aria-hidden + tabindex=-1 so
   // real users won't see/tab into it. Bots auto-fill it.
   const [fax, setFax] = useState("");
+  // Cloudflare Turnstile token (optional CAPTCHA replacement). The
+  // widget renders only when REACT_APP_TURNSTILE_SITE_KEY is set, so
+  // dev/preview without keys keeps working. The token is sent on
+  // submit; backend fail-softs if Turnstile isn't configured there.
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const turnstileRef = useRef(null);
+  const turnstileSiteKey = process.env.REACT_APP_TURNSTILE_SITE_KEY || "";
+  const turnstileWidgetIdRef = useRef(null);
+
+  // Inject the Turnstile script once (when configured) and render the
+  // widget into our container. Explicit-render mode lets us re-use the
+  // same component instance and reset the widget after a failed submit.
+  useEffect(() => {
+    if (!turnstileSiteKey) return;
+    const SCRIPT_ID = "cf-turnstile-script";
+    const ensureScript = () =>
+      new Promise((resolve) => {
+        if (window.turnstile) {
+          resolve();
+          return;
+        }
+        const existing = document.getElementById(SCRIPT_ID);
+        if (existing) {
+          existing.addEventListener("load", () => resolve());
+          return;
+        }
+        const s = document.createElement("script");
+        s.id = SCRIPT_ID;
+        s.src =
+          "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+        s.async = true;
+        s.defer = true;
+        s.onload = () => resolve();
+        document.head.appendChild(s);
+      });
+    let cancelled = false;
+    ensureScript().then(() => {
+      if (cancelled || !turnstileRef.current || !window.turnstile) return;
+      try {
+        turnstileWidgetIdRef.current = window.turnstile.render(
+          turnstileRef.current,
+          {
+            sitekey: turnstileSiteKey,
+            theme: "light",
+            size: "flexible",
+            callback: (tok) => setTurnstileToken(tok || ""),
+            "error-callback": () => setTurnstileToken(""),
+            "expired-callback": () => setTurnstileToken(""),
+          },
+        );
+      } catch (_) {
+        /* ignore double-render */
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [turnstileSiteKey]);
   // Scroll the form card into view on step change. Without this the step
   // animation re-renders mid-scroll and the page lurches up/down on
   // mobile when the new step has a different content height. We pin the
@@ -317,6 +375,9 @@ export default function IntakeForm() {
         // OR if form completion took less than ~2s.
         fax_number: fax,
         form_started_at_ms: formStartedAt,
+        // Cloudflare Turnstile (optional). Backend fail-softs when not
+        // configured, so an empty string here is harmless in dev.
+        turnstile_token: turnstileToken,
       };
       delete payload.referral_source_other;
       const res = await api.post("/requests", payload);
@@ -1040,6 +1101,14 @@ export default function IntakeForm() {
             </div>
           </div>
         </div>
+        {/* ── Turnstile widget (renders only when site key configured) ── */}
+        {turnstileSiteKey && (
+          <div
+            ref={turnstileRef}
+            className="mt-6 flex justify-center"
+            data-testid="turnstile-widget"
+          />
+        )}
         {/* ── Honeypot: bots fill this; humans never see it. ────────────── */}
         <div
           aria-hidden="true"

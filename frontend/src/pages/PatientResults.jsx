@@ -54,6 +54,115 @@ function topReasons(breakdown) {
   return entries.slice(0, 3);
 }
 
+// Concrete "Why I matched" chip text generators. Each one takes the
+// therapist + request and returns a short, specific string the patient
+// can read at a glance — e.g. "Treats anxiety", "Telehealth fit",
+// "$150/session", instead of the generic axis label "Specializes in
+// your concerns". Falls back to the axis label if we can't produce
+// a concrete reason.
+const WHY_GENERATORS = {
+  issues: (t, r) => {
+    const want = (r?.presenting_issues || [])[0];
+    if (!want) return null;
+    const primary = (t.primary_specialties || []).map((s) => s.toLowerCase());
+    const secondary = (t.secondary_specialties || []).map((s) => s.toLowerCase());
+    const friendly = ISSUE_LABELS[want] || want.replace(/_/g, " ");
+    if (primary.includes(want)) return `${cap(friendly)} specialist`;
+    if (secondary.includes(want)) return `Treats ${friendly}`;
+    return `Treats ${friendly}`;
+  },
+  modality: (t, r) => {
+    const pref = (r?.modality_preference || "").toLowerCase();
+    const off = (t.modality_offering || "").toLowerCase();
+    if (pref === "telehealth_only" || pref === "prefer_telehealth") return "Telehealth fit";
+    if (pref === "in_person_only" || pref === "prefer_inperson") return "In-person fit";
+    if (off === "both") return "Telehealth & in-person";
+    if (off === "telehealth") return "Telehealth";
+    if (off === "in_person") return "In-person";
+    return null;
+  },
+  availability: (t, r) => {
+    const want = new Set(r?.availability_windows || []);
+    if (want.has("flexible")) return "Flexible schedule";
+    const offer = (t.availability_windows || []).filter((w) => want.has(w));
+    if (offer.length === 0) return null;
+    const w = offer[0];
+    const map = {
+      weekday_morning: "Weekday mornings",
+      weekday_afternoon: "Weekday afternoons",
+      weekday_evening: "Weekday evenings",
+      weekend_morning: "Weekend mornings",
+      weekend_afternoon: "Weekend afternoons",
+    };
+    return map[w] || w.replace(/_/g, " ");
+  },
+  urgency: (t, r) => {
+    const u = (r?.urgency || "").toLowerCase();
+    if (u === "asap") return "Available ASAP";
+    if (u === "within_2_3_weeks") return "Open in 2-3 weeks";
+    return "Open scheduling";
+  },
+  payment_fit: (t) => (t.sliding_scale ? "Sliding-scale OK" : null),
+  modality_pref: (t, r) => {
+    const want = (r?.modality_preferences || []).map((m) => m.toLowerCase());
+    const offer = (t.modalities || []).map((m) => m.toLowerCase());
+    const overlap = want.find((m) => offer.includes(m));
+    if (!overlap) return null;
+    return `Trained in ${overlap.toUpperCase()}`;
+  },
+  experience: (t) => {
+    const yrs = parseInt(t.years_experience, 10);
+    if (!yrs || isNaN(yrs)) return null;
+    return `${yrs}+ yrs experience`;
+  },
+  reviews: (t) => {
+    const avg = parseFloat(t.review_avg);
+    const cnt = parseInt(t.review_count, 10);
+    if (!avg || avg < 4.0 || !cnt || cnt < 3) return null;
+    return `${avg.toFixed(1)}★ verified`;
+  },
+  gender: (t, r) => {
+    const want = (r?.gender_preference || "").toLowerCase();
+    if (!want || want === "no_pref") return null;
+    return `${cap(want)} therapist`;
+  },
+  style: (t, r) => {
+    const want = (r?.style_preference || []).map((s) => s.toLowerCase());
+    const offer = (t.style_tags || []).map((s) => s.toLowerCase());
+    const overlap = want.find((s) => offer.includes(s));
+    if (!overlap) return null;
+    return cap(overlap.replace(/_/g, " "));
+  },
+  prior_therapy: () => null,
+};
+
+function cap(s) {
+  if (!s) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// Returns up to 3 concrete chip strings explaining why this therapist
+// scored high. Falls back to axis labels for axes without a generator.
+function whyMatchedChips(breakdown, therapist, request) {
+  const reasons = topReasons(breakdown);
+  const seen = new Set();
+  const out = [];
+  for (const r of reasons) {
+    const gen = WHY_GENERATORS[r.key];
+    let text = null;
+    try {
+      text = gen ? gen(therapist || {}, request || {}) : null;
+    } catch (_) {
+      text = null;
+    }
+    if (!text) text = r.label;
+    if (seen.has(text)) continue;
+    seen.add(text);
+    out.push({ key: r.key, text });
+  }
+  return out;
+}
+
 function buildConsultMailto(therapist, request) {
   const firstName = (therapist?.name || "").split(",")[0].split(" ")[0] || "there";
   const issues = (request?.presenting_issues || [])
@@ -581,13 +690,16 @@ export default function PatientResults() {
                             className="flex flex-wrap gap-1.5 mt-3"
                             data-testid={`why-match-${i}`}
                           >
-                            {topReasons(app.match_breakdown).map((r) => (
+                            <li className="text-[10px] uppercase tracking-wider text-[#C87965] font-semibold pr-1 self-center">
+                              Why we matched
+                            </li>
+                            {whyMatchedChips(app.match_breakdown, t, request).map((r) => (
                               <li
                                 key={r.key}
-                                className="text-[11px] bg-[#FDFBF7] border border-[#E8E5DF] text-[#2B2A29] px-2 py-0.5 rounded-full"
+                                className="text-[11px] bg-[#F2F7F1] border border-[#D2E2D0] text-[#3F6F4A] px-2 py-0.5 rounded-full font-medium"
                                 data-testid={`why-match-${i}-${r.key}`}
                               >
-                                {r.label}
+                                {r.text}
                               </li>
                             ))}
                           </ul>

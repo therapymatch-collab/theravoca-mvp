@@ -499,12 +499,26 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
         f"{target}. Active directory size: {total_active}. The axes below "
         f"show which filter cut the pool down."
     )
+    # If the patient hasn't yet clicked the verification link, the matching
+    # job never ran — so a low notified_count says nothing about the
+    # provider directory, and the admin should be told that explicitly
+    # before drawing any conclusions about coverage gaps.
+    verified = bool(req.get("verified"))
+    if not verified:
+        summary = (
+            "Patient hasn't verified their email yet — matching only runs "
+            "after verification, so 0 therapists have been notified. The "
+            "axes below show what the directory could match if/when they "
+            "verify; the actual notify count will fill in once they "
+            "click the verification link."
+        )
     return {
         "notified": notified_count,
         "target": target,
         "active_directory": total_active,
         "axes": axes,
         "summary": summary,
+        "patient_verified": verified,
     }
 
 
@@ -960,6 +974,22 @@ async def admin_update_email_template(
     if key not in EMAIL_TEMPLATE_DEFAULTS:
         raise HTTPException(404, f"Unknown template key: {key}")
     return await upsert_template(db, key, payload or {})
+
+
+@router.post("/admin/email-templates/{key}/preview")
+async def admin_preview_email_template(
+    key: str, payload: dict | None = None, _: bool = Depends(require_admin),
+):
+    """Render the template against realistic sample data and return
+    `{subject, html}` so the admin can see what the email will look
+    like before sending. The `draft` body fields (if supplied) are
+    rendered IN-MEMORY ONLY — they're not persisted, so the admin can
+    iterate on copy without polluting the saved override."""
+    if key not in EMAIL_TEMPLATE_DEFAULTS:
+        raise HTTPException(404, f"Unknown template key: {key}")
+    from email_service import render_template_preview
+    draft = (payload or {}).get("draft") if isinstance(payload, dict) else None
+    return await render_template_preview(key, draft)
 
 
 @router.get("/admin/declines")

@@ -88,20 +88,20 @@ const SEED_KEYS = [
   {
     key: "therapist.hero.eyebrow",
     label: "Therapist · Hero eyebrow",
-    fallback: "Join the network",
+    fallback: "For licensed therapists",
     previewPath: "/therapists/join",
   },
   {
     key: "therapist.hero.headline",
     label: "Therapist · Hero headline",
-    fallback: "Get matched with patients who fit your practice",
+    fallback: "You focus on care — we provide the referrals.",
     previewPath: "/therapists/join",
   },
   {
     key: "therapist.hero.subhead",
     label: "Therapist · Hero subhead",
     fallback:
-      "Stop chasing leads. Stop fighting insurance forms. We send you only the patients you can actually help.",
+      "Marketing yourself to attract the right patients can feel frustrating and time-consuming. We do all the work by sending pre-screened referrals straight to your inbox — so you can spend your hours on clients, not on SEO.",
     previewPath: "/therapists/join",
   },
   // Footer

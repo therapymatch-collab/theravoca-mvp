@@ -115,6 +115,10 @@ class RequestCreate(BaseModel):
     # Client timestamp (ms since epoch) when the form was first rendered.
     # If the gap from this to submit is < ~2s, it's almost certainly a bot.
     form_started_at_ms: Optional[int] = None
+    # Cloudflare Turnstile token. Optional in the schema so dev/preview
+    # environments without Turnstile configured still work; verified
+    # at the route layer using `turnstile_service.verify_token()`.
+    turnstile_token: Optional[str] = Field(default=None, max_length=2200)
 
 
 class RequestOut(BaseModel):

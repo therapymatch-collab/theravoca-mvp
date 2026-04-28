@@ -1,0 +1,25 @@
+{
+  "summary": "Iter-70 batch (7 features) backend verification: 12/12 pytest tests pass. Verified email-template preview endpoint (default + draft override + 404 + non-persistence), matching strict-identity no-pref regression (no longer filters everyone), research_enrichment._multi_search smoke (no raise; returned list), turnstile fail-soft when secret unset, intake POST /api/requests still succeeds without turnstile_token, response_quality block on patient applications populated correctly (length/issue_match/action_signal/personal_voice/total) for an anxiety+'available next week'+'I'd' message, and admin match_gap.patient_verified=false with 'verified their email' summary for unverified vs patient_verified=true with notify-count summary for verified. Frontend testids verified in source (preview-template-{key}, tpl-preview-draft, more-tab-how_it_works, how-it-works-panel, why-match-{i}, turnstile-widget — Turnstile widget correctly only renders when site key configured).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration70_iter70_features.py",
+    "/app/test_reports/pytest/iter70_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "review_request specified endpoint GET /portal/requests/{id}/applications for response_quality, but the actual endpoint is GET /api/requests/{id}/results (in routes/patients.py). Either the doc or the path needs reconciliation; tests adapted to the real path.",
+    "matching: confirmed no regression — strict_priorities + identity factor + gender_preference='no_pref' produces a positive score (does not filter all therapists). _score_gender returning a passable value for no_pref is the right behavior here.",
+    "_explain_match_gap: `notified_count < 30` precondition means a fully-matched verified request will hide match_gap entirely; consequently the 'verified mentions notify count' summary is only visible for under-notified verified requests. Test forces an empty notified_therapist_ids list to surface it.",
+    "Turnstile fail-soft works as designed; when admin pastes TURNSTILE_SECRET_KEY into backend/.env and TURNSTILE_SITE_KEY into frontend/.env, the IntakeForm widget begins rendering and verify_token enforces tokens. Confirmed no regression today.",
+    "research_enrichment._multi_search smoke returned a non-empty list in this run (DDG/Bing reachable from preview); function correctly degrades to [] on outage."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration70_iter70_features.py (new)"],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "source-level testid verification only"},
+  "test_credentials": "admin master pwd: admin123!",
+  "seed_data_creation": "Created TEST_iter70_* requests + 1 synthetic application + ~12 synthetic intake_ip_log rows (10.71-74.x.y prefix). All cleaned up at end of run (verified 0 TEST_iter70 records remain).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reusable: `REACT_APP_BACKEND_URL=https://care-matcher-1.preview.emergentagent.com python -m pytest backend/tests/test_iteration70_iter70_features.py -v`. Tests use sync pymongo (MongoClient direct) instead of motor to avoid asyncio loop-closed errors when forcing request state. UI flow for admin login: nav has a 'Sign in' dropdown link in the header that intercepts global Sign-in button clicks if hovered first — when scripting, click the form-internal Sign in button via `page.locator(\"form button:has-text('Sign in')\").click()` or by selecting the .text-white CTA inside the admin card. Frontend testids confirmed by source grep: preview-template-{key}, tpl-preview-draft, more-tab-how_it_works, how-it-works-panel, why-match-{i}, turnstile-widget.",
+  "rca of the issue": "No issues. All 7 iter-70 features behave as specified."
+}

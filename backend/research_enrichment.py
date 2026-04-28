@@ -94,6 +94,74 @@ async def _ddg_search(query: str, *, limit: int = DEEP_FETCH_LIMIT) -> list[str]
     return out
 
 
+async def _bing_search(query: str, *, limit: int = DEEP_FETCH_LIMIT) -> list[str]:
+    """Return up to `limit` result URLs for `query` from Bing's HTML
+    SERP. No API key, similar resilience profile to `_ddg_search`. We
+    add Bing as a second source because it surfaces LinkedIn and
+    Healthgrades links DuckDuckGo sometimes misses, broadening the
+    evidence base for the research summary.
+    """
+    url = "https://www.bing.com/search"
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as c:
+            r = await c.get(
+                url,
+                params={"q": query, "form": "QBLH"},
+                headers={"User-Agent": USER_AGENT},
+                timeout=HTTP_TIMEOUT_SEC,
+            )
+            if r.status_code != 200:
+                return []
+            html = r.text
+    except (httpx.HTTPError, Exception):  # noqa: BLE001
+        return []
+    # Bing wraps each result in `<li class="b_algo">…<a href="https://...">`
+    candidates = re.findall(
+        r'<li class="b_algo[^"]*">.*?<a href="(https?://[^"\']+)"',
+        html, flags=re.DOTALL,
+    )
+    out: list[str] = []
+    seen: set[str] = set()
+    for u in candidates:
+        if any(bad in u for bad in (
+            "bing.com", "go.microsoft.com", "duckduckgo.com",
+            "google.com/search", "/ads/", "facebook.com/share",
+        )):
+            continue
+        if u in seen:
+            continue
+        seen.add(u)
+        out.append(u)
+        if len(out) >= limit:
+            break
+    return out
+
+
+async def _multi_search(query: str, *, limit: int = DEEP_FETCH_LIMIT) -> list[str]:
+    """Run DuckDuckGo + Bing in parallel and merge into a single
+    deduped list (DDG order first, Bing fills the rest). Falls through
+    to whichever engine is reachable when one is rate-limited."""
+    ddg, bing = await asyncio.gather(
+        _ddg_search(query, limit=limit),
+        _bing_search(query, limit=limit),
+        return_exceptions=True,
+    )
+    if isinstance(ddg, Exception):
+        ddg = []
+    if isinstance(bing, Exception):
+        bing = []
+    out: list[str] = []
+    seen: set[str] = set()
+    for u in [*ddg, *bing]:
+        if u in seen:
+            continue
+        seen.add(u)
+        out.append(u)
+        if len(out) >= limit:
+            break
+    return out
+
+
 # ─── Admin toggle ───────────────────────────────────────────────────────────
 
 async def is_enabled() -> bool:
@@ -171,7 +239,7 @@ async def _build_research_summary(t: dict, *, deep: bool = False) -> dict[str, A
         license_str = (t.get("credential_type") or "").strip()
         city = (t.get("office_locations") or [None])[0] or "Idaho"
         query = f'"{name}" {license_str} {city} therapist'
-        urls = await _ddg_search(query)
+        urls = await _multi_search(query)
         # Skip URLs we already have (the therapist's primary website domain)
         primary_host = ""
         if t.get("website"):

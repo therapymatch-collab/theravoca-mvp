@@ -415,22 +415,95 @@ async def send_therapist_rejected(to: str, name: str) -> None:
 async def _send_simple_cta_template(template_key: str, to: str, cta_url: str, vars_: dict) -> None:
     """Shared helper for short CTA-only emails (follow-ups, profile nags)."""
     tpl = await get_template(_db(), template_key)
+    inner, subject, heading = _build_cta_email_html(tpl, cta_url, vars_)
+    await _send(to, subject, _wrap(heading, inner))
+
+
+def _build_cta_email_html(
+    tpl: dict, cta_url: str, vars_: dict,
+) -> tuple[str, str, str]:
+    """Build the rendered (inner_html, subject, heading) for a simple CTA
+    email given a template dict + CTA URL + substitution vars. Pulled out
+    of `_send_simple_cta_template` so the admin preview endpoint can
+    re-use the exact same render path."""
     greeting = render(tpl.get("greeting", ""), **vars_)
-    intro = render(tpl["intro"], **vars_)
+    intro = render(tpl.get("intro", "") or "", **vars_)
     cta_label = render(tpl.get("cta_label", ""), **vars_)
     footer_note = render(tpl.get("footer_note", ""), **vars_)
+    body = render(tpl.get("body", "") or "", **vars_)
     cta_html = (
         f'<p style="margin:28px 0;text-align:center;">'
         f'<a href="{cta_url}" style="display:inline-block;background:{BRAND["primary"]};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">{cta_label}</a>'
         f'</p>'
     ) if cta_label else ""
+    body_html = (
+        f'<p style="font-size:15px;line-height:1.7;color:{BRAND["text"]};margin-top:14px;">{body}</p>'
+        if body else ""
+    )
     inner = f"""
     {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
     <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">{intro}</p>
+    {body_html}
     {cta_html}
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">{footer_note}</p>
     """
-    await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner))
+    return (
+        inner,
+        render(tpl.get("subject", "") or "TheraVoca", **vars_),
+        render(tpl.get("heading", "") or "", **vars_),
+    )
+
+
+# Realistic sample values for each template's `available_vars`. Used by
+# the admin preview endpoint so admins can see exactly how their copy
+# will look against typical dynamic data — without sending a real email.
+_PREVIEW_VARS: dict[str, dict[str, Any]] = {
+    "verification":              {"verify_url": "https://theravoca.com/verify/sample"},
+    "therapist_notification":    {"first_name": "Alex", "match_score": 87,
+                                   "apply_url": "https://theravoca.com/therapist/apply/sample",
+                                   "decline_url": "https://theravoca.com/therapist/decline/sample"},
+    "patient_results":           {"count": 5, "results_url": "https://theravoca.com/results/sample"},
+    "patient_results_empty":     {},
+    "therapist_signup_received": {"first_name": "Alex"},
+    "therapist_approved":        {"first_name": "Alex"},
+    "therapist_rejected":        {"first_name": "Alex"},
+    "patient_followup_48h":      {"request_id": "sample-id"},
+    "patient_followup_2w":       {"request_id": "sample-id"},
+    "patient_followup_6w":       {"request_id": "sample-id"},
+    "therapist_followup_2w":     {"first_name": "Alex"},
+    "therapist_stale_profile_nag": {"first_name": "Alex", "days_stale": 14},
+    "license_expiring_therapist": {"first_name": "Alex", "expires_at": "2026-12-31"},
+    "license_expiring_admin":    {"name": "Alex Therapist", "expires_at": "2026-12-31"},
+    "magic_code":                {"code": "123456", "role": "patient"},
+    "claim_profile":             {"first_name": "Alex", "claim_url": "https://theravoca.com/claim/sample"},
+    "availability_prompt":       {"therapist_name": "Alex Therapist"},
+    "followup_survey":           {"first_name": "Alex"},
+}
+
+
+async def render_template_preview(
+    template_key: str, draft: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    """Render an email template with realistic sample data, returning
+    {subject, html} for admin preview. If `draft` is supplied, the
+    draft fields override the saved/default copy WITHOUT persisting —
+    so the admin can see their edits live before clicking Save.
+    """
+    base = await get_template(_db(), template_key)
+    if draft:
+        for k in ("subject", "heading", "greeting", "intro", "cta_label", "footer_note", "body"):
+            if k in draft and draft[k] is not None:
+                base[k] = draft[k]
+    vars_ = dict(_PREVIEW_VARS.get(template_key) or {})
+    cta_url = (
+        vars_.get("verify_url")
+        or vars_.get("apply_url")
+        or vars_.get("results_url")
+        or vars_.get("claim_url")
+        or "#preview"
+    )
+    inner, subject, heading = _build_cta_email_html(base, cta_url, vars_)
+    return {"subject": subject, "html": _wrap(heading or "Preview", inner)}
 
 
 async def send_patient_followup_48h(to: str, request_id: str) -> None:

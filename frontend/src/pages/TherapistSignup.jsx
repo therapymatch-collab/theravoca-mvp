@@ -706,17 +706,22 @@ export default function TherapistSignup() {
           <div className="max-w-5xl mx-auto px-5 sm:px-8 grid md:grid-cols-2 gap-10 items-center">
             <div>
               <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] mb-3">
-                For licensed therapists
+                {t("therapist.hero.eyebrow", "For licensed therapists")}
               </p>
               <h1 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] leading-[1.05]">
-                You focus on <em className="not-italic text-[#C87965]">care</em> —
-                we provide the referrals.
+                {t(
+                  "therapist.hero.headline",
+                  <>
+                    You focus on <em className="not-italic text-[#C87965]">care</em>{" "}
+                    — we provide the referrals.
+                  </>,
+                )}
               </h1>
               <p className="mt-5 text-[#2B2A29]/80 leading-relaxed">
-                Marketing yourself to attract the right patients can feel
-                frustrating and time-consuming. We do all the work by sending
-                pre-screened referrals straight to your inbox — so you can spend
-                your hours on clients, not on SEO.
+                {t(
+                  "therapist.hero.subhead",
+                  "Marketing yourself to attract the right patients can feel frustrating and time-consuming. We do all the work by sending pre-screened referrals straight to your inbox — so you can spend your hours on clients, not on SEO.",
+                )}
               </p>
               <div className="mt-6 inline-flex items-center gap-3 bg-white border border-[#E8E5DF] rounded-2xl px-4 py-3">
                 <div className="w-2 h-2 rounded-full bg-[#2D4A3E]" />
@@ -836,7 +841,7 @@ export default function TherapistSignup() {
                 className="tv-btn-primary"
                 data-testid="why-join-cta-btn"
               >
-                Get more referrals
+                {t("btn.therapist.cta.headline", "Get more referrals")}
                 <ArrowRight size={16} className="ml-1.5 inline" />
               </a>
             </div>
