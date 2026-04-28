@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Loader2, Phone, Mail, Star, Sparkles, CalendarPlus, Send, Inbox, CheckCircle2, Clock, ArrowRight, Share2 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
-import { api } from "@/lib/api";
+import { api, getSession } from "@/lib/api";
 import { RESULTS_POLL_INTERVAL_MS } from "@/lib/constants";
 
 // Friendly labels for each scoring axis. Each entry maps axis -> { max, label }.
@@ -86,12 +86,35 @@ function buildConsultMailto(therapist, request) {
 export default function PatientResults() {
   const { requestId } = useParams();
   const [data, setData] = useState(null);
+  const navigate = useNavigate();
+  const [sp] = useSearchParams();
+  const viewToken = sp.get("t") || "";
+  const session = getSession();
 
   useEffect(() => {
     let active = true;
+    const headers = session?.token
+      ? { Authorization: `Bearer ${session.token}` }
+      : undefined;
+    const url = viewToken
+      ? `/requests/${requestId}/results?t=${encodeURIComponent(viewToken)}`
+      : `/requests/${requestId}/results`;
     const load = () =>
-      api.get(`/requests/${requestId}/results`).then((res) => {
+      api.get(url, { headers }).then((res) => {
         if (active) setData(res.data);
+      }).catch((err) => {
+        if (!active) return;
+        if (err?.response?.status === 401) {
+          // Magic-code login required (no token + no/expired session).
+          // Patient signs in with the email that owns this request, then
+          // returns here.
+          navigate(
+            `/sign-in?role=patient&next=${encodeURIComponent(
+              `/results/${requestId}`,
+            )}`,
+            { replace: true },
+          );
+        }
       });
     load();
     const intervalId = setInterval(load, RESULTS_POLL_INTERVAL_MS);
@@ -99,7 +122,7 @@ export default function PatientResults() {
       active = false;
       clearInterval(intervalId);
     };
-  }, [requestId]);
+  }, [requestId, viewToken, session?.token, navigate]);
 
   if (!data) {
     return (

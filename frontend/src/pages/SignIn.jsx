@@ -29,13 +29,15 @@ export default function SignIn() {
   const [code, setCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [sp] = useSearchParams();
+  const nextPath = sp.get("next");
 
   useEffect(() => {
     const session = getSession();
     if (session?.role) {
-      navigate(ROLE_INFO[session.role]?.portal || "/", { replace: true });
+      navigate(nextPath || ROLE_INFO[session.role]?.portal || "/", { replace: true });
     }
-  }, [navigate]);
+  }, [navigate, nextPath]);
 
   useEffect(() => {
     if (resendCooldown <= 0) return undefined;
@@ -71,7 +73,7 @@ export default function SignIn() {
       const res = await api.post("/auth/verify-code", { email, role, code });
       setSession(res.data);
       toast.success("Signed in");
-      navigate(ROLE_INFO[role].portal);
+      navigate(nextPath || ROLE_INFO[role].portal);
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Invalid or expired code");
     } finally {

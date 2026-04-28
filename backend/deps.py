@@ -115,6 +115,18 @@ def require_session(allowed_roles: tuple[str, ...]):
     return _dep
 
 
+def _decode_session_from_authorization(authorization: Optional[str]) -> Optional[dict[str, Any]]:
+    """Soft session decoder — returns None instead of raising when missing
+    or invalid. Used for endpoints that accept multiple auth modes."""
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return None
+    token = authorization.split(" ", 1)[1].strip()
+    try:
+        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+        return None
+
+
 # Re-export Depends for convenience
 __all__ = [
     "Depends", "HTTPException", "Header", "Request",
@@ -126,4 +138,5 @@ __all__ = [
     "MAGIC_CODE_MAX_PER_HOUR", "LOGIN_MAX_FAILURES", "LOGIN_LOCKOUT_MINUTES",
     "_login_attempts", "_client_ip", "_check_lockout", "_record_failure", "_reset_failures",
     "require_admin", "require_session", "_create_session_token",
+    "_decode_session_from_authorization",
 ]

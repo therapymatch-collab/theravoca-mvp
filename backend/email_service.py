@@ -204,6 +204,16 @@ async def send_therapist_notification(
 
 
 async def send_patient_results(to: str, request_id: str, applications: list[dict[str, Any]]) -> None:
+    # Fetch the request once so we can carry its `view_token` into every link
+    # — patients land on /results/:id?t=<token> which auto-grants access; if
+    # they hit the URL later without the token, they'll be prompted to sign
+    # in via magic code. See routes/patients.py:public_request_results.
+    req = await _db().requests.find_one(
+        {"id": request_id}, {"_id": 0, "view_token": 1},
+    ) or {}
+    view_token = req.get("view_token", "")
+    token_query = f"?t={view_token}" if view_token else ""
+
     if not applications:
         tpl_e = await get_template(_db(), "patient_results_empty")
         intro = render(tpl_e["intro"])
@@ -286,7 +296,7 @@ async def send_patient_results(to: str, request_id: str, applications: list[dict
         if t.get("modality_offering") == "both":
             format_label = "In-person & telehealth"
 
-        profile_url = f"{_get_app_url()}/results/{request_id}#therapist-{t.get('id', '')}"
+        profile_url = f"{_get_app_url()}/results/{request_id}{token_query}#therapist-{t.get('id', '')}"
         cta_cell = (
             f'<a href="{profile_url}" '
             f'style="display:inline-block;background:{BRAND["primary"]};color:#ffffff;'

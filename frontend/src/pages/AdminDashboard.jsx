@@ -144,6 +144,8 @@ export default function AdminDashboard() {
   const [feedback, setFeedback] = useState(null);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [showOnlyReapproval, setShowOnlyReapproval] = useState(false);
+  const [providerPageSize, setProviderPageSize] = useState(20);
+  const [providerPage, setProviderPage] = useState(0);
 
   // Coverage-gap analysis — recruiting recommendations.
   const [coverageGap, setCoverageGap] = useState(null);
@@ -971,49 +973,40 @@ export default function AdminDashboard() {
 
               {tab === "all_therapists" && (
                 <div className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
-                  <div className="flex items-center gap-3 p-4 border-b border-[#E8E5DF] flex-wrap">
-                    <span className="text-xs text-[#6D6A65]">
-                      Showing {(showOnlyReapproval
+                  <ProviderTableControls
+                    total={allTherapists.length}
+                    visibleTotal={
+                      (showOnlyReapproval
                         ? filteredAllTherapists.filter((t) => t.pending_reapproval)
                         : filteredAllTherapists
-                      ).length}
-                      {" "}of {allTherapists.length}
-                    </span>
-                    <button
-                      onClick={() => setShowOnlyReapproval((v) => !v)}
-                      className={`text-xs px-3 py-1 rounded-full border transition ${
-                        showOnlyReapproval
-                          ? "bg-[#FBF2E8] border-[#F0DEC8] text-[#B8742A]"
-                          : "bg-white border-[#E8E5DF] text-[#6D6A65] hover:border-[#B8742A]"
-                      }`}
-                      data-testid="filter-pending-reapproval"
-                    >
-                      ⚠ Needs re-review (
-                      {allTherapists.filter((t) => t.pending_reapproval).length}
-                      )
-                    </button>
-                  </div>
-                  <div className="overflow-x-auto">
-                  <table className="w-full text-sm min-w-[1500px]" data-testid="all-therapists-table">
+                      ).length
+                    }
+                    showOnlyReapproval={showOnlyReapproval}
+                    setShowOnlyReapproval={setShowOnlyReapproval}
+                    pageSize={providerPageSize}
+                    setPageSize={setProviderPageSize}
+                    page={providerPage}
+                    setPage={setProviderPage}
+                    pendingCount={
+                      allTherapists.filter((t) => t.pending_reapproval).length
+                    }
+                  />
+                  <table className="w-full text-sm" data-testid="all-therapists-table">
                     <thead className="bg-[#FDFBF7] text-[#6D6A65]">
                       <tr className="text-left">
-                        <Th>Name</Th>
+                        <Th>Provider</Th>
                         <Th>Status</Th>
                         <Th>License</Th>
                         <Th>Reviews</Th>
                         <Th>Rate</Th>
-                        <Th>Insurance</Th>
                         <Th>Specialties</Th>
-                        <Th>Format</Th>
-                        <Th>Offices / City</Th>
-                        <Th>Contact</Th>
                         <Th></Th>
                       </tr>
                     </thead>
                     <tbody>
                       {allTherapists.length === 0 && (
                         <tr>
-                          <td colSpan={11} className="p-10 text-center text-[#6D6A65]">
+                          <td colSpan={7} className="p-10 text-center text-[#6D6A65]">
                             No providers in the directory yet.
                           </td>
                         </tr>
@@ -1021,16 +1014,31 @@ export default function AdminDashboard() {
                       {(showOnlyReapproval
                         ? filteredAllTherapists.filter((t) => t.pending_reapproval)
                         : filteredAllTherapists
-                      ).map((t) => (
-                        <ProviderRow
-                          key={t.id}
-                          t={t}
-                          onEdit={() => setEditTherapist({ ...t })}
-                        />
-                      ))}
+                      )
+                        .slice(
+                          providerPage * providerPageSize,
+                          providerPage * providerPageSize + providerPageSize,
+                        )
+                        .map((t) => (
+                          <ProviderRow
+                            key={t.id}
+                            t={t}
+                            onEdit={() => setEditTherapist({ ...t })}
+                          />
+                        ))}
                     </tbody>
                   </table>
-                  </div>
+                  <ProviderTablePager
+                    total={
+                      (showOnlyReapproval
+                        ? filteredAllTherapists.filter((t) => t.pending_reapproval)
+                        : filteredAllTherapists
+                      ).length
+                    }
+                    pageSize={providerPageSize}
+                    page={providerPage}
+                    setPage={setProviderPage}
+                  />
                 </div>
               )}
               {tab === "referral_sources" && (
@@ -3214,22 +3222,31 @@ function ProviderRow({ t, onEdit }) {
     ...(t.secondary_specialties || []),
   ];
   const insurances = t.insurance_accepted || [];
+
+  // Build a compact "format / location" hint for the rate column subtitle
+  const formatHint = inPerson && telehealth
+    ? "In-person + telehealth"
+    : inPerson
+      ? `In-person${offices[0] ? ` · ${offices[0]}` : ""}`
+      : "Telehealth only";
+
   return (
     <tr
       className="border-t border-[#E8E5DF] hover:bg-[#FDFBF7] align-top"
       data-testid={`provider-row-${t.id}`}
     >
-      <td className="p-4 min-w-[200px]">
-        <div className="font-medium text-[#2B2A29]">{t.name}</div>
-        <div className="text-xs text-[#6D6A65] mt-0.5">
-          {t.credential_type || "—"}
-          {t.years_experience != null && (
-            <span> · {t.years_experience} yrs exp</span>
-          )}
-          {t.gender && t.gender !== "prefer_not_to_say" && (
-            <span> · {t.gender}</span>
-          )}
+      <td className="p-4 max-w-[320px]">
+        <div className="font-medium text-[#2B2A29] truncate" title={t.name}>
+          {t.name}
         </div>
+        <div className="text-xs text-[#6D6A65] mt-0.5 truncate" title={t.email}>
+          {t.credential_type ? `${t.credential_type} · ` : ""}
+          {t.years_experience != null && `${t.years_experience} yrs · `}
+          {t.email}
+        </div>
+        {t.phone && (
+          <div className="text-[11px] text-[#6D6A65] mt-0.5">{t.phone}</div>
+        )}
       </td>
 
       <td className="p-4 whitespace-nowrap">
@@ -3253,7 +3270,7 @@ function ProviderRow({ t, onEdit }) {
       <td className="p-4 whitespace-nowrap">
         {t.review_count > 0 ? (
           <>
-            <div className="font-medium text-[#C87965] text-sm">
+            <div className="font-medium text-[#C87965] text-sm" aria-label={`${(t.review_avg ?? 0).toFixed(1)} stars`}>
               {"★".repeat(Math.round(t.review_avg || 0))}
               <span className="text-[#E8E5DF]">
                 {"★".repeat(5 - Math.round(t.review_avg || 0))}
@@ -3263,11 +3280,6 @@ function ProviderRow({ t, onEdit }) {
               {(t.review_avg ?? 0).toFixed(1)} · {t.review_count} review
               {t.review_count === 1 ? "" : "s"}
             </div>
-            {t.review_sources && t.review_sources.length > 0 && (
-              <div className="text-[10px] text-[#6D6A65] mt-0.5">
-                via {t.review_sources.map((r) => r.platform || "src").join(", ")}
-              </div>
-            )}
           </>
         ) : (
           <span className="text-xs text-[#C8C4BB]">No reviews</span>
@@ -3287,83 +3299,27 @@ function ProviderRow({ t, onEdit }) {
           )}
           {!t.sliding_scale && !t.free_consult && "per session"}
         </div>
-      </td>
-
-      <td className="p-4 text-xs text-[#2B2A29] min-w-[140px] max-w-[220px]">
-        {insurances.length > 0 ? (
-          <div
-            className="leading-snug"
-            title={insurances.join(", ")}
-          >
-            {insurances.slice(0, 3).join(", ")}
-            {insurances.length > 3 && (
-              <span className="text-[#6D6A65]"> +{insurances.length - 3}</span>
-            )}
-          </div>
-        ) : (
-          <span className="text-[#C8C4BB]">Cash only</span>
-        )}
-      </td>
-
-      <td className="p-4 text-xs text-[#2B2A29] min-w-[160px] max-w-[240px]">
-        {specs.length > 0 ? (
-          <div className="leading-snug" title={specs.join(", ")}>
-            {specs.slice(0, 3).map((s) => (typeof s === "string" ? s : s?.name || "")).filter(Boolean).join(", ")}
-            {specs.length > 3 && (
-              <span className="text-[#6D6A65]"> +{specs.length - 3}</span>
-            )}
-          </div>
-        ) : (
-          <span className="text-[#C8C4BB]">—</span>
-        )}
-      </td>
-
-      <td className="p-4 whitespace-nowrap">
-        <div className="flex flex-col gap-1">
-          {inPerson && (
-            <span className="inline-flex items-center gap-1 text-[10px] bg-[#2D4A3E]/10 text-[#2D4A3E] rounded-full px-2 py-0.5 w-fit">
-              In-person
-            </span>
-          )}
-          {telehealth && (
-            <span className="inline-flex items-center gap-1 text-[10px] bg-[#C87965]/15 text-[#C87965] rounded-full px-2 py-0.5 w-fit">
-              Telehealth
-            </span>
-          )}
-          {!inPerson && !telehealth && (
-            <span className="text-[11px] text-[#C8C4BB]">—</span>
-          )}
+        <div className="text-[10px] text-[#6D6A65] mt-1 truncate max-w-[160px]" title={formatHint}>
+          {formatHint}
         </div>
       </td>
 
-      <td className="p-4 text-xs text-[#2B2A29] min-w-[200px] max-w-[280px]">
-        {inPerson && (t.office_addresses?.length > 0 || offices.length > 0) ? (
-          <div className="leading-snug">
-            {(t.office_addresses || offices).slice(0, 2).map((a, i) => (
-              <div key={`addr-${typeof a === "string" ? a : a?.address || i}`} className="text-[11px] text-[#2B2A29]">
-                {typeof a === "string" ? a : a?.address || a?.city || ""}
-              </div>
-            ))}
-            {(t.office_addresses || offices).length > 2 && (
-              <div className="text-[10px] text-[#6D6A65]">
-                +{(t.office_addresses || offices).length - 2} more
-              </div>
+      <td className="p-4 text-xs text-[#2B2A29] max-w-[280px]">
+        {specs.length > 0 ? (
+          <div className="leading-snug" title={specs.join(", ")}>
+            {specs.slice(0, 2).map((s) => (typeof s === "string" ? s : s?.name || "")).filter(Boolean).join(", ")}
+            {specs.length > 2 && (
+              <span className="text-[#6D6A65]"> +{specs.length - 2}</span>
             )}
           </div>
-        ) : telehealth ? (
-          <span className="text-[11px] text-[#6D6A65]">telehealth only</span>
         ) : (
           <span className="text-[#C8C4BB]">—</span>
         )}
-      </td>
-
-      <td className="p-4 text-xs min-w-[180px]">
-        <div className="text-[#2B2A29] break-all">{t.email}</div>
-        {t.phone && (
-          <div className="text-[11px] text-[#6D6A65] mt-0.5 whitespace-nowrap">
-            {t.phone}
-          </div>
-        )}
+        <div className="text-[11px] text-[#6D6A65] mt-1 truncate" title={insurances.join(", ") || "Cash only"}>
+          {insurances.length > 0
+            ? `Insurance: ${insurances.slice(0, 2).join(", ")}${insurances.length > 2 ? ` +${insurances.length - 2}` : ""}`
+            : "Cash only"}
+        </div>
       </td>
 
       <td className="p-4 text-right whitespace-nowrap">
@@ -3376,6 +3332,86 @@ function ProviderRow({ t, onEdit }) {
         </button>
       </td>
     </tr>
+  );
+}
+
+function ProviderTableControls({
+  total, visibleTotal, showOnlyReapproval, setShowOnlyReapproval,
+  pageSize, setPageSize, setPage, pendingCount,
+}) {
+  return (
+    <div className="flex items-center gap-3 p-4 border-b border-[#E8E5DF] flex-wrap">
+      <span className="text-xs text-[#6D6A65]">
+        Showing <strong className="text-[#2B2A29]">{visibleTotal}</strong> of {total}
+      </span>
+      <button
+        onClick={() => {
+          setShowOnlyReapproval((v) => !v);
+          setPage(0);
+        }}
+        className={`text-xs px-3 py-1 rounded-full border transition ${
+          showOnlyReapproval
+            ? "bg-[#FBF2E8] border-[#F0DEC8] text-[#B8742A]"
+            : "bg-white border-[#E8E5DF] text-[#6D6A65] hover:border-[#B8742A]"
+        }`}
+        data-testid="filter-pending-reapproval"
+      >
+        ⚠ Needs re-review ({pendingCount})
+      </button>
+      <div className="ml-auto flex items-center gap-2 text-xs text-[#6D6A65]">
+        <label htmlFor="provider-page-size">Rows per page:</label>
+        <select
+          id="provider-page-size"
+          value={pageSize}
+          onChange={(e) => {
+            setPageSize(Number(e.target.value));
+            setPage(0);
+          }}
+          className="border border-[#E8E5DF] rounded-md px-2 py-1 text-xs bg-white text-[#2B2A29]"
+          data-testid="provider-page-size"
+        >
+          <option value={10}>10</option>
+          <option value={20}>20</option>
+          <option value={50}>50</option>
+          <option value={100}>100</option>
+        </select>
+      </div>
+    </div>
+  );
+}
+
+function ProviderTablePager({ total, pageSize, page, setPage }) {
+  if (total <= pageSize) return null;
+  const pageCount = Math.ceil(total / pageSize);
+  const from = page * pageSize + 1;
+  const to = Math.min(total, from + pageSize - 1);
+  return (
+    <div className="flex items-center justify-between gap-3 p-3 border-t border-[#E8E5DF] text-xs text-[#6D6A65] flex-wrap">
+      <span>
+        Showing <strong className="text-[#2B2A29]">{from}–{to}</strong> of {total}
+      </span>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => setPage(Math.max(0, page - 1))}
+          disabled={page === 0}
+          className="px-3 py-1 rounded-md border border-[#E8E5DF] disabled:opacity-50 hover:border-[#2D4A3E] text-[#2B2A29]"
+          data-testid="provider-page-prev"
+        >
+          ← Prev
+        </button>
+        <span className="px-2 text-[#2B2A29] font-medium">
+          {page + 1} / {pageCount}
+        </span>
+        <button
+          onClick={() => setPage(Math.min(pageCount - 1, page + 1))}
+          disabled={page >= pageCount - 1}
+          className="px-3 py-1 rounded-md border border-[#E8E5DF] disabled:opacity-50 hover:border-[#2D4A3E] text-[#2B2A29]"
+          data-testid="provider-page-next"
+        >
+          Next →
+        </button>
+      </div>
+    </div>
   );
 }
 

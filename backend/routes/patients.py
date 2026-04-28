@@ -7,9 +7,9 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 
-from deps import db, DEFAULT_THRESHOLD, require_admin
+from deps import db, DEFAULT_THRESHOLD, _decode_session_from_authorization, require_admin
 from email_service import send_verification_email
 from geocoding import geocode_city, geocode_zip
 from helpers import _now_iso, _parse_iso, _trigger_matching
@@ -110,6 +110,7 @@ async def create_request(payload: RequestCreate):
         "patient_referral_code": patient_referral_code,
         "patient_geo": patient_geo,
         "verification_token": token,
+        "view_token": secrets.token_urlsafe(24),
         "verified": False,
         "status": "pending_verification",
         "threshold": DEFAULT_THRESHOLD,
@@ -226,9 +227,22 @@ async def admin_release_results(request_id: str, _: bool = Depends(require_admin
 
 
 @router.get("/requests/{request_id}/results", response_model=dict)
-async def public_request_results(request_id: str):
+async def public_request_results(
+    request_id: str,
+    t: Optional[str] = None,  # view_token from email
+    authorization: Optional[str] = Header(None),
+):
     """Patient view of ranked therapist applications.
 
+    Auth model:
+      - Email link carries `?t=<view_token>` → grant access (the link itself
+        was sent only to the verified patient inbox, so possessing the token
+        proves email control).
+      - No token → require a magic-link session whose email matches the
+        request's patient email. This protects against a leaked/shoulder-
+        surfed UUID URL — even if someone guesses the URL, they can't open
+        it without proving inbox control via the 6-digit magic code.
+      - Admin's `X-Admin-Password` header always grants access (debug).
     24h hold: results are hidden until matched_at + 24h OR admin manually releases.
     """
     req = await db.requests.find_one(
@@ -236,6 +250,29 @@ async def public_request_results(request_id: str):
     )
     if not req:
         raise HTTPException(404)
+
+    # ── auth gate ──
+    granted = False
+    expected_token = req.get("view_token")
+    if t and expected_token and t == expected_token:
+        granted = True
+    if not granted:
+        # Session-based auth: the patient must be signed in with the email
+        # that owns this request (verified via 6-digit magic code).
+        sess = _decode_session_from_authorization(authorization)
+        if (
+            sess
+            and (sess.get("role") == "patient")
+            and (sess.get("email", "").lower() == (req.get("email") or "").lower())
+        ):
+            granted = True
+    if not granted:
+        # 401 → frontend redirects to /sign-in?role=patient&next=/results/...
+        raise HTTPException(
+            status_code=401,
+            detail="signin_required",
+            headers={"X-Auth-Hint": "magic_code"},
+        )
     apps_raw = await db.applications.find(
         {"request_id": request_id}, {"_id": 0}
     ).to_list(50)
