@@ -1673,7 +1673,8 @@ async def admin_warmup_deep_research(payload: dict) -> dict[str, Any]:
     rolling deep research over each of them in the background. The
     warmup runs sequentially under a 60s/therapist budget so we don't
     flood DDG; expect ~30 minutes for 30 therapists."""
-    target_count = int(payload.get("count") or 30)
+    raw_count = payload.get("count")
+    target_count = int(raw_count) if raw_count is not None else 30
     target_count = max(1, min(target_count, 200))
 
     # Pick the top N therapists by review count + active status.
@@ -1717,8 +1718,18 @@ async def admin_warmup_deep_research(payload: dict) -> dict[str, Any]:
             try:
                 await get_or_build_research(t, force=True, deep=True)
                 done += 1
-            except Exception:
+            except Exception as e:
+                logger.warning(
+                    "deep-research warmup failed for %s: %s",
+                    t.get("name"), e,
+                )
                 failed += 1
+            # Bail out early if the admin clicked Cancel (sets running=false).
+            cur = await db.app_config.find_one(
+                {"key": _WARMUP_KEY}, {"_id": 0, "running": 1},
+            )
+            if cur and cur.get("running") is False:
+                break
             await db.app_config.update_one(
                 {"key": _WARMUP_KEY},
                 {"$set": {"done": done, "failed": failed}},
@@ -1748,6 +1759,26 @@ async def admin_warmup_deep_research(payload: dict) -> dict[str, Any]:
 async def admin_get_warmup_status() -> dict[str, Any]:
     doc = await db.app_config.find_one({"key": _WARMUP_KEY}, {"_id": 0})
     return doc or {"running": False, "total": 0, "done": 0, "failed": 0}
+
+
+@router.post(
+    "/admin/research-enrichment/warmup/cancel",
+    dependencies=[Depends(require_admin)],
+)
+async def admin_cancel_warmup() -> dict[str, Any]:
+    """Soft-cancel: flips running=false in the status doc so the running
+    loop bails out at its next iteration. The therapist currently
+    in-flight will finish before the loop exits."""
+    res = await db.app_config.update_one(
+        {"key": _WARMUP_KEY},
+        {"$set": {
+            "running": False,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "current_name": None,
+            "cancelled": True,
+        }},
+    )
+    return {"ok": True, "matched": res.matched_count}
 
 
 # Public endpoint — patient intake calls this to populate its dropdown.

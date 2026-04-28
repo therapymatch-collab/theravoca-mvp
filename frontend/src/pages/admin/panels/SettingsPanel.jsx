@@ -301,6 +301,23 @@ export default function SettingsPanel({ client }) {
               ) : null}
               {warmup?.running ? "Running…" : "Start warmup"}
             </button>
+            {warmup?.running ? (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await client.post("/admin/research-enrichment/warmup/cancel");
+                    toast.success("Warmup cancellation requested");
+                  } catch (e) {
+                    toast.error(e?.response?.data?.detail || "Cancel failed");
+                  }
+                }}
+                className="text-xs text-[#B0382A] hover:underline"
+                data-testid="warmup-cancel-btn"
+              >
+                Cancel
+              </button>
+            ) : null}
           </div>
           {warmup ? (
             <div

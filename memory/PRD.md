@@ -1272,3 +1272,46 @@ User asked for 8 changes; all shipped in one batch.
 - `tests/test_iteration65_sms_a2p.py`: 3/3 pass.
 - Frontend Iter-65 flows: 5/5 verified live in browser.
 - DB cleanup (Iter-63) preserved: 123 therapists, 0 test data.
+
+
+## Iteration 66 — Magic-link sign-in + Warmup + Apply back-link + RL polish (2026-04-28)
+
+### Magic-link auto-sign-in
+- send_magic_code email now contains a "Sign in with one click" button
+  linking to `/sign-in?role=...&email=...&code=NNNNNN`. SignIn.jsx
+  auto-verifies on mount when those params are present and redirects
+  to the portal. Verified live: 4-second URL-to-portal landing.
+- Invalid/expired code in the URL → toast error, page stays on /sign-in.
+
+### Patient-intake rate limit confirmed working
+- 1 request per 60 minutes per email (admin-tunable). Returns 429 with
+  detail "You've already submitted a referral in the last hour. We're
+  working on matching you now — check your email for next steps. You
+  can submit a new referral in about N minutes. (Limit: 1 request per
+  hour.)". Different emails do not share the limit.
+
+### Back-to-dashboard on TherapistApply
+- New `BackToDashboardLink` component renders at the top of
+  TherapistApply (and on the error screen). Reads getSession():
+    - signed-in therapist → "← Back to my dashboard" → /portal/therapist
+    - signed-in patient → "← Back to my dashboard" → /portal/patient
+    - not signed in → "← Sign in to your dashboard" → /sign-in?role=therapist
+
+### Deep-research warmup
+- `POST /admin/research-enrichment/warmup {count:N}` queues sequential
+  deep research on top N therapists (by review_count desc, capped 1-200).
+- `GET /admin/research-enrichment/warmup` returns
+  `{running, total, done, failed, current_name, completed_at}`.
+- `POST /admin/research-enrichment/warmup/cancel` flips running=false
+  so the loop bails at the next iteration.
+- Admin Settings panel: "Pre-warm deep-research cache" section with
+  count input, Start/Cancel buttons, live status (5s poll).
+- count=0 → clamped to 1 (bug fixed in this iter); count=9999 → 200;
+  loop logs failures via logger.warning instead of silent except.
+
+### Tests
+- `tests/test_iteration66_magic_link_warmup.py` — magic-link verify-code,
+  rate-limit single+separate-emails, warmup endpoints, count clamping.
+- Frontend Playwright — 5/5 flows green (magic-link valid, magic-link
+  invalid, apply-back-to-signin, apply-back-to-dashboard, warmup UI).
+- Iter-28 testing report at `/app/test_reports/iteration_28.json`.
