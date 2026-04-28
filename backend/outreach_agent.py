@@ -210,8 +210,10 @@ async def _find_candidates(request: dict, count: int = 30) -> list[dict]:
     return (pt_results + llm_results)[:count]
 
 
-def _send_invite_sms_body(candidate: dict, request: dict, score: int) -> str:
-    """Short Twilio-friendly SMS body for PT-scraped candidates without an email."""
+def _send_invite_sms_body(candidate: dict, request: dict, score: int, opt_out_url: str) -> str:
+    """Short Twilio-friendly SMS body for PT-scraped candidates without an email.
+    Includes both STOP keyword (Twilio carrier-level) and a one-click
+    opt-out URL that also updates our server-side opt-out list."""
     public_url = _get_app_url()
     signup_url = f"{public_url}/therapists/join?invite_request_id={request['id']}"
     location = (request.get("location_city") or "Idaho")
@@ -220,16 +222,17 @@ def _send_invite_sms_body(candidate: dict, request: dict, score: int) -> str:
     return (
         f"TheraVoca: we have a {location} patient looking for help with {issue_str} — "
         f"estimated {score}% match for your practice. Apply (free 30-day trial): {signup_url}. "
-        f"Reply STOP to opt out."
+        f"Opt out: {opt_out_url} (or reply STOP)."
     )
 
 
 async def _send_outreach_invite(
-    candidate: dict, request: dict,
+    candidate: dict, request: dict, *, invite_id: str,
 ) -> dict:
     """Send the outreach via email when we have one, else SMS via Twilio.
     Returns a dict with `{ok, channel, error}` so callers can record the
-    attempt for analytics + audit.
+    attempt for analytics + audit. `invite_id` is used to build an
+    unguessable one-click opt-out URL embedded in every send.
     """
     summary = _safe_summary_for_therapist(request)
     first = (candidate.get("name") or "there").split(" ")[0]
@@ -237,6 +240,7 @@ async def _send_outreach_invite(
     score = candidate.get("estimated_score") or 75
     email = (candidate.get("email") or "").strip()
     phone = (candidate.get("phone") or "").strip()
+    opt_out_url = f"{_get_app_url()}/api/outreach/opt-out/{invite_id}"
 
     if not email and not phone:
         return {"ok": False, "channel": None, "error": "no_contact_info"}
@@ -259,6 +263,15 @@ async def _send_outreach_invite(
                 f'<a href="{candidate["profile_url"]}" style="color:{BRAND["primary"]};">'
                 f'Psychology Today profile</a>.</p>'
             )
+
+        opt_out_footer = (
+            f'<hr style="border:none;border-top:1px solid {BRAND["border"]};margin:28px 0 14px;">'
+            f'<p style="color:{BRAND["muted"]};font-size:12px;line-height:1.6;text-align:center;margin:0;">'
+            f'Not interested in future referrals? '
+            f'<a href="{opt_out_url}" style="color:{BRAND["muted"]};text-decoration:underline;">'
+            f'Unsubscribe with one click</a> and we\'ll never email you again.'
+            f'</p>'
+        )
 
         inner = f"""
         <p style="font-size:16px;line-height:1.6;">Hi {first},</p>
@@ -293,6 +306,7 @@ async def _send_outreach_invite(
           If this isn't a fit, no need to reply — we won't contact you again unless we get
           another high-fit patient. We don't sell or share your email.
         </p>
+        {opt_out_footer}
         """
         try:
             await _send(
@@ -307,7 +321,7 @@ async def _send_outreach_invite(
                 return {"ok": False, "channel": "email", "error": str(e)}
 
     # SMS path (no email or email send failed but we have a phone)
-    body = _send_invite_sms_body(candidate, request, score)
+    body = _send_invite_sms_body(candidate, request, score, opt_out_url)
     try:
         sent_ok = await _send_outreach_sms(phone, body)
         if sent_ok:
@@ -388,10 +402,20 @@ async def _filter_existing_contacts(candidates: list[dict]) -> tuple[list[dict],
 
     skip_t = 0
     skip_i = 0
+    skip_opt = 0
     out: list[dict] = []
+
+    # Bulk-fetch the opt-out subset so we don't round-trip per candidate.
+    from outreach_optout import get_opted_out_set
+    opted_emails, opted_phones = await get_opted_out_set(emails, phones)
+
     for c in candidates:
         e = (c.get("email") or "").strip().lower()
         p = normalize_us_phone(c.get("phone") or "")
+        if (e and e in opted_emails) or (p and p in opted_phones):
+            skip_opt += 1
+            logger.info("Outreach: skipping %s/%s (opted out)", e, p)
+            continue
         if (e and e in therapist_emails) or (p and p in therapist_phones):
             skip_t += 1
             logger.info("Outreach: skipping %s/%s (already in therapists)", e, p)
@@ -407,6 +431,7 @@ async def _filter_existing_contacts(candidates: list[dict]) -> tuple[list[dict],
     return out, {
         "skipped_existing_therapist": skip_t,
         "skipped_prior_invite": skip_i,
+        "skipped_opted_out": skip_opt,
     }
 
 
@@ -436,25 +461,37 @@ async def run_outreach_for_request(request_id: str) -> dict[str, Any]:
     sent_email = 0
     sent_sms = 0
     for c in candidates:
-        result = await _send_outreach_invite(c, req)
+        # Pre-create the invite row so we have an invite_id (UUID) to embed as
+        # the opt-out token in the outgoing email/SMS before we actually send.
+        invite_id = str(uuid.uuid4())
+        await db.outreach_invites.insert_one({
+            "id": invite_id,
+            "request_id": request_id,
+            "candidate": c,
+            "email_sent": False,
+            "sms_sent": False,
+            "channel": None,
+            "send_error": None,
+            "source": c.get("source") or "llm",
+            "created_at": _now_iso(),
+        })
+        result = await _send_outreach_invite(c, req, invite_id=invite_id)
         ok = bool(result.get("ok"))
         channel = result.get("channel")
         if ok and channel == "email":
             sent_email += 1
         elif ok and channel == "sms":
             sent_sms += 1
-        # Persist the outreach record for analytics + audit
-        await db.outreach_invites.insert_one({
-            "id": str(uuid.uuid4()),
-            "request_id": request_id,
-            "candidate": c,
-            "email_sent": ok and channel == "email",
-            "sms_sent": ok and channel == "sms",
-            "channel": channel,
-            "send_error": result.get("error"),
-            "source": c.get("source") or "llm",
-            "created_at": _now_iso(),
-        })
+        await db.outreach_invites.update_one(
+            {"id": invite_id},
+            {"$set": {
+                "email_sent": ok and channel == "email",
+                "sms_sent": ok and channel == "sms",
+                "channel": channel,
+                "send_error": result.get("error"),
+                "sent_at": _now_iso() if ok else None,
+            }},
+        )
         # Resend free tier caps at 5/sec; Twilio at ~1/sec for trial — throttle for both
         await asyncio.sleep(0.5)
     await db.requests.update_one(
@@ -475,6 +512,7 @@ async def run_outreach_for_request(request_id: str) -> dict[str, Any]:
         "total_sent": sent_email + sent_sms,
         "skipped_existing_therapist": dedupe_stats["skipped_existing_therapist"],
         "skipped_prior_invite": dedupe_stats["skipped_prior_invite"],
+        "skipped_opted_out": dedupe_stats.get("skipped_opted_out", 0),
         "request_id": request_id,
     }
 

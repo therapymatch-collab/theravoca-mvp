@@ -457,6 +457,35 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
   payment-label fallbacks, admin list `invited_count`, detail `invited`,
   and AI-assistant injection. 43/43 tests pass.
 
+### Iteration 48b (2026-04-28) — One-click opt-out for recruitment outreach
+- **New collection `outreach_opt_outs`** keyed by normalized email +
+  E.164 phone. Captures `last_source` ("outreach_email_link"),
+  `last_reason`, `last_invite_id`, `last_request_id`, `created_at`,
+  `last_opted_out_at`. Idempotent upsert so repeat clicks don't dupe.
+- **Every recruitment email + SMS now includes a one-click opt-out URL**
+  at `GET /api/outreach/opt-out/{invite_id}` (public, no auth — the
+  UUID invite_id is the unguessable token). Email puts it in a clean
+  footer ("Not interested in future referrals? Unsubscribe with one
+  click"); SMS appends it alongside the standard STOP keyword.
+- **Backend-rendered confirmation page**: branded HTML, no React
+  dependency — so the link stays fast + robust for the therapists who
+  aren't users yet. Shows the email/phone we removed and a friendly
+  "already opted out" note on re-click.
+- **Dedupe now filters opt-outs**: `_filter_existing_contacts()` bulk-
+  fetches all opted-out emails + phones for the candidate batch in a
+  single mongo round-trip and drops matches. Stats include a new
+  `skipped_opted_out` counter surfaced on the `/run-outreach` response.
+- **Invite row pre-creation**: `run_outreach_for_request` now inserts
+  the `outreach_invites` row BEFORE sending the email/SMS so the
+  opt-out token exists in the DB at send time, then updates the row
+  with the send result.
+- **Admin endpoint** `GET /api/admin/outreach/opt-outs` lists the full
+  opt-out roster for audit.
+- Tests: `tests/test_iteration48_opt_out.py` covers unit (record,
+  is_opted_out, idempotent), HTTP (200 for valid token, 404 for
+  invalid, unsubscribe-text in body, admin list), and dedupe
+  integration (opted-out candidate skipped on re-run). 41/41 pass.
+
 ## Key DB Schemas
 
 **requests**: `{id, email, location_state, location_city, location_zip, patient_geo, client_type, age_group, payment_type, insurance_name, budget, sliding_scale_ok, presenting_issues:[…], modality_preferences:[…], availability_windows, urgency, prior_therapy, gender_preference, gender_required, style_preference, threshold, notified_therapist_ids, notified_scores, notified_breakdowns, notified_distances, results_released_at, results_sent_at, status, verified, verified_at, created_at, matched_at}`

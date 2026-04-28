@@ -395,6 +395,16 @@ async def admin_list_outreach(_: bool = Depends(require_admin)):
     return {"invites": docs, "total": len(docs)}
 
 
+@router.get("/admin/outreach/opt-outs")
+async def admin_list_opt_outs(_: bool = Depends(require_admin)):
+    """Full opt-out roster so admins can audit who asked to be removed
+    from outreach. Sorted newest-first."""
+    docs = await db.outreach_opt_outs.find(
+        {}, {"_id": 0},
+    ).sort("last_opted_out_at", -1).to_list(500)
+    return {"opt_outs": docs, "total": len(docs)}
+
+
 @router.post("/admin/outreach/{invite_id}/convert")
 async def admin_convert_outreach_invite(
     invite_id: str, _: bool = Depends(require_admin),
@@ -657,6 +667,93 @@ async def public_referral_source_options() -> dict[str, Any]:
     if not options:
         options = DEFAULT_REFERRAL_SOURCE_OPTIONS
     return {"options": _reorder_referral_options(options)}
+
+
+# ─── Outreach opt-out — public, no auth ─────────────────────────────────
+def _render_opt_out_page(*, success: bool, email: str | None, phone: str | None,
+                        already: bool = False) -> str:
+    """Tiny self-contained HTML confirmation page. No React dependency — this
+    link is clicked by people who aren't users yet, and we want the response
+    to be instant + robust."""
+    headline = "You're unsubscribed" if success else "We couldn't process that link"
+    sub = (
+        "You won't receive any further outreach emails or texts from TheraVoca."
+        if success
+        else "The link may be invalid or expired. If you believe this is a mistake, "
+             "reply to the original email and we'll remove you manually."
+    )
+    contact_line = ""
+    if success and (email or phone):
+        who = email or phone
+        contact_line = (
+            f'<p style="color:#6D6A65;font-size:13px;margin:12px 0 0;">We have removed '
+            f'<strong style="color:#2B2A29;">{who}</strong> from our recruitment list.</p>'
+        )
+    already_line = (
+        '<p style="color:#6D6A65;font-size:13px;margin:10px 0 0;">'
+        '(You were already opted out — no action needed.)</p>'
+        if already else ""
+    )
+    return f"""<!doctype html>
+<html><head>
+<meta charset="utf-8">
+<title>TheraVoca — {headline}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body {{ margin:0; padding:48px 20px; background:#FDFBF7; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif; color:#2B2A29; }}
+  .card {{ max-width:520px; margin:0 auto; background:#fff; border:1px solid #E8E5DF; border-radius:16px; padding:40px 32px; text-align:center; }}
+  h1 {{ font-family:Georgia,serif; font-size:26px; color:#2D4A3E; margin:0 0 12px; }}
+  p {{ color:#2B2A29; font-size:15px; line-height:1.6; margin:0 0 8px; }}
+  .brand {{ font-family:Georgia,serif; color:#2D4A3E; font-size:18px; letter-spacing:-0.5px; margin-bottom:24px; }}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="brand">TheraVoca</div>
+  <h1>{headline}</h1>
+  <p>{sub}</p>
+  {contact_line}
+  {already_line}
+</div>
+</body>
+</html>"""
+
+
+@public_router.get("/outreach/opt-out/{invite_id}")
+async def outreach_opt_out(invite_id: str, reason: str | None = None):
+    """One-click opt-out link embedded in every outreach email & SMS. No auth,
+    no CSRF — the invite_id (UUID4) is the unguessable token."""
+    from fastapi.responses import HTMLResponse
+    from outreach_optout import record_opt_out, is_opted_out
+
+    invite = await db.outreach_invites.find_one({"id": invite_id}, {"_id": 0})
+    if not invite:
+        return HTMLResponse(
+            _render_opt_out_page(success=False, email=None, phone=None),
+            status_code=404,
+        )
+    cand = invite.get("candidate") or {}
+    email = cand.get("email") or ""
+    phone = cand.get("phone") or ""
+
+    already = await is_opted_out(email=email, phone=phone)
+    await record_opt_out(
+        email=email, phone=phone, reason=reason,
+        source="outreach_email_link",
+        invite_id=invite_id,
+        request_id=invite.get("request_id"),
+    )
+    # Also flag the invite row itself so analytics can see which invites
+    # resulted in opt-outs.
+    await db.outreach_invites.update_one(
+        {"id": invite_id},
+        {"$set": {"opted_out_at": _now_iso(), "opt_out_reason": reason}},
+    )
+    return HTMLResponse(
+        _render_opt_out_page(
+            success=True, email=email, phone=phone, already=already,
+        ),
+    )
 
 
 @router.post("/admin/therapists/{therapist_id}/reviews")
