@@ -1385,6 +1385,9 @@ def _coerce_source(payload: dict) -> dict[str, Any]:
         raise HTTPException(400, "Each source requires a url")
     if not (url.startswith("http://") or url.startswith("https://")):
         raise HTTPException(400, f"URL must start with http(s)://: {url}")
+    from urllib.parse import urlparse
+    if not urlparse(url).netloc:
+        raise HTTPException(400, f"URL is missing a host: {url}")
     return {
         "id": (payload.get("id") or str(_uuid.uuid4())),
         "url": url,

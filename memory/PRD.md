@@ -1116,3 +1116,50 @@ User asked for 8 changes; all shipped in one batch.
   divider + no-password hint verified. **100% pass on all 8 items.**
 
 
+
+## Iteration 61 — Logo scroll + Master-Query geo + Scrape-source registry (2026-04-28)
+
+### Logo scroll-to-top (P0 fix)
+- Reworked `/app/frontend/src/components/ScrollManager.jsx` to force
+  `window.scrollTo(0,0)` across THREE frames (sync + 2 RAF + 60ms
+  setTimeout) so the browser's cached scroll restoration cannot win the
+  race when the new route grows the document.
+- Removed the `setTimeout` workaround from `useScrollTopNavigate` in
+  `SiteShell.jsx` — ScrollManager is now the single source of truth.
+- Verified: from `/therapists/join` scrolled to scrollY=2906, clicking
+  the logo now lands on `/` at scrollY=0. Same for `/admin`.
+
+### Master Query — therapist counts by city / zip / state
+- `/api/admin/master-query/snapshot` now returns three new arrays:
+  `therapists_by_state`, `therapists_by_city` (from `office_geos.city`),
+  and `therapists_by_zip` (parsed via regex from `office_addresses`).
+- LLM system message updated so Claude knows to look up city/zip/state
+  questions in those arrays. Sample question "How many therapists do we
+  have in Boise?" returns `Boise: 10` with citation.
+
+### Patient intake rate limit — UX hardening
+- Backend bounds widened: `max_requests_per_window` 1-1000 (was 1-50);
+  `window_minutes` 1-43200 (30 days, was 1 week).
+- Frontend `SettingsPanel.jsx`: now reflects server-confirmed values
+  after save, shows inline error banner (`rate-limit-error` testid)
+  on validation failure, and the success toast names the saved values.
+
+### External scrape-source registry (NEW feature)
+- New `app_config.scrape_sources` doc storing
+  `[{id, url, label, notes, enabled}]`.
+- New endpoints `GET /api/admin/scrape-sources` and
+  `PUT /api/admin/scrape-sources` (admin-only, validate URL has scheme
+  + host, max 50 entries).
+- New admin panel `/app/frontend/src/pages/admin/panels/ScrapeSourcesPanel.jsx`
+  exposed under **Admin → More → Scrape sources**: add/remove rows,
+  edit URL/label/notes, toggle enabled, save.
+- Outreach LLM (`outreach_agent._find_candidates_llm`) and gap recruiter
+  (`gap_recruiter._ask_for_candidates`) now inject any enabled URLs
+  into Claude's research prompt as `ADDITIONAL DIRECTORY SOURCES`.
+
+### Tests / verification
+- `tests/test_iteration61_admin_extras.py`: 20/20 pass (master-query
+  geo, intake rate-limit boundaries, scrape-sources CRUD + auth).
+- Playwright smoke: logo scroll-to-top from `/therapists/join` and
+  `/admin` (scrollY=0 after click). Header visible on `/admin` and `/blog`.
+- Iter-23 testing report at `/app/test_reports/iteration_23.json`.
