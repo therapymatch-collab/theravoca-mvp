@@ -1,0 +1,33 @@
+{
+  "summary": "Iter-59 review (4 user-reported fixes). Backend 4/4 NEW + 12/12 regression PASSED (16/16). Frontend smoke confirmed all 4 fixes: (1) email _wrap() footer contains literal 'support@theravoca.com' inside mailto: anchor styled with brand primary; (2) Landing.jsx — new section CTAs how-cta-btn / testimonials-cta-btn / different-cta-btn / faq-cta-btn ALL present with href=/#start; old dual-cta-after-* testids ALL removed; TherapistSignup.jsx — why-join-cta-btn + therapist-faq-cta-btn present with href=#signup-form, click smooth-scrolls to scrollY=2157 (form visible); (3) Testimonials — 5 <video> elements with corrected single-dot URLs (W.Z.mp4, D.A.mp4, Referral_4_Cuts_..., Reerral_4-1.mp4, N.N.mp4 — NO double-dots); testimonials-prev / testimonials-next buttons present and visible at sm+; clicking next advances scrollLeft from 0 → 344px, prev returns to 0; testimonial-play-{id} overlay button present per card and disappears once playingId matches; videos render correctly with posters in browser; (4) Site Copy preview — copy-preview-landing.hero.eyebrow button opens new tab to /?preview=eyJsYW5kaW5nLmhlcm8uZXllYnJvdyI6IlBSRVZJRVcgRFJBRlQgWFlaMTIzIn0%3D; base64 decodes to {'landing.hero.eyebrow':'PREVIEW DRAFT XYZ123'}; the draft eyebrow text is rendered on the public landing without saving; useSiteCopy.js correctly parses the ?preview= URL param into previewOverrides and short-circuits before falling back to the saved map.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration59_email_footer.py",
+    "/app/test_reports/pytest/iter59_results.xml"
+  ],
+  "verifications": {
+    "T1_email_footer": "from email_service import _wrap; html=_wrap('X','Y'); assert 'support@theravoca.com' in html AND 'mailto:support@theravoca.com' in html AND 'Questions? Reach us at' in html. Anchor uses BRAND['primary']=#2D4A3E and underline. 2/2 unit tests PASS.",
+    "T2_landing_section_ctas": "page.locator(testid).count() = 1 for how-cta-btn, testimonials-cta-btn, different-cta-btn, faq-cta-btn — all href=/#start. Deprecated testids dual-cta-after-testimonials/intake/faq all count=0.",
+    "T2_therapist_ctas": "why-join-cta-btn AND therapist-faq-cta-btn present, href=#signup-form, label 'Get more referrals'. After click(why-join), window.scrollY=2157 → form scrolled into view. #signup-form anchor present.",
+    "T3_testimonials": "5 <video> elements; src URLs all single-dot (no '..'); URL fragments matched: W.Z.mp4 ✓, D.A.mp4 ✓, Referral_4_Cuts ✓, Reerral_4-1.mp4 ✓, N.N.mp4 ✓. testimonials-prev + testimonials-next visible. Click next → track.scrollLeft 0 → 344px (smooth, ≈ one card width 320 + 20 gap). Click prev → 0. testimonial-play-wz overlay present. Browser-side video preview/posters render in screenshot.",
+    "T4_site_copy_preview": "copy-preview-landing.hero.eyebrow opens new tab to URL with ?preview=<base64>. Decoded payload = {'landing.hero.eyebrow':'PREVIEW DRAFT XYZ123'}. Draft text rendered on /?preview=... without backend persistence (saved map unaffected — useSiteCopy.previewOverrides resolver wins for matching keys only). 56 copy-* testids on the panel (preview/save/reset for each row + custom-key/custom-value/custom-save controls).",
+    "T5_regression": "test_iteration58_site_copy.py 8/8 + test_iteration57_match_gap.py 4/4 = 12/12 PASSED. Public /api/site-copy and admin auto-decline-duplicates-banner unchanged."
+  },
+  "action_items": [],
+  "critical_code_review_comments": [
+    "useSiteCopy.js: previewOverrides parsed inside useState body on every render — cheap (only one URL.search read) but could be useMemo()'d for cleanliness. Non-blocking.",
+    "Note: theravoca.com WordPress media returns 403 to HEAD requests but 200 to GET (typical mod_security). Backend HEAD probes from outside containers will fail; browsers fetch fine — videos render correctly. No fix needed; just be aware that any future CI that HEAD-checks these URLs will spuriously fail."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration59_email_footer.py (NEW — 4 tests)",
+    "/app/test_reports/pytest/iter59_results.xml (NEW)"
+  ],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "100%"},
+  "test_credentials": "Admin master pwd: admin123! via 'Master password' tab at /admin (default tab is 'Team email'). Backend admin-only endpoints use X-Admin-Password header.",
+  "seed_data_creation": "None. Preview button uses ephemeral URL-only payloads — no DB writes. test_iteration59 only reads _wrap() output and public endpoints.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-59 fully green. New backend test at /app/backend/tests/test_iteration59_email_footer.py covers the email footer support@theravoca.com line via direct _wrap() import. Frontend changes are pure UI/route additions: GetMatchedCTA component injected into 4 landing sections + 2 therapist sections, DualCTA.jsx deleted, VideoTestimonials gained prev/next + play overlay, SiteCopyAdminPanel got per-row Preview button that builds /path?preview=base64(JSON). useSiteCopy.js short-circuits resolver on previewOverrides parsed from ?preview=. To reach Site copy panel: /admin → 'Master password' tab → admin123! → admin-login-btn → tab-more-btn → more-tab-site_copy. Note: the 'More' menu button has data-testid='tab-more-btn' (not 'more-btn').",
+  "rca of the issue": "N/A — review iteration, all 4 reported fixes verified working."
+}

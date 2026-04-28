@@ -66,7 +66,8 @@ def _wrap(title: str, inner_html: str) -> str:
           {inner_html}
         </td></tr>
         <tr><td style="padding:20px 32px;background:{BRAND['bg']};color:{BRAND['muted']};font-size:12px;line-height:1.6;border-top:1px solid {BRAND['border']};">
-          You received this email from TheraVoca. If this wasn't you, please ignore this message.
+          You received this email from TheraVoca. If this wasn't you, please ignore this message.<br/>
+          Questions? Reach us at <a href="mailto:support@theravoca.com" style="color:{BRAND['primary']};text-decoration:underline;">support@theravoca.com</a>.
         </td></tr>
       </table>
     </td></tr>

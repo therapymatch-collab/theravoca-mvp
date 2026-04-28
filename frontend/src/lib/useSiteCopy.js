@@ -33,6 +33,21 @@ export function bustSiteCopyCache() {
 
 export default function useSiteCopy() {
   const [map, setMap] = useState(_cache?.map || {});
+  // Preview overrides: when ?preview=base64-of-{k:v} is in the URL, those
+  // values override the saved map for the current page load only — used
+  // by the admin Site Copy panel's "Preview on landing" button.
+  const previewOverrides = (() => {
+    if (typeof window === "undefined") return {};
+    const p = new URLSearchParams(window.location.search).get("preview");
+    if (!p) return {};
+    try {
+      const decoded = JSON.parse(atob(decodeURIComponent(p)));
+      if (decoded && typeof decoded === "object") return decoded;
+    } catch (_) {
+      /* ignore malformed preview payloads */
+    }
+    return {};
+  })();
 
   useEffect(() => {
     const onChange = (m) => setMap(m);
@@ -48,6 +63,10 @@ export default function useSiteCopy() {
   }, []);
 
   return (key, fallback) => {
+    if (key in previewOverrides) {
+      const pv = previewOverrides[key];
+      if (typeof pv === "string" && pv.length > 0) return pv;
+    }
     const v = map[key];
     return typeof v === "string" && v.length > 0 ? v : fallback;
   };

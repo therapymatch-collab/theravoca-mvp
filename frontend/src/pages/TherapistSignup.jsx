@@ -709,6 +709,22 @@ export default function TherapistSignup() {
                 </li>
               ))}
             </ul>
+            <div className="mt-10 flex justify-center">
+              <a
+                href="#signup-form"
+                onClick={(e) => {
+                  e.preventDefault();
+                  document
+                    .getElementById("signup-form")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                className="tv-btn-primary"
+                data-testid="why-join-cta-btn"
+              >
+                Get more referrals
+                <ArrowRight size={16} className="ml-1.5 inline" />
+              </a>
+            </div>
           </div>
         </section>
 
@@ -738,6 +754,22 @@ export default function TherapistSignup() {
                 </AccordionItem>
               ))}
             </Accordion>
+            <div className="mt-10 flex justify-center">
+              <a
+                href="#signup-form"
+                onClick={(e) => {
+                  e.preventDefault();
+                  document
+                    .getElementById("signup-form")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                className="tv-btn-primary"
+                data-testid="therapist-faq-cta-btn"
+              >
+                Get more referrals
+                <ArrowRight size={16} className="ml-1.5 inline" />
+              </a>
+            </div>
           </div>
         </section>
 

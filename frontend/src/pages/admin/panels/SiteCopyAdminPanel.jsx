@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Pencil, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Trash2, ExternalLink } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { bustSiteCopyCache } from "@/lib/useSiteCopy";
@@ -18,68 +18,80 @@ const SEED_KEYS = [
     key: "landing.hero.eyebrow",
     label: "Landing · Hero eyebrow",
     fallback: "Therapy referrals, reimagined",
+    previewPath: "/",
   },
   {
     key: "landing.hero.headline",
     label: "Landing · Hero headline",
     fallback: "Find the right therapist — without the search",
+    previewPath: "/",
   },
   {
     key: "landing.hero.subhead",
     label: "Landing · Hero subhead",
     fallback:
       "Tell us what you need. We match you with vetted therapists who actively want to help.",
+    previewPath: "/",
   },
   {
     key: "landing.hero.cta",
     label: "Landing · Hero CTA",
     fallback: "Get matched",
+    previewPath: "/",
   },
   // How it works
   {
     key: "landing.how.heading",
     label: "Landing · How it works heading",
     fallback: "How it works",
+    previewPath: "/#how",
   },
   {
     key: "landing.how.subhead",
     label: "Landing · How it works subhead",
     fallback: "Three steps from request to first session.",
+    previewPath: "/#how",
   },
   // Why TheraVoca
   {
     key: "landing.different.heading",
     label: "Landing · Why TheraVoca heading",
     fallback: "Why TheraVoca",
+    previewPath: "/#different",
   },
   {
     key: "landing.different.subhead",
     label: "Landing · Why TheraVoca subhead",
     fallback:
       "We do the search. You meet the therapists who can actually help.",
+    previewPath: "/#different",
   },
   // FAQ
   {
     key: "landing.faq.heading",
     label: "Landing · FAQ heading",
     fallback: "Things people ask",
+    previewPath: "/#faq",
   },
   // Therapist join hero
   {
     key: "therapist.hero.eyebrow",
     label: "Therapist · Hero eyebrow",
     fallback: "Join the network",
+    previewPath: "/therapists/join",
   },
   {
     key: "therapist.hero.headline",
     label: "Therapist · Hero headline",
     fallback: "Get matched with patients who fit your practice",
+    previewPath: "/therapists/join",
   },
   {
     key: "therapist.hero.subhead",
     label: "Therapist · Hero subhead",
     fallback:
       "Stop chasing leads. Stop fighting insurance forms. We send you only the patients you can actually help.",
+    previewPath: "/therapists/join",
   },
   // Footer
   {
@@ -87,6 +99,7 @@ const SEED_KEYS = [
     label: "Footer · Tagline",
     fallback:
       "Let therapists come to you. We do the logistical work so you can focus on healing.",
+    previewPath: "/",
   },
 ];
 
@@ -263,6 +276,37 @@ export default function SiteCopyAdminPanel({ client }) {
                             <Pencil size={11} />
                           )}
                           Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // Build a preview URL with the current draft
+                            // (or override) for THIS key only — keeps the
+                            // preview focused on what the admin is
+                            // actually editing.
+                            const payload = encodeURIComponent(
+                              btoa(
+                                JSON.stringify({
+                                  [seed.key]: current,
+                                }),
+                              ),
+                            );
+                            const path = seed.previewPath || "/";
+                            const sep = path.includes("?") ? "&" : "?";
+                            const hashIdx = path.indexOf("#");
+                            const url =
+                              hashIdx >= 0
+                                ? `${path.slice(0, hashIdx)}${sep}preview=${payload}${path.slice(hashIdx)}`
+                                : `${path}${sep}preview=${payload}`;
+                            window.open(url, "_blank", "noopener");
+                          }}
+                          disabled={!current.trim()}
+                          className="text-[#C87965] hover:underline text-xs inline-flex items-center gap-1 disabled:opacity-40 disabled:no-underline"
+                          title={`Open ${seed.previewPath || "/"} in a new tab with this override applied`}
+                          data-testid={`copy-preview-${seed.key}`}
+                        >
+                          <ExternalLink size={11} />
+                          Preview
                         </button>
                         {isOverridden && (
                           <button

@@ -10,7 +10,7 @@ import {
 import { Check, X, Sparkles } from "lucide-react";
 import { useEffect } from "react";
 import useSiteCopy from "@/lib/useSiteCopy";
-import DualCTA from "@/components/DualCTA";
+import GetMatchedCTA from "@/components/GetMatchedCTA";
 
 const HERO_IMAGE =
   "https://images.unsplash.com/photo-1760702591586-a46969be7de9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzB8MHwxfHNlYXJjaHwzfHxjYWxtJTIwbmF0dXJlJTIwZm9yZXN0JTIwc3Vuc2V0fGVufDB8fHx8MTc3NzIwNjYzM3ww&ixlib=rb-4.1.0&q=85";
@@ -185,12 +185,12 @@ export default function Landing() {
               </div>
             ))}
           </div>
+
+          <GetMatchedCTA id="how-cta" />
         </div>
       </section>
 
       <VideoTestimonials />
-
-      <DualCTA tone="light" id="dual-cta-after-testimonials" />
 
       {/* DIFFERENT */}
       <section
@@ -256,13 +256,12 @@ export default function Landing() {
               </div>
             </div>
           </div>
+          <GetMatchedCTA id="different-cta" />
         </div>
       </section>
 
       {/* INTAKE FORM */}
       <IntakeForm />
-
-      <DualCTA tone="warm" id="dual-cta-after-intake" />
 
       {/* FAQ */}
       <section id="faq" className="py-20 md:py-28">
@@ -290,10 +289,10 @@ export default function Landing() {
               </AccordionItem>
             ))}
           </Accordion>
+
+          <GetMatchedCTA id="faq-cta" />
         </div>
       </section>
-
-      <DualCTA tone="warm" id="dual-cta-after-faq" />
 
       <Footer />
     </div>
