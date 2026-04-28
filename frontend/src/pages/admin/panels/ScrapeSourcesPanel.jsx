@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2, ExternalLink } from "lucide-react";
+import { Loader2, Plus, Trash2, ExternalLink, Beaker } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 // Admin-managed registry of EXTRA therapist directory URLs (state board
@@ -45,6 +45,43 @@ export default function ScrapeSourcesPanel({ client }) {
     ]);
 
   const remove = (i) => setSources((s) => s.filter((_, idx) => idx !== i));
+
+  // Per-row "Test scrape" — calls POST /admin/scrape-sources/test with the
+  // current row's URL and shows the result inline (count + strategy used).
+  const [testing, setTesting] = useState({});
+  const [testResults, setTestResults] = useState({});
+  const testRow = async (i) => {
+    const row = sources[i];
+    if (!row?.url) {
+      toast.error("Add a URL first");
+      return;
+    }
+    setTesting((t) => ({ ...t, [i]: true }));
+    setTestResults((r) => ({ ...r, [i]: null }));
+    try {
+      const res = await client.post("/admin/scrape-sources/test", {
+        url: row.url,
+        label: row.label || "",
+      });
+      setTestResults((r) => ({ ...r, [i]: res.data }));
+      const n = res.data.candidate_count || 0;
+      if (n === 0) {
+        toast.warning(
+          `No therapists extracted from ${row.url} (strategy: ${res.data.strategy})`,
+        );
+      } else {
+        toast.success(
+          `Extracted ${n} candidates via ${res.data.strategy} (${res.data.elapsed_sec}s)`,
+        );
+      }
+    } catch (e) {
+      const msg = e?.response?.data?.detail || e.message || "Test failed";
+      toast.error(msg);
+      setTestResults((r) => ({ ...r, [i]: { error: msg } }));
+    } finally {
+      setTesting((t) => ({ ...t, [i]: false }));
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -172,6 +209,20 @@ export default function ScrapeSourcesPanel({ client }) {
                       </label>
                       <button
                         type="button"
+                        onClick={() => testRow(i)}
+                        disabled={!!testing[i] || !s.url}
+                        className="text-[#2D4A3E] hover:text-[#1f3a30] disabled:opacity-40"
+                        title="Test scrape this URL"
+                        data-testid={`scrape-source-test-${i}`}
+                      >
+                        {testing[i] ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Beaker size={14} />
+                        )}
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => remove(i)}
                         className="text-[#B0382A] hover:text-[#8E2A1F]"
                         title="Remove"
@@ -180,6 +231,34 @@ export default function ScrapeSourcesPanel({ client }) {
                         <Trash2 size={14} />
                       </button>
                     </div>
+                    {testResults[i] ? (
+                      <div
+                        className="md:col-span-12 text-xs px-3 py-2 rounded-md bg-[#F4F1EC] border border-[#E8E5DF] text-[#2B2A29]"
+                        data-testid={`scrape-source-test-result-${i}`}
+                      >
+                        {testResults[i].error ? (
+                          <span className="text-[#B0382A]">
+                            Error: {testResults[i].error}
+                          </span>
+                        ) : (
+                          <>
+                            <strong>{testResults[i].candidate_count}</strong>{" "}
+                            candidates extracted via{" "}
+                            <code>{testResults[i].strategy}</code> in{" "}
+                            {testResults[i].elapsed_sec}s.
+                            {testResults[i].candidates_preview?.length ? (
+                              <span className="text-[#6D6A65]">
+                                {" "}
+                                Preview:{" "}
+                                {testResults[i].candidates_preview
+                                  .map((c) => `${c.name || "?"} (${c.city || "?"})`)
+                                  .join(", ")}
+                              </span>
+                            ) : null}
+                          </>
+                        )}
+                      </div>
+                    ) : null}
                   </li>
                 ))}
               </ul>

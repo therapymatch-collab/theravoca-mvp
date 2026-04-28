@@ -85,10 +85,36 @@ def _normalize_pt_to_outreach(c: dict, request: dict) -> dict:
         "state": c.get("state") or request.get("location_state") or "ID",
         "match_rationale": rationale,
         "estimated_score": score,
-        "source": "psychology_today",
+        "source": c.get("source") or "psychology_today",
         "profile_url": c.get("profile_url") or "",
         "website": c.get("website") or "",
     }
+
+
+async def _find_candidates_external(request: dict) -> list[dict]:
+    """Live HTTP scrape of admin-registered external directory URLs.
+    Each enabled `app_config.scrape_sources` entry gets fetched in parallel,
+    parsed via JSON-LD first then LLM fallback, then normalized into the
+    standard outreach candidate shape."""
+    try:
+        from routes.admin import get_enabled_scrape_sources
+        from external_scraper import scrape_external_sources
+    except ImportError:
+        return []
+    enabled = await get_enabled_scrape_sources()
+    if not enabled:
+        return []
+    try:
+        bundle = await scrape_external_sources(enabled, total_budget_sec=30.0)
+    except Exception as e:
+        logger.warning("External scrape failed: %s", e)
+        return []
+    out: list[dict] = []
+    for r in bundle.get("results") or []:
+        for c in r.get("candidates") or []:
+            out.append(_normalize_pt_to_outreach(c, request))
+    out.sort(key=lambda c: c.get("estimated_score") or 0, reverse=True)
+    return out
 
 
 async def _find_candidates_pt(request: dict, count: int) -> list[dict]:
@@ -206,8 +232,8 @@ Return ONLY a JSON array. No prose, no markdown fences. Empty array `[]` is acce
 
 
 async def _find_candidates(request: dict, count: int = 30) -> list[dict]:
-    """Hybrid: try Psychology Today scraping first (real, grounded data),
-    then fall back / top-up via the LLM agent if we still need more.
+    """Hybrid: PT scrape → admin-registered external directory scrape →
+    LLM fallback. Each phase only runs if we still need more candidates.
 
     Honours the `PT_SCRAPING_ENABLED` env flag so we can disable scraping
     quickly if PT changes their HTML or starts rate-limiting us.
@@ -220,12 +246,37 @@ async def _find_candidates(request: dict, count: int = 30) -> list[dict]:
     if len(pt_results) >= count:
         return pt_results[:count]
 
+    # Phase 2: live HTTP scrape of admin-registered external directory URLs.
+    ext_results = await _find_candidates_external(request)
+    logger.info("External scrape returned %d candidates", len(ext_results))
+
+    # Dedupe by name+city across phases so we don't double-invite.
+    seen: set[tuple[str, str]] = {
+        ((c.get("name") or "").lower().strip(), (c.get("city") or "").lower().strip())
+        for c in pt_results
+    }
+    merged = list(pt_results)
+    for c in ext_results:
+        key = ((c.get("name") or "").lower().strip(), (c.get("city") or "").lower().strip())
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(c)
+    if len(merged) >= count:
+        return merged[:count]
+
     # Top up with LLM-generated candidates so the request gets full coverage
-    needed_extra = count - len(pt_results)
+    needed_extra = count - len(merged)
     llm_results = await _find_candidates_llm(request, count=needed_extra)
     logger.info("LLM fallback returned %d candidates (needed %d more)",
                 len(llm_results), needed_extra)
-    return (pt_results + llm_results)[:count]
+    for c in llm_results:
+        key = ((c.get("name") or "").lower().strip(), (c.get("city") or "").lower().strip())
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(c)
+    return merged[:count]
 
 
 def _send_invite_sms_body(candidate: dict, request: dict, score: int, opt_out_url: str) -> str:

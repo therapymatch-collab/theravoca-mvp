@@ -1176,13 +1176,13 @@ export default function TherapistSignup() {
                       return (
                         <div
                           key={iss.v}
-                          className="flex items-center justify-between gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2"
+                          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5"
                           data-testid={`signup-issue-${iss.v}`}
                         >
-                          <span className="text-sm text-[#2B2A29] flex-1">
+                          <span className="text-sm text-[#2B2A29] sm:flex-1">
                             {iss.l}
                           </span>
-                          <div className="flex gap-1">
+                          <div className="flex flex-wrap gap-1">
                             {[
                               ["primary", "Primary", "#2D4A3E"],
                               ["secondary", "Secondary", "#3A5E50"],

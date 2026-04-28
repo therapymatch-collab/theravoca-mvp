@@ -1430,6 +1430,34 @@ async def get_enabled_scrape_sources() -> list[dict]:
     return [s for s in sources if s.get("enabled", True) and s.get("url")]
 
 
+@router.post("/admin/scrape-sources/test", dependencies=[Depends(require_admin)])
+async def admin_scrape_sources_test(payload: dict) -> dict[str, Any]:
+    """Live-fetch ONE source URL and report how many therapist cards we
+    can extract (JSON-LD strategy first, LLM fallback). Lets the admin
+    sanity-check a directory URL before saving it."""
+    url = (payload.get("url") or "").strip()
+    label = (payload.get("label") or "").strip()
+    if not url:
+        raise HTTPException(400, "url is required")
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise HTTPException(400, "url must start with http(s)://")
+    from external_scraper import scrape_external_sources
+    bundle = await scrape_external_sources(
+        [{"url": url, "label": label, "enabled": True}],
+        total_budget_sec=20.0,
+    )
+    res = (bundle.get("results") or [{}])[0]
+    return {
+        "url": url,
+        "label": label,
+        "strategy": res.get("strategy", "none"),
+        "candidate_count": len(res.get("candidates") or []),
+        "candidates_preview": (res.get("candidates") or [])[:5],
+        "error": res.get("error"),
+        "elapsed_sec": bundle.get("elapsed_sec"),
+    }
+
+
 # Public endpoint — patient intake calls this to populate its dropdown.
 public_router = APIRouter()
 
