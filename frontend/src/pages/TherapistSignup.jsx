@@ -418,8 +418,11 @@ export default function TherapistSignup() {
                   res.data.session_token,
                 );
                 sessionStorage.setItem("tv_session_role", "therapist");
-              } catch (_) {
-                /* sessionStorage may be disabled */
+              } catch (e) {
+                // sessionStorage can fail in private mode or when
+                // storage is full. The user can re-sign-in via
+                // magic link if the auto-session didn't stick.
+                console.warn("sessionStorage write failed:", e?.message);
               }
             }
             toast.success("Free trial started — you're all set!");
@@ -429,7 +432,10 @@ export default function TherapistSignup() {
           // Clean URL
           window.history.replaceState({}, "", "/therapists/join");
         })
-        .catch(() => toast.error("Could not finalize subscription"));
+        .catch((e) => {
+          console.error("Finalize subscription failed:", e);
+          toast.error("Could not finalize subscription");
+        });
       return;
     }
     // Restore the post-submission "Add payment" screen if the therapist
@@ -447,8 +453,15 @@ export default function TherapistSignup() {
           }
         }
       }
-    } catch (_) {
-      /* ignore parse errors */
+    } catch (e) {
+      // Stale or corrupted JSON — drop it so the next visit isn't
+      // perpetually broken.
+      console.warn("tv_signup_pending parse failed, clearing:", e?.message);
+      try {
+        sessionStorage.removeItem("tv_signup_pending");
+      } catch (_inner) {
+        /* private mode — nothing more we can do */
+      }
     }
   }, []);
 
@@ -477,8 +490,10 @@ export default function TherapistSignup() {
             data: { name: data.name, email: data.email },
           }),
         );
-      } catch (_) {
-        /* sessionStorage may be disabled */
+      } catch (e) {
+        // Private-mode storage failure is non-fatal — the user can still
+        // continue, they'll just lose the back-button preservation.
+        console.warn("tv_signup_pending write failed:", e?.message);
       }
       toast.success("Profile received — please add a payment method to start your free trial.");
       window.scrollTo({ top: 0, behavior: "smooth" });

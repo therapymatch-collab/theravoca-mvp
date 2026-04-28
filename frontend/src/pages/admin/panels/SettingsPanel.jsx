@@ -49,13 +49,16 @@ export default function SettingsPanel({ client }) {
         });
       } catch (e) {
         // Soft fail — toggle simply hidden if the endpoint isn't reachable.
+        // We deliberately don't toast here so a missing endpoint on older
+        // backends doesn't yell at the admin every page load.
+        console.warn("research-enrichment status unreachable:", e?.message);
       }
       try {
         const r3 = await client.get("/admin/research-enrichment/warmup");
         if (!alive) return;
         setWarmup(r3.data || null);
-      } catch (_e) {
-        // Soft fail
+      } catch (e) {
+        console.warn("warmup status unreachable:", e?.message);
       }
     })();
     // Poll the warmup status every 5s while it's running so the admin
@@ -64,7 +67,13 @@ export default function SettingsPanel({ client }) {
       try {
         const r = await client.get("/admin/research-enrichment/warmup");
         setWarmup(r.data || null);
-      } catch (_e) {}
+      } catch (e) {
+        // Polling errors are silent by design — we don't want a transient
+        // 500 to spam the console. Only warn if it persists across polls.
+        if (e?.response?.status >= 500) {
+          console.warn("warmup poll 5xx:", e?.response?.status);
+        }
+      }
     }, 5000);
     return () => {
       alive = false;

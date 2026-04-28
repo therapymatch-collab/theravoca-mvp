@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Loader2, ArrowLeft } from "lucide-react";
+import DOMPurify from "dompurify";
 import { Header, Footer } from "@/components/SiteShell";
 import { api } from "@/lib/api";
 
@@ -88,7 +89,12 @@ export default function BlogPost() {
               <div
                 className="mt-10 prose prose-tv max-w-none"
                 data-testid="blog-body"
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(post.body_markdown || "") }}
+                dangerouslySetInnerHTML={{
+                  __html: DOMPurify.sanitize(
+                    renderMarkdown(post.body_markdown || ""),
+                    { USE_PROFILES: { html: true } },
+                  ),
+                }}
               />
             </article>
           )}

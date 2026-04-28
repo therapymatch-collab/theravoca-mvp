@@ -3739,7 +3739,7 @@ function ProviderRow({
               </div>
               <ul className="list-disc ml-4 space-y-0.5">
                 {drResult.public_footprint.map((f, i) => (
-                  <li key={i}>{f}</li>
+                  <li key={`${f.slice(0, 40)}-${i}`}>{f}</li>
                 ))}
               </ul>
             </div>
@@ -3750,8 +3750,8 @@ function ProviderRow({
                 Sources researched
               </div>
               <ul className="space-y-0.5">
-                {drResult.extra_sources.map((u, i) => (
-                  <li key={i}>
+                {drResult.extra_sources.map((u) => (
+                  <li key={u}>
                     <a
                       href={u}
                       target="_blank"

@@ -60,6 +60,19 @@ async def lifespan(_app: FastAPI):
     sweep_interval = int(os.environ.get("SWEEP_INTERVAL_SECONDS", "300"))
     _sweep_task = asyncio.create_task(_sweep_loop(sweep_interval))
     _daily_task = asyncio.create_task(_daily_loop())
+    # Reset any "running" flags that were left orphaned by a previous
+    # supervisorctl restart. Background tasks (deep-research warmup,
+    # outreach jobs) live in asyncio tasks that die on restart, but their
+    # progress flag is on disk in app_config — clear it so the admin UI
+    # doesn't perpetually show "Running…" with no actual work happening.
+    await db.app_config.update_many(
+        {"key": "deep_research_warmup", "running": True},
+        {"$set": {
+            "running": False,
+            "current_name": None,
+            "interrupted_by_restart": True,
+        }},
+    )
     logger.info(
         "Started results sweep loop (every %ds) + daily-task scheduler",
         sweep_interval,

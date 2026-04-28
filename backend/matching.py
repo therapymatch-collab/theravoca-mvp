@@ -422,10 +422,11 @@ def _tiebreaker(t: dict) -> tuple[float, float, float, float]:
     recency = updated.timestamp() if updated else 0.0
     # Stable per-therapist random-ish offset so two genuinely-identical
     # therapists don't always sort the same way (avoids one therapist
-    # always getting the top slot at the expense of another).
+    # always getting the top slot at the expense of another). SHA-256
+    # used purely as a stable hash function — not for any security purpose.
     tid = (t.get("id") or t.get("email") or "").encode("utf-8")
     import hashlib as _h
-    salt = int(_h.md5(tid).hexdigest()[:8], 16) / 0xFFFFFFFF
+    salt = int(_h.sha256(tid).hexdigest()[:8], 16) / 0xFFFFFFFF
     return (review_signal, years, recency, salt)
 
 

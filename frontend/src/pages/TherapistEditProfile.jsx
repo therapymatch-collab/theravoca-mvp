@@ -704,8 +704,11 @@ function LicenseDocUploader() {
       try {
         const r = await client.get("/therapists/me/license-document");
         if (alive) setMeta(r.data?.present ? r.data : null);
-      } catch (_e) {
-        // silent — endpoint just shows fresh state
+      } catch (e) {
+        // 404 is the expected "no doc yet" path — only surface real failures.
+        if (e?.response?.status >= 500 || e?.code === "ERR_NETWORK") {
+          console.warn("license-document fetch failed:", e?.message);
+        }
       }
     })();
     return () => {

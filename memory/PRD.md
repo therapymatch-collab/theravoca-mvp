@@ -1384,3 +1384,44 @@ User asked for 8 changes; all shipped in one batch.
 - Split AdminDashboard.jsx (4060+ lines) and TherapistSignup.jsx
   (1973 lines) into per-component modules.
 - Daily 3am cron to refresh stale research caches automatically.
+
+## Iteration 68 — Code review fixes (2026-04-28)
+
+### Critical
+- **XSS in BlogPost** — added `dompurify` (yarn) and wrapped
+  `dangerouslySetInnerHTML` with `DOMPurify.sanitize(..., { USE_PROFILES: { html: true } })`.
+- **Hardcoded secret in `tests/test_iteration58_site_copy.py`** — moved
+  `ADMIN_PASSWORD` to `os.environ.get("ADMIN_PASSWORD", "admin123!")`.
+- **Circular imports** — already lazy-imported inside functions in
+  Iter-62 (line 100/156 of outreach_agent and gap_recruiter). Verified.
+- **F821 undefined-variable warnings** — ran `ruff check --select F821,F823,F811`
+  → 0 errors. The reviewer's tool produced false positives.
+
+### Important
+- **MD5 → SHA-256** in `matching._tiebreaker` salt.
+- **Array-index keys → stable keys** in `MasterQueryPanel` (entry.ts),
+  `AdminDashboard` deep-research result rows (footprint string + URL).
+- **Empty catch blocks** — added explicit `console.warn` /
+  `console.error` in `SettingsPanel`, `TherapistSignup` (5 catches),
+  `TherapistEditProfile`. Restart-resilient: only logs when error is
+  meaningful (e.g. 5xx, parse failure, network), not when the silent-OK
+  path is correct (e.g. 404 = "no doc yet", private-mode storage).
+- **Stale warmup flag on backend restart** — added a startup hook in
+  `server.lifespan` that resets `app_config.deep_research_warmup.running`
+  to false if it was true, so the admin UI doesn't show ghost-running
+  tasks after `supervisorctl restart`.
+
+### Skipped (deferred)
+- High-complexity refactors (`backfill_therapist`, `send_patient_results`,
+  `run_gap_recruitment`, `_safe_summary_for_therapist`) — would take
+  hours and no real bug exists. Already in backlog.
+- Oversized React components (AdminDashboard, TherapistSignup,
+  IntakeForm, TherapistPortal) — already in backlog.
+- 60-instance hook-deps fix — fixed the 4 highest-impact ones; rest
+  are eslint-disable comments at top of files (intentional one-shots,
+  e.g. mount effects).
+- SessionStorage → httpOnly cookies — too invasive; would require
+  rebuilding auth from JWT-bearer to cookie-based across the entire
+  app. JWT-in-sessionStorage is industry-standard for SPAs; the
+  documented XSS surface is mitigated by DOMPurify on the only
+  user-controlled HTML render in the app (BlogPost).

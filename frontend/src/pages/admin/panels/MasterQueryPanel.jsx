@@ -148,7 +148,7 @@ export default function MasterQueryPanel({ client }) {
         <div className="space-y-3" data-testid="master-query-history">
           {history.map((entry, i) => (
             <div
-              key={i}
+              key={entry.ts || `${entry.q}-${i}`}
               className="bg-white border border-[#E8E5DF] rounded-2xl p-5"
               data-testid={`master-query-entry-${i}`}
             >
