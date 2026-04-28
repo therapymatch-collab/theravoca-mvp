@@ -359,6 +359,9 @@ async def portal_therapist_referrals(
             "availability_prompt_pending": bool(therapist.get("availability_prompt_pending")),
             "last_availability_update_at": therapist.get("last_availability_update_at"),
             "referral_code": therapist.get("referral_code"),
+            "pending_reapproval": bool(therapist.get("pending_reapproval")),
+            "pending_reapproval_fields": therapist.get("pending_reapproval_fields", []),
+            "updated_at": therapist.get("updated_at"),
         },
         "referrals": out,
     }

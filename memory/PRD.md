@@ -627,3 +627,28 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 - Admin password: `admin123!`
 - Magic-link login: any seeded therapist email `therapymatch+t001..t147@gmail.com`
 - Stripe test key: real `sk_test_51RWhfV...` in `/app/backend/.env`
+
+## Iteration 51 — Patient timeline polish & Therapist red-flag callouts (Apr 28, 2026)
+
+- **PatientPortal.jsx**: Replaced flat status badge with a 5-step visual
+  timeline (Submitted → Email verified → Matched → Responses → Results
+  ready). Each step shows real metadata (notified count, application
+  count, dates) and lights up green when complete or amber while
+  active. `data-testid="status-timeline"` and per-step state testids.
+- **TherapistPortal.jsx**: New `<ProfileHealthCallouts>` panel
+  consolidates 5 actionable warnings and renders nothing when the
+  profile is healthy:
+    - **License expired** (critical, red, blocks referrals)
+    - **License expiring ≤30 days** (warning)
+    - **Pending re-approval** after a self-edit (info, lists changed
+      fields)
+    - **Stale profile** (≥90 days since `updated_at`)
+    - **Missing bio** (or <40 chars) and **Missing profile photo**
+    Each flag has a one-click CTA pointing at `/portal/therapist/edit`.
+    Header colour band auto-escalates: critical (red) → warning
+    (amber) → info (green) so therapists see severity at a glance.
+- **portal.py**: `GET /api/portal/therapist/referrals` now exposes
+  `pending_reapproval`, `pending_reapproval_fields`, and `updated_at`
+  on the therapist payload so the new UI panel can compute flags
+  client-side without an extra round-trip.
+

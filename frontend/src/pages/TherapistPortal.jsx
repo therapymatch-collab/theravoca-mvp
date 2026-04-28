@@ -419,30 +419,10 @@ export default function TherapistPortal() {
             </div>
           )}
 
-          {/* License expiration warning */}
-          {therapist?.license_expires_at && (() => {
-            const exp = new Date(therapist.license_expires_at);
-            const days = Math.floor((exp - new Date()) / (1000 * 60 * 60 * 24));
-            if (days < 0 || days > 30) return null;
-            return (
-              <div
-                className="mt-6 bg-[#FDEDEB] border border-[#F2C7BD] rounded-2xl p-5 flex items-start gap-3"
-                data-testid="license-expiry-banner"
-              >
-                <AlertTriangle size={18} className="text-[#D45D5D] mt-1 shrink-0" />
-                <div>
-                  <div className="text-sm font-semibold text-[#2B2A29]">
-                    License expires in {days} days
-                  </div>
-                  <p className="text-sm text-[#6D6A65] mt-1 leading-relaxed">
-                    Renew with your state board and upload an updated copy via the admin so
-                    referrals don't pause. Expires{" "}
-                    {exp.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}.
-                  </p>
-                </div>
-              </div>
-            );
-          })()}
+          {/* Profile health (red-flag callouts) — only for approved therapists */}
+          {therapist && !isPending && (
+            <ProfileHealthCallouts therapist={therapist} />
+          )}
 
           {/* Refer-a-colleague tile (always visible for active therapists) */}
           {therapist?.referral_code && !isPending && (
@@ -790,6 +770,161 @@ function PreviewRow({ label, value, span = 1 }) {
       <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">{label}</div>
       <div className="font-medium text-[#2B2A29]">{value || "—"}</div>
     </div>
+  );
+}
+
+/**
+ * Consolidated profile-health callouts for the therapist portal.
+ * Surfaces actionable issues so therapists can fix them in one click:
+ *  - Expired license (critical, blocks referrals)
+ *  - License expiring within 30 days (warning)
+ *  - Pending re-approval after a self-edit (info)
+ *  - Stale profile (no edits in 90+ days)
+ *  - Missing bio
+ *  - Missing profile picture
+ * Renders nothing when the profile is healthy.
+ */
+function ProfileHealthCallouts({ therapist }) {
+  const flags = [];
+
+  // 1. License status
+  if (therapist?.license_expires_at) {
+    const exp = new Date(therapist.license_expires_at);
+    const days = Math.floor((exp - new Date()) / (1000 * 60 * 60 * 24));
+    if (days < 0) {
+      flags.push({
+        key: "license-expired",
+        severity: "critical",
+        title: `License expired ${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} ago`,
+        body: `Referrals are paused until you upload an active license. Expired ${exp.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}.`,
+        cta: { label: "Update license", to: "/portal/therapist/edit", testid: "fix-license-expired" },
+      });
+    } else if (days <= 30) {
+      flags.push({
+        key: "license-expiring",
+        severity: "warning",
+        title: `License expires in ${days} day${days === 1 ? "" : "s"}`,
+        body: `Renew with your state board and upload an updated copy so referrals don't pause. Expires ${exp.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}.`,
+        cta: { label: "Update license", to: "/portal/therapist/edit", testid: "fix-license-expiring" },
+      });
+    }
+  }
+
+  // 2. Pending re-approval after a self-edit
+  if (therapist?.pending_reapproval) {
+    const fields = (therapist.pending_reapproval_fields || [])
+      .map((f) => f.replace(/_/g, " "))
+      .join(", ");
+    flags.push({
+      key: "pending-reapproval",
+      severity: "info",
+      title: "Recent edits awaiting admin review",
+      body: fields
+        ? `You changed ${fields}. Patients will see the previous values until an admin re-approves (usually within 1 business day).`
+        : "Some of your recent edits need admin re-approval before they go live.",
+    });
+  }
+
+  // 3. Stale profile (>90 days since last update)
+  const lastTouched = therapist?.updated_at || therapist?.last_availability_update_at;
+  if (lastTouched) {
+    const days = Math.floor((new Date() - new Date(lastTouched)) / (1000 * 60 * 60 * 24));
+    if (days >= 90) {
+      flags.push({
+        key: "stale-profile",
+        severity: "warning",
+        title: `Your profile hasn't been updated in ${days} days`,
+        body: "Profiles updated in the last 90 days rank higher in match results. Quickly review your specialties, fees, and availability.",
+        cta: { label: "Refresh profile", to: "/portal/therapist/edit", testid: "fix-stale-profile" },
+      });
+    }
+  }
+
+  // 4. Missing bio
+  if (!therapist?.bio || (therapist.bio || "").trim().length < 40) {
+    flags.push({
+      key: "missing-bio",
+      severity: "warning",
+      title: "Your bio is missing or too short",
+      body: "Patients are 3x more likely to choose therapists with a personal 2–4 sentence bio. Add yours so they can see your voice.",
+      cta: { label: "Add a bio", to: "/portal/therapist/edit", testid: "fix-missing-bio" },
+    });
+  }
+
+  // 5. Missing profile picture
+  if (!therapist?.profile_picture) {
+    flags.push({
+      key: "missing-photo",
+      severity: "warning",
+      title: "No profile photo uploaded",
+      body: "Profiles with a photo get clicked through significantly more than those without. Upload a friendly headshot.",
+      cta: { label: "Upload photo", to: "/portal/therapist/edit", testid: "fix-missing-photo" },
+    });
+  }
+
+  // Suppress license-expiring/expired flags here because the existing
+  // subscription banner already covers payment, and we don't want noise.
+  if (flags.length === 0) return null;
+
+  // Compute the most severe color band so the panel header reads correctly.
+  const hasCritical = flags.some((f) => f.severity === "critical");
+  const hasWarning = flags.some((f) => f.severity === "warning");
+  const headerHue = hasCritical
+    ? { bg: "bg-[#FDEDEB]", border: "border-[#F2C7BD]", text: "text-[#D45D5D]", label: "Action required" }
+    : hasWarning
+    ? { bg: "bg-[#FDF7EC]", border: "border-[#E8DCC1]", text: "text-[#C87965]", label: "Recommended improvements" }
+    : { bg: "bg-[#F2F4F0]", border: "border-[#D9DDD2]", text: "text-[#2D4A3E]", label: "Just FYI" };
+
+  return (
+    <section
+      className={`mt-6 ${headerHue.bg} border ${headerHue.border} rounded-2xl p-5 sm:p-6`}
+      data-testid="profile-health-callouts"
+    >
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <AlertTriangle size={16} className={headerHue.text} />
+          <div className={`text-xs uppercase tracking-wider font-semibold ${headerHue.text}`}>
+            {headerHue.label}
+          </div>
+        </div>
+        <div className="text-xs text-[#6D6A65]">
+          {flags.length} item{flags.length === 1 ? "" : "s"}
+        </div>
+      </div>
+
+      <ul className="mt-4 space-y-3">
+        {flags.map((f) => {
+          const sev =
+            f.severity === "critical"
+              ? { dot: "bg-[#D45D5D]", title: "text-[#D45D5D]" }
+              : f.severity === "warning"
+              ? { dot: "bg-[#C87965]", title: "text-[#2B2A29]" }
+              : { dot: "bg-[#2D4A3E]", title: "text-[#2B2A29]" };
+          return (
+            <li
+              key={f.key}
+              className="bg-white/70 backdrop-blur-sm border border-white rounded-xl p-4 flex items-start gap-3"
+              data-testid={`flag-${f.key}`}
+            >
+              <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${sev.dot}`} aria-hidden />
+              <div className="flex-1 min-w-0">
+                <div className={`text-sm font-semibold ${sev.title}`}>{f.title}</div>
+                <p className="text-sm text-[#6D6A65] mt-1 leading-relaxed">{f.body}</p>
+              </div>
+              {f.cta && (
+                <Link
+                  to={f.cta.to}
+                  className="tv-btn-secondary !py-1.5 !px-3 text-xs shrink-0 self-center"
+                  data-testid={f.cta.testid}
+                >
+                  {f.cta.label}
+                </Link>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
