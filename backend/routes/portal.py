@@ -86,6 +86,108 @@ async def portal_me(
     return {"email": session["email"], "role": session["role"]}
 
 
+@router.get("/portal/therapist/profile")
+async def portal_therapist_profile(
+    session: dict[str, Any] = Depends(require_session(("therapist",))),
+):
+    """Return the therapist's own profile for the self-edit page.
+
+    Strips fields the therapist shouldn't see/own (e.g., internal scoring
+    caches) but keeps everything they're allowed to edit."""
+    t = await db.therapists.find_one(
+        {"email": {"$regex": f"^{re.escape(session['email'])}$", "$options": "i"}},
+        {"_id": 0},
+    )
+    if not t:
+        raise HTTPException(404, "Therapist profile not found")
+    return t
+
+
+# Fields a therapist can change directly without admin re-approval.
+_SELF_EDITABLE_FIELDS = {
+    "bio",
+    "office_phone", "phone", "phone_alert",
+    "website",
+    "office_addresses", "office_locations",
+    "client_types", "age_groups",
+    "modalities", "modality_offering",
+    "offers_in_person", "telehealth",
+    "insurance_accepted",
+    "cash_rate", "sliding_scale", "free_consult",
+    "languages_spoken",
+    "availability", "availability_notes",
+    "profile_picture",
+    "notify_by_email", "notify_by_sms",
+}
+
+# Fields that force a re-approval flag when edited (e.g., license or
+# specialties changes need a human-in-the-loop check).
+_REAPPROVAL_FIELDS = {
+    "primary_specialties",
+    "secondary_specialties",
+    "general_treats",
+    "license_number",
+    "license_expires_at",
+    "licensed_states",
+    "years_experience",
+    "credential_type",
+    "gender",
+    "name",
+}
+
+
+@router.put("/portal/therapist/profile")
+async def portal_therapist_update_profile(
+    payload: dict[str, Any],
+    session: dict[str, Any] = Depends(require_session(("therapist",))),
+):
+    """Therapist self-edit. Silently drops unknown/forbidden fields so
+    clients can send the whole profile back without cherry-picking. Setting
+    any field in `_REAPPROVAL_FIELDS` flips `pending_reapproval=True` so
+    an admin sees it in the pending queue before the change goes live to
+    patients."""
+    allowed = _SELF_EDITABLE_FIELDS | _REAPPROVAL_FIELDS
+    clean = {k: v for k, v in (payload or {}).items() if k in allowed}
+    if not clean:
+        raise HTTPException(400, "No editable fields provided")
+
+    # Clamp rate to sanity bounds (mirrors models.TherapistSignup)
+    if "cash_rate" in clean:
+        try:
+            clean["cash_rate"] = max(0, min(1000, int(clean["cash_rate"])))
+        except (TypeError, ValueError):
+            clean.pop("cash_rate")
+
+    current = await db.therapists.find_one(
+        {"email": {"$regex": f"^{re.escape(session['email'])}$", "$options": "i"}},
+        {"_id": 0},
+    )
+    if not current:
+        raise HTTPException(404, "Therapist profile not found")
+
+    reapproval_changed = [
+        k for k in _REAPPROVAL_FIELDS
+        if k in clean and current.get(k) != clean.get(k)
+    ]
+    update_doc = {**clean, "updated_at": _now_iso()}
+    if reapproval_changed:
+        update_doc["pending_reapproval"] = True
+        update_doc["pending_reapproval_fields"] = reapproval_changed
+        update_doc["pending_reapproval_at"] = _now_iso()
+
+    await db.therapists.update_one(
+        {"id": current["id"]},
+        {"$set": update_doc},
+    )
+    updated = await db.therapists.find_one({"id": current["id"]}, {"_id": 0})
+    return {
+        "ok": True,
+        "profile": updated,
+        "requires_reapproval": bool(reapproval_changed),
+        "reapproval_fields": reapproval_changed,
+    }
+
+
 @router.get("/portal/patient/requests")
 async def portal_patient_requests(
     session: dict[str, Any] = Depends(require_session(("patient",))),

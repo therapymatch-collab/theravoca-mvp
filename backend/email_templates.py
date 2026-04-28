@@ -41,7 +41,7 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "subject": "Your {count} therapist matches are ready",
         "heading": "Your matches are here",
         "greeting": "",
-        "intro": "Your personalized therapist matches are ready. These therapists read your anonymous referral and want to work with you. Reach out to whoever feels right — many offer a free consult.",
+        "intro": "Your personalized therapist matches are ready. These therapists read your anonymous referral and want to work with you. Tap <strong>View full profile &amp; contact</strong> on any match below to see their bio and reach out — many offer a free 15-minute consult.",
         "cta_label": "View full matches",
         "footer_note": "",
         "available_vars": "count, results_url",

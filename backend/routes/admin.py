@@ -133,12 +133,24 @@ async def admin_update_threshold(
 async def admin_list_therapists(
     pending: Optional[bool] = None, _: bool = Depends(require_admin),
 ):
+    from license_verify import compute_license_status, dopl_verification_url
+
     query: dict[str, Any] = {}
     if pending is True:
         query["pending_approval"] = True
     elif pending is False:
         query["pending_approval"] = {"$ne": True}
-    return await db.therapists.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    rows = await db.therapists.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    # Attach lightweight license-status metadata so admin UI can render the
+    # "Verify" badge without doing its own date math (keeps frontend lean
+    # and lets us swap in live DOPL API calls here without touching React).
+    for t in rows:
+        t["license_status"] = compute_license_status(
+            license_expires_at=t.get("license_expires_at"),
+            license_number=t.get("license_number"),
+        )
+        t["license_verify_url"] = dopl_verification_url(t.get("license_number"))
+    return rows
 
 
 @router.post("/admin/therapists/{therapist_id}/approve")

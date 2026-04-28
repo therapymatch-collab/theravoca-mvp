@@ -219,13 +219,22 @@ export default function TherapistPortal() {
                 </p>
               )}
             </div>
-            <button
-              onClick={signOut}
-              className="text-sm text-[#6D6A65] hover:text-[#2D4A3E] inline-flex items-center gap-1.5"
-              data-testid="therapist-signout"
-            >
-              <LogOut size={14} /> Sign out
-            </button>
+            <div className="flex items-center gap-3">
+              <Link
+                to="/portal/therapist/edit"
+                className="text-sm text-[#2D4A3E] hover:underline inline-flex items-center gap-1.5"
+                data-testid="therapist-edit-profile-link"
+              >
+                <Settings size={14} /> Edit profile
+              </Link>
+              <button
+                onClick={signOut}
+                className="text-sm text-[#6D6A65] hover:text-[#2D4A3E] inline-flex items-center gap-1.5"
+                data-testid="therapist-signout"
+              >
+                <LogOut size={14} /> Sign out
+              </button>
+            </div>
           </div>
 
           {error && (

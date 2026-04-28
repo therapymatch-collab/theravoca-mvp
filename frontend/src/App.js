@@ -9,6 +9,7 @@ import TherapistSignup from "@/pages/TherapistSignup";
 import SignIn from "@/pages/SignIn";
 import PatientPortal from "@/pages/PatientPortal";
 import TherapistPortal from "@/pages/TherapistPortal";
+import TherapistEditProfile from "@/pages/TherapistEditProfile";
 import FollowupForm from "@/pages/FollowupForm";
 import PatientResults from "@/pages/PatientResults";
 import AdminLogin from "@/pages/AdminLogin";
@@ -28,6 +29,7 @@ function App() {
           <Route path="/sign-in" element={<SignIn />} />
           <Route path="/portal/patient" element={<PatientPortal />} />
           <Route path="/portal/therapist" element={<TherapistPortal />} />
+          <Route path="/portal/therapist/edit" element={<TherapistEditProfile />} />
           <Route path="/therapists/join" element={<TherapistSignup />} />
           <Route path="/verify/:token" element={<VerifyEmail />} />
           <Route

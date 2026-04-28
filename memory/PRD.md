@@ -459,6 +459,53 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ### Iteration 48b (2026-04-28) — One-click opt-out for recruitment outreach
 - **New collection `outreach_opt_outs`** keyed by normalized email +
+  E.164 phone. Every recruitment email + SMS includes a one-click opt-out
+  URL (`GET /api/outreach/opt-out/{invite_id}`). Backend-rendered branded
+  HTML confirmation page. Dedupe now also filters opted-out candidates
+  (`skipped_opted_out` stat). Invite rows pre-created before send so the
+  opt-out token exists at send time. Admin endpoint
+  `GET /api/admin/outreach/opt-outs`. Tests pass.
+
+### Iteration 49 (2026-04-28) — Therapist self-edit + admin opt-outs tab + license badge + patient email redesign + CTA & wrapping fixes
+- **Therapist self-edit portal page** (`/portal/therapist/edit`): 5-section
+  form (About, Fees, Format/Offices, Modalities, Availability/Alerts) with
+  field allowlist, auto-derives `modality_offering`, and flips a
+  `pending_reapproval` flag on sensitive changes (specialties, license,
+  credential, name). Admin sees the flag in the pending queue. Route:
+  `PUT /api/portal/therapist/profile` with strict allowlist.
+- **Admin UI tab — "Opt-outs"**: new tab card showing full opt-out roster
+  with Email / Phone / Source / Timestamp / Reason / linked invite-id.
+  Search filters across all three text columns. Powered by the existing
+  `GET /api/admin/outreach/opt-outs` endpoint.
+- **License verification badge** on every All-providers row: computed
+  status (active / expiring_soon / expired / no_expiry / no_license) with
+  severity-color badge + license number + one-click "Verify on DOPL ↗"
+  deep-link. Idaho DOPL doesn't publish a JSON API (confirmed via
+  research), so we compute from `license_expires_at` + link to their
+  public search. Helper: `license_verify.py`. Hook: admin list now
+  attaches `license_status` + `license_verify_url` to each therapist.
+- **Patient "Your matches are here" email** redesigned
+  (`email_service.send_patient_results`): drops Email and Phone rows,
+  adds Fee line (cash + sliding + free-consult), Format (in-person /
+  telehealth combo), Offices, Approaches (modalities), Insurance,
+  Reviews (★ avg + count), and a 240-char bio excerpt. Each card ends
+  with a "View full profile & contact" CTA button that deep-links
+  `#therapist-<id>` on the results page — patients must click through
+  to see contact info, reducing spam risk and driving engagement.
+- **"Book free consult" mailto fix**: `URLSearchParams` encoded spaces
+  as `+` (form-urlencoded), which iOS/Android Mail render literally.
+  Swapped to `encodeURIComponent` so subject/body use %20.
+- **Patient-results intro paragraph** now uses `text-pretty` + `max-w-2xl`
+  for balanced line-breaks ("These therapists read your anonymous
+  referral and submitted interest…").
+- **Therapist portal copy**: "matches your profile (60%+)" →
+  "matches your profile (70%+)" to match the real match threshold.
+- Tests: `tests/test_iteration49_self_edit.py` covers license status
+  (all 5 severity states), DOPL URL formatting, admin list license
+  metadata, portal GET/PUT profile, re-approval flag behavior, cash_rate
+  clamping, unknown-field allowlist enforcement, and unauthenticated
+  rejection. 57/57 tests pass.
+- **New collection `outreach_opt_outs`** keyed by normalized email +
   E.164 phone. Captures `last_source` ("outreach_email_link"),
   `last_reason`, `last_invite_id`, `last_request_id`, `created_at`,
   `last_opted_out_at`. Idempotent upsert so repeat clicks don't dupe.

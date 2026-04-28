@@ -250,19 +250,67 @@ async def send_patient_results(to: str, request_id: str, applications: list[dict
                 f'<div>{chips}</div>'
                 f'</div>'
             )
+
+        specialties_list = (t.get("specialties_display") or [])[:5]
+        modalities_list = (t.get("modalities") or [])[:4]
+        offices_list = (t.get("office_locations") or [])[:3]
+        insurance_list = (t.get("insurance_accepted") or [])[:4]
+        review_avg = t.get("review_avg")
+        review_count = t.get("review_count") or 0
+        reviews_line = ""
+        if review_count > 0 and review_avg:
+            reviews_line = (
+                f'<tr><td style="padding:3px 14px 3px 0;color:{BRAND["muted"]};">Reviews</td>'
+                f'<td style="padding:3px 0;">★ {review_avg:.1f} · {review_count} review'
+                f'{"" if review_count == 1 else "s"}</td></tr>'
+            )
+
+        fee_parts = []
+        if t.get("cash_rate"):
+            fee_parts.append(f"${t['cash_rate']}/session")
+        if t.get("sliding_scale"):
+            fee_parts.append("sliding scale")
+        if t.get("free_consult"):
+            fee_parts.append("free consult")
+        fee_line = " · ".join(fee_parts) if fee_parts else "—"
+
+        bio_preview = (t.get("bio") or "").strip()
+        if len(bio_preview) > 240:
+            bio_preview = bio_preview[:237].rstrip() + "…"
+
+        format_label = "Telehealth"
+        if t.get("offers_in_person") or offices_list:
+            format_label = (
+                "In-person & telehealth" if t.get("telehealth") else "In-person"
+            ) if offices_list else "Telehealth"
+        if t.get("modality_offering") == "both":
+            format_label = "In-person & telehealth"
+
+        profile_url = f"{_get_app_url()}/results/{request_id}#therapist-{t.get('id', '')}"
+        cta_cell = (
+            f'<a href="{profile_url}" '
+            f'style="display:inline-block;background:{BRAND["primary"]};color:#ffffff;'
+            f'text-decoration:none;padding:10px 20px;border-radius:999px;'
+            f'font-weight:600;font-size:13px;">View full profile &amp; contact</a>'
+        )
+
         cards += f"""
         <div style="background:#ffffff;border:1px solid {BRAND['border']};border-radius:14px;padding:22px;margin-bottom:14px;">
           <div style="display:inline-block;background:{BRAND['primary']};color:#ffffff;font-size:12px;padding:4px 10px;border-radius:999px;letter-spacing:0.05em;margin-bottom:10px;">{int(app['match_score'])}% MATCH</div>
           <h3 style="margin:6px 0 4px;font-family:Georgia,serif;font-size:22px;color:{BRAND['primary']};">{i}. {t['name']}</h3>
-          <div style="color:{BRAND['muted']};font-size:13px;margin-bottom:10px;">{', '.join(t.get('specialties_display', [])[:3])} • {t.get('years_experience', '?')} yrs experience</div>
-          <p style="margin:10px 0;color:{BRAND['text']};font-size:14px;line-height:1.6;font-style:italic;border-left:3px solid {BRAND['secondary']};padding-left:12px;">"{app.get('message', '')}"</p>
+          <div style="color:{BRAND['muted']};font-size:13px;margin-bottom:10px;">{', '.join(specialties_list[:3]) or '—'} • {t.get('years_experience', '?')} yrs experience</div>
+          {f'<p style="margin:10px 0;color:{BRAND["text"]};font-size:14px;line-height:1.6;font-style:italic;border-left:3px solid {BRAND["secondary"]};padding-left:12px;">"{app.get("message", "")}"</p>' if app.get('message') else ''}
           {reasons_html}
-          <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:12px;font-size:13px;color:{BRAND['text']};">
-            <tr><td style="padding:3px 14px 3px 0;color:{BRAND['muted']};">Email</td><td style="padding:3px 0;">{t['email']}</td></tr>
-            <tr><td style="padding:3px 14px 3px 0;color:{BRAND['muted']};">Phone</td><td style="padding:3px 0;">{t.get('phone', '—')}</td></tr>
-            <tr><td style="padding:3px 14px 3px 0;color:{BRAND['muted']};">Cash rate</td><td style="padding:3px 0;">${t.get('cash_rate', '?')}/session</td></tr>
-            <tr><td style="padding:3px 14px 3px 0;color:{BRAND['muted']};">Free consult</td><td style="padding:3px 0;">{'Yes' if t.get('free_consult') else 'No'}</td></tr>
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:12px;font-size:13px;color:{BRAND['text']};width:100%;">
+            <tr><td style="padding:3px 14px 3px 0;color:{BRAND['muted']};width:110px;">Fee</td><td style="padding:3px 0;">{fee_line}</td></tr>
+            <tr><td style="padding:3px 14px 3px 0;color:{BRAND['muted']};">Format</td><td style="padding:3px 0;">{format_label}</td></tr>
+            {f'<tr><td style="padding:3px 14px 3px 0;color:{BRAND["muted"]};">Offices</td><td style="padding:3px 0;">{", ".join(offices_list)}</td></tr>' if offices_list else ''}
+            {f'<tr><td style="padding:3px 14px 3px 0;color:{BRAND["muted"]};">Approaches</td><td style="padding:3px 0;">{", ".join(modalities_list)}</td></tr>' if modalities_list else ''}
+            {f'<tr><td style="padding:3px 14px 3px 0;color:{BRAND["muted"]};">Insurance</td><td style="padding:3px 0;">{", ".join(insurance_list)}</td></tr>' if insurance_list else ''}
+            {reviews_line}
           </table>
+          {f'<p style="margin:14px 0 0;font-size:14px;line-height:1.6;color:{BRAND["text"]};">{bio_preview}</p>' if bio_preview else ''}
+          <div style="margin-top:16px;">{cta_cell}</div>
         </div>
         """
     results_url = f"{_get_app_url()}/results/{request_id}"

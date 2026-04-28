@@ -75,8 +75,12 @@ function buildConsultMailto(therapist, request) {
     "",
     "Looking forward to it,",
   ].join("\n");
-  const params = new URLSearchParams({ subject, body });
-  return `mailto:${therapist?.email || ""}?${params.toString()}`;
+  // `mailto:` URLs require RFC-3986 percent-encoding (%20 for spaces), NOT
+  // the application/x-www-form-urlencoded scheme that URLSearchParams uses
+  // (which encodes spaces as `+`). iOS/Android Mail read the `+` literally
+  // so subjects looked like "Free+15-min+consult". Use encodeURIComponent.
+  const q = `subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  return `mailto:${therapist?.email || ""}?${q}`;
 }
 
 export default function PatientResults() {
@@ -158,7 +162,7 @@ export default function PatientResults() {
           <h1 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] mt-2 leading-tight">
             Therapists who want to work with you
           </h1>
-          <p className="text-[#6D6A65] mt-3 max-w-xl leading-relaxed">
+          <p className="text-[#6D6A65] mt-3 max-w-2xl leading-relaxed text-pretty">
             These therapists read your anonymous referral and submitted interest.
             Reach out to whoever feels right — many offer a free consult.
           </p>
