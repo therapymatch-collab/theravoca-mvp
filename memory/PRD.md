@@ -1163,3 +1163,39 @@ User asked for 8 changes; all shipped in one batch.
 - Playwright smoke: logo scroll-to-top from `/therapists/join` and
   `/admin` (scrollY=0 after click). Header visible on `/admin` and `/blog`.
 - Iter-23 testing report at `/app/test_reports/iteration_23.json`.
+
+
+## Iteration 62 — Live HTTP scraping for admin-registered sources + mobile fix (2026-04-28)
+
+### Live HTTP scraping for scrape-sources (NEW)
+- New module `/app/backend/external_scraper.py`. For each enabled
+  `app_config.scrape_sources` URL it tries:
+   1. **Schema.org JSON-LD `Person`** — reuses `pt_scraper`'s parser
+      (covers most directories with structured data).
+   2. **LLM extraction** — falls back to Claude Sonnet 4.5 over
+      cleaned page text with a strict JSON schema (covers plain-HTML
+      pages). Capped at 200 KB and 25 candidates per source.
+- All URLs fetched in parallel under a 30s global budget.
+  Per-URL timeout 8s.
+- `outreach_agent._find_candidates` now runs PT → external scrape →
+  LLM in that order, deduping by `(name, city)` across phases so one
+  therapist never gets two invites.
+- New endpoint `POST /api/admin/scrape-sources/test` lets the admin
+  hot-fetch ONE URL and inspect strategy + extracted preview before
+  saving — verified live: PT Boise returns **19 cards via JSON-LD in
+  ~2s**.
+- `ScrapeSourcesPanel.jsx` got a Beaker icon per row that calls the
+  test endpoint and shows the result inline.
+
+### Mobile UX — Specialties row stacking
+- `TherapistSignup.jsx` step 4 (Specialties) row was overflowing on
+  mobile (label + 4 chips wider than 390px viewport).
+- Switched the row to `flex-col sm:flex-row` and the chip group to
+  `flex-wrap`. Verified DOM bounding-box ≤ window.innerWidth at 390px
+  AND single-row at 1280px desktop.
+
+### Tests
+- `tests/test_iteration62_scrape_test.py`: 9/9 pass — PT live scrape
+  ≥10 cards, graceful fail on invalid hosts, 400/auth errors, 30s
+  budget honoured, dedup across PT+external verified.
+- Iter-24 testing report at `/app/test_reports/iteration_24.json`.

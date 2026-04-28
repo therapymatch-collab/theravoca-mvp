@@ -26,6 +26,7 @@ import json
 import logging
 import os
 import re
+import time
 import uuid
 from typing import Any, Optional
 from urllib.parse import urlparse
@@ -237,7 +238,7 @@ async def scrape_external_sources(
     if not enabled:
         return {"results": [], "total_candidates": 0, "elapsed_sec": 0.0}
 
-    started = asyncio.get_event_loop().time()
+    started = time.monotonic()
     async with httpx.AsyncClient(follow_redirects=True) as client:
         try:
             results = await asyncio.wait_for(
@@ -260,5 +261,5 @@ async def scrape_external_sources(
     return {
         "results": cleaned,
         "total_candidates": total,
-        "elapsed_sec": round(asyncio.get_event_loop().time() - started, 2),
+        "elapsed_sec": round(time.monotonic() - started, 2),
     }
