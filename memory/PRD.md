@@ -467,6 +467,80 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
   `GET /api/admin/outreach/opt-outs`. Tests pass.
 
 ### Iteration 49 (2026-04-28) — Therapist self-edit + admin opt-outs tab + license badge + patient email redesign + CTA & wrapping fixes
+- Therapist self-edit portal page (`/portal/therapist/edit`), admin
+  Opt-outs tab, License verification badge + DOPL deep-link, patient
+  matches email redesign (contact removed, bio/fees/reviews added, CTA
+  click-through), mailto `+` bug fix, 60% → 70% copy fix.
+
+### Iteration 50 (2026-04-28) — Phases 1–3 bundle: admin re-review UI, age-cap, rich signup review, approval/rejection emails, returning-patient prefill, feedback widget + follow-ups, stale-profile nag, DOPL live-API stub
+
+**Phase 1 (admin triage + lifecycle emails)**
+- **"Needs re-review" filter + badge** on All providers: orange pill on each
+  row with `pending_reapproval=true`, plus a top-of-table filter button to
+  show only those rows. Reviewer flow: see the flag → click Edit → approve
+  the changes (new endpoint `POST /api/admin/therapists/{id}/clear-reapproval`
+  unsets the flag and stamps `reapproved_at`).
+- **Richer therapist signup review** — `PendingSignupRow` component now
+  shows: inline license-picture thumbnail (click to open full-size), name +
+  credential pill, years-exp / license # / expiry / rate / format / gender
+  one-liner, bio preview, collapsed specialties/modalities/insurance/ages
+  summary, and an expandable "Show all signup answers" side panel that
+  exposes 18 fields (primary/secondary specialties, weighted specialties,
+  general treats, modalities, age groups, client types, availability
+  windows, urgency capacity, insurance, languages, office addresses, office
+  phone, website, licensed states, style tags, submission time). Approve /
+  Edit fields / Reject action stack.
+- **Approval email** upgraded — next-steps card, "Sign in to your portal"
+  and "Complete your profile" CTAs, magic-code reminder.
+- **Rejection email** (new template `therapist_rejected`) — warm copy,
+  door-open-for-future-apply messaging, never blames the applicant.
+- **Age groups cap at 3** enforced at three layers:
+  (a) Pydantic `TherapistSignup.age_groups: max_length=3` for new signups;
+  (b) Admin `PUT /admin/therapists/{id}` clamps to 3 on save;
+  (c) Portal `PUT /portal/therapist/profile` clamps to 3 on self-edit.
+  Signup UI + portal edit UI show "pick up to 3" label and reject the 4th
+  chip with a toast.
+- **Returning-patient prefill** — `GET /api/requests/prefill?email=…`
+  returns the stable fields from the most recent prior request
+  (referral_source, zip, preferred_language, age_group, gender_preference)
+  so returning patients don't re-answer. IntakeForm pre-fills on email blur
+  and toasts "Welcome back — we've pre-filled a few fields…"
+
+**Phase 2 (feedback capture + follow-up cycle)**
+- **Floating `FeedbackWidget`** mounted globally — corner button opens a
+  modal with Name (optional) / Email (optional) / Message (5–2000 chars).
+  POSTs `/api/feedback/widget` which persists to `feedback` collection and
+  relays to `theravoca@gmail.com` (configurable via
+  `FEEDBACK_INBOX_EMAIL` env).
+- **Structured follow-up forms** at `/feedback/patient/{id}` and
+  `/feedback/therapist/{id}` — 3 questions each (rating + action-taken +
+  free-form notes), context-aware copy for 48h vs 2w milestones.
+- **Email templates** added: `patient_followup_48h`, `patient_followup_2w`,
+  `therapist_followup_2w` — each links to the structured form above.
+- **Daily cron** (`_run_patient_structured_followups`,
+  `_run_therapist_2w_followups`) — idempotent via
+  `structured_followup_48h_sent_at`, `structured_followup_2w_sent_at`,
+  `therapist_2w_followup_sent_at` flags. Triggered from
+  `_daily_loop`.
+- **Admin "Feedback" tab** — unified view of all feedback sources with
+  kind tag, star rating (when present), structured-question summary, free-
+  form notes, contact info, and submission timestamp. Counts per kind.
+
+**Phase 3 (directory hygiene + future-proofing)**
+- **90-day stale-profile nag** (`_run_stale_profile_nag` cron + email
+  template `therapist_stale_profile_nag`) — idempotent via
+  `stale_profile_nag_sent_at`, which is **unset** whenever a therapist
+  touches the profile (so they don't get the nag again on normal updates).
+  Config: `PROFILE_STALE_DAYS` env (default 90).
+- **DOPL live-API stub** (`license_verify.check_dopl_status`) — returns
+  `None` today (signal "not available"), ready to swap in the real live
+  endpoint when Idaho DOPL publishes it. Documented TODO notes the
+  expected return shape + recommended 24h cache.
+- **Tests**: `tests/test_iteration50_feedback_and_lifecycle.py` —
+  feedback widget persist/validate/admin-list, patient feedback
+  submission + 404, age-groups Pydantic cap + admin PUT clamp,
+  approve/reject lifecycle + rejected_at stamp, clear-reapproval
+  endpoint. **69/69 backend tests pass across all iterations.**
 - **Therapist self-edit portal page** (`/portal/therapist/edit`): 5-section
   form (About, Fees, Format/Offices, Modalities, Availability/Alerts) with
   field allowlist, auto-derives `modality_offering`, and flips a

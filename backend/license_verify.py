@@ -108,3 +108,37 @@ def dopl_verification_url(license_number: Optional[str]) -> Optional[str]:
     if not ln:
         return None
     return f"https://dopl.idaho.gov/public-records-request/?q={ln}"
+
+
+# ── Live DOPL check — upgrade path ─────────────────────────────────────
+# Idaho DOPL teased a biennial-renewal-cycle API overhaul for 2025–2026.
+# When that ships, implement this function to hit their JSON endpoint with
+# the license number and return a dict like:
+#   {
+#     "live_ok": True,
+#     "disciplined": False,
+#     "suspended": False,
+#     "raw_expiry": "2027-12-31",
+#     "last_checked_at": iso,
+#   }
+# The return shape must be a superset of `compute_license_status`'s fields
+# so the admin UI doesn't need changes to consume the richer data — just
+# merge the extra flags into the existing badge.
+#
+# Right now this is a STUB that returns None (signaling "not available")
+# so the rest of the code path stays on the offline expiry calculation.
+async def check_dopl_status(license_number: str | None) -> dict | None:
+    """Return live DOPL verification status, or None if the API isn't
+    reachable / available yet.
+
+    When implementing: honour a short cache (e.g. 24h TTL in a
+    `dopl_cache` Mongo collection) so we don't hit DOPL on every admin
+    page render. Fail soft — if DOPL is down, fall back to the offline
+    status computed from `license_expires_at`.
+    """
+    if not license_number:
+        return None
+    # TODO(idaho-dopl-api): once DOPL publishes the JSON endpoint,
+    # make an httpx GET against it with a 5s timeout, cache the result
+    # in `dopl_cache`, and return the dict shape documented above.
+    return None

@@ -982,11 +982,11 @@ export default function TherapistSignup() {
                       testid="signup-client-type"
                     />
                   </Field>
-                  <Field label={<>Age groups <Req /></>}>
+                  <Field label={<>Age groups <span className="text-xs text-[#6D6A65] font-normal">(pick up to 3)</span> <Req /></>}>
                     <PillRow
                       items={AGE_GROUPS}
                       selected={data.age_groups}
-                      onSelect={(v) => toggleArr("age_groups", v)}
+                      onSelect={(v) => toggleArr("age_groups", v, 3)}
                       testid="signup-age-group"
                     />
                   </Field>

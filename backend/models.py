@@ -43,7 +43,7 @@ class TherapistSignup(BaseModel):
     website: Optional[str] = ""  # public — patients can click through
     office_addresses: list[str] = Field(default_factory=list)  # full street addresses
     client_types: list[str] = Field(default_factory=lambda: ["individual"])
-    age_groups: list[str] = Field(default_factory=list)
+    age_groups: list[str] = Field(default_factory=list, max_length=3)
     primary_specialties: list[str] = Field(default_factory=list, max_length=2)
     secondary_specialties: list[str] = Field(default_factory=list, max_length=3)
     general_treats: list[str] = Field(default_factory=list, max_length=5)

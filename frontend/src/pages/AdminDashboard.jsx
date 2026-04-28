@@ -141,6 +141,9 @@ export default function AdminDashboard() {
   const [convertingInviteId, setConvertingInviteId] = useState(null);
   const [optOuts, setOptOuts] = useState(null);
   const [optOutsLoading, setOptOutsLoading] = useState(false);
+  const [feedback, setFeedback] = useState(null);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [showOnlyReapproval, setShowOnlyReapproval] = useState(false);
 
   // Coverage-gap analysis — recruiting recommendations.
   const [coverageGap, setCoverageGap] = useState(null);
@@ -491,6 +494,18 @@ export default function AdminDashboard() {
     }
   }, [client]);
 
+  const loadFeedback = useCallback(async () => {
+    setFeedbackLoading(true);
+    try {
+      const res = await client.get("/admin/feedback");
+      setFeedback(res.data);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Couldn't load feedback");
+    } finally {
+      setFeedbackLoading(false);
+    }
+  }, [client]);
+
   const loadCoverageGap = useCallback(async () => {
     setCoverageGapLoading(true);
     try {
@@ -784,6 +799,17 @@ export default function AdminDashboard() {
                   testid="tab-opt-outs"
                 />
                 <TabBtn
+                  active={tab === "feedback"}
+                  onClick={() => {
+                    setTab("feedback");
+                    if (!feedback) loadFeedback();
+                  }}
+                  icon={<MessageSquare size={14} />}
+                  label="Feedback"
+                  count={feedback?.total ?? null}
+                  testid="tab-feedback"
+                />
+                <TabBtn
                   active={tab === "coverage_gap"}
                   onClick={() => {
                     setTab("coverage_gap");
@@ -930,48 +956,13 @@ export default function AdminDashboard() {
                   ) : (
                     <div className="divide-y divide-[#E8E5DF]" data-testid="pending-therapists-list">
                       {filteredPendingTherapists.map((t) => (
-                        <div key={t.id} className="p-5 flex items-start gap-5 hover:bg-[#FDFBF7]">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-3 flex-wrap">
-                              <h4 className="font-medium text-[#2B2A29]">{t.name}</h4>
-                              <span className="text-xs text-[#6D6A65]">{t.email}</span>
-                              {t.phone && (
-                                <span className="text-xs text-[#6D6A65]">• {t.phone}</span>
-                              )}
-                            </div>
-                            <div className="text-xs text-[#6D6A65] mt-1">
-                              {t.years_experience} yrs • ${t.cash_rate}/session •{" "}
-                              {t.modalities?.join(", ")} •{" "}
-                              {(t.specialties || []).map((s) => `${s.name} (${s.weight})`).join(", ")}
-                            </div>
-                            {t.bio && (
-                              <p className="text-sm text-[#2B2A29] mt-2 leading-relaxed">
-                                {t.bio}
-                              </p>
-                            )}
-                            <div className="text-xs text-[#6D6A65] mt-2">
-                              Cities: {t.office_locations?.join(", ") || "telehealth only"} •
-                              Insurance: {t.insurance_accepted?.length ? t.insurance_accepted.join(", ") : "—"} •
-                              Ages: {t.ages_served?.join(", ")}
-                            </div>
-                          </div>
-                          <div className="flex flex-col gap-2 shrink-0">
-                            <button
-                              className="tv-btn-primary !py-1.5 !px-4 text-sm"
-                              onClick={() => approveTherapist(t.id)}
-                              data-testid={`approve-${t.id}`}
-                            >
-                              <CheckCircle2 size={14} className="inline mr-1.5" /> Approve
-                            </button>
-                            <button
-                              className="text-sm text-[#D45D5D] hover:underline"
-                              onClick={() => rejectTherapist(t.id)}
-                              data-testid={`reject-${t.id}`}
-                            >
-                              <XCircle size={14} className="inline mr-1.5" /> Reject
-                            </button>
-                          </div>
-                        </div>
+                        <PendingSignupRow
+                          key={t.id}
+                          t={t}
+                          onApprove={() => approveTherapist(t.id)}
+                          onReject={() => rejectTherapist(t.id)}
+                          onEdit={() => setEditTherapist({ ...t })}
+                        />
                       ))}
                     </div>
                   )}
@@ -980,6 +971,28 @@ export default function AdminDashboard() {
 
               {tab === "all_therapists" && (
                 <div className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
+                  <div className="flex items-center gap-3 p-4 border-b border-[#E8E5DF] flex-wrap">
+                    <span className="text-xs text-[#6D6A65]">
+                      Showing {(showOnlyReapproval
+                        ? filteredAllTherapists.filter((t) => t.pending_reapproval)
+                        : filteredAllTherapists
+                      ).length}
+                      {" "}of {allTherapists.length}
+                    </span>
+                    <button
+                      onClick={() => setShowOnlyReapproval((v) => !v)}
+                      className={`text-xs px-3 py-1 rounded-full border transition ${
+                        showOnlyReapproval
+                          ? "bg-[#FBF2E8] border-[#F0DEC8] text-[#B8742A]"
+                          : "bg-white border-[#E8E5DF] text-[#6D6A65] hover:border-[#B8742A]"
+                      }`}
+                      data-testid="filter-pending-reapproval"
+                    >
+                      ⚠ Needs re-review (
+                      {allTherapists.filter((t) => t.pending_reapproval).length}
+                      )
+                    </button>
+                  </div>
                   <div className="overflow-x-auto">
                   <table className="w-full text-sm min-w-[1500px]" data-testid="all-therapists-table">
                     <thead className="bg-[#FDFBF7] text-[#6D6A65]">
@@ -1005,7 +1018,10 @@ export default function AdminDashboard() {
                           </td>
                         </tr>
                       )}
-                      {filteredAllTherapists.map((t) => (
+                      {(showOnlyReapproval
+                        ? filteredAllTherapists.filter((t) => t.pending_reapproval)
+                        : filteredAllTherapists
+                      ).map((t) => (
                         <ProviderRow
                           key={t.id}
                           t={t}
@@ -1401,6 +1417,15 @@ export default function AdminDashboard() {
                   data={optOuts}
                   loading={optOutsLoading}
                   onReload={loadOptOuts}
+                  filter={search}
+                />
+              )}
+
+              {tab === "feedback" && (
+                <FeedbackPanel
+                  data={feedback}
+                  loading={feedbackLoading}
+                  onReload={loadFeedback}
                   filter={search}
                 />
               )}
@@ -3210,6 +3235,15 @@ function ProviderRow({ t, onEdit }) {
       <td className="p-4 whitespace-nowrap">
         <ProviderStatus t={t} />
         <SubBadge t={t} />
+        {t.pending_reapproval && (
+          <span
+            className="mt-1 inline-flex items-center gap-1 text-[10px] bg-[#FBF2E8] text-[#B8742A] border border-[#F0DEC8] rounded-full px-2 py-0.5 w-fit"
+            title={`Changes awaiting admin re-review: ${(t.pending_reapproval_fields || []).join(", ") || "fields"}`}
+            data-testid={`pending-reapproval-badge-${t.id}`}
+          >
+            ⚠ Needs re-review
+          </span>
+        )}
       </td>
 
       <td className="p-4 whitespace-nowrap">
@@ -3425,6 +3459,351 @@ function OptOutsPanel({ data, loading, onReload, filter }) {
           </tbody>
         </table>
       )}
+    </div>
+  );
+}
+
+
+function FeedbackPanel({ data, loading, onReload, filter }) {
+  const rows = data?.feedback || [];
+  const q = (filter || "").trim().toLowerCase();
+  const visible = q
+    ? rows.filter((r) =>
+        JSON.stringify(r).toLowerCase().includes(q),
+      )
+    : rows;
+
+  const counts = {
+    patient: rows.filter((r) => r.kind === "patient").length,
+    therapist: rows.filter((r) => r.kind === "therapist").length,
+    widget: rows.filter((r) => r.kind === "widget").length,
+  };
+
+  return (
+    <div className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden" data-testid="feedback-panel">
+      <div className="flex items-center justify-between gap-3 p-5 border-b border-[#E8E5DF] flex-wrap">
+        <div>
+          <h3 className="font-serif-display text-2xl text-[#2D4A3E]">Feedback</h3>
+          <p className="text-sm text-[#6D6A65] mt-1">
+            Submissions from the floating widget and the 48h/2w follow-up forms.
+          </p>
+          <div className="mt-2 flex gap-3 text-xs text-[#6D6A65]">
+            <span>Patient follow-ups: <strong className="text-[#2B2A29]">{counts.patient}</strong></span>
+            <span>Therapist follow-ups: <strong className="text-[#2B2A29]">{counts.therapist}</strong></span>
+            <span>Widget messages: <strong className="text-[#2B2A29]">{counts.widget}</strong></span>
+          </div>
+        </div>
+        <button
+          onClick={onReload}
+          disabled={loading}
+          className="inline-flex items-center gap-2 text-sm text-[#2D4A3E] hover:underline disabled:opacity-50"
+          data-testid="feedback-reload"
+        >
+          <RotateCw size={14} className={loading ? "animate-spin" : ""} />
+          Refresh
+        </button>
+      </div>
+      {loading && rows.length === 0 ? (
+        <div className="p-10 text-center text-[#6D6A65]">
+          <Loader2 className="animate-spin inline" /> Loading…
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="p-10 text-center text-[#6D6A65]">
+          {q
+            ? "No feedback matches your search."
+            : "No feedback yet. It'll start showing up after patients/therapists respond to their follow-up emails or use the floating widget."}
+        </div>
+      ) : (
+        <div className="divide-y divide-[#E8E5DF]">
+          {visible.map((r, idx) => (
+            <FeedbackRow key={r.id || idx} r={r} idx={idx} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FeedbackRow({ r, idx }) {
+  const kindMeta = {
+    patient: { label: "Patient follow-up", bg: "#F2F4F0", fg: "#2D4A3E" },
+    therapist: { label: "Therapist follow-up", bg: "#FBF2E8", fg: "#B8742A" },
+    widget: { label: "Widget", bg: "#FBE9E6", fg: "#C8412B" },
+  };
+  const meta = kindMeta[r.kind] || { label: r.kind, bg: "#F6F4EE", fg: "#6D6A65" };
+  return (
+    <div className="p-5" data-testid={`feedback-row-${idx}`}>
+      <div className="flex items-center gap-3 flex-wrap mb-2">
+        <span
+          className="text-[11px] rounded-full px-2 py-0.5"
+          style={{ background: meta.bg, color: meta.fg }}
+        >
+          {meta.label}
+        </span>
+        {r.milestone && (
+          <span className="text-[11px] text-[#6D6A65]">{r.milestone}</span>
+        )}
+        {r.kind === "patient" && r.match_quality && (
+          <span className="text-[11px] text-[#2D4A3E] font-medium">
+            ★ {r.match_quality}/5 match quality
+          </span>
+        )}
+        {r.kind === "therapist" && r.referrals_quality && (
+          <span className="text-[11px] text-[#2D4A3E] font-medium">
+            ★ {r.referrals_quality}/5 referral quality
+          </span>
+        )}
+        <span className="text-[11px] text-[#6D6A65] ml-auto">
+          {r.created_at ? new Date(r.created_at).toLocaleString() : "—"}
+        </span>
+      </div>
+      <div className="text-sm text-[#2B2A29]">
+        {r.kind === "patient" && r.reached_out && (
+          <div><strong>Did patient reach out:</strong> {r.reached_out.replace(/_/g, " ")}</div>
+        )}
+        {r.kind === "therapist" && r.booked_any && (
+          <div><strong>Booked intakes:</strong> {r.booked_any.replace(/_/g, " ")}</div>
+        )}
+        {r.kind === "widget" && (
+          <div className="text-xs text-[#6D6A65]">
+            {r.name || "Anonymous"}
+            {r.email && ` · ${r.email}`}
+            {r.role && r.role !== "anonymous" && ` · ${r.role}`}
+          </div>
+        )}
+        {(r.notes || r.message) && (
+          <div className="mt-2 bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap">
+            {r.notes || r.message}
+          </div>
+        )}
+        {r.patient_email && (
+          <div className="text-xs text-[#6D6A65] mt-2 font-mono">{r.patient_email}</div>
+        )}
+        {r.therapist_email && (
+          <div className="text-xs text-[#6D6A65] mt-2 font-mono">
+            {r.therapist_email}
+            {r.therapist_name && ` · ${r.therapist_name}`}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+function PendingSignupRow({ t, onApprove, onReject, onEdit }) {
+  const [expanded, setExpanded] = useState(false);
+  const specs = (t.specialties || []).map((s) =>
+    typeof s === "string" ? s : `${s.name || s.value || ""}${s.weight ? ` (w${s.weight})` : ""}`,
+  );
+  const generalTreats = t.general_treats || [];
+  const offices = t.office_addresses?.length ? t.office_addresses : t.office_locations || [];
+  return (
+    <div className="p-5 hover:bg-[#FDFBF7]" data-testid={`pending-row-${t.id}`}>
+      <div className="flex items-start gap-5">
+        {/* License picture preview */}
+        <div className="shrink-0">
+          {t.license_picture ? (
+            <a href={t.license_picture} target="_blank" rel="noopener noreferrer">
+              <img
+                src={t.license_picture}
+                alt="License"
+                className="w-20 h-24 object-cover rounded-lg border border-[#E8E5DF] hover:border-[#2D4A3E] transition"
+                data-testid={`license-thumb-${t.id}`}
+              />
+            </a>
+          ) : (
+            <div className="w-20 h-24 bg-[#FDFBF7] border border-dashed border-[#E8E5DF] rounded-lg flex items-center justify-center text-[10px] text-[#C8C4BB] text-center p-1">
+              No license
+              <br />
+              uploaded
+            </div>
+          )}
+        </div>
+
+        {/* Core identity + quick stats */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h4 className="font-medium text-[#2B2A29] text-base">{t.name}</h4>
+            {t.credential_type && (
+              <span className="text-xs text-[#2D4A3E] bg-[#F2F4F0] border border-[#D9DDD2] rounded-full px-2 py-0.5">
+                {t.credential_type}
+              </span>
+            )}
+            <span className="text-xs text-[#6D6A65] break-all">{t.email}</span>
+            {t.phone && (
+              <span className="text-xs text-[#6D6A65]">· {t.phone}</span>
+            )}
+          </div>
+          <div className="text-xs text-[#6D6A65] mt-1 flex flex-wrap gap-x-3 gap-y-1">
+            <span>{t.years_experience ?? "?"} yrs exp</span>
+            <span>
+              Licensed:{" "}
+              {t.license_number || "—"}
+              {t.license_expires_at && ` · exp ${t.license_expires_at}`}
+            </span>
+            <span>${t.cash_rate}/session{t.sliding_scale && " (sliding)"}</span>
+            <span>
+              {t.modality_offering === "both"
+                ? "In-person + telehealth"
+                : t.modality_offering === "in_person"
+                  ? "In-person"
+                  : "Telehealth"}
+            </span>
+            {t.gender && t.gender !== "prefer_not_to_say" && (
+              <span>{t.gender}</span>
+            )}
+          </div>
+
+          {/* Bio preview */}
+          {t.bio && (
+            <p className="text-sm text-[#2B2A29] mt-3 leading-relaxed bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg px-3 py-2">
+              {expanded ? t.bio : (t.bio.length > 240 ? t.bio.slice(0, 237) + "…" : t.bio)}
+            </p>
+          )}
+
+          {/* Collapsed one-liners */}
+          {!expanded && (
+            <div className="text-xs text-[#6D6A65] mt-3 flex flex-wrap gap-x-3 gap-y-1">
+              <span>
+                <strong className="text-[#2B2A29]">Specialties:</strong>{" "}
+                {specs.slice(0, 4).join(", ") || "—"}
+                {specs.length > 4 && ` +${specs.length - 4} more`}
+              </span>
+              <span>
+                <strong className="text-[#2B2A29]">Modalities:</strong>{" "}
+                {(t.modalities || []).slice(0, 3).join(", ") || "—"}
+              </span>
+              <span>
+                <strong className="text-[#2B2A29]">Insurance:</strong>{" "}
+                {(t.insurance_accepted || []).slice(0, 3).join(", ") || "Cash only"}
+              </span>
+              <span>
+                <strong className="text-[#2B2A29]">Ages:</strong>{" "}
+                {(t.age_groups || t.ages_served || []).join(", ") || "—"}
+              </span>
+            </div>
+          )}
+
+          {/* Expanded full side-panel view */}
+          {expanded && (
+            <div className="mt-4 grid md:grid-cols-2 gap-4 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl p-4">
+              <Block label="Primary specialties">
+                {(t.primary_specialties || []).join(", ") || "—"}
+              </Block>
+              <Block label="Secondary specialties">
+                {(t.secondary_specialties || []).join(", ") || "—"}
+              </Block>
+              <Block label="Weighted specialties (signup order)">
+                {specs.join(", ") || "—"}
+              </Block>
+              <Block label="General treats">
+                {generalTreats.join(", ") || "—"}
+              </Block>
+              <Block label="Modalities">
+                {(t.modalities || []).join(", ") || "—"}
+              </Block>
+              <Block label="Age groups">
+                {(t.age_groups || t.ages_served || []).join(", ") || "—"}
+              </Block>
+              <Block label="Client types">
+                {(t.client_types || []).join(", ") || "—"}
+              </Block>
+              <Block label="Availability windows">
+                {(t.availability_windows || []).join(", ") || "—"}
+              </Block>
+              <Block label="Urgency capacity">{t.urgency_capacity || "—"}</Block>
+              <Block label="Insurance accepted">
+                {(t.insurance_accepted || []).join(", ") || "Cash only"}
+              </Block>
+              <Block label="Languages">
+                {(t.languages_spoken || ["English"]).join(", ")}
+              </Block>
+              <Block label="Office addresses">
+                {offices.length ? (
+                  <div className="space-y-1">
+                    {offices.map((a, i) => (
+                      <div key={i}>{typeof a === "string" ? a : a?.address}</div>
+                    ))}
+                  </div>
+                ) : (
+                  "Telehealth only"
+                )}
+              </Block>
+              <Block label="Office phone">{t.office_phone || "—"}</Block>
+              <Block label="Website">
+                {t.website ? (
+                  <a
+                    href={t.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#2D4A3E] underline break-all"
+                  >
+                    {t.website}
+                  </a>
+                ) : (
+                  "—"
+                )}
+              </Block>
+              <Block label="Licensed states">
+                {(t.licensed_states || []).join(", ") || "—"}
+              </Block>
+              <Block label="Style tags">
+                {(t.style_tags || []).join(", ") || "—"}
+              </Block>
+              <Block label="Submitted">
+                {t.created_at ? new Date(t.created_at).toLocaleString() : "—"}
+              </Block>
+            </div>
+          )}
+
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="text-xs text-[#2D4A3E] hover:underline mt-3"
+            data-testid={`toggle-detail-${t.id}`}
+          >
+            {expanded ? "Hide full details" : "Show all signup answers"}
+          </button>
+        </div>
+
+        {/* Action stack */}
+        <div className="flex flex-col gap-2 shrink-0">
+          <button
+            className="tv-btn-primary !py-1.5 !px-4 text-sm"
+            onClick={onApprove}
+            data-testid={`approve-${t.id}`}
+          >
+            <CheckCircle2 size={14} className="inline mr-1.5" /> Approve
+          </button>
+          <button
+            onClick={onEdit}
+            className="text-xs text-[#2D4A3E] hover:underline inline-flex items-center gap-1 justify-center"
+            data-testid={`edit-pending-${t.id}`}
+          >
+            <Pencil size={12} /> Edit fields
+          </button>
+          <button
+            className="text-sm text-[#D45D5D] hover:underline"
+            onClick={onReject}
+            data-testid={`reject-${t.id}`}
+          >
+            <XCircle size={14} className="inline mr-1.5" /> Reject
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Block({ label, children }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-1">
+        {label}
+      </div>
+      <div className="text-sm text-[#2B2A29] leading-snug break-words">
+        {children}
+      </div>
     </div>
   );
 }

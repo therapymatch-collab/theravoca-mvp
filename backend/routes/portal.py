@@ -157,6 +157,9 @@ async def portal_therapist_update_profile(
             clean["cash_rate"] = max(0, min(1000, int(clean["cash_rate"])))
         except (TypeError, ValueError):
             clean.pop("cash_rate")
+    # Enforce 3-age-group cap on self-edit too
+    if "age_groups" in clean and isinstance(clean["age_groups"], list):
+        clean["age_groups"] = clean["age_groups"][:3]
 
     current = await db.therapists.find_one(
         {"email": {"$regex": f"^{re.escape(session['email'])}$", "$options": "i"}},
@@ -170,6 +173,9 @@ async def portal_therapist_update_profile(
         if k in clean and current.get(k) != clean.get(k)
     ]
     update_doc = {**clean, "updated_at": _now_iso()}
+    # Reset the stale-profile nag flag whenever they touch the profile —
+    # they're active again and shouldn't get the nag email next week.
+    unset_doc = {"stale_profile_nag_sent_at": ""}
     if reapproval_changed:
         update_doc["pending_reapproval"] = True
         update_doc["pending_reapproval_fields"] = reapproval_changed
@@ -177,7 +183,7 @@ async def portal_therapist_update_profile(
 
     await db.therapists.update_one(
         {"id": current["id"]},
-        {"$set": update_doc},
+        {"$set": update_doc, "$unset": unset_doc},
     )
     updated = await db.therapists.find_one({"id": current["id"]}, {"_id": 0})
     return {

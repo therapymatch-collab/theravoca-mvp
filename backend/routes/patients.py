@@ -28,6 +28,44 @@ async def root():
     return {"app": "TheraVoca", "status": "ok"}
 
 
+@router.get("/requests/prefill")
+async def prefill_from_prior_request(email: str):
+    """Returning-patient helper: if this email already filed a request,
+    return the fields that never change between visits (referral source,
+    attribution, location, language) so we can pre-populate the intake.
+    We DO NOT pre-fill the sensitive clinical fields (presenting issues,
+    payment situation, urgency) — those legitimately change every time
+    they come back.
+    """
+    import re
+    email_norm = (email or "").strip().lower()
+    if not email_norm or "@" not in email_norm:
+        raise HTTPException(400, "Invalid email")
+    prior = await db.requests.find_one(
+        {"email": {"$regex": f"^{re.escape(email_norm)}$", "$options": "i"}},
+        {
+            "_id": 0, "verification_token": 0,
+            "email": 0, "phone": 0,
+        },
+        sort=[("created_at", -1)],
+    )
+    if not prior:
+        return {"returning": False}
+    return {
+        "returning": True,
+        "prefill": {
+            "referral_source": prior.get("referral_source"),
+            "zip_code": prior.get("zip_code"),
+            "preferred_language": prior.get("preferred_language"),
+            "age_group": prior.get("age_group"),
+            "gender_preference": prior.get("gender_preference"),
+        },
+        "prior_request_count": await db.requests.count_documents(
+            {"email": {"$regex": f"^{re.escape(email_norm)}$", "$options": "i"}},
+        ),
+    }
+
+
 @router.post("/requests", response_model=dict)
 async def create_request(payload: RequestCreate):
     # ─── Spam / sanity gates (run before any DB writes) ────────────────

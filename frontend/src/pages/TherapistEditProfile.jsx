@@ -25,6 +25,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { sessionClient, getSession } from "@/lib/api";
 
+const AGE_GROUP_OPTIONS = [
+  { v: "children", l: "Children (<12)" },
+  { v: "teens", l: "Teens (13–17)" },
+  { v: "young_adults", l: "Young adults (18–29)" },
+  { v: "adults", l: "Adults (30–64)" },
+  { v: "seniors", l: "Seniors (65+)" },
+];
+
 const MODALITY_OPTIONS = [
   { v: "cbt", l: "CBT" },
   { v: "dbt", l: "DBT" },
@@ -83,6 +91,7 @@ export default function TherapistEditProfile() {
           insurance_accepted: [...(r.data.insurance_accepted || [])],
           languages_spoken: [...(r.data.languages_spoken || ["English"])],
           availability: [...(r.data.availability || [])],
+          age_groups: [...(r.data.age_groups || [])],
           notify_by_email: r.data.notify_by_email !== false,
           notify_by_sms: r.data.notify_by_sms !== false,
           // Re-approval fields (editable, but flag change)
@@ -98,10 +107,14 @@ export default function TherapistEditProfile() {
 
   const set = (k, v) => setDraft((d) => ({ ...d, [k]: v }));
 
-  const toggleList = (key, value) => {
+  const toggleList = (key, value, max = null) => {
     setDraft((d) => {
       const current = d[key] || [];
       const has = current.includes(value);
+      if (!has && max != null && current.length >= max) {
+        toast.error(`You can pick up to ${max}.`);
+        return d;
+      }
       return {
         ...d,
         [key]: has ? current.filter((x) => x !== value) : [...current, value],
@@ -346,6 +359,21 @@ export default function TherapistEditProfile() {
             onToggle={(v) => toggleList("modalities", v)}
             testidPrefix="modality"
           />
+          <div className="pt-5 border-t border-[#E8E5DF]">
+            <p className="text-sm font-medium text-[#2B2A29] mb-1">
+              Age groups you work with{" "}
+              <span className="text-xs text-[#6D6A65] font-normal">
+                (pick up to 3)
+              </span>
+            </p>
+            <ChipRow
+              options={AGE_GROUP_OPTIONS.map((o) => o.v)}
+              labels={Object.fromEntries(AGE_GROUP_OPTIONS.map((o) => [o.v, o.l]))}
+              selected={draft.age_groups}
+              onToggle={(v) => toggleList("age_groups", v, 3)}
+              testidPrefix="agegroup"
+            />
+          </div>
         </Section>
 
         {/* 5. Availability & alerts */}

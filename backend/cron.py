@@ -272,6 +272,117 @@ async def _run_gap_recruitment() -> dict[str, int]:
         return {"error": str(e)}
 
 
+async def _run_patient_structured_followups() -> dict[str, int]:
+    """Phase-2 patient follow-ups with links to a structured 3-question form.
+    Separate from `_run_followup_surveys` (which sends an unstructured NPS
+    survey) — this sends the new `patient_followup_48h` and
+    `patient_followup_2w` templates.
+    Flags: `structured_followup_48h_sent_at`, `structured_followup_2w_sent_at`.
+    """
+    from email_service import send_patient_followup_48h, send_patient_followup_2w
+    now = datetime.now(timezone.utc)
+    milestones = [
+        ("48h", 2, "structured_followup_48h_sent_at", send_patient_followup_48h),
+        ("2w", 14, "structured_followup_2w_sent_at", send_patient_followup_2w),
+    ]
+    out: dict[str, int] = {}
+    for code, days, flag, sender in milestones:
+        cutoff = (now - timedelta(days=days)).isoformat()
+        cur = db.requests.find(
+            {
+                "results_sent_at": {"$ne": None, "$lte": cutoff},
+                flag: {"$exists": False},
+                "email": {"$ne": None},
+            },
+            {"_id": 0, "id": 1, "email": 1},
+        )
+        count = 0
+        async for r in cur:
+            try:
+                await sender(r["email"], r["id"])
+                await db.requests.update_one(
+                    {"id": r["id"]}, {"$set": {flag: _now_iso()}},
+                )
+                count += 1
+            except Exception as e:
+                logger.warning("Structured follow-up %s failed for %s: %s", code, r["id"], e)
+        out[code] = count
+    return out
+
+
+async def _run_therapist_2w_followups() -> dict[str, int]:
+    """Two weeks after a therapist's first referral, ask them 3 questions
+    about referral quality so we can tighten matching. Flag:
+    `therapist_2w_followup_sent_at`. Only send to active, non-paused therapists.
+    """
+    from email_service import send_therapist_followup_2w
+    now = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(days=14)).isoformat()
+    cur = db.therapists.find(
+        {
+            "is_active": True,
+            "pending_approval": {"$ne": True},
+            "first_referral_sent_at": {"$ne": None, "$lte": cutoff},
+            "therapist_2w_followup_sent_at": {"$exists": False},
+            "email": {"$ne": None},
+        },
+        {"_id": 0, "id": 1, "email": 1, "name": 1},
+    )
+    count = 0
+    async for t in cur:
+        try:
+            await send_therapist_followup_2w(t["email"], t["name"], t["id"])
+            await db.therapists.update_one(
+                {"id": t["id"]}, {"$set": {"therapist_2w_followup_sent_at": _now_iso()}},
+            )
+            count += 1
+        except Exception as e:
+            logger.warning("Therapist 2w follow-up failed for %s: %s", t["id"], e)
+    return {"sent": count}
+
+
+async def _run_stale_profile_nag() -> dict[str, int]:
+    """Therapists who haven't updated their profile in 90+ days get a gentle
+    reminder so their directory listing stays fresh. Idempotent via
+    `stale_profile_nag_sent_at` flag (reset once they update the profile).
+    """
+    from email_service import send_therapist_stale_profile_nag
+    STALE_DAYS = int(os.environ.get("PROFILE_STALE_DAYS", "90"))
+    now = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(days=STALE_DAYS)).isoformat()
+    cur = db.therapists.find(
+        {
+            "is_active": True,
+            "pending_approval": {"$ne": True},
+            "$or": [
+                {"updated_at": {"$lte": cutoff}},
+                {"updated_at": {"$exists": False}, "created_at": {"$lte": cutoff}},
+            ],
+            "stale_profile_nag_sent_at": {"$exists": False},
+            "email": {"$ne": None},
+        },
+        {"_id": 0, "id": 1, "email": 1, "name": 1, "updated_at": 1, "created_at": 1},
+    )
+    count = 0
+    async for t in cur:
+        try:
+            last = t.get("updated_at") or t.get("created_at") or _now_iso()
+            try:
+                last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
+            except ValueError:
+                last_dt = now
+            days_stale = max(STALE_DAYS, (now - last_dt).days)
+            await send_therapist_stale_profile_nag(t["email"], t["name"], days_stale)
+            await db.therapists.update_one(
+                {"id": t["id"]},
+                {"$set": {"stale_profile_nag_sent_at": _now_iso()}},
+            )
+            count += 1
+        except Exception as e:
+            logger.warning("Stale-profile nag failed for %s: %s", t["id"], e)
+    return {"sent": count}
+
+
 async def _daily_loop() -> None:
     while True:
         try:
@@ -290,13 +401,19 @@ async def _daily_loop() -> None:
                     lic = await _run_license_expiry_alerts()
                     avail = await _run_availability_prompts()
                     follow = await _run_followup_surveys()
+                    structured = await _run_patient_structured_followups()
+                    t_follow = await _run_therapist_2w_followups()
+                    stale = await _run_stale_profile_nag()
                     recruit = await _run_gap_recruitment()
                     await db.cron_runs.update_one(
                         {"name": "daily_tasks", "date": today_iso},
                         {"$set": {
                             "completed_at": _now_iso(),
                             "billing": bill, "license": lic, "availability": avail,
-                            "followups": follow, "gap_recruit": recruit,
+                            "followups": follow, "structured_followups": structured,
+                            "therapist_followups": t_follow,
+                            "stale_profile_nag": stale,
+                            "gap_recruit": recruit,
                         }},
                     )
         except Exception as e:

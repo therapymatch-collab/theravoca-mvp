@@ -14,6 +14,8 @@ import FollowupForm from "@/pages/FollowupForm";
 import PatientResults from "@/pages/PatientResults";
 import AdminLogin from "@/pages/AdminLogin";
 import AdminDashboard from "@/pages/AdminDashboard";
+import FeedbackForm from "@/pages/FeedbackForm";
+import FeedbackWidget from "@/components/FeedbackWidget";
 import NotFound from "@/pages/NotFound";
 
 function App() {
@@ -40,8 +42,17 @@ function App() {
           <Route path="/followup/:requestId/:milestone" element={<FollowupForm />} />
           <Route path="/admin" element={<AdminLogin />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route
+            path="/feedback/patient/:requestId"
+            element={<FeedbackForm kind="patient" />}
+          />
+          <Route
+            path="/feedback/therapist/:therapistId"
+            element={<FeedbackForm kind="therapist" />}
+          />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        <FeedbackWidget />
       </BrowserRouter>
     </div>
   );

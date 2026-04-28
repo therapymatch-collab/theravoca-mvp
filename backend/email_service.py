@@ -350,6 +350,8 @@ async def send_therapist_signup_received(to: str, name: str) -> None:
 async def send_therapist_approved(to: str, name: str) -> None:
     tpl = await get_template(_db(), "therapist_approved")
     first_name = _first_name(name)
+    portal_url = f"{_get_app_url()}/sign-in?role=therapist"
+    edit_url = f"{_get_app_url()}/portal/therapist/edit"
     vars_ = {"first_name": first_name}
     greeting = render(tpl["greeting"], **vars_)
     intro = render(tpl["intro"], **vars_)
@@ -357,9 +359,92 @@ async def send_therapist_approved(to: str, name: str) -> None:
     inner = f"""
     {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
     <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">{intro}</p>
+    <div style="background:{BRAND['bg']};border:1px solid {BRAND['border']};border-radius:12px;padding:18px 22px;margin:22px 0;">
+      <div style="font-size:13px;color:{BRAND['muted']};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">
+        Next steps (2 minutes)
+      </div>
+      <ol style="margin:0;padding-left:20px;color:{BRAND['text']};font-size:14px;line-height:1.7;">
+        <li><strong>Sign in</strong> with your email — we'll email you a 6-digit code. No password required.</li>
+        <li><strong>Add a warm bio and your openings</strong> so patients pick you quickly.</li>
+        <li>Watch your inbox for referrals. You'll get an email + text when a patient matches your profile at 70%+.</li>
+      </ol>
+    </div>
+    <p style="margin:28px 0;text-align:center;">
+      <a href="{portal_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;margin:4px;">
+        Sign in to your portal
+      </a>
+      <a href="{edit_url}" style="display:inline-block;background:#ffffff;color:{BRAND['primary']};border:1px solid {BRAND['primary']};text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;margin:4px;">
+        Complete your profile
+      </a>
+    </p>
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">{footer_note}</p>
     """
     await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner))
+
+
+async def send_therapist_rejected(to: str, name: str) -> None:
+    """Warm rejection email — leaves the door open for a future re-apply once
+    the directory opens additional states / specialties."""
+    tpl = await get_template(_db(), "therapist_rejected")
+    first_name = _first_name(name)
+    vars_ = {"first_name": first_name}
+    greeting = render(tpl["greeting"], **vars_)
+    intro = render(tpl["intro"], **vars_)
+    body = render(tpl["body"], **vars_)
+    footer_note = render(tpl["footer_note"], **vars_)
+    inner = f"""
+    {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">{intro}</p>
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">{body}</p>
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">{footer_note}</p>
+    """
+    await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner))
+
+
+async def _send_simple_cta_template(template_key: str, to: str, cta_url: str, vars_: dict) -> None:
+    """Shared helper for short CTA-only emails (follow-ups, profile nags)."""
+    tpl = await get_template(_db(), template_key)
+    greeting = render(tpl.get("greeting", ""), **vars_)
+    intro = render(tpl["intro"], **vars_)
+    cta_label = render(tpl.get("cta_label", ""), **vars_)
+    footer_note = render(tpl.get("footer_note", ""), **vars_)
+    cta_html = (
+        f'<p style="margin:28px 0;text-align:center;">'
+        f'<a href="{cta_url}" style="display:inline-block;background:{BRAND["primary"]};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">{cta_label}</a>'
+        f'</p>'
+    ) if cta_label else ""
+    inner = f"""
+    {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">{intro}</p>
+    {cta_html}
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">{footer_note}</p>
+    """
+    await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner))
+
+
+async def send_patient_followup_48h(to: str, request_id: str) -> None:
+    url = f"{_get_app_url()}/feedback/patient/{request_id}?milestone=48h"
+    await _send_simple_cta_template("patient_followup_48h", to, url, {"request_id": request_id})
+
+
+async def send_patient_followup_2w(to: str, request_id: str) -> None:
+    url = f"{_get_app_url()}/feedback/patient/{request_id}?milestone=2w"
+    await _send_simple_cta_template("patient_followup_2w", to, url, {"request_id": request_id})
+
+
+async def send_therapist_followup_2w(to: str, name: str, therapist_id: str) -> None:
+    url = f"{_get_app_url()}/feedback/therapist/{therapist_id}?milestone=2w"
+    await _send_simple_cta_template(
+        "therapist_followup_2w", to, url, {"first_name": _first_name(name)},
+    )
+
+
+async def send_therapist_stale_profile_nag(to: str, name: str, days_stale: int) -> None:
+    url = f"{_get_app_url()}/portal/therapist/edit"
+    await _send_simple_cta_template(
+        "therapist_stale_profile_nag", to, url,
+        {"first_name": _first_name(name), "days_stale": days_stale},
+    )
 
 
 async def send_magic_code(to: str, code: str, role: str) -> None:

@@ -689,6 +689,48 @@ export default function IntakeForm() {
                     type="email"
                     value={data.email}
                     onChange={(e) => set("email", e.target.value)}
+                    onBlur={() => {
+                      // Returning-patient prefill: if this email has filed a
+                      // prior request, we pull their stable fields (referral
+                      // source, zip, language preference) so they don't have
+                      // to re-answer. Silent failure — this is a nice-to-have.
+                      if (!emailLooksOk(data.email)) return;
+                      api
+                        .get(`/requests/prefill?email=${encodeURIComponent(data.email)}`)
+                        .then((r) => {
+                          const pre = r.data?.prefill;
+                          if (!r.data?.returning || !pre) return;
+                          setData((d) => {
+                            // Only fill fields the patient hasn't already touched
+                            const merged = { ...d };
+                            const fields = [
+                              "referral_source",
+                              "zip_code",
+                              "preferred_language",
+                              "age_group",
+                              "gender_preference",
+                            ];
+                            let changed = 0;
+                            for (const k of fields) {
+                              if (!merged[k] && pre[k]) {
+                                merged[k] = pre[k];
+                                changed += 1;
+                              }
+                            }
+                            if (changed > 0 && !merged._prefilled_notice_shown) {
+                              merged._prefilled_notice_shown = true;
+                            }
+                            return merged;
+                          });
+                          if (Object.values(pre).some(Boolean)) {
+                            toast.info(
+                              "Welcome back — we've pre-filled a few fields from your last request. Review and change any if needed.",
+                              { duration: 6000 },
+                            );
+                          }
+                        })
+                        .catch(() => {});
+                    }}
                     placeholder="you@example.com"
                     className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                     data-testid="email-input"

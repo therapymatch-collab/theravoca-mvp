@@ -15,7 +15,7 @@ from deps import (
     LOGIN_MAX_FAILURES, _check_lockout, _client_ip,
     _login_attempts, _record_failure, _reset_failures, require_admin,
 )
-from email_service import send_therapist_approved
+from email_service import send_therapist_approved, send_therapist_rejected
 from email_templates import DEFAULTS as EMAIL_TEMPLATE_DEFAULTS, list_templates, upsert_template
 from helpers import _deliver_results, _now_iso, _trigger_matching
 from seed_data import generate_seed_therapists
@@ -169,6 +169,7 @@ async def admin_approve_therapist(therapist_id: str, _: bool = Depends(require_a
 
 @router.post("/admin/therapists/{therapist_id}/reject")
 async def admin_reject_therapist(therapist_id: str, _: bool = Depends(require_admin)):
+    import asyncio
     t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0})
     if not t:
         raise HTTPException(404)
@@ -176,7 +177,28 @@ async def admin_reject_therapist(therapist_id: str, _: bool = Depends(require_ad
         {"id": therapist_id},
         {"$set": {"pending_approval": False, "is_active": False, "rejected_at": _now_iso()}},
     )
+    asyncio.create_task(send_therapist_rejected(t["email"], t["name"]))
     return {"id": therapist_id, "status": "rejected"}
+
+
+@router.post("/admin/therapists/{therapist_id}/clear-reapproval")
+async def admin_clear_reapproval(
+    therapist_id: str, _: bool = Depends(require_admin),
+):
+    """Admin has reviewed the therapist's specialty/license self-edit and
+    blessed it — clear the pending_reapproval flag so the updated profile
+    starts being used by the matching engine."""
+    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(404)
+    await db.therapists.update_one(
+        {"id": therapist_id},
+        {
+            "$set": {"pending_reapproval": False, "reapproved_at": _now_iso()},
+            "$unset": {"pending_reapproval_fields": "", "pending_reapproval_at": ""},
+        },
+    )
+    return {"id": therapist_id, "status": "reapproved"}
 
 
 @router.put("/admin/therapists/{therapist_id}")
@@ -205,6 +227,10 @@ async def admin_update_therapist(
     update = {k: v for k, v in (payload or {}).items() if k in allowed}
     if not update:
         raise HTTPException(400, "No editable fields provided")
+    # Enforce the 3-age-group cap on ALL saves (admin + self-edit) — same
+    # rule applied at the model layer for new signups.
+    if "age_groups" in update and isinstance(update["age_groups"], list):
+        update["age_groups"] = update["age_groups"][:3]
     update["updated_at"] = _now_iso()
     res = await db.therapists.update_one({"id": therapist_id}, {"$set": update})
     if res.matched_count == 0:
@@ -415,6 +441,12 @@ async def admin_list_opt_outs(_: bool = Depends(require_admin)):
         {}, {"_id": 0},
     ).sort("last_opted_out_at", -1).to_list(500)
     return {"opt_outs": docs, "total": len(docs)}
+
+
+@router.get("/admin/feedback")
+async def admin_list_feedback(_: bool = Depends(require_admin)):
+    docs = await db.feedback.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return {"feedback": docs, "total": len(docs)}
 
 
 @router.post("/admin/outreach/{invite_id}/convert")
