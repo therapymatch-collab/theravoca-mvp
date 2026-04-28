@@ -8,6 +8,12 @@ import { api } from "@/lib/api";
 import { IDAHO_INSURERS } from "@/lib/insurers";
 import { imageToDataUrl } from "@/lib/image";
 import { Input } from "@/components/ui/input";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -84,6 +90,44 @@ const GENDERS = [
   { v: "female", l: "Female" },
   { v: "male", l: "Male" },
   { v: "nonbinary", l: "Nonbinary" },
+];
+
+// Therapist-side FAQ — short, plain answers to the questions clinicians
+// ask before signing up. Kept generic and platform-focused so the copy
+// holds up across markets.
+const THERAPIST_FAQS = [
+  {
+    q: "How does TheraVoca differ from other directories?",
+    a: "Patients fill out a structured intake and our matching engine ranks therapists by fit. You only see referrals scored 71% or higher for your practice — no scrolling through every search result hoping to be picked.",
+  },
+  {
+    q: "How much does it cost?",
+    a: "Your first 30 days are free. After that it's $45/month, billed monthly. Cancel any time from your portal — no contracts or per-referral fees.",
+  },
+  {
+    q: "Will patients see my contact info?",
+    a: "Not until you accept a referral. We send you the anonymized request first; once you say 'I'll see this client' the patient receives your name, phone, email, and intake link.",
+  },
+  {
+    q: "What information do you need from me?",
+    a: "Credentials, license number and expiry, your specialties and modalities, age groups you treat, fees, and whether you offer telehealth or in-person. The signup flow walks you through everything in 8 steps.",
+  },
+  {
+    q: "How do you verify my license?",
+    a: "We check your number against the state board's public registry (Idaho DOPL today, additional states rolling out). Profiles with an expired or invalid license aren't shown to patients.",
+  },
+  {
+    q: "How many referrals will I get?",
+    a: "It depends on your specialties, fees, capacity, and how many patients in your area match your profile. Therapists with complete profiles, recent availability updates, and competitive pricing tend to receive the most referrals.",
+  },
+  {
+    q: "Can I pause referrals when I'm full?",
+    a: "Yes — toggle 'not currently accepting new clients' in your portal and we'll skip you in matching until you flip it back. Your subscription continues so your profile reactivates instantly.",
+  },
+  {
+    q: "How do I get paid?",
+    a: "TheraVoca only handles the intro. Payment for sessions happens directly between you and the patient on whatever billing system you already use.",
+  },
 ];
 
 export default function TherapistSignup() {
@@ -634,6 +678,35 @@ export default function TherapistSignup() {
           </div>
         </section>
 
+        {/* Therapist FAQ — answers what new clinicians ask before they sign up. */}
+        <section className="border-t border-[#E8E5DF] py-16 bg-white">
+          <div className="max-w-3xl mx-auto px-5 sm:px-8">
+            <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] mb-3 text-center">
+              FAQs for therapists
+            </p>
+            <h2 className="font-serif-display text-4xl text-[#2D4A3E] leading-tight text-center">
+              Common questions
+            </h2>
+            <Accordion type="single" collapsible className="mt-8" data-testid="therapist-faq">
+              {THERAPIST_FAQS.map((f) => (
+                <AccordionItem
+                  key={f.q}
+                  value={`item-${f.q}`}
+                  className="border-[#E8E5DF]"
+                  data-testid={`therapist-faq-${f.q.slice(0, 20)}`}
+                >
+                  <AccordionTrigger className="text-left text-[#2B2A29] hover:text-[#2D4A3E] hover:no-underline py-5">
+                    {f.q}
+                  </AccordionTrigger>
+                  <AccordionContent className="text-[#6D6A65] leading-relaxed">
+                    {f.a}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </div>
+        </section>
+
         <section id="signup-form" className="py-14 scroll-mt-24">
           <div className="max-w-3xl mx-auto px-5 sm:px-8">
             <div
@@ -768,10 +841,11 @@ export default function TherapistSignup() {
                     </div>
                   </Field>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Field label={<>Full name + title (e.g. Sarah Lin, LCSW) <Req /></>}>
+                    <Field label={<>Full name + degree (e.g. Sarah Lin, MA, LCSW) <Req /></>}>
                       <Input
                         value={data.name}
                         onChange={(e) => set("name", e.target.value)}
+                        placeholder="Sarah Lin, MA, LCSW"
                         className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                         data-testid="signup-name"
                       />

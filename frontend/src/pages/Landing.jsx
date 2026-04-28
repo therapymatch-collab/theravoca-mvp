@@ -1,5 +1,6 @@
 import { Header, Footer } from "@/components/SiteShell";
 import IntakeForm from "@/components/IntakeForm";
+import VideoTestimonials from "@/components/VideoTestimonials";
 import {
   Accordion,
   AccordionContent,
@@ -253,6 +254,8 @@ export default function Landing() {
 
       {/* INTAKE FORM */}
       <IntakeForm />
+
+      <VideoTestimonials />
 
       {/* FAQ */}
       <section id="faq" className="py-20 md:py-28">

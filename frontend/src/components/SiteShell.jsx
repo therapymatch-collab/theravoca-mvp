@@ -273,6 +273,17 @@ export function Footer() {
             We never share your personal information without your consent. Therapists
             only see anonymized referrals.
           </p>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+            <Link to="/terms" className="hover:text-[#2D4A3E] underline" data-testid="footer-terms">
+              Terms of Use
+            </Link>
+            <Link to="/privacy" className="hover:text-[#2D4A3E] underline" data-testid="footer-privacy">
+              Privacy Notice
+            </Link>
+            <Link to="/blog" className="hover:text-[#2D4A3E] underline" data-testid="footer-blog">
+              Blog
+            </Link>
+          </div>
         </div>
       </div>
     </footer>

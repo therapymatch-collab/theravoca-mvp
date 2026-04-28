@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
-import { useParams, useSearchParams, Link } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
 import { CheckCircle2, Loader2, Mail } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
-import { api } from "@/lib/api";
+import { api, setSession } from "@/lib/api";
 import { ICON_SIZE_LG } from "@/lib/constants";
 
 export default function VerifyEmail() {
   const { token } = useParams();
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const isPending = token === "pending";
   const requestId = params.get("id");
   const [state, setState] = useState(isPending ? "pending" : "loading");
@@ -23,9 +24,16 @@ export default function VerifyEmail() {
         setVerifiedId(res.data.id);
         setVerifiedEmail(res.data.email || null);
         setState("verified");
-        // If this email has filed multiple requests but hasn't set a
-        // password yet, surface the "create an account" CTA so they can
-        // start tracking everything in one dashboard.
+        // Mint a patient session locally so the "Create my account" CTA
+        // can drop the user straight into a password-setup form without
+        // a second magic-code round-trip.
+        if (res.data.session_token && res.data.email) {
+          setSession({
+            token: res.data.session_token,
+            role: "patient",
+            email: res.data.email,
+          });
+        }
         const emailFromResponse = res.data.email;
         if (emailFromResponse) {
           api
@@ -101,13 +109,14 @@ export default function VerifyEmail() {
                     your past requests, responses, and matches in one dashboard — no more
                     one-time codes.
                   </p>
-                  <Link
-                    to={`/sign-in?role=patient&email=${encodeURIComponent(verifiedEmail || "")}&setup=1&next=/portal/patient`}
+                  <button
+                    type="button"
+                    onClick={() => navigate("/account/setup-password?next=/portal/patient")}
                     className="tv-btn-primary !py-2 !px-4 text-sm mt-3 inline-flex"
                     data-testid="offer-account-cta"
                   >
                     Create my account
-                  </Link>
+                  </button>
                 </div>
               )}
             </>

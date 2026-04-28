@@ -770,151 +770,53 @@ export default function AdminDashboard() {
                 <StatBox label="Applications" value={stats?.applications} />
               </div>
 
-              <div className="mt-10 flex gap-2 border-b border-[#E8E5DF]">
-                <TabBtn
-                  active={tab === "requests"}
-                  onClick={() => setTab("requests")}
-                  icon={<Inbox size={14} />}
-                  label="Patient requests"
-                  count={requests.length}
-                  testid="tab-requests"
-                />
-                <TabBtn
-                  active={tab === "therapists"}
-                  onClick={() => setTab("therapists")}
-                  icon={<Users size={14} />}
-                  label="Therapist signups"
-                  count={pendingTherapists.length}
-                  testid="tab-therapists"
-                  highlight={pendingTherapists.length > 0}
-                />
-                <TabBtn
-                  active={tab === "all_therapists"}
-                  onClick={() => setTab("all_therapists")}
-                  icon={<UserCheck size={14} />}
-                  label="All providers"
-                  count={allTherapists.length}
-                  testid="tab-all-therapists"
-                />
-                <TabBtn
-                  active={tab === "email_templates"}
-                  onClick={() => {
-                    setTab("email_templates");
-                    if (emailTemplates.length === 0) loadEmailTemplates();
-                  }}
-                  icon={<Mail size={14} />}
-                  label="Email templates"
-                  count={emailTemplates.length || null}
-                  testid="tab-email-templates"
-                />
-                <TabBtn
-                  active={tab === "referral_sources"}
-                  onClick={() => {
-                    setTab("referral_sources");
-                    if (!refSources) loadReferralSources();
-                    if (!refOptionsLoaded) loadRefOptions();
-                  }}
-                  icon={<Sliders size={14} />}
-                  label="Referral sources"
-                  count={refSources?.sources?.length || null}
-                  testid="tab-referral-sources"
-                />
-                <TabBtn
-                  active={tab === "invited_therapists"}
-                  onClick={() => {
-                    setTab("invited_therapists");
-                    if (!outreach) loadOutreach();
-                  }}
-                  icon={<Send size={14} />}
-                  label="Invited therapists"
-                  count={outreach?.total ?? null}
-                  testid="tab-invited-therapists"
-                />
-                <TabBtn
-                  active={tab === "opt_outs"}
-                  onClick={() => {
-                    setTab("opt_outs");
-                    if (!optOuts) loadOptOuts();
-                  }}
-                  icon={<Ban size={14} />}
-                  label="Opt-outs"
-                  count={optOuts?.total ?? null}
-                  testid="tab-opt-outs"
-                />
-                <TabBtn
-                  active={tab === "feedback"}
-                  onClick={() => {
-                    setTab("feedback");
-                    if (!feedback) loadFeedback();
-                  }}
-                  icon={<MessageSquare size={14} />}
-                  label="Feedback"
-                  count={feedback?.total ?? null}
-                  testid="tab-feedback"
-                />
-                <TabBtn
-                  active={tab === "patients"}
-                  onClick={() => {
-                    setTab("patients");
-                    if (!patientsByEmail) loadPatientsByEmail();
-                  }}
-                  icon={<Users size={14} />}
-                  label="Patients (by email)"
-                  count={patientsByEmail?.total ?? null}
-                  testid="tab-patients"
-                />
-                <TabBtn
-                  active={tab === "team"}
-                  onClick={() => {
-                    setTab("team");
-                    if (!team) loadTeam();
-                  }}
-                  icon={<Users size={14} />}
-                  label="Team"
-                  count={team?.total ?? null}
-                  testid="tab-team"
-                />
-                <TabBtn
-                  active={tab === "completion"}
-                  onClick={() => {
-                    setTab("completion");
-                    if (!completion) loadCompletion();
-                  }}
-                  icon={<Sparkles size={14} />}
-                  label="Profile completion"
-                  count={completion?.incomplete ?? null}
-                  testid="tab-completion"
-                />
-                <TabBtn
-                  active={tab === "coverage_gap"}
-                  onClick={() => {
-                    setTab("coverage_gap");
-                    if (!coverageGap) loadCoverageGap();
-                    if (!recruitDrafts) loadRecruitDrafts();
-                  }}
-                  icon={<TrendingUp size={14} />}
-                  label="Coverage gaps"
-                  count={coverageGap?.gap_summary?.total ?? null}
-                  testid="tab-coverage-gap"
-                  highlight={(coverageGap?.gap_summary?.critical ?? 0) > 0}
-                />
-                <TabBtn
-                  active={tab === "referrals"}
-                  onClick={() => {
-                    setTab("referrals");
-                    if (!referralAnalytics) loadReferralAnalytics();
-                  }}
-                  icon={<Share2 size={14} />}
-                  label="Referrals"
-                  count={
-                    referralAnalytics
-                      ? (referralAnalytics.patient_referrals.total_invited +
-                         referralAnalytics.therapist_referrals.total_invited)
-                      : null
-                  }
-                  testid="tab-referrals"
-                />
-              </div>
+              <AdminTabsBar
+                tab={tab}
+                setTab={setTab}
+                requestsCount={requests.length}
+                pendingTherapists={pendingTherapists.length}
+                allTherapists={allTherapists.length}
+                emailTemplatesCount={emailTemplates.length || null}
+                onLoadEmailTemplates={loadEmailTemplates}
+                refSources={refSources}
+                onLoadReferralSources={() => {
+                  if (!refSources) loadReferralSources();
+                  if (!refOptionsLoaded) loadRefOptions();
+                }}
+                outreach={outreach}
+                onLoadOutreach={() => {
+                  if (!outreach) loadOutreach();
+                }}
+                optOuts={optOuts}
+                onLoadOptOuts={() => {
+                  if (!optOuts) loadOptOuts();
+                }}
+                feedback={feedback}
+                onLoadFeedback={() => {
+                  if (!feedback) loadFeedback();
+                }}
+                patientsByEmail={patientsByEmail}
+                onLoadPatients={() => {
+                  if (!patientsByEmail) loadPatientsByEmail();
+                }}
+                team={team}
+                onLoadTeam={() => {
+                  if (!team) loadTeam();
+                }}
+                completion={completion}
+                onLoadCompletion={() => {
+                  if (!completion) loadCompletion();
+                }}
+                coverageGap={coverageGap}
+                onLoadCoverageGap={() => {
+                  if (!coverageGap) loadCoverageGap();
+                  if (!recruitDrafts) loadRecruitDrafts();
+                }}
+                referralAnalytics={referralAnalytics}
+                onLoadReferralAnalytics={() => {
+                  if (!referralAnalytics) loadReferralAnalytics();
+                }}
+              />
 
               {/* Per-tab search — applies a substring filter to whichever list is open */}
               <div className="mt-4 flex items-center gap-2 max-w-md" data-testid="admin-search-wrap">

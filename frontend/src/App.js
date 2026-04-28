@@ -14,6 +14,11 @@ import FollowupForm from "@/pages/FollowupForm";
 import PatientResults from "@/pages/PatientResults";
 import AdminLogin from "@/pages/AdminLogin";
 import AdminDashboard from "@/pages/AdminDashboard";
+import AccountSetupPassword from "@/pages/AccountSetupPassword";
+import TermsOfUse from "@/pages/TermsOfUse";
+import PrivacyNotice from "@/pages/PrivacyNotice";
+import BlogList from "@/pages/BlogList";
+import BlogPost from "@/pages/BlogPost";
 import FeedbackForm from "@/pages/FeedbackForm";
 import FeedbackWidget from "@/components/FeedbackWidget";
 import NotFound from "@/pages/NotFound";
@@ -42,6 +47,11 @@ function App() {
           <Route path="/followup/:requestId/:milestone" element={<FollowupForm />} />
           <Route path="/admin" element={<AdminLogin />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/account/setup-password" element={<AccountSetupPassword />} />
+          <Route path="/terms" element={<TermsOfUse />} />
+          <Route path="/privacy" element={<PrivacyNotice />} />
+          <Route path="/blog" element={<BlogList />} />
+          <Route path="/blog/:slug" element={<BlogPost />} />
           <Route
             path="/feedback/patient/:requestId"
             element={<FeedbackForm kind="patient" />}

@@ -153,7 +153,19 @@ async def verify_request(token: str):
             _trigger_matching(req["id"]),
             name=f"match_for_{req['id'][:8]}",
         )
-    return {"id": req["id"], "verified": True, "email": req.get("email")}
+    # Issue a patient session token here too — the email link itself proves
+    # the user owns this address, so we can drop them straight into account
+    # setup without a second magic-code round-trip.
+    from deps import _create_session_token  # local import to avoid cycle
+    session_token = (
+        _create_session_token(req["email"], "patient") if req.get("email") else None
+    )
+    return {
+        "id": req["id"],
+        "verified": True,
+        "email": req.get("email"),
+        "session_token": session_token,
+    }
 
 
 @router.get("/requests/{request_id}/public", response_model=dict)
