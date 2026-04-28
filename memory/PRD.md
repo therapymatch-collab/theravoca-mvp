@@ -1425,3 +1425,65 @@ User asked for 8 changes; all shipped in one batch.
   app. JWT-in-sessionStorage is industry-standard for SPAs; the
   documented XSS surface is mitigated by DOMPurify on the only
   user-controlled HTML render in the app (BlogPost).
+
+---
+
+## Iter-69 (Apr 28 2026) — Patient priorities + bot defenses + site-copy buttons
+
+### Implemented
+1. **Patient-customizable matching weights** (`matching.py` + `models.py` + `IntakeForm.jsx`)
+   - New intake step 7 of 8 (`What matters most?`) — Option C "pick what matters" UI
+   - 5 priority factors: `specialty`, `modality`, `schedule`, `payment`, `identity`
+   - Each selected factor multiplies its score axes by `PRIORITY_BOOST = 1.8x`
+     (mapped via `PRIORITY_AXES` in matching.py)
+   - Optional "Strict mode" toggle hard-filters therapists scoring 0 on any
+     priority axis the patient *expressed a preference on* (per-axis check
+     via `_patient_expressed_axis()` so picking 'identity' without a
+     gender preference doesn't drop everyone)
+   - `RequestCreate` model gains `priority_factors: list[str]`,
+     `strict_priorities: bool`
+
+2. **Bot defenses on POST /api/requests** (free, no 3rd-party captcha)
+   - **Honeypot**: hidden `fax_number` field (off-screen, tabIndex=-1,
+     aria-hidden) — non-empty value → 400 reject
+   - **Timing heuristic**: client passes `form_started_at_ms`; if delta
+     to server time < 2s → 400 reject
+   - **Per-IP rate limit**: `intake_ip_log` collection (24h TTL via
+     BSON Date `ts_at`), 3 submissions per IP per hour → 429
+   - Pre-existing per-email rate-limit unchanged
+
+3. **Site editor: editable button labels** (`SiteCopyAdminPanel.jsx`
+   + `useSiteCopy` integration)
+   - 14 new SEED_KEYS spanning intake CTAs, sign-in CTAs, therapist
+     signup CTAs, and intake.priorities.* copy
+   - Wired into `IntakeForm.jsx` (Continue / Back / Submit / Edit /
+     Confirm), `SignIn.jsx` (Send code / Verify), `TherapistSignup.jsx`
+     (Hero CTA / Add payment / Skip payment)
+   - Existing SEED_KEYS aligned to actual default UI text (e.g.
+     `btn.intake.next` is now "Continue", not "Next")
+
+4. **Mobile text-wrap fix** on `PatientPortal.jsx`
+   - Added `break-words` / `break-all` to email + presenting_issues +
+     timeline labels so long strings don't horizontally overflow on
+     390px viewports
+
+### Backend changes
+- `routes/patients.py`: imports `Request`, adds 3-layer bot gate before
+  any DB writes; logs successful intake IPs
+- `server.py` lifespan: creates `intake_ip_log` indices (`ip` + TTL on
+  `ts_at`)
+- `matching.py`: `PRIORITY_AXES`, `_priority_weights`,
+  `_patient_expressed_axis`; `score_therapist` applies multipliers and
+  optional strict filter
+
+### Tests
+- New `backend/tests/test_iteration69_priorities_botdef.py` (6/6 pass via
+  testing agent iter-30): honeypot, timing < 2s, IP rate-limit,
+  priority weighting, strict-mode, site-copy seed keys
+
+### Backlog / not done
+- ~~Refactoring oversized React components (AdminDashboard / TherapistSignup
+  / IntakeForm)~~ — still deferred
+- Multi-state rollout (currently Idaho only)
+- hCaptcha / Turnstile if heuristics prove insufficient
+- DOPL live API integration when published

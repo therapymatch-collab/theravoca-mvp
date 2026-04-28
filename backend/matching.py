@@ -369,6 +369,32 @@ def _priority_weights(priority_factors: list[str]) -> dict[str, float]:
     return weights
 
 
+def _patient_expressed_axis(r: dict, axis: str) -> bool:
+    """Per-axis check used by strict-mode: did the patient actually tell
+    us something concrete about THIS scoring axis? If not, we skip the
+    strict-mode filter for it (otherwise picking a priority factor
+    composed of multiple axes — e.g. 'identity' = gender + style —
+    would drop every therapist when the patient set only one of them).
+    """
+    if axis == "issues":
+        return bool([i for i in (r.get("presenting_issues") or []) if i and i != "other"])
+    if axis == "modality":
+        return bool((r.get("modality_preference") or "").strip())
+    if axis == "modality_pref":
+        return bool([m for m in (r.get("modality_preferences") or []) if m])
+    if axis == "availability":
+        return bool([w for w in (r.get("availability_windows") or []) if w])
+    if axis == "urgency":
+        return (r.get("urgency") or "").strip() not in ("", "flexible")
+    if axis == "payment_fit":
+        return bool(r.get("sliding_scale_ok"))
+    if axis == "gender":
+        return (r.get("gender_preference") or "").lower() not in ("", "no_pref")
+    if axis == "style":
+        return bool([s for s in (r.get("style_preference") or []) if s and s != "no_pref"])
+    return False
+
+
 def score_therapist(t: dict, r: dict) -> dict[str, Any]:
     """Return scoring breakdown + total. total=-1 indicates filtered out."""
     if not _state_pass(t, r):
@@ -399,12 +425,16 @@ def score_therapist(t: dict, r: dict) -> dict[str, Any]:
 
     # Strict mode: patient said "don't show me anyone who scores zero on
     # my top priorities." Hard-filter any therapist that whiffed an axis
-    # the patient flagged as important (only applied when the patient
-    # actually picked priorities).
+    # the patient flagged as important — but ONLY if the patient actually
+    # expressed a preference on that axis. e.g. picking "identity" with
+    # gender_preference='no_pref' would otherwise drop every therapist
+    # because _score_gender returns 0 when the patient doesn't care.
     priority_factors = list(r.get("priority_factors") or [])
     if r.get("strict_priorities") and priority_factors:
         for f in priority_factors:
             for axis in PRIORITY_AXES.get(f, []):
+                if not _patient_expressed_axis(r, axis):
+                    continue
                 if (raw.get(axis) or 0) <= 0:
                     return {
                         "total": -1,
@@ -412,10 +442,10 @@ def score_therapist(t: dict, r: dict) -> dict[str, Any]:
                         "filtered": True,
                     }
 
-    # Apply patient-customizable weight multipliers. Re-normalise so a
-    # patient picking everything doesn't artificially inflate their
-    # total above 100, while a patient picking nothing gets the
-    # historical default scoring.
+    # Apply patient-customizable weight multipliers. We min-clamp the
+    # total to 100 (see end of function) — picking many priorities can
+    # pin a therapist at 100 by design, since the patient told us many
+    # axes matter and the therapist scored full marks across them.
     weights = _priority_weights(priority_factors)
     breakdown = {ax: round(v * weights[ax], 2) for ax, v in raw.items()}
     # Reputation boost — verified online reviews ≥ 4.5★ adds +5 (out of 100).

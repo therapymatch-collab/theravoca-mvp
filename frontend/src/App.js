@@ -24,7 +24,6 @@ import FeedbackWidget from "@/components/FeedbackWidget";
 import PreviewBanner from "@/components/PreviewBanner";
 import ScrollManager from "@/components/ScrollManager";
 import NotFound from "@/pages/NotFound";
-import WeightsDemo from "@/pages/WeightsDemo";
 
 function App() {
   useEffect(() => {
@@ -75,7 +74,6 @@ function App() {
             path="/feedback/therapist/:therapistId"
             element={<FeedbackForm kind="therapist" />}
           />
-          <Route path="/demo/weights" element={<WeightsDemo />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
         <FeedbackWidget />
