@@ -34,12 +34,41 @@ export default function MatchedProviderCard({ t }) {
             )}
           </div>
         </div>
-        <span className="font-mono text-xs bg-[#2D4A3E] text-white px-2.5 py-0.5 rounded shrink-0">
-          {Math.round(t.match_score)}%
-        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          {t.enriched_score != null && t.score_delta != null && (
+            <span
+              className="font-mono text-xs bg-[#C87965] text-white px-2 py-0.5 rounded"
+              title="LLM web-research enriched score"
+              data-testid={`matched-provider-enriched-${t.id}`}
+            >
+              {Math.round(t.enriched_score)}
+              {t.score_delta > 0 ? (
+                <span className="ml-1 opacity-90">+{t.score_delta}</span>
+              ) : null}
+            </span>
+          )}
+          <span className="font-mono text-xs bg-[#2D4A3E] text-white px-2.5 py-0.5 rounded">
+            {Math.round(t.match_score)}%
+          </span>
+        </div>
       </button>
       {open && (
         <div className="border-t border-[#E8E5DF] bg-[#FDFBF7] px-4 py-3 text-xs space-y-3">
+          {t.research_rationale ? (
+            <div
+              className="bg-[#FBE9E5] border border-[#F4C7BE] rounded-md px-3 py-2 text-[#2B2A29]"
+              data-testid={`matched-provider-rationale-${t.id}`}
+            >
+              <div className="text-[10px] uppercase tracking-wider text-[#C87965] font-semibold mb-1">
+                LLM web research · +{t.score_delta || 0} bonus
+              </div>
+              <div className="leading-relaxed">{t.research_rationale}</div>
+              <div className="mt-1.5 text-[10px] text-[#6D6A65] flex flex-wrap gap-3">
+                <span>Evidence depth: <strong>{t.evidence_depth ?? 0}/10</strong></span>
+                <span>Approach align: <strong>{t.approach_alignment ?? 0}/5</strong></span>
+              </div>
+            </div>
+          ) : null}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1.5">
             <div>
               <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Years exp</div>

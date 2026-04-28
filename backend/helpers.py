@@ -249,6 +249,18 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
             )
         except Exception as e:
             logger.warning("Could not schedule outreach for %s: %s", request_id, e)
+
+    # Spawn LLM web-research enrichment in background — non-blocking. The
+    # admin toggle (`app_config.research_enrichment.enabled`) is checked
+    # inside the task itself, so a flipped toggle takes effect immediately.
+    try:
+        from research_enrichment import enrich_matches_for_request
+        _spawn_bg(
+            enrich_matches_for_request(request_id),
+            name=f"research_enrich_{request_id[:8]}",
+        )
+    except Exception as e:
+        logger.warning("Could not schedule research enrichment for %s: %s", request_id, e)
     return {
         "notified_new": len(new_matches),
         "notified_total": notified_total,
@@ -267,6 +279,7 @@ async def _deliver_results(request_id: str) -> dict[str, Any]:
     apps = await db.applications.find({"request_id": request_id}, {"_id": 0}).to_list(50)
     matched_at = req.get("matched_at") or req.get("created_at")
     matched_dt = _parse_iso(matched_at) if matched_at else None
+    research_scores = req.get("research_scores") or {}
     for a in apps:
         ms = float(a.get("match_score") or 0)
         speed_bonus = 0.0
@@ -277,7 +290,22 @@ async def _deliver_results(request_id: str) -> dict[str, Any]:
                 speed_bonus = max(0.0, min(30.0, 30.0 * (24.0 - hours) / 24.0))
         msg_len = len(a.get("message") or "")
         quality_bonus = min(10.0, msg_len / 300.0 * 10.0)
-        a["patient_rank_score"] = round(min(100.0, ms * 0.6 + speed_bonus + quality_bonus), 1)
+        # Research-enrichment bonus (evidence_depth + approach_alignment +
+        # apply_fit) — only used when admin has enabled the toggle and we
+        # have stored research scores for this match.
+        rs = research_scores.get(a["therapist_id"]) or {}
+        research_bonus = float(rs.get("delta") or 0)  # evidence_depth + approach_alignment
+        apply_fit = float(a.get("apply_fit") or 0)    # 0-5 scored at apply time
+        a["patient_rank_score"] = round(
+            min(
+                120.0,
+                ms * 0.6 + speed_bonus + quality_bonus + research_bonus + apply_fit,
+            ),
+            1,
+        )
+        a["research_rationale"] = rs.get("rationale") or ""
+        a["evidence_depth"] = rs.get("evidence_depth") or 0
+        a["approach_alignment"] = rs.get("approach_alignment") or 0
 
     apps.sort(key=lambda a: (a.get("patient_rank_score", 0), a.get("created_at", "")), reverse=True)
 

@@ -1,0 +1,29 @@
+{
+  "summary": "Iter-63 review: NEW LLM web-research enrichment + DB cleanup. Backend pytest 16/16 passed (8.42s) covering: GET/PUT/POST /api/admin/research-enrichment (shape, roundtrip, missing-id graceful 200 + {error:'request not found'}, X-Admin-Password gating returns 401), in-process score_research_axes against Ann Omodt (id=b54d5535) with presenting_issues=['anxiety'] returns evidence_depth=8.0 (>=5 ✓, real Claude call), get_or_build_research caching no-op verified by research_refreshed_at unchanged across two calls, score_apply_fit empty input → 0.0 + 'no apply message' rationale, non-empty 8-yr-IFS apply message scored within 0-5 with rationale, admin_request_detail surfaces all 6 enriched keys (enriched_score, score_delta, evidence_depth, approach_alignment, research_rationale, research_themes) per notified therapist on a freshly-seeded patient request, DB cleanup snapshot confirms therapists=123 (122 imported_xlsx + 1 gap_recruit_signup) and recruit_drafts/feedback/patient_accounts/magic_codes all == 0, plus Iter-61/62 regressions (intake-rate-limit, scrape-sources, scrape-sources/test 400 on missing url) green. Frontend (1440x900): admin master-password login (Enter-key submit to dodge navbar dropdown overlay), navigated More → Settings, research-enrichment-card visible, toggle (testid: research-enrichment-toggle) flipped false→true (toast 'LLM web-research enrichment enabled') then true→false (toast 'disabled'). Restored backend toggle back to enabled=true post-test (matches end-of-dev state).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration63_research_enrichment.py",
+    "/app/test_reports/pytest/iter63_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "research_enrichment._build_research_summary uses no LLM-call cap or retry — a flaky Claude 5xx will silently degrade depth_signal='none' (already handled gracefully, but no observability — consider counting failures into the admin stats so the toggle UI can warn 'X% of refreshes failing').",
+    "score_research_axes performs an HTTP fetch of the therapist website inside the same async path as the LLM call (HTTP_TIMEOUT_SEC=8). When a site is slow + LLM is slow, total wall-time per therapist can hit ~25s; enrich_matches_for_request iterates serially over notified_ids — for a request with 30 notified therapists this is a ~12-min background task. Consider asyncio.gather with a small semaphore (e.g. 4) to parallelise.",
+    "research_enrichment.py is 460+ lines doing fetch+LLM+scoring+caching+enrichment in one module. Splitting the LLM-prompt + scoring math into separate files would let the pure-math _score_axes be unit-tested without LLM fixtures.",
+    "routes/admin.py is now ~2180 lines — split deferred from Iter-61/62 still applies. The new research-enrichment endpoints could move into a dedicated routes/admin_research.py.",
+    "MatchedProviderCard renders the enriched badge (+delta) only inside the expanded 'open' details — but the badge itself sits in the always-visible header. Mild UX inconsistency: the badge is visible even when open=false, which is good, but the rationale text is hidden until expand. Consider an info-icon hover preview so admins can scan rationale without expanding each card.",
+    "enrich_matches_for_request silently returns {'skipped': 'enrichment disabled'} when toggle=false but admin_run_research_enrichment temporarily flips it on. Subtle race: if another request triggers _trigger_matching during the temp-on window it will ALSO start enriching. Probably fine in practice (idempotent + cached) but worth a comment."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration63_research_enrichment.py (NEW — 16 tests)",
+    "/app/test_reports/pytest/iter63_results.xml (NEW)"
+  ],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "100% — toggle on→off→on with toast confirmations"},
+  "test_credentials": "X-Admin-Password: admin123!",
+  "seed_data_creation": "1 patient request seeded with email TEST_iter63_<uuid>@example.com via POST /api/requests to verify admin_request_detail enriched-keys schema. Toggle restored to enabled=true post-test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All Iter-63 backend + UI green. Pytest run cmd: REACT_APP_BACKEND_URL=https://care-matcher-1.preview.emergentagent.com pytest tests/test_iteration63_research_enrichment.py -v. Use `adb` (per-test motor client) fixture for any test that calls research_enrichment.* directly — module-scoped motor clients trip 'Event loop is closed' across asyncio.run() boundaries. Patient request endpoint is POST /api/requests (NOT /api/patients/request). Per-email rate-limit is 1/hour by default — always seed unique TEST_<uuid>@... emails. Ann Omodt id=b54d5535-8647-4fe6-9a52-106b1b79632d already has cached research (depth=deep, themes include anxiety). Did NOT exercise: (a) /api/admin/research-enrichment/run/{real_request_id} happy-path (would burn ~15s of LLM time), (b) PatientResults page 'Why we recommend' callout (no notified+enriched data exists yet for any patient session). Both can be added once a real enriched request flows through.",
+  "rca of the issue": "N/A — feature is working end-to-end. One minor test-harness gotcha (motor client per event loop) noted above; product code unaffected."
+}

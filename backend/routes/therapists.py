@@ -378,6 +378,16 @@ async def therapist_apply(request_id: str, therapist_id: str, payload: Therapist
         ]),
         "created_at": now,
     }
+    # Score apply-text fit when research enrichment is enabled. Best-effort
+    # — failures don't block the apply. Adds 0-5 points + 1-sentence rationale.
+    try:
+        from research_enrichment import is_enabled as _re_enabled, score_apply_fit
+        if await _re_enabled():
+            fit = await score_apply_fit(payload.message or "", req, therapist)
+            app_doc["apply_fit"] = fit.get("apply_fit") or 0
+            app_doc["apply_fit_rationale"] = fit.get("rationale") or ""
+    except Exception:
+        pass
     await db.applications.insert_one(app_doc.copy())
     return ApplicationOut(**app_doc)
 

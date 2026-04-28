@@ -471,6 +471,17 @@ export default function PatientResults() {
                             </span>
                           )}
                         </div>
+                        {app.research_rationale ? (
+                          <div
+                            className="mt-3 text-xs text-[#2B2A29] bg-[#FBE9E5] border border-[#F4C7BE] rounded-md px-3 py-2 leading-relaxed"
+                            data-testid={`therapist-research-rationale-${i}`}
+                          >
+                            <span className="text-[10px] uppercase tracking-wider text-[#C87965] font-semibold mr-1.5">
+                              Why we recommend
+                            </span>
+                            {app.research_rationale}
+                          </div>
+                        ) : null}
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 mt-3 text-xs">
                           <Detail label="Format" value={formatStr} />
                           <Detail

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -320,10 +321,12 @@ async def admin_request_detail(request_id: str, _: bool = Depends(require_admin)
     notified_ids = req.get("notified_therapist_ids") or []
     notified_distances = req.get("notified_distances") or {}
     notified_breakdowns = req.get("notified_breakdowns") or {}
+    research_scores = req.get("research_scores") or {}
     notified = []
     for tid in notified_ids:
         t = await db.therapists.find_one({"id": tid}, {"_id": 0})
         if t:
+            rs = research_scores.get(tid) or {}
             notified.append({
                 "id": t["id"],
                 "name": t["name"],
@@ -343,6 +346,13 @@ async def admin_request_detail(request_id: str, _: bool = Depends(require_admin)
                 "review_avg": t.get("review_avg"),
                 "review_count": t.get("review_count"),
                 "years_experience": t.get("years_experience"),
+                # Research enrichment (only populated when the toggle was on)
+                "enriched_score": rs.get("enriched_score"),
+                "score_delta": rs.get("delta"),
+                "evidence_depth": rs.get("evidence_depth"),
+                "approach_alignment": rs.get("approach_alignment"),
+                "research_rationale": rs.get("rationale"),
+                "research_themes": rs.get("themes") or {},
             })
     apps = await db.applications.find({"request_id": request_id}, {"_id": 0}).to_list(50)
     apps.sort(key=lambda a: a["match_score"], reverse=True)
@@ -1456,6 +1466,57 @@ async def admin_scrape_sources_test(payload: dict) -> dict[str, Any]:
         "error": res.get("error"),
         "elapsed_sec": bundle.get("elapsed_sec"),
     }
+
+
+# ─── Research enrichment toggle + manual triggers ──────────────────────────
+@router.get("/admin/research-enrichment", dependencies=[Depends(require_admin)])
+async def admin_get_research_enrichment() -> dict[str, Any]:
+    from research_enrichment import is_enabled
+    enabled = await is_enabled()
+    # Stats: how many therapists have a fresh research summary?
+    fresh_cutoff = (
+        datetime.now(timezone.utc) - timedelta(days=30)
+    ).isoformat()
+    fresh = await db.therapists.count_documents({
+        "research_refreshed_at": {"$gte": fresh_cutoff},
+    })
+    enriched_requests = await db.requests.count_documents({
+        "research_scores": {"$exists": True, "$ne": {}},
+    })
+    return {
+        "enabled": enabled,
+        "therapists_with_fresh_research": fresh,
+        "enriched_requests": enriched_requests,
+    }
+
+
+@router.put("/admin/research-enrichment", dependencies=[Depends(require_admin)])
+async def admin_set_research_enrichment(payload: dict) -> dict[str, Any]:
+    from research_enrichment import set_enabled
+    enabled = bool(payload.get("enabled"))
+    await set_enabled(enabled)
+    return {"enabled": enabled}
+
+
+@router.post(
+    "/admin/research-enrichment/run/{request_id}",
+    dependencies=[Depends(require_admin)],
+)
+async def admin_run_research_enrichment(request_id: str) -> dict[str, Any]:
+    """Manual trigger so the admin can enrich an already-matched request
+    after flipping the toggle (or after a therapist updates their site)."""
+    from research_enrichment import enrich_matches_for_request, set_enabled, is_enabled
+    # Allow one-off run even if globally disabled — temporarily enable, run,
+    # restore. Cleaner UX than telling admin "you must enable first".
+    was_enabled = await is_enabled()
+    if not was_enabled:
+        await set_enabled(True)
+    try:
+        result = await enrich_matches_for_request(request_id)
+    finally:
+        if not was_enabled:
+            await set_enabled(False)
+    return result
 
 
 # Public endpoint — patient intake calls this to populate its dropdown.

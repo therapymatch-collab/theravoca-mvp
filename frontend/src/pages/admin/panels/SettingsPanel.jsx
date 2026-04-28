@@ -13,6 +13,11 @@ export default function SettingsPanel({ client }) {
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // LLM web-research enrichment toggle + stats.
+  const [reEnabled, setReEnabled] = useState(false);
+  const [reStats, setReStats] = useState(null);
+  const [reSaving, setReSaving] = useState(false);
+
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -29,11 +34,39 @@ export default function SettingsPanel({ client }) {
             "Failed to load rate-limit settings",
         );
       }
+      try {
+        const r2 = await client.get("/admin/research-enrichment");
+        if (!alive) return;
+        setReEnabled(!!r2.data.enabled);
+        setReStats({
+          fresh: r2.data.therapists_with_fresh_research,
+          enrichedRequests: r2.data.enriched_requests,
+        });
+      } catch (e) {
+        // Soft fail — toggle simply hidden if the endpoint isn't reachable.
+      }
     })();
     return () => {
       alive = false;
     };
   }, [client]);
+
+  const toggleResearch = async (next) => {
+    setReSaving(true);
+    try {
+      const r = await client.put("/admin/research-enrichment", { enabled: next });
+      setReEnabled(!!r.data.enabled);
+      toast.success(
+        r.data.enabled
+          ? "LLM web-research enrichment enabled"
+          : "LLM web-research enrichment disabled",
+      );
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message || "Save failed");
+    } finally {
+      setReSaving(false);
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -145,6 +178,52 @@ export default function SettingsPanel({ client }) {
             </button>
           </div>
         )}
+      </div>
+
+      {/* LLM web-research enrichment */}
+      <div
+        className="bg-white border border-[#E8E5DF] rounded-2xl p-6"
+        data-testid="research-enrichment-card"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="font-serif-display text-2xl text-[#2D4A3E]">
+              LLM web-research enrichment
+            </h3>
+            <p className="text-sm text-[#6D6A65] mt-2 max-w-2xl leading-relaxed">
+              Pulls each therapist's public website + bio through Claude to
+              grade <strong>evidence depth</strong> (0-10), <strong>approach
+              alignment</strong> (0-5), and <strong>apply-text fit</strong>{" "}
+              (0-5) per patient request — adds up to <strong>+20 bonus
+              points</strong> on top of the standard 100-point match. Each
+              score comes with a one-sentence rationale citing the evidence.
+            </p>
+            {reStats ? (
+              <p className="text-xs text-[#6D6A65] mt-3">
+                <strong>{reStats.fresh}</strong> therapists have fresh research
+                cached (≤30 days) ·{" "}
+                <strong>{reStats.enrichedRequests}</strong> requests enriched
+                so far.
+              </p>
+            ) : null}
+          </div>
+          <label
+            className="inline-flex items-center gap-2 cursor-pointer select-none"
+            data-testid="research-enrichment-toggle-label"
+          >
+            <input
+              type="checkbox"
+              checked={reEnabled}
+              disabled={reSaving}
+              onChange={(e) => toggleResearch(e.target.checked)}
+              className="w-5 h-5 accent-[#2D4A3E]"
+              data-testid="research-enrichment-toggle"
+            />
+            <span className="text-sm text-[#2B2A29] font-medium">
+              {reEnabled ? "Enabled" : "Disabled"}
+            </span>
+          </label>
+        </div>
       </div>
     </div>
   );
