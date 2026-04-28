@@ -52,7 +52,7 @@ export default function SetPasswordPrompt({ onDone }) {
       className="mt-6 bg-[#F2F4F0] border border-[#D9DDD2] rounded-2xl p-5"
       data-testid="set-password-prompt"
     >
-      <div className="flex items-start justify-between gap-3 flex-wrap">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-start sm:justify-between gap-3">
         <div className="flex items-start gap-3 flex-1 min-w-0">
           <KeyRound size={18} className="text-[#2D4A3E] mt-1 shrink-0" />
           <div className="min-w-0">
@@ -66,7 +66,7 @@ export default function SetPasswordPrompt({ onDone }) {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1 shrink-0 self-end sm:self-start">
           {!open && (
             <button
               type="button"

@@ -2552,6 +2552,14 @@ function AdminTabsBar({
       count: allTherapists,
     },
     {
+      id: "master_query",
+      label: "Master Query",
+      icon: <Sparkles size={14} />,
+    },
+  ];
+
+  const SECONDARY = [
+    {
       id: "patients",
       label: "Patients (by email)",
       icon: <Users size={14} />,
@@ -2566,14 +2574,6 @@ function AdminTabsBar({
       highlight: (completion?.incomplete || 0) > 0,
       onClick: onLoadCompletion,
     },
-    {
-      id: "master_query",
-      label: "Master Query",
-      icon: <Sparkles size={14} />,
-    },
-  ];
-
-  const SECONDARY = [
     {
       id: "invited_therapists",
       label: "Invited therapists",

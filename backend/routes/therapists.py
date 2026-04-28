@@ -79,6 +79,24 @@ async def therapist_signup(payload: TherapistSignup):
         "New therapist signup: %s (%s) with %d geocoded offices, recruit_code=%s",
         payload.email, tid, len(office_geos), recruit_code or "—",
     )
+    # Kick off deep web-research enrichment in the background so by the
+    # time admin reviews the application, we already have evidence-graded
+    # specialty themes + public footprint cached. Best-effort; failures
+    # are logged in research_enrichment but never block signup.
+    try:
+        from research_enrichment import get_or_build_research
+
+        async def _bg_deep_research():
+            try:
+                t = await db.therapists.find_one({"id": tid}, {"_id": 0})
+                if t:
+                    await get_or_build_research(t, force=True, deep=True)
+            except Exception as e:
+                logger.warning("Auto deep-research for new signup failed: %s", e)
+
+        asyncio.create_task(_bg_deep_research())
+    except ImportError:
+        pass
     return {"id": tid, "status": "pending_approval"}
 
 

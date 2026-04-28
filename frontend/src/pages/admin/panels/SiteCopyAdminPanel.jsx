@@ -112,6 +112,73 @@ const SEED_KEYS = [
       "Let therapists come to you. We do the logistical work so you can focus on healing.",
     previewPath: "/",
   },
+  // ─── Button labels (CTA copy) ──────────────────────────────────────
+  {
+    key: "btn.therapist.cta.headline",
+    label: "Button — Therapist hero CTA headline",
+    fallback: "Get more referrals",
+    previewPath: "/therapists/join",
+  },
+  {
+    key: "btn.therapist.cta.subline",
+    label: "Button — Therapist hero CTA subline",
+    fallback: "30-day free trial · Cancel anytime",
+    previewPath: "/therapists/join",
+  },
+  {
+    key: "btn.therapist.signup_cta",
+    label: "Button — Therapist signup primary",
+    fallback: "Start matching with patients",
+    previewPath: "/therapists/join",
+  },
+  {
+    key: "btn.intake.start",
+    label: "Button — Patient intake primary",
+    fallback: "Get matched — free",
+    previewPath: "/get-matched",
+  },
+  {
+    key: "btn.intake.next",
+    label: "Button — Intake form 'Next' label",
+    fallback: "Next",
+    previewPath: "/get-matched",
+  },
+  {
+    key: "btn.intake.back",
+    label: "Button — Intake form 'Back' label",
+    fallback: "Back",
+    previewPath: "/get-matched",
+  },
+  {
+    key: "btn.intake.submit",
+    label: "Button — Intake form final submit",
+    fallback: "Send my referral request",
+    previewPath: "/get-matched",
+  },
+  {
+    key: "btn.signin.send_code",
+    label: "Button — 'Email me a sign-in code'",
+    fallback: "Email me a sign-in code",
+    previewPath: "/sign-in",
+  },
+  {
+    key: "btn.signin.verify",
+    label: "Button — 'Verify and sign in'",
+    fallback: "Verify and sign in",
+    previewPath: "/sign-in",
+  },
+  {
+    key: "btn.therapist.add_payment",
+    label: "Button — Therapist add payment method",
+    fallback: "Add payment method & start free trial",
+    previewPath: "/therapists/join",
+  },
+  {
+    key: "btn.therapist.skip_payment",
+    label: "Button — Therapist skip payment",
+    fallback: "I'll do this later",
+    previewPath: "/therapists/join",
+  },
 ];
 
 export default function SiteCopyAdminPanel({ client }) {
