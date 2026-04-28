@@ -767,13 +767,105 @@ mobile when stepping through the intake form.
   79.9px from viewport top after a `next-btn` click on a 390×844
   viewport.
 
-## Backlog (post iter-57)
+## Backlog (post iter-58)
 ### P1
 - Replace Resend test mode with verified domain (BLOCKED on user verifying domain on Resend dashboard).
 - Multi-state rollout (Idaho → WA, OR, MT, UT, WY, NV).
 ### P2
 - Live DOPL JSON API integration (when Idaho DOPL publishes).
-- Continue admin panel refactor: extract `PendingSignupRow` + `MatchGapPanel` + `RequestFullBrief` + `MatchedProviderCard` from AdminDashboard.jsx (still 4425 lines).
+- Auto-decline endpoint chunked send (100ms between Resend calls) when >100 pending applicants — currently fires unbounded asyncio tasks.
+- Therapist signup Stripe back-button live retest (code-confirmed, not E2E tested due to Stripe key constraint in test env).
+
+## Iteration 58 — 11-task batch (Apr 28, 2026)
+
+User asked for 11 changes; all shipped + verified green by testing agent (iteration_20.json).
+
+### Auto-decline duplicate-roster applicants (Task 1)
+- New `POST /api/admin/therapists/auto-decline-duplicates` endpoint:
+  computes `_attach_value_tags` then bulk-rejects every pending row
+  with `value_summary.is_duplicate_only=true`, fires polite rejection
+  emails. Supports `{dry_run: true}` for preview.
+- New banner at top of admin Pending therapists tab:
+  `auto-decline-duplicates-banner` with `auto-decline-duplicates-btn`.
+  Confirmation dialog before action.
+
+### Continued refactor (Task 2)
+- Extracted `RequestFullBrief`, `MatchGapPanel`, `MatchedProviderCard`,
+  `PendingSignupRow` from AdminDashboard.jsx into
+  `src/pages/admin/panels/`. AdminDashboard.jsx **4435 → 3966 lines
+  (-469 lines / -10.5%)**. Cumulative reduction since iter-55:
+  **5555 → 3966 (-1589 lines / -28.6%)**.
+
+### Discoverable password sign-in (Task 3)
+- Replaced auto-detect-only flow with a 2-tab method toggle on
+  `/sign-in`: `signin-method-password` and `signin-method-code` pills
+  let users explicitly pick how to sign in. Default still tracks
+  `hasPassword` auto-detect, but a user without a password can now
+  manually pick "Password" to see a clear cross-link explaining how
+  to set one up.
+
+### Testimonials (Tasks 4 + 5)
+- Carousel always horizontally scrolls (removed `sm:grid` breakpoint);
+  added `tv-no-scrollbar` utility + `snap-x` mandatory snap.
+- Moved `<VideoTestimonials />` from after IntakeForm to BEFORE the
+  "Different" section (right after "How it works") to mirror live
+  theravoca.com order.
+- Added `nav-testimonials` (desktop) and `mobile-nav-testimonials`
+  links pointing to `#testimonials`.
+
+### Patient results CTA cleanup (Task 6)
+- Removed final `Submit another request` block from
+  `PatientResults.jsx` (it had survived iter-56's removal because
+  PatientResults.jsx and PatientPortal.jsx had separate CTAs). The
+  rate limit + portal CTA now handle the same role.
+
+### Mobile audit (Task 7)
+- Testing agent at 390×844 confirmed Landing/SignIn/TherapistJoin/
+  Admin all have `document.scrollWidth==clientWidth` (no horizontal
+  overflow). Burger opens drawer with `mobile-nav-testimonials`. The
+  `signin-method-password` button measures 137×36 — tap-friendly.
+
+### Stripe back-button preservation (Task 8)
+- After signup submit, `tv_signup_pending` is written to sessionStorage
+  with `{therapist_id, email, data: {name, email}}`. On every mount,
+  if the key is present and there's no `?subscribed=` URL param, the
+  user lands back on the post-submit "Add payment method" screen
+  instead of an empty form. Cleared on successful subscription sync.
+
+### Logo navigation (Task 9)
+- Already wired via `useScrollTopNavigate("/")`. Confirmed: clicking
+  logo on `/therapists/join` routes to `/`; clicking logo on `/`
+  itself smooth-scrolls to top.
+
+### DualCTA blocks (Task 10)
+- New `/app/frontend/src/components/DualCTA.jsx` — two-card row
+  ("Looking for a therapist?" → `/#start` + "Therapists — join our
+  network" → `/therapists/join`). Inserted at 3 spots on Landing.jsx:
+  after VideoTestimonials, after IntakeForm, after FAQ. Tones:
+  `light` (cream `#F4EFE7`) and `warm` (off-white `#FDFBF7`) so the
+  cards layer correctly against neighbouring sections.
+
+### Site copy editor (Task 11)
+- New backend collection `site_copy` + `routes/site_copy.py` with:
+  - `GET /api/site-copy` — public, returns `{key: value}` map.
+  - `GET /api/admin/site-copy` — admin, returns row list.
+  - `PUT /api/admin/site-copy` — upserts a key.
+  - `DELETE /api/admin/site-copy/{key}` — resets to default.
+- New `useSiteCopy` hook (60s TTL in-memory cache) returns a `t(key,
+  fallback)` resolver. Wired into Landing.jsx for `landing.hero.eyebrow`
+  + `landing.how.heading` + `landing.how.subhead`.
+- New admin tab "Site copy" (`site_copy` under More) with
+  `SiteCopyAdminPanel` — 13 seed rows pre-populated for hero/how/
+  different/faq/therapist hero/footer; supports save/reset and adding
+  custom keys for future-engineered text.
+
+### Tests / verification
+- Backend: 8 new tests in `tests/test_iteration58_site_copy.py`
+  (public read, admin CRUD, auto-decline dry-run). 26/26 regression.
+  **34/34 total green**.
+- Frontend: testing agent confirmed all 11 items + mobile audit.
+  No issues raised.
+
 
 ## Iteration 57 — 8-task batch (Apr 28, 2026)
 
