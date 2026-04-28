@@ -35,6 +35,10 @@ export default function SignIn() {
   const [submitting, setSubmitting] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [hasPassword, setHasPassword] = useState(null); // null = unknown, true/false
+  const [method, setMethod] = useState(null); // null = auto, 'password' | 'code'
+  // Effective sign-in method: if user picked one, honour it; otherwise
+  // default to password when we know the account has one, code otherwise.
+  const effectiveMethod = method || (hasPassword ? "password" : "code");
   const nextPath = params.get("next");
   const setupFlag = params.get("setup") === "1";
 
@@ -193,7 +197,40 @@ export default function SignIn() {
                 {ROLE_INFO[role].blurb}
               </p>
 
-              <label className="mt-7 block text-xs uppercase tracking-wider text-[#6D6A65] mb-2">
+              {/* Sign-in method toggle — patients & therapists with an
+                  existing password can pick "Password"; everyone else
+                  uses the one-time "Email code" path. */}
+              <div
+                className="mt-6 grid grid-cols-2 bg-[#FDFBF7] border border-[#E8E5DF] rounded-full p-1 text-sm"
+                data-testid="signin-method-toggle"
+              >
+                <button
+                  type="button"
+                  onClick={() => setMethod("password")}
+                  className={`rounded-full py-2 transition flex items-center justify-center gap-1.5 ${
+                    effectiveMethod === "password"
+                      ? "bg-[#2D4A3E] text-white font-semibold"
+                      : "text-[#6D6A65] hover:text-[#2D4A3E]"
+                  }`}
+                  data-testid="signin-method-password"
+                >
+                  <Lock size={13} /> Password
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMethod("code")}
+                  className={`rounded-full py-2 transition flex items-center justify-center gap-1.5 ${
+                    effectiveMethod === "code"
+                      ? "bg-[#2D4A3E] text-white font-semibold"
+                      : "text-[#6D6A65] hover:text-[#2D4A3E]"
+                  }`}
+                  data-testid="signin-method-code"
+                >
+                  <Mail size={13} /> Email code
+                </button>
+              </div>
+
+              <label className="mt-6 block text-xs uppercase tracking-wider text-[#6D6A65] mb-2">
                 Email address
               </label>
               <div className="relative">
@@ -209,7 +246,7 @@ export default function SignIn() {
                   className="pl-10 bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      if (hasPassword) loginWithPassword();
+                      if (effectiveMethod === "password") loginWithPassword();
                       else sendCode();
                     }
                   }}
@@ -217,21 +254,31 @@ export default function SignIn() {
                 />
               </div>
 
-              {/* Password input — shown when the email has a password set */}
-              {hasPassword && (
+              {/* Password input — shown when user picked Password method */}
+              {effectiveMethod === "password" && (
                 <>
-                  <div
-                    className="mt-5 flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-[#C87965]"
-                    data-testid="signin-password-section"
-                  >
-                    <span className="h-px flex-1 bg-[#E8E5DF]" />
-                    <span>Sign in with password</span>
-                    <span className="h-px flex-1 bg-[#E8E5DF]" />
-                  </div>
-                  <p className="text-xs text-[#6D6A65] text-center mt-2">
-                    Welcome back — we found an account for{" "}
-                    <span className="text-[#2D4A3E] font-medium">{email}</span>.
-                  </p>
+                  {hasPassword === false && email.includes("@") && (
+                    <p
+                      className="text-xs text-[#C87965] text-center mt-3"
+                      data-testid="signin-no-password-warning"
+                    >
+                      No password is set for this email yet — switch to{" "}
+                      <button
+                        type="button"
+                        onClick={() => setMethod("code")}
+                        className="underline hover:text-[#2D4A3E]"
+                      >
+                        Email code
+                      </button>{" "}
+                      to sign in, then set a password after.
+                    </p>
+                  )}
+                  {hasPassword && (
+                    <p className="text-xs text-[#6D6A65] text-center mt-3">
+                      Welcome back — we found an account for{" "}
+                      <span className="text-[#2D4A3E] font-medium">{email}</span>.
+                    </p>
+                  )}
                   <label className="mt-4 block text-xs uppercase tracking-wider text-[#6D6A65] mb-2">
                     Password
                   </label>
@@ -280,9 +327,25 @@ export default function SignIn() {
                 </>
               )}
 
-              {/* Magic-code primary path — when no password is set */}
-              {!hasPassword && (
+              {/* Magic-code primary path — when user picked Email code */}
+              {effectiveMethod === "code" && (
                 <>
+                  {hasPassword && (
+                    <p
+                      className="text-xs text-[#6D6A65] text-center mt-3"
+                      data-testid="signin-has-password-hint"
+                    >
+                      This email has a password —{" "}
+                      <button
+                        type="button"
+                        onClick={() => setMethod("password")}
+                        className="underline hover:text-[#2D4A3E]"
+                      >
+                        sign in with password
+                      </button>{" "}
+                      instead, or get a one-time code below.
+                    </p>
+                  )}
                   {hasPassword === false && email.includes("@") && (
                     <p
                       className="text-xs text-[#6D6A65] text-center mt-3"

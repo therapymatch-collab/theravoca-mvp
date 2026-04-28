@@ -408,6 +408,7 @@ export default function TherapistSignup() {
             setTrialActivated(true);
             setSubmitted(true);
             setTherapistId(subscribedId);
+            sessionStorage.removeItem("tv_signup_pending");
             toast.success("Free trial started — you're all set!");
           } else {
             toast.error("Payment session not complete; please try again.");
@@ -416,6 +417,25 @@ export default function TherapistSignup() {
           window.history.replaceState({}, "", "/therapists/join");
         })
         .catch(() => toast.error("Could not finalize subscription"));
+      return;
+    }
+    // Restore the post-submission "Add payment" screen if the therapist
+    // submitted their profile, hit "Add payment", then hit Back from
+    // Stripe Checkout. Without this they'd land on a blank form.
+    try {
+      const raw = sessionStorage.getItem("tv_signup_pending");
+      if (raw) {
+        const pending = JSON.parse(raw);
+        if (pending?.therapist_id && pending?.email) {
+          setTherapistId(pending.therapist_id);
+          setSubmitted(true);
+          if (pending.data) {
+            setData((d) => ({ ...d, ...pending.data }));
+          }
+        }
+      }
+    } catch (_) {
+      /* ignore parse errors */
     }
   }, []);
 
@@ -432,6 +452,21 @@ export default function TherapistSignup() {
       const res = await api.post("/therapists/signup", payload);
       setTherapistId(res.data?.id);
       setSubmitted(true);
+      // Persist the post-submit context so the back-from-Stripe round
+      // trip lands on the same "Add payment method" screen rather than
+      // wiping every field they just typed.
+      try {
+        sessionStorage.setItem(
+          "tv_signup_pending",
+          JSON.stringify({
+            therapist_id: res.data?.id,
+            email: data.email,
+            data: { name: data.name, email: data.email },
+          }),
+        );
+      } catch (_) {
+        /* sessionStorage may be disabled */
+      }
       toast.success("Profile received — please add a payment method to start your free trial.");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {

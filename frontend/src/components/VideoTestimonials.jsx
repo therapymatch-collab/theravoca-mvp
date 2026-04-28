@@ -79,13 +79,13 @@ export default function VideoTestimonials() {
           Patients who tried TheraVoca speak for themselves.
         </p>
         <div
-          className="mt-12 -mx-5 sm:mx-0 flex sm:grid sm:grid-cols-2 lg:grid-cols-3 gap-5 overflow-x-auto sm:overflow-visible snap-x snap-mandatory pb-5 px-5 sm:px-0"
+          className="mt-12 -mx-5 sm:-mx-8 lg:-mx-0 flex gap-5 overflow-x-auto snap-x snap-mandatory pb-5 px-5 sm:px-8 lg:px-0 tv-no-scrollbar"
           data-testid="testimonials-track"
         >
           {TESTIMONIALS.map((t) => (
             <article
               key={t.id}
-              className="shrink-0 w-[78%] sm:w-auto snap-center bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden"
+              className="shrink-0 w-[78%] sm:w-[44%] lg:w-[30%] snap-center bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden"
               data-testid={`testimonial-card-${t.id}`}
             >
               <div className="aspect-[9/16] bg-[#0F1714] relative">

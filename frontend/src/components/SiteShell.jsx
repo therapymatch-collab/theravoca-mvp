@@ -83,6 +83,9 @@ export function Header({ minimal = false }) {
               <a href="/#how" className="hover:text-[#2D4A3E] transition" data-testid="nav-how">
                 How it works
               </a>
+              <a href="/#testimonials" className="hover:text-[#2D4A3E] transition" data-testid="nav-testimonials">
+                Testimonials
+              </a>
               <a href="/#different" className="hover:text-[#2D4A3E] transition" data-testid="nav-diff">
                 Why TheraVoca
               </a>
@@ -185,6 +188,13 @@ export function Header({ minimal = false }) {
               data-testid="mobile-nav-how"
             >
               How it works
+            </a>
+            <a
+              href="/#testimonials"
+              className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition"
+              data-testid="mobile-nav-testimonials"
+            >
+              Testimonials
             </a>
             <a
               href="/#different"

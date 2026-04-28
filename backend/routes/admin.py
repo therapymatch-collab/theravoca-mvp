@@ -673,6 +673,59 @@ async def admin_reject_therapist(therapist_id: str, _: bool = Depends(require_ad
     return {"id": therapist_id, "status": "rejected"}
 
 
+@router.post("/admin/therapists/auto-decline-duplicates")
+async def admin_auto_decline_duplicates(
+    payload: dict | None = None, _: bool = Depends(require_admin),
+):
+    """Bulk-rejects every pending therapist whose value tags only contain
+    "duplicate" axes (i.e. `value_summary.is_duplicate_only == True`) —
+    the admin no longer has to click reject one at a time. Pass
+    `{"dry_run": true}` to preview without sending emails."""
+    import asyncio
+    dry_run = bool((payload or {}).get("dry_run"))
+
+    pending = await db.therapists.find(
+        {"pending_approval": True}, {"_id": 0},
+    ).to_list(500)
+    await _attach_value_tags(pending)
+
+    targets = [t for t in pending if (t.get("value_summary") or {}).get("is_duplicate_only")]
+    rejected_ids: list[str] = []
+    if not dry_run and targets:
+        ids = [t["id"] for t in targets]
+        await db.therapists.update_many(
+            {"id": {"$in": ids}},
+            {
+                "$set": {
+                    "pending_approval": False,
+                    "is_active": False,
+                    "rejected_at": _now_iso(),
+                    "auto_declined_reason": "duplicate_roster",
+                }
+            },
+        )
+        rejected_ids = ids
+        # Fire rejection emails in the background — one at a time so we
+        # don't trip Resend's batch rate limit.
+        for t in targets:
+            asyncio.create_task(send_therapist_rejected(t["email"], t["name"]))
+
+    return {
+        "dry_run": dry_run,
+        "matched": len(targets),
+        "rejected_ids": rejected_ids,
+        "preview": [
+            {
+                "id": t["id"],
+                "name": t.get("name"),
+                "email": t.get("email"),
+                "duplicates": (t.get("value_summary") or {}).get("duplicates", 0),
+            }
+            for t in targets[:20]
+        ],
+    }
+
+
 @router.post("/admin/therapists/{therapist_id}/clear-reapproval")
 async def admin_clear_reapproval(
     therapist_id: str, _: bool = Depends(require_admin),

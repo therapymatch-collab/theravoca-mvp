@@ -124,6 +124,14 @@ body {
     animation-delay: 0.32s;
 }
 
+/* Hide horizontal scrollbar visually while keeping scroll behavior */
+.tv-no-scrollbar {
+    scrollbar-width: none;
+}
+.tv-no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
 @layer base {
     [data-debug-wrapper="true"] {
         display: contents !important;

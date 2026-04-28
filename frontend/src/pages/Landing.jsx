@@ -9,6 +9,8 @@ import {
 } from "@/components/ui/accordion";
 import { Check, X, Sparkles } from "lucide-react";
 import { useEffect } from "react";
+import useSiteCopy from "@/lib/useSiteCopy";
+import DualCTA from "@/components/DualCTA";
 
 const HERO_IMAGE =
   "https://images.unsplash.com/photo-1760702591586-a46969be7de9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzB8MHwxfHNlYXJjaHwzfHxjYWxtJTIwbmF0dXJlJTIwZm9yZXN0JTIwc3Vuc2V0fGVufDB8fHx8MTc3NzIwNjYzM3ww&ixlib=rb-4.1.0&q=85";
@@ -43,6 +45,7 @@ const FAQS = [
 ];
 
 export default function Landing() {
+  const t = useSiteCopy();
   // Cross-page anchor links (`/#start`) need a manual scroll on mount because
   // React Router's hashchange handling doesn't fire when content is rendered
   // post-mount. This makes "Get matched" buttons from any page reliably land
@@ -71,7 +74,7 @@ export default function Landing() {
           <div className="tv-fade-up">
             <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] mb-5">
               <Sparkles size={14} className="inline mr-1.5 -mt-0.5" strokeWidth={1.8} />
-              Pilot live in Idaho
+              {t("landing.hero.eyebrow", "Pilot live in Idaho")}
             </p>
             <h1 className="font-serif-display text-5xl sm:text-6xl lg:text-7xl text-[#2D4A3E] leading-[1.05] tracking-tight">
               Let therapists <em className="not-italic text-[#C87965]">come to you</em>.
@@ -142,10 +145,10 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-5 sm:px-8">
           <div className="max-w-2xl">
             <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] mb-3">
-              How it works
+              {t("landing.how.heading", "How it works")}
             </p>
             <h2 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] leading-tight">
-              Three steps. No forms-overload.
+              {t("landing.how.subhead", "Three steps. No forms-overload.")}
             </h2>
           </div>
           <div className="mt-16 grid md:grid-cols-3 gap-8">
@@ -184,6 +187,10 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      <VideoTestimonials />
+
+      <DualCTA tone="light" id="dual-cta-after-testimonials" />
 
       {/* DIFFERENT */}
       <section
@@ -255,7 +262,7 @@ export default function Landing() {
       {/* INTAKE FORM */}
       <IntakeForm />
 
-      <VideoTestimonials />
+      <DualCTA tone="warm" id="dual-cta-after-intake" />
 
       {/* FAQ */}
       <section id="faq" className="py-20 md:py-28">
@@ -285,6 +292,8 @@ export default function Landing() {
           </Accordion>
         </div>
       </section>
+
+      <DualCTA tone="warm" id="dual-cta-after-faq" />
 
       <Footer />
     </div>

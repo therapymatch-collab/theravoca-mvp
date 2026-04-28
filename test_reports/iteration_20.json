@@ -1,0 +1,41 @@
+{
+  "summary": "Iter-58 review (11 P0 user-requested changes). Backend 8/8 new + 26/26 regression PASSED (34/34). Frontend smoke confirms: nav-testimonials + mobile-nav-testimonials, video-testimonials moved AFTER how-it-works (vtTop=1460 > hiTop=69), testimonials-track horizontally scrolls (overflow-x:auto, scrollWidth=1485px @ mobile), all 3 DualCTA blocks render with patient+therapist sub-buttons, logo-link returns to / and scrolls to top, signin method toggle works (Password ↔ Email code), admin auto-decline-duplicates-banner shows 11 + 11 duplicate-warning badges, site-copy panel mounts with 13 rows + save/reset/custom-key/custom-value/custom-save controls, PatientResults submit-another CTAs removed, mobile audit at 390x844 = no horizontal overflow on Landing/SignIn/TherapistJoin/Admin.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration58_site_copy.py",
+    "/app/test_reports/pytest/iter58_full.xml",
+    "/app/test_reports/pytest/iter58_site_copy.xml"
+  ],
+  "verifications": {
+    "T1_auto_decline_duplicates": "Banner data-testid=auto-decline-duplicates-banner + auto-decline-duplicates-btn render with text '11 pending applicants cover only axes we already have 5+ providers for.' POST /api/admin/therapists/auto-decline-duplicates with {dry_run:true} returns matched=N, rejected_ids=[], preview[] (≤20). Pending count unchanged after dry_run. Backend tests 3/3 PASS.",
+    "T2_panels_extracted": "PendingTherapistsPanel renders 11 duplicate-warning badges. Site copy panel + match-gap (iter-57 verified) render in dialogs. Tab list confirmed: requests, therapists, all_therapists, patients, completion, master_query, more-btn.",
+    "T3_signin_method_toggle": "signin-method-password + signin-method-code pill toggles render at /sign-in?role=patient. Clicking Password reveals password input. Clicking Email code reveals 'Send me a code' button. Both paths user-selectable.",
+    "T4_5_testimonials_position_and_nav": "video-testimonials-section vtTop=1460.125 > how-it-works hiTop=69 → AFTER. Track always overflow-x:auto (no grid breakpoint). Desktop nav-testimonials + mobile-nav-testimonials links present.",
+    "T6_patient_results_cta_removed": "submit-another-request-btn AND submit-another-request-section both = null on /portal/patient/results/<token>.",
+    "T7_mobile_audit_390x844": "Landing/SignIn/TherapistJoin/Admin all doc.scrollWidth=390==clientWidth → no horizontal overflow. Burger opens drawer with mobile-nav-testimonials. signin-method-password is 137x36 (tap-friendly).",
+    "T8_stripe_back_preservation": "Code-confirmed in TherapistSignup.jsx (sessionStorage tv_signup_pending). Live retest deferred — no fresh email available without Stripe key — non-blocking.",
+    "T9_logo_navigation": "On / scroll=1500 → click logo-link → scrollY=0. On /therapists/join → click logo-link → url=/. Both behaviours correct.",
+    "T10_dual_cta_blocks": "All 3 testids present: dual-cta-after-testimonials, dual-cta-after-intake, dual-cta-after-faq. Each has dual-cta-patient-btn + dual-cta-therapist-btn.",
+    "T11_site_copy_editor": "GET /api/site-copy = public ✓; admin GET/PUT/DELETE round-trip = ✓ (8 backend tests). Panel mounts at More → Site copy with 13 rows, copy-save-landing.hero.eyebrow + copy-reset-landing.hero.eyebrow + copy-custom-key + copy-custom-value + copy-custom-save-btn all present. Existing override 'Live in Idaho — and growing' rendered.",
+    "T12_regression": "test_iteration57_match_gap.py 4/4 + test_iteration55_rate_limit.py 11/11 + test_iteration3_rate_limit.py 11/11 = 26/26 PASSED."
+  },
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AdminDashboard.jsx still ~3966 lines after iter-58 refactor. Next pass could extract SiteCopyAdminPanel rendering wrapper if more admin tabs are added. Low priority.",
+    "Site copy 60s in-memory cache (useSiteCopy.js) means edits take up to 60s to surface — UX-acceptable per spec but document on the admin panel.",
+    "Auto-decline endpoint fires asyncio.create_task per row for emails — for >100 pending applicants this could hit Resend rate limits; consider chunked sleep (e.g. 100ms between sends). Currently 11 rows so non-blocking."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration58_site_copy.py (NEW — 8 tests)",
+    "/app/test_reports/pytest/iter58_full.xml (NEW)",
+    "/app/test_reports/pytest/iter58_site_copy.xml (NEW)"
+  ],
+  "success_rate": {"backend": "100% (34/34)", "frontend": "100%"},
+  "test_credentials": "Admin master pwd: admin123! via X-Admin-Password header (NOT cookie-based — backend admin_login does not set httpOnly cookie; auth is stateless via header or Bearer JWT for team accounts).",
+  "seed_data_creation": "test_iteration58_site_copy.py generates ephemeral keys 'test.iter58.<uuid8>' and DELETEs them at end of round-trip test. Auto-decline test runs ONLY in dry_run mode — no real reject performed, leaving the 11 seeded pending duplicates intact for downstream UI tests.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-58 fully green. New backend test file at /app/backend/tests/test_iteration58_site_copy.py covers /api/site-copy public + /api/admin/site-copy admin CRUD + /api/admin/therapists/auto-decline-duplicates dry_run. Run with cwd=/app/backend and REACT_APP_BACKEND_URL env set. Admin auth uses X-Admin-Password header (not cookie). The 11 pending duplicate-roster therapists are intentionally preserved by tests — do not run a non-dry_run auto-decline in CI or future iterations will lose the seed. Stripe back-button restore (T8) was code-confirmed only; main agent can self-test by submitting fresh therapist signup and reloading.",
+  "rca of the issue": "N/A — review iteration, no bugs found."
+}

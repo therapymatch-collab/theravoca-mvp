@@ -42,9 +42,14 @@ import TeamPanel from "@/pages/admin/panels/TeamPanel";
 import MasterQueryPanel from "@/pages/admin/panels/MasterQueryPanel";
 import BlogAdminPanel from "@/pages/admin/panels/BlogAdminPanel";
 import SettingsPanel from "@/pages/admin/panels/SettingsPanel";
+import SiteCopyAdminPanel from "@/pages/admin/panels/SiteCopyAdminPanel";
 import RequestsPanel from "@/pages/admin/panels/RequestsPanel";
 import PendingTherapistsPanel from "@/pages/admin/panels/PendingTherapistsPanel";
 import AllProvidersPanel from "@/pages/admin/panels/AllProvidersPanel";
+import RequestFullBrief from "@/pages/admin/panels/RequestFullBrief";
+import MatchGapPanel from "@/pages/admin/panels/MatchGapPanel";
+import MatchedProviderCard from "@/pages/admin/panels/MatchedProviderCard";
+import PendingSignupRow from "@/pages/admin/panels/PendingSignupRow";
 
 // ─── Editor option lists (mirrors TherapistSignup) ───
 const ISSUES_LIST = [
@@ -866,12 +871,14 @@ export default function AdminDashboard() {
 
               {tab === "therapists" && (
                 <PendingTherapistsPanel
+                  client={client}
                   pendingTherapists={pendingTherapists}
                   filteredPendingTherapists={filteredPendingTherapists}
                   PendingSignupRow={PendingSignupRow}
                   onApprove={approveTherapist}
                   onReject={rejectTherapist}
                   onEdit={(t) => setEditTherapist({ ...t })}
+                  onReload={refresh}
                 />
               )}
 
@@ -1351,6 +1358,8 @@ export default function AdminDashboard() {
               {tab === "master_query" && <MasterQueryPanel client={client} />}
 
               {tab === "blog" && <BlogAdminPanel client={client} />}
+
+              {tab === "site_copy" && <SiteCopyAdminPanel client={client} />}
 
               {tab === "settings" && <SettingsPanel client={client} />}
 
@@ -2214,208 +2223,6 @@ export default function AdminDashboard() {
   );
 }
 
-function RequestFullBrief({ request }) {
-  if (!request) return null;
-  const fields = [
-    { label: "Patient email", value: request.email },
-    { label: "Phone", value: request.phone || "—" },
-    { label: "Location", value: `${request.location_city || ""} ${request.location_state || ""} ${request.location_zip || ""}`.trim() || "—" },
-    { label: "Client age / type", value: `${request.client_age || "—"} · ${request.client_type || "—"}` },
-    { label: "Age group", value: request.age_group || "—" },
-    { label: "Session format", value: request.session_format || request.modality_preference || "—" },
-    { label: "Urgency", value: request.urgency || "—" },
-    { label: "Prior therapy", value: request.prior_therapy || "—" },
-    { label: "Experience pref", value: Array.isArray(request.experience_preference) ? request.experience_preference.join(", ") : (request.experience_preference || "—") },
-    { label: "Gender pref", value: request.gender_preference || "no_pref" },
-    { label: "Style pref", value: Array.isArray(request.style_preference) ? request.style_preference.join(", ") : (request.style_preference || "—") },
-    { label: "Modality pref", value: Array.isArray(request.modality_preferences) ? request.modality_preferences.join(", ") : (request.modality_preferences || "—") },
-    { label: "Payment", value: request.payment_type === "cash" ? `Cash $${request.budget || "?"}` : (request.insurance_name || "Insurance") },
-    { label: "Threshold", value: (() => {
-      const t = request.threshold;
-      if (t == null) return "—";
-      const num = Number(t);
-      // Backwards-compat: thresholds stored as 0–1 fraction OR 0–100 integer.
-      const pct = num <= 1 ? num * 100 : num;
-      return `${Math.round(pct)}%`;
-    })() },
-    { label: "Status", value: request.status || "—" },
-    { label: "Referral source", value: request.referral_source || "—" },
-    { label: "Referred by code", value: request.referred_by_patient_code || "—" },
-    { label: "SMS opt-in", value: request.sms_opt_in ? "Yes" : "No" },
-    { label: "Created", value: request.created_at ? new Date(request.created_at).toLocaleString() : "—" },
-    { label: "Matched", value: request.matched_at ? new Date(request.matched_at).toLocaleString() : "—" },
-    { label: "Results sent", value: request.results_sent_at ? new Date(request.results_sent_at).toLocaleString() : "—" },
-  ];
-  const issues = Array.isArray(request.presenting_issues)
-    ? request.presenting_issues.join(", ")
-    : (request.presenting_issues || "—");
-  const availability = Array.isArray(request.availability_windows)
-    ? request.availability_windows.join(", ")
-    : (request.availability_windows || "—");
-  return (
-    <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl p-5 space-y-4" data-testid="request-full-brief">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-sm">
-        {fields.map((f) => (
-          <div key={f.label}>
-            <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">{f.label}</div>
-            <div className="text-[#2B2A29] break-words">{f.value || "—"}</div>
-          </div>
-        ))}
-      </div>
-      <div className="border-t border-[#E8E5DF] pt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Presenting issues</div>
-          <div className="text-[#2B2A29] mt-0.5 leading-relaxed">{issues}</div>
-        </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Availability windows</div>
-          <div className="text-[#2B2A29] mt-0.5">{availability}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MatchGapPanel({ gap }) {
-  if (!gap) return null;
-  const sevColor = (s) =>
-    s === "critical"
-      ? "bg-[#FDF1EF] border-[#F2C9C0] text-[#D45D5D]"
-      : s === "warning"
-      ? "bg-[#FBF3E8] border-[#EAD9B6] text-[#9A6E1A]"
-      : "bg-[#F2F7F1] border-[#D2E2D0] text-[#3F6F4A]";
-  return (
-    <div
-      className="bg-white border border-[#E8E5DF] rounded-2xl p-5"
-      data-testid="match-gap-panel"
-    >
-      <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-full bg-[#FBF3E8] text-[#C87965] flex items-center justify-center shrink-0">
-          <AlertTriangle size={16} />
-        </div>
-        <div className="flex-1">
-          <h4 className="font-semibold text-[#2B2A29]">
-            Why we couldn&apos;t fill 30 matches
-          </h4>
-          <p className="text-sm text-[#6D6A65] mt-1 leading-relaxed">
-            {gap.summary}
-          </p>
-        </div>
-      </div>
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {(gap.axes || []).map((a, i) => (
-          <div
-            key={`${a.label}-${i}`}
-            className={`border rounded-xl px-3 py-2 ${sevColor(a.severity)}`}
-            data-testid={`match-gap-axis-${i}`}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-medium">{a.label}</span>
-              <span className="text-xs font-mono">
-                {a.count} <span className="opacity-60">/ {a.target}</span>
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function MatchedProviderCard({ t }) {
-  const [open, setOpen] = useState(false);
-  const breakdown = t.match_breakdown || {};
-  const breakdownEntries = Object.entries(breakdown).filter(([, v]) => v > 0);
-  return (
-    <div
-      className="border border-[#E8E5DF] rounded-xl bg-white overflow-hidden"
-      data-testid={`matched-provider-${t.id}`}
-    >
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full text-left px-4 py-3 flex items-center justify-between gap-3 hover:bg-[#FDFBF7] transition"
-      >
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="font-medium text-[#2B2A29] truncate">{t.name}</span>
-            <span className="text-xs text-[#6D6A65]">{t.credential_type || "—"}</span>
-            {t.review_count >= 10 && t.review_avg >= 4.0 && (
-              <span className="text-[10px] text-[#C87965]">
-                ★{t.review_avg.toFixed(1)} · {t.review_count}
-              </span>
-            )}
-          </div>
-          <div className="text-xs text-[#6D6A65] mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
-            <span>{t.email}</span>
-            {t.distance_miles != null && (
-              <span className="text-[#C87965]">{t.distance_miles} mi</span>
-            )}
-            {(t.office_locations || []).length > 0 && (
-              <span>{t.office_locations.join(", ")}</span>
-            )}
-          </div>
-        </div>
-        <span className="font-mono text-xs bg-[#2D4A3E] text-white px-2.5 py-0.5 rounded shrink-0">
-          {Math.round(t.match_score)}%
-        </span>
-      </button>
-      {open && (
-        <div className="border-t border-[#E8E5DF] bg-[#FDFBF7] px-4 py-3 text-xs space-y-3">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1.5">
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Years exp</div>
-              <div className="text-[#2B2A29]">{t.years_experience ?? "—"}</div>
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Cash rate</div>
-              <div className="text-[#2B2A29]">${t.cash_rate ?? "—"}</div>
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Sliding scale</div>
-              <div className="text-[#2B2A29]">{t.sliding_scale ? "Yes" : "No"}</div>
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Telehealth</div>
-              <div className="text-[#2B2A29]">{t.telehealth ? "Yes" : "No"}</div>
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">In-person</div>
-              <div className="text-[#2B2A29]">{t.offers_in_person ? "Yes" : "No"}</div>
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Plans</div>
-              <div className="text-[#2B2A29]">{(t.insurance_accepted || []).length || 0}</div>
-            </div>
-          </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Specialties</div>
-            <div className="text-[#2B2A29]">{(t.primary_specialties || []).join(" · ") || "—"}</div>
-          </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Modalities</div>
-            <div className="text-[#2B2A29]">{(t.modalities || []).join(" · ") || "—"}</div>
-          </div>
-          {breakdownEntries.length > 0 && (
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-1">
-                Score breakdown ({Math.round(breakdownEntries.reduce((a, [, v]) => a + v, 0))} pts)
-              </div>
-              <div className="grid grid-cols-2 gap-1">
-                {breakdownEntries.map(([axis, pts]) => (
-                  <div key={axis} className="flex items-center justify-between bg-white border border-[#E8E5DF] rounded px-2 py-1">
-                    <span className="text-[#6D6A65]">{axis.replace(/_/g, " ")}</span>
-                    <span className="font-mono text-[#2D4A3E]">+{pts}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function SectionHeader({ color, label }) {
   return (
@@ -2734,6 +2541,11 @@ function AdminTabsBar({
     {
       id: "blog",
       label: "Blog",
+      icon: <Pencil size={14} />,
+    },
+    {
+      id: "site_copy",
+      label: "Site copy",
       icon: <Pencil size={14} />,
     },
     {
@@ -4154,271 +3966,5 @@ function FeedbackRow({ r, idx }) {
 }
 
 
-function PendingSignupRow({ t, onApprove, onReject, onEdit }) {
-  const [expanded, setExpanded] = useState(false);
-  const specs = (t.specialties || []).map((s) =>
-    typeof s === "string" ? s : `${s.name || s.value || ""}${s.weight ? ` (w${s.weight})` : ""}`,
-  );
-  const generalTreats = t.general_treats || [];
-  const offices = t.office_addresses?.length ? t.office_addresses : t.office_locations || [];
-  return (
-    <div className="p-5 hover:bg-[#FDFBF7]" data-testid={`pending-row-${t.id}`}>
-      <div className="flex items-start gap-5">
-        {/* License picture preview */}
-        <div className="shrink-0">
-          {t.license_picture ? (
-            <a href={t.license_picture} target="_blank" rel="noopener noreferrer">
-              <img
-                src={t.license_picture}
-                alt="License"
-                className="w-20 h-24 object-cover rounded-lg border border-[#E8E5DF] hover:border-[#2D4A3E] transition"
-                data-testid={`license-thumb-${t.id}`}
-              />
-            </a>
-          ) : (
-            <div className="w-20 h-24 bg-[#FDFBF7] border border-dashed border-[#E8E5DF] rounded-lg flex items-center justify-center text-[10px] text-[#C8C4BB] text-center p-1">
-              No license
-              <br />
-              uploaded
-            </div>
-          )}
-        </div>
-
-        {/* Core identity + quick stats */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h4 className="font-medium text-[#2B2A29] text-base">{t.name}</h4>
-            {t.credential_type && (
-              <span className="text-xs text-[#2D4A3E] bg-[#F2F4F0] border border-[#D9DDD2] rounded-full px-2 py-0.5">
-                {t.credential_type}
-              </span>
-            )}
-            <span className="text-xs text-[#6D6A65] break-all">{t.email}</span>
-            {t.phone && (
-              <span className="text-xs text-[#6D6A65]">· {t.phone}</span>
-            )}
-          </div>
-          <div className="text-xs text-[#6D6A65] mt-1 flex flex-wrap gap-x-3 gap-y-1">
-            <span>{t.years_experience ?? "?"} yrs exp</span>
-            <span>
-              Licensed:{" "}
-              {t.license_number || "—"}
-              {t.license_expires_at && ` · exp ${t.license_expires_at}`}
-            </span>
-            <span>${t.cash_rate}/session{t.sliding_scale && " (sliding)"}</span>
-            <span>
-              {t.modality_offering === "both"
-                ? "In-person + telehealth"
-                : t.modality_offering === "in_person"
-                  ? "In-person"
-                  : "Telehealth"}
-            </span>
-            {t.gender && t.gender !== "prefer_not_to_say" && (
-              <span>{t.gender}</span>
-            )}
-          </div>
-
-          {/* Bio preview */}
-          {t.bio && (
-            <p className="text-sm text-[#2B2A29] mt-3 leading-relaxed bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg px-3 py-2">
-              {expanded ? t.bio : (t.bio.length > 240 ? t.bio.slice(0, 237) + "…" : t.bio)}
-            </p>
-          )}
-
-          {/* Collapsed one-liners */}
-          {!expanded && (
-            <div className="text-xs text-[#6D6A65] mt-3 flex flex-wrap gap-x-3 gap-y-1">
-              <span>
-                <strong className="text-[#2B2A29]">Specialties:</strong>{" "}
-                {specs.slice(0, 4).join(", ") || "—"}
-                {specs.length > 4 && ` +${specs.length - 4} more`}
-              </span>
-              <span>
-                <strong className="text-[#2B2A29]">Modalities:</strong>{" "}
-                {(t.modalities || []).slice(0, 3).join(", ") || "—"}
-              </span>
-              <span>
-                <strong className="text-[#2B2A29]">Insurance:</strong>{" "}
-                {(t.insurance_accepted || []).slice(0, 3).join(", ") || "Cash only"}
-              </span>
-              <span>
-                <strong className="text-[#2B2A29]">Ages:</strong>{" "}
-                {(t.age_groups || t.ages_served || []).join(", ") || "—"}
-              </span>
-            </div>
-          )}
-
-          {/* Expanded full side-panel view */}
-          {expanded && (
-            <div className="mt-4 grid md:grid-cols-2 gap-4 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl p-4">
-              <Block label="Primary specialties">
-                {(t.primary_specialties || []).join(", ") || "—"}
-              </Block>
-              <Block label="Secondary specialties">
-                {(t.secondary_specialties || []).join(", ") || "—"}
-              </Block>
-              <Block label="Weighted specialties (signup order)">
-                {specs.join(", ") || "—"}
-              </Block>
-              <Block label="General treats">
-                {generalTreats.join(", ") || "—"}
-              </Block>
-              <Block label="Modalities">
-                {(t.modalities || []).join(", ") || "—"}
-              </Block>
-              <Block label="Age groups">
-                {(t.age_groups || t.ages_served || []).join(", ") || "—"}
-              </Block>
-              <Block label="Client types">
-                {(t.client_types || []).join(", ") || "—"}
-              </Block>
-              <Block label="Availability windows">
-                {(t.availability_windows || []).join(", ") || "—"}
-              </Block>
-              <Block label="Urgency capacity">{t.urgency_capacity || "—"}</Block>
-              <Block label="Insurance accepted">
-                {(t.insurance_accepted || []).join(", ") || "Cash only"}
-              </Block>
-              <Block label="Languages">
-                {(t.languages_spoken || ["English"]).join(", ")}
-              </Block>
-              <Block label="Office addresses">
-                {offices.length ? (
-                  <div className="space-y-1">
-                    {offices.map((a, i) => (
-                      <div key={`addr-${typeof a === "string" ? a : a?.address || i}`}>
-                        {typeof a === "string" ? a : a?.address}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  "Telehealth only"
-                )}
-              </Block>
-              <Block label="Office phone">{t.office_phone || "—"}</Block>
-              <Block label="Website">
-                {t.website ? (
-                  <a
-                    href={t.website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[#2D4A3E] underline break-all"
-                  >
-                    {t.website}
-                  </a>
-                ) : (
-                  "—"
-                )}
-              </Block>
-              <Block label="Licensed states">
-                {(t.licensed_states || []).join(", ") || "—"}
-              </Block>
-              <Block label="Style tags">
-                {(t.style_tags || []).join(", ") || "—"}
-              </Block>
-              <Block label="Submitted">
-                {t.created_at ? new Date(t.created_at).toLocaleString() : "—"}
-              </Block>
-            </div>
-          )}
-
-          <button
-            onClick={() => setExpanded((v) => !v)}
-            className="text-xs text-[#2D4A3E] hover:underline mt-3"
-            data-testid={`toggle-detail-${t.id}`}
-          >
-            {expanded ? "Hide full details" : "Show all signup answers"}
-          </button>
-
-          {/* Value tags — shows what gaps this applicant fills, and warns
-              the admin if they're a "duplicate" (axes where we already
-              have ≥5 active providers). */}
-          {(t.value_tags?.length || 0) > 0 && (
-            <div className="mt-4 border-t border-dashed border-[#E8E5DF] pt-3">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-[10px] uppercase tracking-wider text-[#6D6A65]">
-                  Coverage value
-                </span>
-                {t.value_summary?.is_duplicate_only ? (
-                  <span
-                    className="text-xs bg-[#FDF1EF] border border-[#F2C9C0] text-[#D45D5D] rounded-full px-2 py-0.5"
-                    data-testid={`pending-duplicate-warning-${t.id}`}
-                    title="Every axis this applicant covers already has 5+ active providers. Approving may dilute referrals to existing therapists."
-                  >
-                    Duplicate roster — consider declining
-                  </span>
-                ) : (
-                  <span
-                    className="text-xs bg-[#F2F7F1] border border-[#D2E2D0] text-[#3F6F4A] rounded-full px-2 py-0.5"
-                    data-testid={`pending-fills-gap-${t.id}`}
-                  >
-                    Fills {t.value_summary?.fills_gaps || 0} gap
-                    {(t.value_summary?.fills_gaps || 0) === 1 ? "" : "s"}
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {t.value_tags.map((tag, i) => (
-                  <span
-                    key={`${tag.axis}-${tag.label}-${i}`}
-                    className={`text-[11px] rounded-full px-2 py-0.5 border ${
-                      tag.kind === "fills_gap"
-                        ? "bg-[#F2F7F1] border-[#D2E2D0] text-[#3F6F4A]"
-                        : "bg-[#F4F1EC] border-[#E8E5DF] text-[#6D6A65]"
-                    }`}
-                    title={`${tag.count} active provider${tag.count === 1 ? "" : "s"} already cover this axis`}
-                    data-testid={`value-tag-${t.id}-${i}`}
-                  >
-                    {tag.kind === "fills_gap" ? "✓ " : ""}
-                    {tag.label}{" "}
-                    <span className="opacity-60">({tag.count})</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Action stack */}
-        <div className="flex flex-col gap-2 shrink-0">
-          <button
-            className="tv-btn-primary !py-1.5 !px-4 text-sm"
-            onClick={onApprove}
-            data-testid={`approve-${t.id}`}
-          >
-            <CheckCircle2 size={14} className="inline mr-1.5" /> Approve
-          </button>
-          <button
-            onClick={onEdit}
-            className="text-xs text-[#2D4A3E] hover:underline inline-flex items-center gap-1 justify-center"
-            data-testid={`edit-pending-${t.id}`}
-          >
-            <Pencil size={12} /> Edit fields
-          </button>
-          <button
-            className="text-sm text-[#D45D5D] hover:underline"
-            onClick={onReject}
-            data-testid={`reject-${t.id}`}
-          >
-            <XCircle size={14} className="inline mr-1.5" /> Reject
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Block({ label, children }) {
-  return (
-    <div>
-      <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-1">
-        {label}
-      </div>
-      <div className="text-sm text-[#2B2A29] leading-snug break-words">
-        {children}
-      </div>
-    </div>
-  );
-}
 
 

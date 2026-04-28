@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, Phone, Mail, Star, Sparkles, CalendarPlus, Send, Inbox, CheckCircle2, Clock, ArrowRight, ArrowLeft, Share2, FileText, AlertCircle, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { Loader2, Phone, Mail, Star, Sparkles, CalendarPlus, Send, Inbox, CheckCircle2, Clock, ArrowRight, ArrowLeft, Share2, FileText, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { api, getSession } from "@/lib/api";
 import { RESULTS_POLL_INTERVAL_MS } from "@/lib/constants";
@@ -689,30 +689,6 @@ export default function PatientResults() {
               </Link>
             </div>
           )}
-
-          {/* Submit-another-request CTA — always visible at the very bottom of the results page */}
-          <div
-            className="mt-10 text-center"
-            data-testid="submit-another-request-section"
-          >
-            <Link
-              to="/#start"
-              className="tv-btn-primary inline-flex items-center gap-2"
-              data-testid="submit-another-request-btn"
-              onClick={() => {
-                setTimeout(() => {
-                  document
-                    .getElementById("start")
-                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                }, 250);
-              }}
-            >
-              <Plus size={16} /> Submit another request
-            </Link>
-            <p className="text-xs text-[#6D6A65] mt-2">
-              Looking for a different therapist for someone else, or for a separate concern?
-            </p>
-          </div>
         </div>
       </main>
       <Footer />

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="5" skipped="0" tests="8" time="1.086" timestamp="2026-04-28T15:41:35.779663+00:00" hostname="agent-env-23b94589-1b76-4fdc-8dc9-4b69ec6bdf34"><testcase classname="backend.tests.test_iteration58_site_copy.TestSiteCopy" name="test_public_get_site_copy_ok" time="0.289" /><testcase classname="backend.tests.test_iteration58_site_copy.TestSiteCopy" name="test_admin_list_site_copy_requires_auth" time="0.139" /><testcase classname="backend.tests.test_iteration58_site_copy.TestSiteCopy" name="test_admin_list_site_copy_ok" time="0.176"><failure message="assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">backend/tests/test_iteration58_site_copy.py:42: in test_admin_list_site_copy_ok
+    assert r.status_code == 200
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iteration58_site_copy.TestSiteCopy" name="test_upsert_get_delete_round_trip" time="0.056"><failure message="AssertionError: {&quot;detail&quot;:&quot;Invalid admin credentials&quot;}&#10;assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">backend/tests/test_iteration58_site_copy.py:57: in test_upsert_get_delete_round_trip
+    assert r.status_code == 200, r.text
+E   AssertionError: {"detail":"Invalid admin credentials"}
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iteration58_site_copy.TestSiteCopy" name="test_put_validation" time="0.052"><failure message="assert 401 in (400, 422)&#10; +  where 401 = &lt;Response [401]&gt;.status_code">backend/tests/test_iteration58_site_copy.py:97: in test_put_validation
+    assert r.status_code in (400, 422)
+E   assert 401 in (400, 422)
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iteration58_site_copy.TestAutoDeclineDuplicates" name="test_unauth_blocked" time="0.147" /><testcase classname="backend.tests.test_iteration58_site_copy.TestAutoDeclineDuplicates" name="test_dry_run_returns_matched" time="0.061"><failure message="AssertionError: {&quot;detail&quot;:&quot;Invalid admin credentials&quot;}&#10;assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">backend/tests/test_iteration58_site_copy.py:116: in test_dry_run_returns_matched
+    assert r.status_code == 200, r.text
+E   AssertionError: {"detail":"Invalid admin credentials"}
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iteration58_site_copy.TestAutoDeclineDuplicates" name="test_dry_run_does_not_change_pending_count" time="0.050"><failure message="assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">backend/tests/test_iteration58_site_copy.py:128: in test_dry_run_does_not_change_pending_count
+    assert before.status_code == 200
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase></testsuite></testsuites>
