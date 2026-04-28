@@ -38,7 +38,7 @@ def fresh_therapist():
         pytest.skip("Real Stripe test key required for e2e")
     email = f"e2e_checkout_{int(time.time())}@example.com"
     payload = {
-        "name": f"E2E Checkout, LCSW",
+        "name": "E2E Checkout, LCSW",
         "email": email,
         "phone_alert": "(208) 555-9001",
         "office_phone": "(208) 555-9001",

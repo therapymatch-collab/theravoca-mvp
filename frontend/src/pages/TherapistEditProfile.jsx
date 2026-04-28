@@ -302,7 +302,7 @@ export default function TherapistEditProfile() {
           {draft.offers_in_person && (
             <Field label="Office addresses">
               {(draft.office_addresses || []).map((a, i) => (
-                <div key={i} className="flex gap-2 mb-2">
+                <div key={`office-${i}-${(draft.office_addresses || []).length}`} className="flex gap-2 mb-2">
                   <Input
                     value={a}
                     onChange={(e) => updateOfficeAddress(i, e.target.value)}

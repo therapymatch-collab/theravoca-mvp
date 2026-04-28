@@ -3340,7 +3340,7 @@ function ProviderRow({ t, onEdit }) {
         {inPerson && (t.office_addresses?.length > 0 || offices.length > 0) ? (
           <div className="leading-snug">
             {(t.office_addresses || offices).slice(0, 2).map((a, i) => (
-              <div key={i} className="text-[11px] text-[#2B2A29]">
+              <div key={`addr-${typeof a === "string" ? a : a?.address || i}`} className="text-[11px] text-[#2B2A29]">
                 {typeof a === "string" ? a : a?.address || a?.city || ""}
               </div>
             ))}
@@ -3723,7 +3723,9 @@ function PendingSignupRow({ t, onApprove, onReject, onEdit }) {
                 {offices.length ? (
                   <div className="space-y-1">
                     {offices.map((a, i) => (
-                      <div key={i}>{typeof a === "string" ? a : a?.address}</div>
+                      <div key={`addr-${typeof a === "string" ? a : a?.address || i}`}>
+                        {typeof a === "string" ? a : a?.address}
+                      </div>
                     ))}
                   </div>
                 ) : (

@@ -34,7 +34,6 @@ async def stripe_webhook(request: Request):
     tid: Optional[str] = None
 
     async def _set(fields: dict[str, Any]):
-        nonlocal tid
         if not tid:
             return
         fields["updated_at"] = _now_iso()
