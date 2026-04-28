@@ -394,7 +394,7 @@ def score_therapist(t: dict, r: dict) -> dict[str, Any]:
         diff_bonus += min(0.5, years / 40.0)
     breakdown["differentiator"] = round(diff_bonus, 2)
 
-    total = round(min(100.0, sum(breakdown.values())), 1)
+    total = round(min(100.0, sum(breakdown.values())), 2)
     return {"total": total, "breakdown": breakdown, "filtered": False}
 
 

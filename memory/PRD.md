@@ -1315,3 +1315,72 @@ User asked for 8 changes; all shipped in one batch.
 - Frontend Playwright — 5/5 flows green (magic-link valid, magic-link
   invalid, apply-back-to-signin, apply-back-to-dashboard, warmup UI).
 - Iter-28 testing report at `/app/test_reports/iteration_28.json`.
+
+## Iteration 67 — A2P helper, license upload, scoring rebalance, tiebreakers (2026-04-28)
+
+### SMS deliverability panel + A2P 10DLC tracker
+- New `GET /api/admin/sms-status` returns deliverability verdict
+  (delivered / blocked_a2p_10dlc / blocked / twilio_disabled /
+  missing_credentials / untested) computed from the latest test-SMS
+  result + env config.
+- New `PUT /api/admin/sms-status/a2p` stores brand_id, campaign_id,
+  status, notes in `app_config.a2p_10dlc`.
+- `/admin/test-sms` now persists its result to `app_config.last_test_sms`
+  so the panel banner reflects current state without re-calling Twilio.
+- New `SmsStatusPanel.jsx` exposed at Admin → More → SMS status — shows
+  red/yellow/green banner + A2P registration form + Send test SMS.
+
+### License document self-serve upload
+- New `POST /api/therapists/me/license-document` (base64, ≤5MB, PDF/JPG/
+  PNG/WEBP) stores doc on therapist row + flips `pending_reapproval`.
+- New `GET /api/therapists/me/license-document` returns metadata (no
+  base64 in response).
+- `LicenseDocUploader` slot in TherapistEditProfile under "License &
+  credentials" section. Allowed to replace existing doc.
+- **Bug fix:** initial implementation used `Depends(require_session)`
+  (factory not invoked) — caught by testing agent, fixed to
+  `Depends(require_session(("therapist",)))`.
+
+### Research-enrichment scoring rebalance
+- `_score_axes` no longer awards bonus points based on web-presence
+  depth alone. Pure "moderate/deep" depth without theme overlap on
+  the patient's primary concern is capped at 1 point (was 4-6).
+- Primary-concern theme match is the dominant driver (5-7 pts);
+  secondary concerns add up to +2 pts.
+- Fixes the user-reported "+4 with no anxiety evidence" rationale bug.
+
+### Matching tiebreakers + differentiator bonus
+- New `_tiebreaker(t)` in matching.py: review_signal (avg × log10
+  count), years_experience, recency, md5 stable salt.
+- `score_therapist` now adds a 0-1.5 fractional `differentiator`
+  bonus per therapist (review-quality + experience based) so
+  displayed scores diverge.
+- `total = round(min(100, sum), 2)` (was 1) so the fractional bonus
+  survives.
+- `rank_therapists` sorts by `(match_score, *_tiebreaker(t))` desc.
+
+### Action icons stack vertically in All Providers
+- `flex-col items-end gap-1.5` swap saves ~150px column width;
+  Edit / Deep research / Archive / Delete now stack as compact links.
+
+### Misc
+- Auto LLM outreach when <30 matches — confirmed already firing
+  (no changes; lives in `helpers._trigger_matching` with
+  `OUTREACH_AUTO_RUN=true` default).
+- Patient verification email — confirmed already one-click via
+  `/verify/{token}` route → VerifyEmail.jsx auto-verifies on mount.
+
+### Tests
+- `tests/test_iteration67_sms_license_match.py`: 12/12 after fix.
+  - SMS panel + A2P roundtrip — green
+  - License upload (after factory fix) — green
+  - Research-enrichment bonus rebalance — green
+  - Matching tiebreaker — green
+  - Differentiator: 8/15 unique scores in top-15 (was 5/15 pre-fix).
+- Iter-29 testing report at `/app/test_reports/iteration_29.json`.
+
+### Carry-over backlog
+- Persist "Active only" toggle in localStorage.
+- Split AdminDashboard.jsx (4060+ lines) and TherapistSignup.jsx
+  (1973 lines) into per-component modules.
+- Daily 3am cron to refresh stale research caches automatically.

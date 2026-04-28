@@ -481,14 +481,12 @@ LICENSE_ALLOWED_TYPES = {
 @router.post("/therapists/me/license-document")
 async def therapist_upload_license(
     payload: dict,
-    role_email: tuple[str, str] = Depends(require_session),
+    session: dict = Depends(require_session(("therapist",))),
 ):
     """Therapist uploads a base64-encoded license document. Body:
         {filename, content_type, data_base64}
     """
-    role, email = role_email
-    if role != "therapist":
-        raise HTTPException(403, "Therapist account required")
+    email = session.get("email")
     therapist = await db.therapists.find_one({"email": email}, {"_id": 0})
     if not therapist:
         raise HTTPException(404, "Therapist profile not found")
@@ -541,11 +539,9 @@ async def therapist_upload_license(
 
 @router.get("/therapists/me/license-document")
 async def therapist_get_my_license_doc(
-    role_email: tuple[str, str] = Depends(require_session),
+    session: dict = Depends(require_session(("therapist",))),
 ):
-    role, email = role_email
-    if role != "therapist":
-        raise HTTPException(403, "Therapist account required")
+    email = session.get("email")
     t = await db.therapists.find_one(
         {"email": email}, {"_id": 0, "license_document": 1},
     )
