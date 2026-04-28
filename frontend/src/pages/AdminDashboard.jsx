@@ -43,6 +43,7 @@ import MasterQueryPanel from "@/pages/admin/panels/MasterQueryPanel";
 import BlogAdminPanel from "@/pages/admin/panels/BlogAdminPanel";
 import SettingsPanel from "@/pages/admin/panels/SettingsPanel";
 import SiteCopyAdminPanel from "@/pages/admin/panels/SiteCopyAdminPanel";
+import FaqAdminPanel from "@/pages/admin/panels/FaqAdminPanel";
 import RequestsPanel from "@/pages/admin/panels/RequestsPanel";
 import PendingTherapistsPanel from "@/pages/admin/panels/PendingTherapistsPanel";
 import AllProvidersPanel from "@/pages/admin/panels/AllProvidersPanel";
@@ -1361,6 +1362,8 @@ export default function AdminDashboard() {
 
               {tab === "site_copy" && <SiteCopyAdminPanel client={client} />}
 
+              {tab === "faqs" && <FaqAdminPanel client={client} />}
+
               {tab === "settings" && <SettingsPanel client={client} />}
 
               {tab === "email_templates" && (
@@ -2546,6 +2549,11 @@ function AdminTabsBar({
     {
       id: "site_copy",
       label: "Site copy",
+      icon: <Pencil size={14} />,
+    },
+    {
+      id: "faqs",
+      label: "FAQs",
       icon: <Pencil size={14} />,
     },
     {

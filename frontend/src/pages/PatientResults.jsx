@@ -357,7 +357,7 @@ export default function PatientResults() {
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
-      <Header minimal />
+      <Header />
       <main className="flex-1 px-5 py-12 md:py-16" data-testid="patient-results-page">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between gap-3 flex-wrap">

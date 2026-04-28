@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from deps import db, logger, require_admin, require_session
+from deps import db, logger, require_admin, require_session, _create_session_token
 import stripe_service
 from email_service import send_therapist_signup_received
 from geocoding import geocode_offices
@@ -144,11 +144,19 @@ async def therapist_sync_payment_method(therapist_id: str, payload: dict):
             "updated_at": _now_iso(),
         }},
     )
+    # Issue a portal session token so the user can land directly on
+    # /portal/therapist after Stripe success without bouncing through
+    # email / magic-code sign-in.
+    full = await db.therapists.find_one({"id": therapist_id}, {"_id": 0, "email": 1})
+    session_token = (
+        _create_session_token(full["email"], "therapist") if full else None
+    )
     return {
         "ok": True,
         "subscription_status": "trialing",
         "trial_ends_at": trial_end.isoformat(),
         "demo_mode": is_demo,
+        "session_token": session_token,
     }
 
 

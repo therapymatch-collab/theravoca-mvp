@@ -10,6 +10,7 @@ import {
 import { Check, X, Sparkles } from "lucide-react";
 import { useEffect } from "react";
 import useSiteCopy from "@/lib/useSiteCopy";
+import useFaqs from "@/lib/useFaqs";
 import GetMatchedCTA from "@/components/GetMatchedCTA";
 
 const HERO_IMAGE =
@@ -46,6 +47,7 @@ const FAQS = [
 
 export default function Landing() {
   const t = useSiteCopy();
+  const faqs = useFaqs("patient", FAQS);
   // Cross-page anchor links (`/#start`) need a manual scroll on mount because
   // React Router's hashchange handling doesn't fire when content is rendered
   // post-mount. This makes "Get matched" buttons from any page reliably land
@@ -273,7 +275,7 @@ export default function Landing() {
             Things people ask
           </h2>
           <Accordion type="single" collapsible className="mt-10" data-testid="faq">
-            {FAQS.map((f) => (
+            {faqs.map((f) => (
               <AccordionItem
                 key={f.q}
                 value={`item-${f.q}`}

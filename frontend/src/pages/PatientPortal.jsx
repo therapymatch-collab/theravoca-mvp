@@ -54,7 +54,7 @@ export default function PatientPortal() {
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
-      <Header minimal />
+      <Header />
       <main className="flex-1 px-5 py-12 md:py-16" data-testid="patient-portal">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-start justify-between gap-4 flex-wrap">

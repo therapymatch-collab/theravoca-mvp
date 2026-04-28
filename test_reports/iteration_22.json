@@ -1,0 +1,58 @@
+{
+  "summary": "Iter-60 review (6 user fixes). Backend 8/10 passed (1 critical fail: PUT /admin/faqs/reorder is route-shadowed by /admin/faqs/{faq_id}; 1 skip on therapist signup fixture schema). Frontend BLOCKER FOUND + FIXED: Landing.jsx was missing 'import useFaqs from @/lib/useFaqs' yet called useFaqs() on L49 — entire Landing page white-screened with 'useFaqs is not defined' runtime error (FAQ section invisible, every #anchor target broken). Added the missing import; Landing now renders, hero 'Let therapists come to you.' visible, FAQ section 'Things people ask' renders with seeded rows ('What is TheraVoca, and how does it work?', 'Is there a fee for patients?'). Universal Header verified on /therapists/join and /portal/patient (nav-how, nav-testimonials, nav-diff all present+visible). Logo click on /therapists/join navigates to /. Auto-decline-duplicates dry_run returns < 5s. Source verified _chunked_send wraps a SINGLE asyncio.create_task with CHUNK=10 + DELAY_S=1.1 ✓. Source verified /therapists/{id}/sync-payment-method returns session_token via _create_session_token(email, 'therapist') ✓.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "PUT /api/admin/faqs/reorder",
+        "issue": "Route is unreachable — registered AFTER PUT /admin/faqs/{faq_id} in routes/faqs.py, so FastAPI matches faq_id='reorder' first and returns 404 'FAQ not found'. Confirmed via curl: PUT /api/admin/faqs/reorder with valid payload returns {\"detail\":\"FAQ not found\"} HTTP 404. This breaks the FAQ admin up/down arrow reorder UI entirely (Task 3).",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Landing.jsx",
+        "issue": "[FIXED by tester] Missing `import useFaqs from '@/lib/useFaqs'` while file calls useFaqs('patient', FAQS) on line 49. Result: entire Landing page (/) crashed with runtime ReferenceError 'useFaqs is not defined' — white screen, no hero, no nav-anchored sections, no FAQ. This regressed every public visitor.",
+        "selector": "/app/frontend/src/pages/Landing.jsx (line 12 area)",
+        "priority": "CRITICAL"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "FAQ admin reorder (up/down arrows)",
+        "issue": "UI calls PUT /admin/faqs/reorder but backend returns 404 because of the route-ordering shadow above. Frontend reorder buttons (faq-up-{id} / faq-down-{id}) will silently fail — no rows ever change position.",
+        "affected_selectors": ["faq-up-{id}", "faq-down-{id}"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration60_faqs_and_chunked.py",
+    "/app/test_reports/pytest/iter60_results.xml"
+  ],
+  "action_items": [
+    "URGENT: Move @router.put('/admin/faqs/reorder') ABOVE @router.put('/admin/faqs/{faq_id}') in /app/backend/routes/faqs.py so the static path is registered first. (Or rename to /admin/faqs:reorder / use POST /admin/faqs/reorder-batch). Re-run the test_reorder case after the fix.",
+    "Verify the missing useFaqs import fix on Landing.jsx in code review — the fix is already applied but a future automated lint should catch undefined identifiers (eslint no-undef should flag this; check if eslint is wired into CI).",
+    "OPTIONAL: in test_iteration60 the therapist signup fixture got a 422 — TherapistSignup pydantic model has additional/different required fields than what I sent. Sync-payment-method session_token verification was source-only. Main agent can self-test via the actual frontend Stripe-success flow."
+  ],
+  "critical_code_review_comments": [
+    "FastAPI route ordering: any future static sub-path under /admin/faqs/* will be similarly shadowed. Group all literal sub-paths above the {faq_id} catch-all and add a unit test that asserts /admin/faqs/reorder responds with 200/422, not 404.",
+    "useFaqs hook caching: 60s TTL is fine but a manual cache-bust API (window event or returned mutate fn) would let admin save → see live without a hard reload.",
+    "Lint gap: ESLint with `no-undef` would have caught the Landing.jsx missing import at build time. Recommend wiring CRACO/CRA's lint into the build to fail on undefined identifiers.",
+    "FAQ public endpoint correctly excludes _id and unpublished rows (verified in test_create_update_delete_flow)."
+  ],
+  "updated_files": [
+    "/app/frontend/src/pages/Landing.jsx (added missing useFaqs import)",
+    "/app/backend/tests/test_iteration60_faqs_and_chunked.py (NEW — 10 tests)",
+    "/app/test_reports/pytest/iter60_results.xml (NEW)"
+  ],
+  "success_rate": {"backend": "80% (8/10 — 1 critical bug, 1 fixture skip)", "frontend": "FIXED Landing crash; full nav + logo + FAQ render verified"},
+  "test_credentials": "Admin master pwd: admin123! via X-Admin-Password header. REACT_APP_BACKEND_URL=https://care-matcher-1.preview.emergentagent.com",
+  "seed_data_creation": "Tests create+delete TEST_-prefixed FAQ rows. test_reorder leaves 2 TEST_reorder_* rows orphaned because the reorder PUT 404'd before cleanup; main agent should run a one-time DELETE of any faqs.question starting with 'TEST_' after fixing the route order.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "After main agent moves the reorder route above {faq_id}, re-run only test_iteration60_faqs_and_chunked.py::TestFaqs::test_reorder to confirm 200 + position swap. Landing.jsx useFaqs import is already fixed by tester. Backend chunked send + sync-payment-method session_token were both source-verified (the live signup→Stripe→sync flow needs end-to-end browser test which I did not run due to context budget). Preview banner, FAQ admin panel UI testids (faq-new-btn / faq-row / faq-edit / faq-delete / faq-up / faq-down / faq-seed-btn / faq-audience-patient / faq-audience-therapist), and post-Stripe `signup-success-dashboard` button were not click-tested in browser — main agent already smoked these per the iter-60 description.",
+  "rca of the issue": "Landing crash RCA: refactor that introduced useFaqs() in Landing.jsx forgot to add the corresponding import line (TherapistSignup.jsx got it, Landing.jsx didn't). React renders to a JS runtime ReferenceError; Error Boundary either absent or returns null, so the body is empty. Mitigation: import added; recommend ESLint no-undef in build pipeline.\n\nReorder 404 RCA: in routes/faqs.py the catch-all PUT /admin/faqs/{faq_id} (line 106) is declared BEFORE PUT /admin/faqs/reorder (line 130). FastAPI/Starlette match routes in declaration order, so 'reorder' is captured as faq_id='reorder' and the handler tries to UPDATE an FAQ with id='reorder', failing with 404. Fix: hoist the static-path PUT (and any future static sub-path) above the parameterized route."
+}

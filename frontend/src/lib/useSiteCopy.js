@@ -31,22 +31,63 @@ export function bustSiteCopyCache() {
   _refreshOverrides();
 }
 
+// Exit preview mode — clears the persisted ?preview= overrides so the
+// site re-renders with the saved/fallback copy. Used by the floating
+// "Exit preview" banner.
+export function clearSiteCopyPreview() {
+  if (typeof window !== "undefined") {
+    try {
+      sessionStorage.removeItem("tv_copy_preview");
+    } catch (_) {
+      /* ignore */
+    }
+  }
+  // Force a refresh by busting the cache.
+  bustSiteCopyCache();
+}
+
 export default function useSiteCopy() {
   const [map, setMap] = useState(_cache?.map || {});
-  // Preview overrides: when ?preview=base64-of-{k:v} is in the URL, those
-  // values override the saved map for the current page load only — used
-  // by the admin Site Copy panel's "Preview on landing" button.
+  // Preview overrides: when ?preview=base64-of-{k:v} is in the URL OR
+  // a previous tab from the Site Copy editor pinned overrides into
+  // sessionStorage, those values override the saved map for this
+  // browsing session. sessionStorage carries the override across
+  // anchor-jumps and internal nav links inside the previewed page.
   const previewOverrides = (() => {
     if (typeof window === "undefined") return {};
-    const p = new URLSearchParams(window.location.search).get("preview");
-    if (!p) return {};
+    let merged = {};
+    // (1) Start from sessionStorage (set by a previous mount when the
+    // ?preview= URL was present).
     try {
-      const decoded = JSON.parse(atob(decodeURIComponent(p)));
-      if (decoded && typeof decoded === "object") return decoded;
+      const raw = sessionStorage.getItem("tv_copy_preview");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") merged = { ...parsed };
+      }
     } catch (_) {
-      /* ignore malformed preview payloads */
+      /* sessionStorage may be disabled */
     }
-    return {};
+    // (2) Layer the URL ?preview= payload on top so the latest tab
+    // open from admin still wins.
+    const p = new URLSearchParams(window.location.search).get("preview");
+    if (p) {
+      try {
+        const decoded = JSON.parse(atob(decodeURIComponent(p)));
+        if (decoded && typeof decoded === "object") {
+          merged = { ...merged, ...decoded };
+          // Persist so anchor jumps and internal nav inside the
+          // previewed page keep showing the override.
+          try {
+            sessionStorage.setItem("tv_copy_preview", JSON.stringify(merged));
+          } catch (_) {
+            /* ignore */
+          }
+        }
+      } catch (_) {
+        /* ignore malformed preview payloads */
+      }
+    }
+    return merged;
   })();
 
   useEffect(() => {

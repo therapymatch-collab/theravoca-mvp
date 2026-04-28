@@ -86,7 +86,7 @@ export default function FollowupForm() {
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
-      <Header minimal />
+      <Header />
       <main className="flex-1 px-5 py-12 md:py-16" data-testid="followup-form">
         <div className="max-w-2xl mx-auto">
           <p className="text-xs uppercase tracking-[0.2em] text-[#C87965]">

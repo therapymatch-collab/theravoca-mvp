@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { CheckCircle2, ArrowRight, X, Plus, Camera, Sparkles } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
+import useFaqs from "@/lib/useFaqs";
 import { formatUsPhone } from "@/lib/phone";
 import { api } from "@/lib/api";
 import { IDAHO_INSURERS } from "@/lib/insurers";
@@ -134,10 +135,8 @@ export default function TherapistSignup() {
   const [searchParams] = useSearchParams();
   const inviteRequestId = searchParams.get("invite_request_id");
   const inviteCode = searchParams.get("ref");
-  // Pre-launch gap-recruit attribution: every recruit email includes
-  // `?recruit_code=XXXXXXXX` so we can track which gap-fill invite drove
-  // a signup. Sent through to the backend on submit.
   const recruitCode = searchParams.get("recruit_code");
+  const therapistFaqs = useFaqs("therapist", THERAPIST_FAQS);
 
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -409,6 +408,19 @@ export default function TherapistSignup() {
             setSubmitted(true);
             setTherapistId(subscribedId);
             sessionStorage.removeItem("tv_signup_pending");
+            // Persist a portal session so the "Go to my dashboard" CTA
+            // logs the therapist straight in without an email round-trip.
+            if (res.data.session_token) {
+              try {
+                sessionStorage.setItem(
+                  "tv_session_token",
+                  res.data.session_token,
+                );
+                sessionStorage.setItem("tv_session_role", "therapist");
+              } catch (_) {
+                /* sessionStorage may be disabled */
+              }
+            }
             toast.success("Free trial started — you're all set!");
           } else {
             toast.error("Payment session not complete; please try again.");
@@ -511,7 +523,7 @@ export default function TherapistSignup() {
     if (trialActivated) {
       return (
         <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
-          <Header minimal />
+          <Header />
           <main className="flex-1 flex items-center justify-center px-5 py-16">
             <div className="max-w-xl w-full bg-white border border-[#E8E5DF] rounded-3xl p-10 text-center tv-fade-up">
               <div className="mx-auto w-14 h-14 rounded-full bg-[#2D4A3E]/10 text-[#2D4A3E] flex items-center justify-center">
@@ -525,13 +537,22 @@ export default function TherapistSignup() {
                 You'll receive your first anonymous referral as soon as a patient match scores ≥71%.
                 We'll email you 3 days before your first $45 charge — cancel any time before then with no fees.
               </p>
-              <Link
-                to="/"
-                className="tv-btn-primary mt-8 inline-flex"
-                data-testid="signup-success-home"
-              >
-                Back home
-              </Link>
+              <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+                <Link
+                  to="/portal/therapist"
+                  className="tv-btn-primary inline-flex"
+                  data-testid="signup-success-dashboard"
+                >
+                  Go to my dashboard
+                </Link>
+                <Link
+                  to="/"
+                  className="tv-btn-secondary inline-flex"
+                  data-testid="signup-success-home"
+                >
+                  Back home
+                </Link>
+              </div>
             </div>
           </main>
           <Footer />
@@ -540,7 +561,7 @@ export default function TherapistSignup() {
     }
     return (
       <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
-        <Header minimal />
+        <Header />
         <main className="flex-1 flex items-center justify-center px-5 py-16">
           <div className="max-w-xl w-full bg-white border border-[#E8E5DF] rounded-3xl p-10 text-center tv-fade-up">
             <div className="mx-auto w-14 h-14 rounded-full bg-[#2D4A3E]/10 text-[#2D4A3E] flex items-center justify-center">

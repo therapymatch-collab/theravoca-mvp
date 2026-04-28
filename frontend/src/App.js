@@ -21,6 +21,7 @@ import BlogList from "@/pages/BlogList";
 import BlogPost from "@/pages/BlogPost";
 import FeedbackForm from "@/pages/FeedbackForm";
 import FeedbackWidget from "@/components/FeedbackWidget";
+import PreviewBanner from "@/components/PreviewBanner";
 import NotFound from "@/pages/NotFound";
 
 function App() {
@@ -63,6 +64,7 @@ function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
         <FeedbackWidget />
+        <PreviewBanner />
       </BrowserRouter>
     </div>
   );

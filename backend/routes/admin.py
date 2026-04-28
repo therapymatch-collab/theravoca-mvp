@@ -705,10 +705,26 @@ async def admin_auto_decline_duplicates(
             },
         )
         rejected_ids = ids
-        # Fire rejection emails in the background — one at a time so we
-        # don't trip Resend's batch rate limit.
-        for t in targets:
-            asyncio.create_task(send_therapist_rejected(t["email"], t["name"]))
+        # Fire rejection emails in chunks so we don't trip Resend's
+        # batch rate limit (~10 req/s burst). The chunked sender
+        # awaits a small delay between batches, but is itself spawned
+        # as a background task so the admin response doesn't block.
+        async def _chunked_send(rows: list[dict]) -> None:
+            CHUNK = 10
+            DELAY_S = 1.1
+            for i in range(0, len(rows), CHUNK):
+                batch = rows[i : i + CHUNK]
+                await asyncio.gather(
+                    *[
+                        send_therapist_rejected(t["email"], t["name"])
+                        for t in batch
+                    ],
+                    return_exceptions=True,
+                )
+                if i + CHUNK < len(rows):
+                    await asyncio.sleep(DELAY_S)
+
+        asyncio.create_task(_chunked_send(targets))
 
     return {
         "dry_run": dry_run,

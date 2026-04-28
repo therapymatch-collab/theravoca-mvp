@@ -51,7 +51,7 @@ export default function VerifyEmail() {
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
-      <Header minimal />
+      <Header />
       <main className="flex-1 flex items-center justify-center px-5 py-16">
         <div className="max-w-xl w-full bg-white border border-[#E8E5DF] rounded-3xl p-10 text-center tv-fade-up">
           {state === "pending" && (
