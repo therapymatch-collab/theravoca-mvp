@@ -1487,3 +1487,74 @@ User asked for 8 changes; all shipped in one batch.
 - Multi-state rollout (currently Idaho only)
 - hCaptcha / Turnstile if heuristics prove insufficient
 - DOPL live API integration when published
+
+---
+
+## Iter-70 (Apr 28 2026) — Site editor wiring fix + email template preview + research expansion + Turnstile (fail-soft)
+
+### Implemented (7 items, all green via testing agent iter-31, 12/12)
+
+#### P0 — Quick wins
+1. **Bug fix: site-editor button overrides not displaying.** "Get more
+   referrals" + therapist hero eyebrow/headline/subhead were hardcoded
+   in `TherapistSignup.jsx` even though SEED_KEYS existed for them.
+   Wired `useSiteCopy` (`t()`) into all four locations and aligned
+   SEED_KEYS fallbacks to the actual displayed text.
+2. **Match-gap clarity for unverified requests.** `_explain_match_gap`
+   now returns `patient_verified` flag; `MatchGapPanel.jsx` swaps
+   headline + icon to a yellow "Patient hasn't verified their email
+   yet" banner when applicable, with a tip explaining matching only
+   runs after verification.
+3. **Email template preview.** New `POST /api/admin/email-templates/{key}/preview`
+   renders the template (with optional in-memory draft override) using
+   realistic sample data (`first_name=Alex`, `match_score=87`, etc.) +
+   the existing `_wrap()` shell. Returns `{subject, html}`. Frontend
+   adds a "Preview" button on each row AND inside the Edit dialog
+   (re-renders with live draft). Modal shows subject + iframe of full
+   rendered HTML. Backed by `_build_cta_email_html()` extracted from
+   `_send_simple_cta_template()` for reuse.
+4. **"Why we matched" concrete chips.** `whyMatchedChips()` +
+   `WHY_GENERATORS` in `PatientResults.jsx` produce up to 3 specific
+   per-axis chips like *"Anxiety specialist"*, *"Telehealth fit"*,
+   *"Sliding-scale OK"*, *"5+ yrs experience"* — pulling from the
+   actual therapist + request data instead of generic axis labels.
+   Falls back to axis label when no concrete reason can be inferred.
+
+#### P1 — Research expansion + therapist response → re-rank
+5. **Multi-engine search:** new `_bing_search()` + `_multi_search()`
+   in `research_enrichment.py` merge DDG + Bing results (parallel,
+   deduped, fail-soft). Used by the deep-research pipeline so we
+   surface LinkedIn / Healthgrades / press hits DDG misses. No paid
+   APIs (SerpAPI / Google Custom Search deferred until pilot
+   economics demand).
+6. **Therapist response quality → patient rank score.** Replaces the
+   length-only `quality_bonus` with a 4-axis signal: length (0-6) +
+   issue match (0-3, mentions patient's presenting concerns) + action
+   signal (0-2, "available next week", "free 15", etc.) + personal
+   voice (0-1, "I'd love…"). Capped at 12. `Application` row gains a
+   `response_quality` breakdown for transparency.
+7. **"How it works" admin doc panel.** New tab in More menu walks the
+   team through the 7-step flow (intake → verify → score → web
+   research → outreach → opt-in → re-rank), including the rationale
+   for going beyond the therapist's website.
+
+#### P2 — Cloudflare Turnstile (fail-soft)
+8. **Turnstile integration.** Backend `turnstile_service.verify_token`
+   short-circuits to True when `TURNSTILE_SECRET_KEY` env is unset.
+   Frontend `IntakeForm.jsx` only renders the widget when
+   `REACT_APP_TURNSTILE_SITE_KEY` is set. Once both keys land in env,
+   the system flips on — no code changes needed. Layered AFTER the
+   honeypot/timing/IP-rate-limit gates.
+
+### Deferred (separate session)
+- Refactor monolithic React components (`AdminDashboard.jsx`,
+  `TherapistSignup.jsx`, `IntakeForm.jsx` — all >800 lines). Too risky
+  to bundle with feature work; will tackle in a dedicated session.
+
+### Backlog
+- Multi-state rollout (currently Idaho only)
+- DOPL live API when published
+- Optional: SerpAPI or Google Custom Search if free DDG+Bing coverage
+  proves insufficient for less-well-known therapists
+- Patient prefs persistence (remember `priority_factors` for return
+  visits)
