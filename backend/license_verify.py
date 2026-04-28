@@ -22,7 +22,10 @@ from typing import Optional
 
 
 EXPIRING_SOON_DAYS = 45
-DOPL_SEARCH_URL = "https://dopl.idaho.gov/public-records-request/"
+# Idaho DOPL public license-search portal. The hash anchor (#2) auto-opens
+# the "License Lookup" tab on the SPA so the admin lands one click from
+# the search input.
+DOPL_SEARCH_URL = "https://edopl.idaho.gov/onlineservices/_/#2"
 
 
 def _parse_iso_date(s: Optional[str]) -> Optional[datetime]:
@@ -98,16 +101,17 @@ def compute_license_status(
 
 
 def dopl_verification_url(license_number: Optional[str]) -> Optional[str]:
-    """Deep-link to Idaho DOPL's license-verification landing page with the
-    license number pre-filled (query param `q`). DOPL doesn't currently honor
-    the query param but we keep it for when they do — and the URL itself
-    drops the admin 1 click closer to the search."""
+    """Deep-link to Idaho DOPL's online-services license-lookup landing
+    page (`edopl.idaho.gov/onlineservices/_/#2`). The portal is a
+    JavaScript SPA so the license number can't be pre-filled in the
+    URL, but the hash anchor lands the admin directly on the License
+    Lookup tab — one paste away from a verified result."""
     if not license_number:
         return None
     ln = license_number.strip()
     if not ln:
         return None
-    return f"https://dopl.idaho.gov/public-records-request/?q={ln}"
+    return DOPL_SEARCH_URL
 
 
 # ── Live DOPL check — upgrade path ─────────────────────────────────────

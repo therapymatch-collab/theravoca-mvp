@@ -349,11 +349,152 @@ async def admin_request_detail(request_id: str, _: bool = Depends(require_admin)
     invited = await db.outreach_invites.find(
         {"request_id": request_id}, {"_id": 0},
     ).sort("created_at", -1).to_list(200)
+    # When fewer than 30 directory matches were notified, surface a gap
+    # explanation so admins can see which axis (specialty, age group,
+    # format, insurance, state) constrained the result count.
+    match_gap = None
+    if len(notified_ids) < 30:
+        match_gap = await _explain_match_gap(req, len(notified_ids))
     return {
         "request": req,
         "notified": notified,
         "applications": apps,
         "invited": invited,
+        "match_gap": match_gap,
+    }
+
+
+async def _explain_match_gap(req: dict, notified_count: int) -> dict:
+    """Counts how many ACTIVE, APPROVED, BILLABLE therapists pass each
+    individual filter from the request, so the admin can see which axis
+    is the bottleneck. Returns `{notified, target, axes:[{label, count,
+    target, severity}], summary}`. `severity` is 'critical' if count==0,
+    'warning' if count<target, else 'ok'."""
+    target = 30
+    base_match = {
+        "is_active": {"$ne": False},
+        "pending_approval": {"$ne": True},
+        "subscription_status": {"$nin": ["past_due", "canceled", "unpaid", "incomplete"]},
+    }
+    total_active = await db.therapists.count_documents(base_match)
+
+    axes: list[dict] = []
+
+    def _axis(label: str, count: int, axis_target: int) -> dict:
+        if count == 0:
+            sev = "critical"
+        elif count < axis_target:
+            sev = "warning"
+        else:
+            sev = "ok"
+        return {
+            "label": label,
+            "count": count,
+            "target": axis_target,
+            "severity": sev,
+        }
+
+    # ── State (geo) ────────────────────────────────────────────────
+    state = req.get("location_state")
+    if state:
+        in_state = await db.therapists.count_documents({
+            **base_match, "licensed_states": state,
+        })
+        axes.append(_axis(f"Therapists licensed in {state}", in_state, target))
+
+    # ── Format ─────────────────────────────────────────────────────
+    fmt = (req.get("modality_preference") or "").lower()
+    if fmt == "in_person":
+        cnt = await db.therapists.count_documents({
+            **base_match,
+            "$or": [
+                {"modality_offering": {"$in": ["in_person", "both"]}},
+                {"offers_in_person": True},
+            ],
+        })
+        axes.append(_axis("Offer in-person sessions", cnt, target))
+    elif fmt == "telehealth":
+        cnt = await db.therapists.count_documents({
+            **base_match,
+            "$or": [
+                {"modality_offering": {"$in": ["telehealth", "both"]}},
+                {"telehealth": True},
+            ],
+        })
+        axes.append(_axis("Offer telehealth", cnt, target))
+
+    # ── Age group ──────────────────────────────────────────────────
+    age = req.get("age_group")
+    if age:
+        cnt = await db.therapists.count_documents({
+            **base_match, "age_groups": age,
+        })
+        axes.append(_axis(f"See {age.replace('_', ' ')} clients", cnt, max(8, target // 4)))
+
+    # ── Top presenting issue ───────────────────────────────────────
+    issues = req.get("presenting_issues") or []
+    for issue in issues[:3]:
+        cnt = await db.therapists.count_documents({
+            **base_match,
+            "$or": [
+                {"primary_specialties": issue},
+                {"secondary_specialties": issue},
+                {"general_treats": issue},
+            ],
+        })
+        axes.append(_axis(f"Treat {issue.replace('_', ' ')}", cnt, max(10, target // 3)))
+
+    # ── Modality preference (treatment style) ──────────────────────
+    pref_mods = req.get("modality_preferences") or []
+    for mod in pref_mods[:2]:
+        cnt = await db.therapists.count_documents({
+            **base_match, "modalities": mod,
+        })
+        axes.append(_axis(f"Practice {mod}", cnt, max(8, target // 4)))
+
+    # ── Insurance ──────────────────────────────────────────────────
+    if req.get("payment_type") in ("insurance", "either") and req.get("insurance_name"):
+        ins = req["insurance_name"]
+        cnt = await db.therapists.count_documents({
+            **base_match,
+            "insurance_accepted": ins,
+        })
+        axes.append(_axis(f"Accept {ins}", cnt, max(8, target // 3)))
+
+    # ── Cash budget ────────────────────────────────────────────────
+    if req.get("payment_type") in ("cash", "either") and req.get("budget"):
+        budget = int(req["budget"])
+        cnt = await db.therapists.count_documents({
+            **base_match,
+            "$or": [
+                {"cash_rate": {"$lte": budget}},
+                {"sliding_scale": True},
+            ],
+        })
+        axes.append(_axis(
+            f"Cash rate ≤ ${budget} (or sliding scale)",
+            cnt, max(15, target // 2),
+        ))
+
+    # ── Gender preference (only if patient required it) ────────────
+    if req.get("gender_required") and req.get("gender_preference"):
+        gp = req["gender_preference"]
+        cnt = await db.therapists.count_documents({
+            **base_match, "gender": gp,
+        })
+        axes.append(_axis(f"Identify as {gp}", cnt, max(8, target // 4)))
+
+    summary = (
+        f"Only {notified_count} therapist(s) were notified — target was "
+        f"{target}. Active directory size: {total_active}. The axes below "
+        f"show which filter cut the pool down."
+    )
+    return {
+        "notified": notified_count,
+        "target": target,
+        "active_directory": total_active,
+        "axes": axes,
+        "summary": summary,
     }
 
 
@@ -397,7 +538,111 @@ async def admin_list_therapists(
             license_number=t.get("license_number"),
         )
         t["license_verify_url"] = dopl_verification_url(t.get("license_number"))
+
+    # For pending therapists, attach "value tags" telling the admin which
+    # patient-demand gaps this applicant would fill — and flag duplicates
+    # (axes where we already have ≥5 active providers like them) so the
+    # admin can decide whether the marginal slot is worth approving.
+    if pending is True and rows:
+        await _attach_value_tags(rows)
     return rows
+
+
+_DUP_THRESHOLD = 5  # axes with ≥5 active matches are "duplicates"
+
+
+async def _attach_value_tags(pending_rows: list[dict]) -> None:
+    """Annotates each pending therapist with a `value_tags` list:
+        [{label, axis, kind: 'fills_gap'|'duplicate'|'neutral', count}]
+    Counts how many active+approved+billable therapists already cover
+    each axis the applicant would contribute to.
+    """
+    base = {
+        "is_active": {"$ne": False},
+        "pending_approval": {"$ne": True},
+        "subscription_status": {
+            "$nin": ["past_due", "canceled", "unpaid", "incomplete"]
+        },
+    }
+
+    async def count(extra: dict) -> int:
+        return await db.therapists.count_documents({**base, **extra})
+
+    for t in pending_rows:
+        tags: list[dict] = []
+        seen: set[tuple[str, str]] = set()
+
+        async def add(label: str, axis: str, count_val: int):
+            if (axis, label) in seen:
+                return
+            seen.add((axis, label))
+            kind = "fills_gap" if count_val < _DUP_THRESHOLD else "duplicate"
+            tags.append(
+                {
+                    "label": label,
+                    "axis": axis,
+                    "kind": kind,
+                    "count": count_val,
+                }
+            )
+
+        # Primary specialties — highest demand axis
+        for s in (t.get("primary_specialties") or [])[:5]:
+            cnt = await count({"primary_specialties": s})
+            await add(f"Treats {s.replace('_', ' ')}", "specialty", cnt)
+
+        # Modalities (treatment style)
+        for m in (t.get("modalities") or [])[:3]:
+            cnt = await count({"modalities": m})
+            await add(f"Practices {m}", "modality", cnt)
+
+        # Age groups
+        for a in (t.get("age_groups") or [])[:3]:
+            cnt = await count({"age_groups": a})
+            await add(f"Sees {a.replace('_', ' ')}", "age_group", cnt)
+
+        # Insurance
+        for ins in (t.get("insurance_accepted") or [])[:3]:
+            cnt = await count({"insurance_accepted": ins})
+            await add(f"Accepts {ins}", "insurance", cnt)
+
+        # Languages (often a gap)
+        for lang in (t.get("languages_spoken") or []):
+            if lang and lang.lower() not in ("english", "en"):
+                cnt = await count({"languages_spoken": lang})
+                await add(f"Speaks {lang}", "language", cnt)
+
+        # In-person coverage by city
+        for office in (t.get("office_addresses") or [])[:2]:
+            city = (office.get("city") or "").strip() if isinstance(office, dict) else ""
+            if city:
+                cnt = await count({
+                    "$or": [
+                        {"office_addresses.city": city},
+                        {"office_locations": city},
+                    ],
+                })
+                await add(f"In-person in {city}", "geo_city", cnt)
+
+        # Sliding scale / free consult — affordability axes
+        if t.get("sliding_scale"):
+            cnt = await count({"sliding_scale": True})
+            await add("Offers sliding scale", "affordability", cnt)
+        if t.get("free_consult"):
+            cnt = await count({"free_consult": True})
+            await add("Offers free consult", "affordability", cnt)
+
+        # Sort: gaps first, then duplicates.
+        tags.sort(key=lambda x: (x["kind"] == "duplicate", x["count"]))
+        # Summary: did this applicant fill ANY gap, or are they all duplicates?
+        gap_count = sum(1 for x in tags if x["kind"] == "fills_gap")
+        dup_count = sum(1 for x in tags if x["kind"] == "duplicate")
+        t["value_tags"] = tags[:12]
+        t["value_summary"] = {
+            "fills_gaps": gap_count,
+            "duplicates": dup_count,
+            "is_duplicate_only": gap_count == 0 and dup_count > 0,
+        }
 
 
 @router.post("/admin/therapists/{therapist_id}/approve")

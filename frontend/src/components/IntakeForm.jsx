@@ -298,7 +298,23 @@ export default function IntakeForm() {
       toast.success("Request received — please check your email to confirm.");
       navigate(`/verify/pending?id=${res.data.id}`, { replace: true });
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Something went wrong.");
+      const status = e?.response?.status;
+      const detail = e?.response?.data?.detail || "Something went wrong.";
+      if (status === 429) {
+        // Rate-limited — likely a duplicate referral within the window.
+        // Offer a deep-link to the patient portal so they can check the
+        // status of the request they already submitted instead of just
+        // seeing a wall of error text.
+        toast.error(detail, {
+          duration: 10000,
+          action: {
+            label: "View my referral",
+            onClick: () => navigate("/portal/patient"),
+          },
+        });
+      } else {
+        toast.error(detail);
+      }
     } finally {
       setSubmitting(false);
     }

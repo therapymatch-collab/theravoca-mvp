@@ -42,6 +42,9 @@ import TeamPanel from "@/pages/admin/panels/TeamPanel";
 import MasterQueryPanel from "@/pages/admin/panels/MasterQueryPanel";
 import BlogAdminPanel from "@/pages/admin/panels/BlogAdminPanel";
 import SettingsPanel from "@/pages/admin/panels/SettingsPanel";
+import RequestsPanel from "@/pages/admin/panels/RequestsPanel";
+import PendingTherapistsPanel from "@/pages/admin/panels/PendingTherapistsPanel";
+import AllProvidersPanel from "@/pages/admin/panels/AllProvidersPanel";
 
 // ─── Editor option lists (mirrors TherapistSignup) ───
 const ISSUES_LIST = [
@@ -853,181 +856,45 @@ export default function AdminDashboard() {
               </div>
 
               {tab === "requests" && (
-              <div className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
-                <table className="w-full text-sm" data-testid="requests-table">
-                  <thead className="bg-[#FDFBF7] text-[#6D6A65]">
-                    <tr className="text-left">
-                      <Th>Email</Th>
-                      <Th>Age / State</Th>
-                      <Th>Status</Th>
-                      <Th>Source</Th>
-                      <Th>Notified</Th>
-                      <Th>Apps</Th>
-                      <Th>Invited</Th>
-                      <Th>Threshold</Th>
-                      <Th>Created</Th>
-                      <Th></Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {requests.length === 0 && (
-                      <tr>
-                        <td colSpan={10} className="p-10 text-center text-[#6D6A65]">
-                          No requests yet.
-                        </td>
-                      </tr>
-                    )}
-                    {filteredRequests.map((r) => (
-                      <tr
-                        key={r.id}
-                        className="border-t border-[#E8E5DF] hover:bg-[#FDFBF7] cursor-pointer"
-                        onClick={() => openDetail(r.id)}
-                        data-testid={`request-row-${r.id}`}
-                      >
-                        <td className="p-4">
-                          <div className="text-[#2B2A29] font-medium">{r.email}</div>
-                          <div className="text-xs text-[#6D6A65]">
-                            {r.id.slice(0, 8)}
-                          </div>
-                        </td>
-                        <td className="p-4 text-[#2B2A29]">
-                          {r.client_age} / {r.location_state}
-                        </td>
-                        <td className="p-4">
-                          <StatusBadge s={r.status} verified={r.verified} />
-                        </td>
-                        <td
-                          className="p-4 text-xs text-[#2B2A29] max-w-[140px] truncate"
-                          title={r.referral_source || ""}
-                          data-testid={`request-referral-source-${r.id}`}
-                        >
-                          {r.referral_source || (
-                            <span className="text-[#C8C4BB] italic">—</span>
-                          )}
-                        </td>
-                        <td className="p-4">{r.notified_count || 0}</td>
-                        <td className="p-4 font-semibold text-[#2D4A3E]">
-                          {r.application_count || 0}
-                        </td>
-                        <td
-                          className="p-4 font-semibold text-[#C87965]"
-                          data-testid={`request-invited-count-${r.id}`}
-                          title="LLM outreach invites sent for this request"
-                        >
-                          {r.invited_count || 0}
-                        </td>
-                        <td className="p-4">{r.threshold}%</td>
-                        <td className="p-4 text-xs text-[#6D6A65]">
-                          {new Date(r.created_at).toLocaleString()}
-                        </td>
-                        <td className="p-4 text-[#6D6A65]">
-                          <ChevronRight size={16} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                <RequestsPanel
+                  requests={requests}
+                  filteredRequests={filteredRequests}
+                  openDetail={openDetail}
+                  StatusBadge={StatusBadge}
+                />
               )}
 
               {tab === "therapists" && (
-                <div className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
-                  {pendingTherapists.length === 0 ? (
-                    <div className="p-12 text-center text-[#6D6A65]">
-                      <Users className="mx-auto mb-3 text-[#C87965]" size={28} strokeWidth={1.5} />
-                      No therapist signups awaiting review.
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-[#E8E5DF]" data-testid="pending-therapists-list">
-                      {filteredPendingTherapists.map((t) => (
-                        <PendingSignupRow
-                          key={t.id}
-                          t={t}
-                          onApprove={() => approveTherapist(t.id)}
-                          onReject={() => rejectTherapist(t.id)}
-                          onEdit={() => setEditTherapist({ ...t })}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <PendingTherapistsPanel
+                  pendingTherapists={pendingTherapists}
+                  filteredPendingTherapists={filteredPendingTherapists}
+                  PendingSignupRow={PendingSignupRow}
+                  onApprove={approveTherapist}
+                  onReject={rejectTherapist}
+                  onEdit={(t) => setEditTherapist({ ...t })}
+                />
               )}
 
               {tab === "all_therapists" && (
-                <div className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
-                  <ProviderTableControls
-                    total={allTherapists.length}
-                    visibleTotal={
-                      (showOnlyReapproval
-                        ? filteredAllTherapists.filter((t) => t.pending_reapproval)
-                        : filteredAllTherapists
-                      ).length
-                    }
-                    showOnlyReapproval={showOnlyReapproval}
-                    setShowOnlyReapproval={setShowOnlyReapproval}
-                    pageSize={providerPageSize}
-                    setPageSize={setProviderPageSize}
-                    page={providerPage}
-                    setPage={setProviderPage}
-                    pendingCount={
-                      allTherapists.filter((t) => t.pending_reapproval).length
-                    }
-                    visibleCols={visibleCols}
-                    setVisibleCols={setVisibleCols}
-                    defaultCols={defaultCols}
-                    setDefaultCols={setDefaultCols}
-                  />
-                  <div className="overflow-x-auto">
-                  <table className="w-full text-sm" data-testid="all-therapists-table">
-                    <thead className="bg-[#FDFBF7] text-[#6D6A65]">
-                      <tr className="text-left">
-                        {PROVIDER_COLUMNS
-                          .filter((c) => visibleCols.includes(c.key))
-                          .map((c) => (
-                            <Th key={c.key}>{c.label}</Th>
-                          ))}
-                        <Th></Th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {allTherapists.length === 0 && (
-                        <tr>
-                          <td colSpan={visibleCols.length + 1} className="p-10 text-center text-[#6D6A65]">
-                            No providers in the directory yet.
-                          </td>
-                        </tr>
-                      )}
-                      {(showOnlyReapproval
-                        ? filteredAllTherapists.filter((t) => t.pending_reapproval)
-                        : filteredAllTherapists
-                      )
-                        .slice(
-                          providerPage * providerPageSize,
-                          providerPage * providerPageSize + providerPageSize,
-                        )
-                        .map((t) => (
-                          <ProviderRow
-                            key={t.id}
-                            t={t}
-                            onEdit={() => setEditTherapist({ ...t })}
-                            visibleCols={visibleCols}
-                          />
-                        ))}
-                    </tbody>
-                  </table>
-                  </div>
-                  <ProviderTablePager
-                    total={
-                      (showOnlyReapproval
-                        ? filteredAllTherapists.filter((t) => t.pending_reapproval)
-                        : filteredAllTherapists
-                      ).length
-                    }
-                    pageSize={providerPageSize}
-                    page={providerPage}
-                    setPage={setProviderPage}
-                  />
-                </div>
+                <AllProvidersPanel
+                  allTherapists={allTherapists}
+                  filteredAllTherapists={filteredAllTherapists}
+                  showOnlyReapproval={showOnlyReapproval}
+                  setShowOnlyReapproval={setShowOnlyReapproval}
+                  providerPageSize={providerPageSize}
+                  setProviderPageSize={setProviderPageSize}
+                  providerPage={providerPage}
+                  setProviderPage={setProviderPage}
+                  visibleCols={visibleCols}
+                  setVisibleCols={setVisibleCols}
+                  defaultCols={defaultCols}
+                  setDefaultCols={setDefaultCols}
+                  PROVIDER_COLUMNS={PROVIDER_COLUMNS}
+                  ProviderTableControls={ProviderTableControls}
+                  ProviderRow={ProviderRow}
+                  ProviderTablePager={ProviderTablePager}
+                  onEdit={(t) => setEditTherapist({ ...t })}
+                />
               )}
               {tab === "referral_sources" && (
                 <div className="mt-6 space-y-4" data-testid="referral-sources-panel">
@@ -2127,6 +1994,8 @@ export default function AdminDashboard() {
             <div className="space-y-5">
               <RequestFullBrief request={detail.request} />
 
+              {detail.match_gap && <MatchGapPanel gap={detail.match_gap} />}
+
               <div className="flex flex-wrap gap-3">
                 <button
                   className="tv-btn-primary !py-2 !px-4 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
@@ -2402,6 +2271,52 @@ function RequestFullBrief({ request }) {
           <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Availability windows</div>
           <div className="text-[#2B2A29] mt-0.5">{availability}</div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function MatchGapPanel({ gap }) {
+  if (!gap) return null;
+  const sevColor = (s) =>
+    s === "critical"
+      ? "bg-[#FDF1EF] border-[#F2C9C0] text-[#D45D5D]"
+      : s === "warning"
+      ? "bg-[#FBF3E8] border-[#EAD9B6] text-[#9A6E1A]"
+      : "bg-[#F2F7F1] border-[#D2E2D0] text-[#3F6F4A]";
+  return (
+    <div
+      className="bg-white border border-[#E8E5DF] rounded-2xl p-5"
+      data-testid="match-gap-panel"
+    >
+      <div className="flex items-start gap-3">
+        <div className="w-9 h-9 rounded-full bg-[#FBF3E8] text-[#C87965] flex items-center justify-center shrink-0">
+          <AlertTriangle size={16} />
+        </div>
+        <div className="flex-1">
+          <h4 className="font-semibold text-[#2B2A29]">
+            Why we couldn&apos;t fill 30 matches
+          </h4>
+          <p className="text-sm text-[#6D6A65] mt-1 leading-relaxed">
+            {gap.summary}
+          </p>
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {(gap.axes || []).map((a, i) => (
+          <div
+            key={`${a.label}-${i}`}
+            className={`border rounded-xl px-3 py-2 ${sevColor(a.severity)}`}
+            data-testid={`match-gap-axis-${i}`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium">{a.label}</span>
+              <span className="text-xs font-mono">
+                {a.count} <span className="opacity-60">/ {a.target}</span>
+              </span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -4414,6 +4329,54 @@ function PendingSignupRow({ t, onApprove, onReject, onEdit }) {
           >
             {expanded ? "Hide full details" : "Show all signup answers"}
           </button>
+
+          {/* Value tags — shows what gaps this applicant fills, and warns
+              the admin if they're a "duplicate" (axes where we already
+              have ≥5 active providers). */}
+          {(t.value_tags?.length || 0) > 0 && (
+            <div className="mt-4 border-t border-dashed border-[#E8E5DF] pt-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[10px] uppercase tracking-wider text-[#6D6A65]">
+                  Coverage value
+                </span>
+                {t.value_summary?.is_duplicate_only ? (
+                  <span
+                    className="text-xs bg-[#FDF1EF] border border-[#F2C9C0] text-[#D45D5D] rounded-full px-2 py-0.5"
+                    data-testid={`pending-duplicate-warning-${t.id}`}
+                    title="Every axis this applicant covers already has 5+ active providers. Approving may dilute referrals to existing therapists."
+                  >
+                    Duplicate roster — consider declining
+                  </span>
+                ) : (
+                  <span
+                    className="text-xs bg-[#F2F7F1] border border-[#D2E2D0] text-[#3F6F4A] rounded-full px-2 py-0.5"
+                    data-testid={`pending-fills-gap-${t.id}`}
+                  >
+                    Fills {t.value_summary?.fills_gaps || 0} gap
+                    {(t.value_summary?.fills_gaps || 0) === 1 ? "" : "s"}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {t.value_tags.map((tag, i) => (
+                  <span
+                    key={`${tag.axis}-${tag.label}-${i}`}
+                    className={`text-[11px] rounded-full px-2 py-0.5 border ${
+                      tag.kind === "fills_gap"
+                        ? "bg-[#F2F7F1] border-[#D2E2D0] text-[#3F6F4A]"
+                        : "bg-[#F4F1EC] border-[#E8E5DF] text-[#6D6A65]"
+                    }`}
+                    title={`${tag.count} active provider${tag.count === 1 ? "" : "s"} already cover this axis`}
+                    data-testid={`value-tag-${t.id}-${i}`}
+                  >
+                    {tag.kind === "fills_gap" ? "✓ " : ""}
+                    {tag.label}{" "}
+                    <span className="opacity-60">({tag.count})</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Action stack */}

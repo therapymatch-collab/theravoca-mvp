@@ -840,7 +840,10 @@ export default function TherapistSignup() {
                     </div>
                   </Field>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Field label={<>Full name + degree (e.g. Sarah Lin, LCSW) <Req /></>}>
+                    <Field
+                      label={<>Full name + degree <Req /></>}
+                      hint="e.g. Sarah Lin, LCSW"
+                    >
                       <Input
                         value={data.name}
                         onChange={(e) => set("name", e.target.value)}
@@ -1423,7 +1426,14 @@ export default function TherapistSignup() {
                 </>)}
               </div>
 
-              <div className="mt-10 pt-6 border-t border-[#E8E5DF] flex items-center justify-between flex-wrap gap-4">
+              {step === 1 && (
+                <p className="mt-6 text-xs text-[#6D6A65]">
+                  Your profile is reviewed before going live. You can edit
+                  anything later.
+                </p>
+              )}
+
+              <div className="mt-6 pt-6 border-t border-[#E8E5DF] flex items-center justify-between flex-wrap gap-4">
                 {step > 1 ? (
                   <button
                     type="button"
@@ -1437,11 +1447,9 @@ export default function TherapistSignup() {
                     Back
                   </button>
                 ) : (
-                  <p className="text-xs text-[#6D6A65] max-w-md">
-                    Your profile is reviewed before going live. You can edit anything later.
-                  </p>
+                  <span className="hidden sm:block" aria-hidden="true" />
                 )}
-                <div className="flex flex-col items-end gap-2">
+                <div className="flex flex-col items-end gap-2 ml-auto">
                   {!canAdvance(step) && stepBlockReason(step) && (
                     <p
                       className="text-xs text-[#D45D5D] max-w-xs text-right leading-relaxed"

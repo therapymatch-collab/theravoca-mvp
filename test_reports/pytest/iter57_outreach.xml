@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="31.949" timestamp="2026-04-28T14:10:17.673687+00:00" hostname="agent-env-23b94589-1b76-4fdc-8dc9-4b69ec6bdf34"><testcase classname="tests.test_iteration57_auto_outreach" name="test_auto_outreach_fires_on_verify_under_30" time="31.866"><failure message="AssertionError: request 03dfd5b1-755b-48f9-9ca2-6144dbf977ff never reached matched status&#10;assert None is not None">tests/test_iteration57_auto_outreach.py:94: in test_auto_outreach_fires_on_verify_under_30
+    assert notified is not None, f"request {rid} never reached matched status"
+E   AssertionError: request 03dfd5b1-755b-48f9-9ca2-6144dbf977ff never reached matched status
+E   assert None is not None</failure></testcase></testsuite></testsuites>
