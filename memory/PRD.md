@@ -1226,3 +1226,49 @@ User asked for 8 changes; all shipped in one batch.
 ### Tests
 - `tests/test_iteration63_research_enrichment.py`: **16/16 pass.**
 - Iter-25 testing report at `/app/test_reports/iteration_25.json`.
+
+
+## Iteration 64-65 — Archive/Delete + Deep Research + SMS A2P + Signup polish (2026-04-28)
+
+### SMS test endpoint hardened (Iter-65)
+- POST /api/admin/test-sms now polls Twilio for terminal status (up to
+  6s) and surfaces `error_code` + `troubleshooting_hint`.
+- Common error codes mapped: 30034 (A2P 10DLC), 21610 (STOP), 21408
+  (region not enabled), 21211 (bad number).
+- **Confirmed:** the user's current Twilio number is unregistered for
+  US A2P 10DLC — error 30034. **All SMS to US recipients will fail
+  until A2P registration is completed at twilio.com/console/sms/a2p-messaging.**
+
+### Therapist provider archive / restore / delete (Iter-64)
+- `POST /admin/therapists/{id}/archive`, `/restore`, and `DELETE` (with
+  409 protection if applications reference the therapist).
+- `AllProvidersPanel`: archive / restore / delete buttons per row;
+  archived rows render at 50% opacity.
+- **Iter-65 add-on:** "Active only" toggle defaults ON, hides
+  archived rows; flip OFF to inspect the archived list.
+
+### LLM deep-research mode (Iter-64-65)
+- `POST /admin/research-enrichment/deep/{therapist_id}` runs DDG
+  search → fetches up to 5 extra pages → LLM extracts:
+  - `summary`, `evidence_themes`, `modality_evidence`,
+    `style_signals`, `depth_signal`, `public_footprint`,
+    `extra_sources`. Cached on therapist doc.
+- Per-row "Deep research" button (Sparkles icon) with inline expanding
+  result panel showing summary + specialty evidence list + public
+  footprint + clickable source URLs.
+- Verified live on Ann Omodt: 17s round-trip, returned IFS approach
+  summary + 7 specialty evidence entries.
+
+### Therapist signup post-success polish (Iter-65)
+- Both paid-path AND skip-payment-path now show a "Check your email —
+  next steps" panel listing what's in the welcome email (referral
+  flow, portal link, onboarding video, gating note).
+- Skip path renders the panel inline rather than navigating to /sign-in
+  immediately, so the therapist can read the next-steps before leaving.
+- Stripe back-button preservation (Iter-59) regression-verified.
+
+### Tests
+- `tests/test_iteration64_archive_deep_research.py`: 13/13 pass.
+- `tests/test_iteration65_sms_a2p.py`: 3/3 pass.
+- Frontend Iter-65 flows: 5/5 verified live in browser.
+- DB cleanup (Iter-63) preserved: 123 therapists, 0 test data.
