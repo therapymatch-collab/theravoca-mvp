@@ -687,3 +687,31 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 ### Tests
 - `tests/test_iteration53_admin_team.py` — 13 tests covering invite/list/login-with-email/JWT-grants-admin/wrong-password-401/reset/deactivate/master-password-still-works/no-creds-401/invalid-bearer-401.
 - All 47 prior tests still passing (12 + 22 + 13).
+
+## Iteration 54 — Go-live cutover toolkit (Apr 28, 2026)
+
+User asked for the "Claim & complete your profile" outreach campaign to be ready when they wipe the DB and put real therapist emails in.
+
+### Backend
+- New `/app/backend/profile_completeness.py` — single source of truth for completeness scoring. **REQUIRED** fields (13): name, email, phone, license_number, license_expires_at, bio≥40 chars, profile_picture, primary_specialties, age_groups, client_types, modality_offering, cash_rate, office_or_telehealth. **ENHANCING** fields (9): years_experience, secondary_specialties, modalities, insurance_accepted, languages_spoken, license_picture, free_consult, sliding_scale, website. Score = 70% weight on REQUIRED + 30% on ENHANCING. `publishable=True` only when ALL REQUIRED pass.
+- `email_service.send_claim_profile_email(to, name, score, missing_fields)` — branded email with score, progress bar, missing-fields checklist, and CTA to /portal/therapist/edit.
+- New endpoints (admin auth):
+   - `GET /api/admin/profile-completeness` → `{therapists:[{id,name,email,score,publishable,required_done,required_total,required_missing,enhancing_missing,claim_email_sent_at}], total, publishable, incomplete, average_score}`. Sorted ascending by score.
+   - `POST /api/admin/profile-completeness/send-claim` body: `{mode: "all_incomplete"|"selected", therapist_ids?, dry_run?, resend?}` — defaults skip already-emailed therapists; `dry_run=True` returns recipients without sending.
+- `GET /api/portal/therapist/referrals` therapist payload now includes `completeness: {score, publishable, required_missing, enhancing_missing, ...}`.
+
+### Frontend
+- New `/app/frontend/src/components/ProfileCompletionMeter.jsx` — top-of-portal banner showing score + progress bar + Action-needed/Publishable chip. Expandable checklist of REQUIRED missing (red) and RECOMMENDED missing (grey) fields. Auto-hides at 100% complete.
+- TherapistPortal renders `<ProfileCompletionMeter />` for approved therapists.
+- New `/app/frontend/src/pages/AdminDashboard.jsx#ProfileCompletionPanel` — Admin "Profile completion" tab with: 3-stat header (Total/Publishable/Incomplete), Dry-run + Send-claim-emails buttons + Resend toggle, campaign-result toast, full roster table sorted by score with per-row "Send claim email" action.
+
+### Go-live cutover playbook
+1. Wipe DB → seed real therapist emails (with whatever fields are available).
+2. Admin opens "Profile completion" tab → confirms total / incomplete count.
+3. Click "Dry run" → preview recipients, confirm everyone's there.
+4. Click "Send claim emails" → therapists receive personalised "Welcome to TheraVoca, here's what's missing" emails.
+5. Therapist signs in via magic code → portal prominently shows their score + checklist → 5-minute fix.
+6. Admin watches the "Publishable" stat tick up. Stragglers can be re-emailed via the per-row "Send claim email" action.
+
+### Tests
+- `tests/test_iteration54_completeness.py` — 11 tests: unit (empty/all-required/telehealth/short-bio/100%) + admin endpoint contract + dry-run + selected-mode + claim_email_sent_at stamping + portal payload includes completeness.

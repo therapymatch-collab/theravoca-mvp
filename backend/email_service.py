@@ -568,3 +568,65 @@ async def send_availability_prompt(to: str, therapist_name: str) -> None:
     </p>
     """
     await _send(to, subject, _wrap("Availability check-in", inner))
+
+
+
+async def send_claim_profile_email(
+    to: str,
+    therapist_name: str,
+    score: int,
+    missing_fields: list[str],
+) -> None:
+    """One-time go-live outreach email asking each existing therapist to
+    claim their profile and fill in any missing information.
+
+    Renders the actual list of missing fields inline so the therapist
+    knows exactly what to fix before they sign in.
+    """
+    first_name = _first_name(therapist_name)
+    portal_url = f"{_get_app_url()}/sign-in?role=therapist"
+    edit_url = f"{_get_app_url()}/portal/therapist/edit"
+    subject = "Welcome to TheraVoca — claim & complete your profile"
+    bullets_html = "".join(
+        f'<li style="margin:6px 0;">{label}</li>' for label in missing_fields[:10]
+    )
+    if not bullets_html:
+        bullets_html = '<li style="margin:6px 0;">Your profile is already complete — feel free to refine it any time.</li>'
+    inner = f"""
+    <p style="font-size:16px;line-height:1.6;">Hi {first_name},</p>
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      We're going live with TheraVoca — a referral platform that does the
+      logistical work of connecting clients to therapists like you so you
+      can spend more time with patients and less on intake calls.
+    </p>
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      We've already pre-loaded your basic credentials. To make sure
+      patients get the best possible match (and so your profile shows up
+      in search), please take 5 minutes to fill in what's missing.
+    </p>
+    <div style="background:{BRAND['bg']};border:1px solid {BRAND['border']};border-radius:12px;padding:18px 22px;margin:22px 0;">
+      <div style="font-size:13px;color:{BRAND['muted']};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">
+        Your profile is {score}% complete
+      </div>
+      <div style="background:{BRAND['border']};border-radius:999px;height:8px;overflow:hidden;margin:8px 0 14px;">
+        <div style="background:{BRAND['primary']};width:{score}%;height:100%;"></div>
+      </div>
+      <div style="font-size:14px;color:{BRAND['text']};font-weight:600;margin-bottom:8px;">What's missing:</div>
+      <ul style="margin:0;padding-left:18px;color:{BRAND['text']};font-size:14px;line-height:1.7;">
+        {bullets_html}
+      </ul>
+    </div>
+    <p style="margin:28px 0;text-align:center;">
+      <a href="{edit_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">
+        Complete my profile
+      </a>
+    </p>
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;text-align:center;">
+      You'll sign in with a one-time code sent to this email — no password to remember.
+    </p>
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">
+      Already signed in? Pop into your <a href="{portal_url}" style="color:{BRAND['primary']};">portal</a>
+      any time. Reply to this email if anything looks off — we'd love to hear from you.
+    </p>
+    """
+    await _send(to, subject, _wrap("Claim your TheraVoca profile", inner))

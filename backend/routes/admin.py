@@ -172,6 +172,126 @@ async def admin_reset_team_password(
     return {"ok": True}
 
 
+# ─── Profile-completeness / claim-campaign ───────────────────────────────────
+from profile_completeness import evaluate as _evaluate_profile  # noqa: E402
+from email_service import send_claim_profile_email as _send_claim_email  # noqa: E402
+from helpers import _spawn_bg as _bg_spawn  # noqa: E402
+
+
+@router.get("/admin/profile-completeness")
+async def admin_profile_completeness(_: bool = Depends(require_admin)):
+    """Roster of every active therapist with their completion score and
+    list of missing fields. Used by the admin to see who needs nudging
+    before / after the go-live cutover.
+
+    Sorted by score ascending so the people who need the most help are
+    surfaced first.
+    """
+    docs = await db.therapists.find(
+        {"is_active": {"$ne": False}, "pending_approval": {"$ne": True}},
+        {"_id": 0},
+    ).to_list(2000)
+    rows: list[dict] = []
+    for t in docs:
+        result = _evaluate_profile(t)
+        rows.append({
+            "id": t.get("id"),
+            "name": t.get("name"),
+            "email": t.get("email"),
+            "score": result["score"],
+            "publishable": result["publishable"],
+            "required_done": result["required_done"],
+            "required_total": result["required_total"],
+            "enhancing_done": result["enhancing_done"],
+            "enhancing_total": result["enhancing_total"],
+            "required_missing": result["required_missing"],
+            "enhancing_missing": result["enhancing_missing"],
+            "claim_email_sent_at": t.get("claim_email_sent_at"),
+        })
+    rows.sort(key=lambda r: (r["score"], r["name"] or ""))
+    avg = round(sum(r["score"] for r in rows) / max(1, len(rows)))
+    publishable = sum(1 for r in rows if r["publishable"])
+    return {
+        "therapists": rows,
+        "total": len(rows),
+        "publishable": publishable,
+        "incomplete": len(rows) - publishable,
+        "average_score": avg,
+    }
+
+
+@router.post("/admin/profile-completeness/send-claim")
+async def admin_send_claim_campaign(
+    payload: dict, _: bool = Depends(require_admin)
+):
+    """Triggers the "Claim & complete your profile" outreach email.
+
+    Body:
+      - mode: "all_incomplete" (default) | "selected"
+      - therapist_ids: list[str] (only when mode=="selected")
+      - dry_run: bool (default False) — when True, returns the recipient
+        list WITHOUT actually sending. Useful for sanity-checking the
+        campaign on staging.
+      - resend: bool (default False) — when False (default) we skip
+        therapists who already have `claim_email_sent_at` set so a single
+        admin can hammer the button safely.
+    """
+    mode = payload.get("mode", "all_incomplete")
+    therapist_ids = payload.get("therapist_ids") or []
+    dry_run = bool(payload.get("dry_run", False))
+    allow_resend = bool(payload.get("resend", False))
+
+    query: dict[str, Any] = {"is_active": {"$ne": False}, "pending_approval": {"$ne": True}}
+    if mode == "selected":
+        if not therapist_ids:
+            raise HTTPException(400, "therapist_ids is required when mode='selected'")
+        query["id"] = {"$in": therapist_ids}
+
+    docs = await db.therapists.find(query, {"_id": 0}).to_list(2000)
+    recipients: list[dict] = []
+    for t in docs:
+        result = _evaluate_profile(t)
+        if mode == "all_incomplete" and result["publishable"]:
+            continue  # skip already-complete therapists
+        if t.get("claim_email_sent_at") and not allow_resend:
+            continue  # skip already-emailed therapists unless resend=True
+        recipients.append({
+            "id": t["id"],
+            "email": t["email"],
+            "name": t.get("name") or t["email"],
+            "score": result["score"],
+            "missing": [m["label"] for m in result["required_missing"] + result["enhancing_missing"]],
+        })
+
+    if dry_run:
+        return {"would_send": len(recipients), "recipients": recipients[:50], "dry_run": True}
+
+    sent = 0
+    failed: list[dict] = []
+    now = _now_iso()
+    for r in recipients:
+        try:
+            # Spawn into the background so a 200-recipient run doesn't
+            # block the request timeout. Background tasks are managed by
+            # `helpers._spawn_bg` which keeps a strong reference so the
+            # GC can't kill them mid-flight.
+            _bg_spawn(_send_claim_email(
+                to=r["email"],
+                therapist_name=r["name"],
+                score=r["score"],
+                missing_fields=r["missing"],
+            ))
+            await db.therapists.update_one(
+                {"id": r["id"]},
+                {"$set": {"claim_email_sent_at": now, "claim_email_score_at_send": r["score"]}},
+            )
+            sent += 1
+        except Exception as e:
+            failed.append({"email": r["email"], "error": str(e)})
+
+    return {"sent": sent, "failed": failed, "total_targeted": len(recipients)}
+
+
 @router.get("/admin/requests", response_model=list)
 async def admin_list_requests(_: bool = Depends(require_admin)):
     docs = await db.requests.find(

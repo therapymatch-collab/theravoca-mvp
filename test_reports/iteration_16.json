@@ -1,0 +1,27 @@
+{
+  "summary": "Iteration 54 (TheraVoca go-live cutover toolkit — profile-completeness scoring + claim-email campaign) tested. Backend: 11/11 pytest cases in test_iteration54_completeness.py PASS — evaluate() unit tests, GET /api/admin/profile-completeness (auth + aggregate + ascending sort + per-row keys), POST /api/admin/profile-completeness/send-claim (dry_run, selected mode requires ids, selected send marks claim_email_sent_at + skip-already-emailed without resend), and /portal/therapist/referrals payload includes `completeness` block. Frontend: Admin Profile-completion tab (data-testid=tab-completion) renders Total/Publishable/Incomplete/Average stat cards, claim-dry-run + claim-send-all + claim-resend-toggle visible/clickable; dry-run toast shows 'Dry run: would send to 162 therapists. No emails were actually sent.'; roster of 165 rows sorted ascending by score (5%→11%→…); per-row completion-send-{email} buttons present (165 found). Therapist portal (portaltest@example.com): ProfileCompletionMeter renders with score 63%, completion-bar bar, 'Complete profile' link, completion-toggle expands to show 5 required-missing-* + 3 enhancing-missing-* items with proper testid keys (phone/profile_picture/age_groups/client_types/modality_offering for required; secondary_specialties/languages_spoken/license_picture for enhancing).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration54_completeness.py",
+    "/app/test_reports/pytest/iteration16_completeness.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AdminDashboard.jsx is now ~4200+ lines (ProfileCompletionPanel starts ~3905). Long-standing concern flagged in iteration 15 — recommend extracting ProfileCompletionPanel to its own file alongside TeamPanel and ProviderTableControls.",
+    "profile_completeness.py is well-structured and self-documenting; no concerns. The `__office_or_telehealth__` synthetic key is correctly stripped of underscores in both the missing-list output and meter testid.",
+    "Roster row score has no dedicated testid (e.g. `completion-score-{id}`). The per-row id attribute is `completion-row-{id}` and send button is `completion-send-{email}`. Score is rendered as plain text inside the row. Not a bug — visual order verified manually — but adding a `completion-row-score-{id}` would harden future regression tests."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100% on validated paths (admin completion tab end-to-end + therapist portal meter expand/collapse)"},
+  "test_credentials": "Master admin: admin123!. Therapist test: portaltest@example.com via _create_session_token (sessionStorage keys: tv_session_token / tv_session_role='therapist' / tv_session_email).",
+  "seed_data_creation": "test_send_to_specific_therapist_marks_claim_sent inserts one fresh therapist doc (id=uuid, email=claimtest_<ts>@example.com) per run via direct db.therapists.insert_one. No cleanup teardown — each run leaves 1 extra row. Pre-existing test claimtest_* rows from the iteration54 author's prior runs are also still in the DB.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iteration54 backend + frontend fully wired and verified end-to-end against https://care-matcher-1.preview.emergentagent.com. The Profile-completion tab is the rightmost admin tab (after Team / Patients-by-email — past Coverage gaps). Master-password admin login button has testid=admin-login-btn and tab uses testid=tab-completion. Therapist-portal meter testids: profile-completion-meter / completion-score / completion-bar / completion-edit-btn / completion-toggle / required-missing-{key} / enhancing-missing-{key}. Test session token issued via sessionStorage (NOT localStorage — common pitfall). For portaltest@example.com the score is currently 63% with 5 required-missing items including 'phone' which is curious because the iteration54 unit-test fixture phone is set; means the portaltest doc has phone unset/empty in the DB. No availability modal popped during this run.",
+  "rca of the issue": "N/A — no functional bugs found. All 11 backend tests pass + admin UI + therapist portal UI verified working end-to-end."
+}

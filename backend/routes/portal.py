@@ -19,6 +19,7 @@ from deps import (
 from email_service import send_magic_code
 from helpers import _now_iso, _safe_summary_for_therapist
 from models import MagicCodeRequest, MagicCodeVerify
+from profile_completeness import evaluate as _evaluate_profile_inline
 
 router = APIRouter()
 
@@ -551,6 +552,7 @@ async def portal_therapist_referrals(
             "pending_reapproval_fields": therapist.get("pending_reapproval_fields", []),
             "updated_at": therapist.get("updated_at"),
             "has_password": bool(therapist.get("password_hash")),
+            "completeness": _evaluate_profile_inline(therapist),
         },
         "referrals": out,
     }
