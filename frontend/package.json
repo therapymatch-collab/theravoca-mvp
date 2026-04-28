@@ -58,7 +58,9 @@
   "scripts": {
     "start": "craco start",
     "build": "craco build",
-    "test": "craco test"
+    "test": "craco test",
+    "lint": "eslint -c eslint.config.mjs 'src/**/*.{js,jsx,ts,tsx}' --max-warnings=0",
+    "lint:strict": "eslint -c eslint.config.mjs 'src/**/*.{js,jsx,ts,tsx}' --rule 'no-undef: error' --max-warnings=0"
   },
   "browserslist": {
     "production": [

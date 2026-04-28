@@ -22,16 +22,29 @@ import BlogPost from "@/pages/BlogPost";
 import FeedbackForm from "@/pages/FeedbackForm";
 import FeedbackWidget from "@/components/FeedbackWidget";
 import PreviewBanner from "@/components/PreviewBanner";
+import ScrollManager from "@/components/ScrollManager";
 import NotFound from "@/pages/NotFound";
 
 function App() {
   useEffect(() => {
     document.title = "TheraVoca — Let therapists come to you";
+    // Disable native scroll-restoration so React Router controls
+    // exactly where the page lands after every navigation. Without
+    // this, the browser snaps back to the previous scrollY when
+    // bouncing between routes — most visibly on Logo → / from any
+    // deep page.
+    if (
+      typeof window !== "undefined" &&
+      "scrollRestoration" in window.history
+    ) {
+      window.history.scrollRestoration = "manual";
+    }
   }, []);
   return (
     <div className="App tv-grain min-h-screen">
       <Toaster richColors position="top-center" />
       <BrowserRouter>
+        <ScrollManager />
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/sign-in" element={<SignIn />} />

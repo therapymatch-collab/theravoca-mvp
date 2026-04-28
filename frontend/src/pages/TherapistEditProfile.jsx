@@ -15,7 +15,7 @@
  * Changes to any "re-approval" field (specialties, license, name, etc.)
  * flip a flag server-side so an admin sees the diff in the pending queue.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowLeft, Loader2, Save, AlertTriangle, Eye } from "lucide-react";
@@ -212,6 +212,12 @@ export default function TherapistEditProfile() {
 
         {/* 1. About you */}
         <Section title="About you">
+          <Field label="Profile photo">
+            <PhotoUploader
+              value={draft.profile_picture}
+              onChange={(v) => set("profile_picture", v)}
+            />
+          </Field>
           <Field label="Bio (patients read this)">
             <Textarea
               value={draft.bio}
@@ -235,7 +241,41 @@ export default function TherapistEditProfile() {
           </Field>
         </Section>
 
-        {/* 2. Session fees */}
+        {/* 2. License & credentials */}
+        <Section title="License & credentials">
+          <p className="text-xs text-[#6D6A65] -mt-2 mb-2">
+            Editing your license number or expiration date triggers an
+            admin re-approval review. Your profile stays live during
+            review.
+          </p>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <Field label="License number">
+              <Input
+                value={draft.license_number || ""}
+                onChange={(e) => set("license_number", e.target.value)}
+                placeholder="e.g. LCSW-12345"
+                data-testid="input-license-number"
+              />
+            </Field>
+            <Field label="License expiration date">
+              <Input
+                type="date"
+                value={(draft.license_expires_at || "").slice(0, 10)}
+                onChange={(e) =>
+                  set(
+                    "license_expires_at",
+                    e.target.value
+                      ? new Date(e.target.value).toISOString()
+                      : "",
+                  )
+                }
+                data-testid="input-license-expires"
+              />
+            </Field>
+          </div>
+        </Section>
+
+        {/* 3. Session fees */}
         <Section title="Session fees">
           <div className="grid sm:grid-cols-2 gap-4">
             <Field label="Cash / out-of-pocket rate (USD)">
@@ -645,3 +685,112 @@ function PreviewKV({ label, value, span = 1 }) {
   );
 }
 
+
+// PhotoUploader — accepts an image, downscales it client-side to fit
+// within 600×600 (whichever side is bigger), encodes it as a JPEG
+// data URL, and emits onChange(dataUrl). Avoids needing a separate
+// upload endpoint while keeping the document lean (~80–150 KB per
+// portrait).
+function PhotoUploader({ value, onChange }) {
+  const inputRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+
+  const onFile = async (file) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file (jpg/png).");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("Photo must be under 8 MB before resize.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = reject;
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
+      const img = await new Promise((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = reject;
+        i.src = dataUrl;
+      });
+      const max = 600;
+      let { width, height } = img;
+      if (width > max || height > max) {
+        if (width >= height) {
+          height = Math.round((height * max) / width);
+          width = max;
+        } else {
+          width = Math.round((width * max) / height);
+          height = max;
+        }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, width, height);
+      const compressed = canvas.toDataURL("image/jpeg", 0.85);
+      onChange(compressed);
+      toast.success("Photo updated — don't forget to Save changes.");
+    } catch (e) {
+      toast.error(e?.message || "Could not process image");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-4 flex-wrap">
+      <div className="w-24 h-24 rounded-full bg-[#F4EFE7] border border-[#E8E5DF] overflow-hidden flex items-center justify-center text-[#6D6A65]">
+        {value ? (
+          <img
+            src={value}
+            alt="Profile"
+            className="w-full h-full object-cover"
+            data-testid="profile-photo-preview"
+          />
+        ) : (
+          <span className="text-xs">No photo</span>
+        )}
+      </div>
+      <div className="flex flex-col gap-2">
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          onChange={(e) => onFile(e.target.files?.[0])}
+          className="hidden"
+          data-testid="profile-photo-input"
+        />
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={busy}
+          className="tv-btn-secondary !py-2 !px-4 text-sm disabled:opacity-50"
+          data-testid="profile-photo-upload-btn"
+        >
+          {busy ? "Processing…" : value ? "Replace photo" : "Upload photo"}
+        </button>
+        {value && (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            className="text-xs text-[#D45D5D] hover:underline self-start"
+            data-testid="profile-photo-remove-btn"
+          >
+            Remove photo
+          </button>
+        )}
+        <p className="text-xs text-[#6D6A65]">
+          Square crops look best. We resize to 600×600 max.
+        </p>
+      </div>
+    </div>
+  );
+}

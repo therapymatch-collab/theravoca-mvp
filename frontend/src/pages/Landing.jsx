@@ -79,23 +79,30 @@ export default function Landing() {
               {t("landing.hero.eyebrow", "Pilot live in Idaho")}
             </p>
             <h1 className="font-serif-display text-5xl sm:text-6xl lg:text-7xl text-[#2D4A3E] leading-[1.05] tracking-tight">
-              Let therapists <em className="not-italic text-[#C87965]">come to you</em>.
+              {t("landing.hero.headline", (
+                <>Let therapists <em className="not-italic text-[#C87965]">come to you</em>.</>
+              ))}
             </h1>
             <p
               className="mt-5 text-2xl sm:text-3xl text-[#2D4A3E] font-serif-display leading-snug"
               data-testid="hero-promise"
             >
-              <span className="font-semibold">3+ matched therapists in 24 hours</span>
-              <span className="text-[#C87965]">, guaranteed.</span>
+              {t("landing.hero.promise", (
+                <>
+                  <span className="font-semibold">3+ matched therapists in 24 hours</span>
+                  <span className="text-[#C87965]">, guaranteed.</span>
+                </>
+              ))}
             </p>
             <p className="mt-5 text-lg text-[#2B2A29]/80 leading-relaxed max-w-xl">
-              No more searching, cold-calls, or waiting to hear back. Pick what
-              matters, and we'll route your request to therapists in your
-              network who actually want to work with you.
+              {t(
+                "landing.hero.subhead",
+                "No more searching, cold-calls, or waiting to hear back. Pick what matters, and we'll route your request to therapists in your network who actually want to work with you.",
+              )}
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-4">
               <a href="#start" className="tv-btn-primary" data-testid="hero-cta">
-                Get matched — free
+                {t("landing.hero.cta", "Get matched — free")}
               </a>
               <a
                 href="#how"
@@ -209,10 +216,13 @@ export default function Landing() {
           </div>
           <div>
             <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] mb-3">
-              How we're different
+              {t("landing.different.eyebrow", "How we're different")}
             </p>
             <h2 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] leading-tight">
-              Finding the right therapist shouldn't feel like a full-time job.
+              {t(
+                "landing.different.heading",
+                "Finding the right therapist shouldn't feel like a full-time job.",
+              )}
             </h2>
             <div className="mt-8 space-y-5">
               {[
@@ -269,10 +279,10 @@ export default function Landing() {
       <section id="faq" className="py-20 md:py-28">
         <div className="max-w-3xl mx-auto px-5 sm:px-8">
           <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] mb-3 text-center">
-            FAQs
+            {t("landing.faq.eyebrow", "FAQs")}
           </p>
           <h2 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] leading-tight text-center">
-            Things people ask
+            {t("landing.faq.heading", "Things people ask")}
           </h2>
           <Accordion type="single" collapsible className="mt-10" data-testid="faq">
             {faqs.map((f) => (

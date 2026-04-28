@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Leaf, ChevronDown, Menu, X } from "lucide-react";
+import useSiteCopy from "@/lib/useSiteCopy";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -261,13 +262,17 @@ export function Header({ minimal = false }) {
 }
 
 export function Footer() {
+  const t = useSiteCopy();
   return (
     <footer className="border-t border-[#E8E5DF] py-12 mt-16" data-testid="site-footer">
       <div className="max-w-7xl mx-auto px-5 sm:px-8 grid grid-cols-1 md:grid-cols-3 gap-8 text-sm text-[#6D6A65]">
         <div>
           <div className="font-serif-display text-2xl text-[#2D4A3E]">TheraVoca</div>
           <p className="mt-2 leading-relaxed">
-            Let therapists come to you. We do the logistical work so you can focus on healing.
+            {t(
+              "footer.tagline",
+              "Let therapists come to you. We do the logistical work so you can focus on healing.",
+            )}
           </p>
         </div>
         <div>

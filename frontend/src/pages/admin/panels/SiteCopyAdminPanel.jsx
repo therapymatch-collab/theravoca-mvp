@@ -17,26 +17,32 @@ const SEED_KEYS = [
   {
     key: "landing.hero.eyebrow",
     label: "Landing · Hero eyebrow",
-    fallback: "Therapy referrals, reimagined",
+    fallback: "Pilot live in Idaho",
     previewPath: "/",
   },
   {
     key: "landing.hero.headline",
     label: "Landing · Hero headline",
-    fallback: "Find the right therapist — without the search",
+    fallback: "Let therapists come to you.",
+    previewPath: "/",
+  },
+  {
+    key: "landing.hero.promise",
+    label: "Landing · Hero promise (large)",
+    fallback: "3+ matched therapists in 24 hours, guaranteed.",
     previewPath: "/",
   },
   {
     key: "landing.hero.subhead",
     label: "Landing · Hero subhead",
     fallback:
-      "Tell us what you need. We match you with vetted therapists who actively want to help.",
+      "No more searching, cold-calls, or waiting to hear back. Pick what matters, and we'll route your request to therapists in your network who actually want to work with you.",
     previewPath: "/",
   },
   {
     key: "landing.hero.cta",
     label: "Landing · Hero CTA",
-    fallback: "Get matched",
+    fallback: "Get matched — free",
     previewPath: "/",
   },
   // How it works
@@ -49,24 +55,29 @@ const SEED_KEYS = [
   {
     key: "landing.how.subhead",
     label: "Landing · How it works subhead",
-    fallback: "Three steps from request to first session.",
+    fallback: "Three steps. No forms-overload.",
     previewPath: "/#how",
   },
   // Why TheraVoca
   {
-    key: "landing.different.heading",
-    label: "Landing · Why TheraVoca heading",
-    fallback: "Why TheraVoca",
+    key: "landing.different.eyebrow",
+    label: "Landing · Why TheraVoca eyebrow",
+    fallback: "How we're different",
     previewPath: "/#different",
   },
   {
-    key: "landing.different.subhead",
-    label: "Landing · Why TheraVoca subhead",
-    fallback:
-      "We do the search. You meet the therapists who can actually help.",
+    key: "landing.different.heading",
+    label: "Landing · Why TheraVoca heading",
+    fallback: "Finding the right therapist shouldn't feel like a full-time job.",
     previewPath: "/#different",
   },
   // FAQ
+  {
+    key: "landing.faq.eyebrow",
+    label: "Landing · FAQ eyebrow",
+    fallback: "FAQs",
+    previewPath: "/#faq",
+  },
   {
     key: "landing.faq.heading",
     label: "Landing · FAQ heading",

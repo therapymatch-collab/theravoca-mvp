@@ -232,7 +232,7 @@ export default function IntakeForm() {
   const DISPOSABLE_HINT = /(mailinator|guerrillamail|10minutemail|tempmail|temp-mail|yopmail|throwawaymail|trashmail|fakeinbox|getnada)/i;
   const emailLooksOk = (email) => {
     if (!email) return false;
-    const m = /^[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9.\-]{1,255}\.[A-Za-z]{2,}$/.test(email);
+    const m = /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,}$/.test(email);
     if (!m) return false;
     if (DISPOSABLE_HINT.test(email)) return false;
     return true;

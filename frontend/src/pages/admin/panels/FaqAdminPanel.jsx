@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Pencil, Trash2, Plus, ArrowUp, ArrowDown } from "lucide-react";
+import { Loader2, Pencil, Trash2, Plus, ArrowUp, ArrowDown, ExternalLink } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { bustFaqsCache } from "@/lib/useFaqs";
@@ -297,7 +297,7 @@ export default function FaqAdminPanel({ client }) {
                   <div className="text-sm text-[#6D6A65] mt-2 whitespace-pre-wrap leading-relaxed">
                     {r.answer}
                   </div>
-                  <div className="mt-3 flex gap-3">
+                  <div className="mt-3 flex gap-3 flex-wrap">
                     <button
                       type="button"
                       onClick={() => startEdit(r)}
@@ -306,6 +306,20 @@ export default function FaqAdminPanel({ client }) {
                     >
                       <Pencil size={12} /> Edit
                     </button>
+                    <a
+                      href={
+                        audience === "patient"
+                          ? "/#faq"
+                          : "/therapists/join#faq"
+                      }
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#C87965] hover:underline text-xs inline-flex items-center gap-1"
+                      data-testid={`faq-view-live-${r.id}`}
+                      title={`Open the live ${audience === "patient" ? "Landing" : "Therapist"} FAQ in a new tab`}
+                    >
+                      <ExternalLink size={12} /> View live
+                    </a>
                     <button
                       type="button"
                       onClick={() => remove(r)}

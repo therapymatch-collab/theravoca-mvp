@@ -32,12 +32,12 @@ import {
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
+import { imageToDataUrl } from "@/lib/image";
 import { ADMIN_POLL_INTERVAL_MS, STATUS_UNAUTHORIZED } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import OptOutsPanel from "@/pages/admin/panels/OptOutsPanel";
-import ProfileCompletionPanel from "@/pages/admin/panels/ProfileCompletionPanel";
+import OptOutsPanel from "@/pages/admin/panels/OptOutsPanel";import ProfileCompletionPanel from "@/pages/admin/panels/ProfileCompletionPanel";
 import TeamPanel from "@/pages/admin/panels/TeamPanel";
 import MasterQueryPanel from "@/pages/admin/panels/MasterQueryPanel";
 import BlogAdminPanel from "@/pages/admin/panels/BlogAdminPanel";
@@ -712,7 +712,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
-      <Header minimal />
+      <Header />
       <main className="flex-1 px-5 py-10 md:py-14" data-testid="admin-dashboard">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between flex-wrap gap-3">
