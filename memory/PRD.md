@@ -767,13 +767,80 @@ mobile when stepping through the intake form.
   79.9px from viewport top after a `next-btn` click on a 390×844
   viewport.
 
-## Backlog (post iter-55)
+## Backlog (post iter-57)
 ### P1
 - Replace Resend test mode with verified domain (BLOCKED on user verifying domain on Resend dashboard).
 - Multi-state rollout (Idaho → WA, OR, MT, UT, WY, NV).
 ### P2
 - Live DOPL JSON API integration (when Idaho DOPL publishes).
-- Continue admin panel refactor: extract Requests / Therapists / All-Providers tabs to `src/pages/admin/panels/` for consistency (AdminDashboard.jsx is now 4448 lines after iter-56 refactor — still large).
+- Continue admin panel refactor: extract `PendingSignupRow` + `MatchGapPanel` + `RequestFullBrief` + `MatchedProviderCard` from AdminDashboard.jsx (still 4425 lines).
+
+## Iteration 57 — 8-task batch (Apr 28, 2026)
+
+User asked for 8 changes; all shipped + verified green by testing agent.
+
+### Refactor (Task 1)
+- Extracted Requests / Pending therapists / All providers tabs into
+  `RequestsPanel.jsx`, `PendingTherapistsPanel.jsx`,
+  `AllProvidersPanel.jsx` under `src/pages/admin/panels/`.
+  AdminDashboard.jsx now 4425 lines (started at 5555 pre-iter-56).
+
+### 429 → portal CTA (Task 2)
+- `IntakeForm.submit()` now detects HTTP 429 and surfaces the rate-limit
+  toast with an action button **"View my referral"** that navigates to
+  `/portal/patient` so frustrated users land on a useful page rather
+  than a dead-end error.
+
+### Match-gap panel (Task 3)
+- `GET /api/admin/requests/{id}` now returns a `match_gap` object when
+  `notified < 30`. Shape: `{notified, target, active_directory,
+  axes:[{label, count, target, severity}], summary}`. Severity is
+  `critical` (count==0), `warning` (count<target), or `ok`.
+- Admin Request-detail dialog renders a **"Why we couldn't fill 30
+  matches"** card with one chip per axis (state, format, age group, top
+  3 issues, top 2 modality prefs, insurance, cash budget, gender) so
+  admins can see exactly which filter throttled the result count.
+
+### Auto-trigger LLM outreach (Task 4)
+- Already wired: `helpers._trigger_matching` schedules
+  `_spawn_bg(run_outreach_for_request(...))` whenever
+  `outreach_needed_count > 0` and env `OUTREACH_AUTO_RUN != "false"`
+  (default `true`). Test confirms outreach fires automatically when a
+  fresh request gets <30 directory matches.
+
+### Therapist signup polish (Tasks 5 + 6)
+- Step-1 helper paragraph ("Your profile is reviewed before going
+  live…") promoted ABOVE the action row; the right-column with the
+  Next button now has `ml-auto`, pinning it to the right edge whether
+  or not the Back button is visible.
+- "Full name + degree" label split into a clean label + a small hint
+  "e.g. Sarah Lin, LCSW" so the line never wraps at 1280×800.
+
+### Pending value tags + duplicate gating (Task 7)
+- New helper `_attach_value_tags()` annotates each pending therapist
+  with `value_tags:[{label, axis, kind:'fills_gap'|'duplicate', count}]`
+  + `value_summary:{fills_gaps, duplicates, is_duplicate_only}`.
+  `_DUP_THRESHOLD=5`: axes with ≥5 active providers are duplicates.
+- `PendingSignupRow` renders a green **"Fills N gaps"** chip OR a red
+  **"Duplicate roster — consider declining"** warning, plus per-axis
+  chips (Treats X, Practices Y, Sees Z, Accepts W…) with the active-
+  provider count behind each.
+
+### DOPL link upgrade (Task 8)
+- `license_verify.DOPL_SEARCH_URL` swapped to
+  `https://edopl.idaho.gov/onlineservices/_/#2` per user's request.
+  All "Verify on DOPL ↗" links now deep-link to the SPA's License
+  Lookup tab.
+
+### Tests / verification
+- Backend: `tests/test_iteration57_match_gap.py` (4/4) +
+  `tests/test_iteration57_auto_outreach.py` (created by testing
+  agent). 22/22 regression green.
+- Frontend: testing agent confirmed all 8 items end-to-end (admin tab
+  refactor, match-gap panel, value-tag chips + duplicate badges, DOPL
+  edopl URL, signup right-aligned Next + label/hint split). **100%
+  green.**
+
 
 ## Iteration 56 — Refactor + intake rate limit + 7 UX polishes (Apr 28, 2026)
 
