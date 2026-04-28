@@ -85,7 +85,7 @@ async def _build_snapshot() -> dict:
     ]):
         top_emails.append({"email": row["_id"], "request_count": row["n"]})
 
-    # Geo coverage
+    # Geo coverage — patient requests
     geo: list[dict] = []
     async for row in db.requests.aggregate([
         {"$group": {"_id": "$location_state", "n": {"$sum": 1}}},
@@ -93,6 +93,51 @@ async def _build_snapshot() -> dict:
         {"$limit": 10},
     ]):
         geo.append({"state": row["_id"], "count": row["n"]})
+
+    # Therapist directory geo aggregates — used to answer questions like
+    # "how many therapists do we have in Boise?" or "in 83702?".
+    # We treat a therapist as covering each of `licensed_states` and
+    # each `office_geos[].city`. Only count active+approved.
+    t_match = {"is_active": {"$ne": False}, "pending_approval": {"$ne": True}}
+    therapists_by_state: list[dict] = []
+    async for row in db.therapists.aggregate([
+        {"$match": t_match},
+        {"$unwind": {"path": "$licensed_states", "preserveNullAndEmptyArrays": False}},
+        {"$group": {"_id": {"$toUpper": "$licensed_states"}, "n": {"$sum": 1}}},
+        {"$sort": {"n": -1}},
+        {"$limit": 25},
+    ]):
+        if row["_id"]:
+            therapists_by_state.append({"state": row["_id"], "count": row["n"]})
+
+    therapists_by_city: list[dict] = []
+    async for row in db.therapists.aggregate([
+        {"$match": t_match},
+        {"$unwind": {"path": "$office_geos", "preserveNullAndEmptyArrays": False}},
+        {"$group": {"_id": "$office_geos.city", "n": {"$sum": 1}}},
+        {"$match": {"_id": {"$nin": [None, ""]}}},
+        {"$sort": {"n": -1}},
+        {"$limit": 50},
+    ]):
+        therapists_by_city.append({"city": row["_id"], "count": row["n"]})
+
+    # Zip aggregation — parse 5-digit zips from office_addresses since the
+    # structured `office_geos` doesn't carry zip. Done in Python (small set).
+    import re as _re
+    zip_counts: dict[str, int] = {}
+    async for t in db.therapists.find(
+        t_match, {"_id": 0, "office_addresses": 1},
+    ):
+        addrs = t.get("office_addresses") or []
+        if not isinstance(addrs, list):
+            continue
+        for a in addrs:
+            for z in _re.findall(r"\b(\d{5})\b", a or ""):
+                zip_counts[z] = zip_counts.get(z, 0) + 1
+    therapists_by_zip = [
+        {"zip": z, "count": n}
+        for z, n in sorted(zip_counts.items(), key=lambda kv: -kv[1])[:50]
+    ]
 
     # Concerns
     concerns: list[dict] = []
@@ -160,6 +205,9 @@ async def _build_snapshot() -> dict:
         "top_referral_sources_90d": referral_breakdown,
         "repeat_submitter_emails": top_emails,
         "geo_distribution": geo,
+        "therapists_by_state": therapists_by_state,
+        "therapists_by_city": therapists_by_city,
+        "therapists_by_zip": therapists_by_zip,
         "top_presenting_concerns": concerns,
         "feedback": {
             "total": feedback_total,
@@ -215,7 +263,11 @@ async def admin_master_query(payload: dict, _: bool = Depends(require_admin)):
         "2. Cite the exact number(s) you used (e.g. 'last 7 days: 42').\n"
         "3. Keep answers under 120 words. Use short bullets if you cite multiple stats.\n"
         "4. Never invent data, projections, or outside benchmarks.\n"
-        "5. Do not output JSON or code unless explicitly asked. Reply in plain prose."
+        "5. Do not output JSON or code unless explicitly asked. Reply in plain prose.\n"
+        "6. For 'how many therapists in <city/zip/state>' questions, use the "
+        "`therapists_by_city`, `therapists_by_zip`, and `therapists_by_state` "
+        "arrays. Match case-insensitively. If the location isn't in the array, "
+        "say zero (the array lists every location with at least one therapist)."
     )
     chat = (
         LlmChat(

@@ -29,6 +29,7 @@ import {
   ChevronDown,
   ChevronUp,
   Sparkles,
+  ExternalLink,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
@@ -42,6 +43,7 @@ import TeamPanel from "@/pages/admin/panels/TeamPanel";
 import MasterQueryPanel from "@/pages/admin/panels/MasterQueryPanel";
 import BlogAdminPanel from "@/pages/admin/panels/BlogAdminPanel";
 import SettingsPanel from "@/pages/admin/panels/SettingsPanel";
+import ScrapeSourcesPanel from "@/pages/admin/panels/ScrapeSourcesPanel";
 import SiteCopyAdminPanel from "@/pages/admin/panels/SiteCopyAdminPanel";
 import FaqAdminPanel from "@/pages/admin/panels/FaqAdminPanel";
 import RequestsPanel from "@/pages/admin/panels/RequestsPanel";
@@ -1366,6 +1368,8 @@ export default function AdminDashboard() {
 
               {tab === "settings" && <SettingsPanel client={client} />}
 
+              {tab === "scrape_sources" && <ScrapeSourcesPanel client={client} />}
+
               {tab === "email_templates" && (
                 <div className="mt-6 space-y-3" data-testid="email-templates-list">
                   {emailTemplates.length === 0 ? (
@@ -2560,6 +2564,11 @@ function AdminTabsBar({
       id: "settings",
       label: "Settings",
       icon: <Sliders size={14} />,
+    },
+    {
+      id: "scrape_sources",
+      label: "Scrape sources",
+      icon: <ExternalLink size={14} />,
     },
     {
       id: "email_templates",

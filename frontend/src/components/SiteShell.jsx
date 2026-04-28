@@ -23,9 +23,10 @@ function useScrollTopNavigate(to) {
     if (location.pathname === to && !location.hash) {
       window.scrollTo({ top: 0, behavior: "smooth" });
     } else {
-      navigate(to);
-      // Defer to next tick so route renders before we jump
-      setTimeout(() => window.scrollTo({ top: 0, behavior: "auto" }), 0);
+      // Strip any leftover hash from the previous URL so Landing's anchor
+      // effect doesn't re-scroll into a section. ScrollManager handles
+      // the actual scroll-to-top after the route swaps.
+      navigate(to, { replace: false });
     }
   };
 }

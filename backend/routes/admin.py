@@ -1349,11 +1349,11 @@ async def admin_set_intake_rate_limit(payload: dict) -> dict[str, Any]:
         raise HTTPException(
             400, "max_requests_per_window and window_minutes must be integers"
         )
-    if max_per < 1 or max_per > 50:
-        raise HTTPException(400, "max_requests_per_window must be between 1 and 50")
-    if window < 1 or window > 7 * 24 * 60:
+    if max_per < 1 or max_per > 1000:
+        raise HTTPException(400, "max_requests_per_window must be between 1 and 1000")
+    if window < 1 or window > 30 * 24 * 60:
         raise HTTPException(
-            400, "window_minutes must be between 1 and 10080 (one week)"
+            400, "window_minutes must be between 1 and 43200 (30 days)"
         )
     await db.app_config.update_one(
         {"key": "intake_rate_limit"},
@@ -1367,6 +1367,64 @@ async def admin_set_intake_rate_limit(payload: dict) -> dict[str, Any]:
         upsert=True,
     )
     return {"max_requests_per_window": max_per, "window_minutes": window}
+
+
+# ─── External scrape-source registry (admin-tunable) ────────────────────
+# Admin can paste in extra directory URLs (ID Counseling Association,
+# group-practice rosters, county clinic listings, etc.) that the
+# outreach LLM and gap recruiter should consult ON TOP of Psychology
+# Today. Stored in `app_config.scrape_sources` as a list of:
+#   {url, label, notes, enabled}.
+_DEFAULT_SCRAPE_SOURCES: list[dict[str, Any]] = []
+
+
+def _coerce_source(payload: dict) -> dict[str, Any]:
+    """Validate + normalize one source dict from the admin payload."""
+    url = (payload.get("url") or "").strip()
+    if not url:
+        raise HTTPException(400, "Each source requires a url")
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise HTTPException(400, f"URL must start with http(s)://: {url}")
+    return {
+        "id": (payload.get("id") or str(_uuid.uuid4())),
+        "url": url,
+        "label": (payload.get("label") or "").strip()[:120],
+        "notes": (payload.get("notes") or "").strip()[:500],
+        "enabled": bool(payload.get("enabled", True)),
+    }
+
+
+@router.get("/admin/scrape-sources", dependencies=[Depends(require_admin)])
+async def admin_get_scrape_sources() -> dict[str, Any]:
+    doc = await db.app_config.find_one({"key": "scrape_sources"}, {"_id": 0})
+    sources = doc.get("sources") if doc else None
+    if not isinstance(sources, list):
+        sources = list(_DEFAULT_SCRAPE_SOURCES)
+    return {"sources": sources}
+
+
+@router.put("/admin/scrape-sources", dependencies=[Depends(require_admin)])
+async def admin_set_scrape_sources(payload: dict) -> dict[str, Any]:
+    raw = payload.get("sources")
+    if not isinstance(raw, list):
+        raise HTTPException(400, "sources must be a list")
+    if len(raw) > 50:
+        raise HTTPException(400, "Maximum 50 sources allowed")
+    cleaned = [_coerce_source(s) for s in raw if isinstance(s, dict)]
+    await db.app_config.update_one(
+        {"key": "scrape_sources"},
+        {"$set": {"key": "scrape_sources", "sources": cleaned}},
+        upsert=True,
+    )
+    return {"sources": cleaned}
+
+
+async def get_enabled_scrape_sources() -> list[dict]:
+    """Helper for outreach/recruiter modules to fetch the admin-configured
+    extra directory URLs. Returns only enabled rows."""
+    doc = await db.app_config.find_one({"key": "scrape_sources"}, {"_id": 0})
+    sources = (doc or {}).get("sources") or []
+    return [s for s in sources if s.get("enabled", True) and s.get("url")]
 
 
 # Public endpoint — patient intake calls this to populate its dropdown.

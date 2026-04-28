@@ -43,6 +43,23 @@ async def _ask_for_candidates(gap: dict, count: int = PER_GAP_CANDIDATES) -> lis
     dim = gap.get("dimension")
     key = gap.get("key")
 
+    # Pull admin-configured external directory URLs to ground research.
+    extra_sources_block = ""
+    try:
+        from routes.admin import get_enabled_scrape_sources
+        extra = await get_enabled_scrape_sources()
+    except Exception:
+        extra = []
+    if extra:
+        bullets = "\n".join(
+            f"  - {s['url']}" + (f"  ({s.get('label')})" if s.get("label") else "")
+            for s in extra
+        )
+        extra_sources_block = (
+            "\n\nADDITIONAL DIRECTORY SOURCES (consult these alongside PT/DOPL):\n"
+            f"{bullets}\n"
+        )
+
     if dim == "specialty":
         focus = (
             f"specialize in `{key.replace('_', ' ')}` and accept new patients in Idaho"
@@ -73,7 +90,7 @@ CRITICAL RULES:
 1. ONLY return therapists you have HIGH CONFIDENCE actually exist (you've seen their name + license + Idaho practice in your training data on Psychology Today, Idaho DOPL, group-practice websites, or established Idaho clinics). Do NOT invent.
 2. If you can't find {count} confident matches, return FEWER. Three real candidates is better than ten fabricated ones.
 3. Cities MUST be real Idaho cities (Boise, Meridian, Nampa, Idaho Falls, Pocatello, Caldwell, Coeur d'Alene, Twin Falls, Lewiston, Eagle, Post Falls, Rexburg, Moscow, Sun Valley, Ketchum, etc.).
-4. License_type must match what their actual license is.
+4. License_type must match what their actual license is.{extra_sources_block}
 
 Return a strict JSON array. Each object:
 - name: full name + license suffix (e.g. "Sarah Chen, LCSW")

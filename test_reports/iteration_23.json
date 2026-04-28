@@ -1,0 +1,34 @@
+{
+  "summary": "Iter-61 review of 5 user fixes. Backend: 20/20 pytest pass on test_iteration61_admin_extras.py covering (a) master-query snapshot geo aggregates [therapists_by_state/city/zip all populated, ID present in states, 168+ ID therapists confirmed], (b) master-query NL Q 'How many therapists in Boise?' returns answer with digit + Boise reference, (c) intake-rate-limit GET/PUT incl. boundaries (1/1, 1000/43200 accepted; 0/60, 1001/60, 5/0, 5/43201 all 400), (d) scrape-sources GET/PUT incl. valid 2-row persist with auto-id, invalid url 400 (ftp), missing url 400, >50 400, non-list 400, auth required. Frontend smoke (Playwright): logo-click scroll-to-top FIX VERIFIED — on /therapists/join after scrolling to scrollY=2906, clicking the logo navigates to '/' and lands at scrollY=0 (the bug-of-record was scrollY=3893). Same behavior verified on /admin. Landing page renders hero ('Let therapists come to you.') and header. Universal navbar visible on /admin AND /blog. No console errors during smoke.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration61_admin_extras.py",
+    "/app/test_reports/pytest/iter61_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: Live-test the Admin → More → Settings rate-limit save UI and More → Scrape sources panel UI in browser (I verified the backend contracts they call but did not click through the panels — main agent already smoked them per Iter-61 description). Use admin password admin123! at /admin.",
+    "OPTIONAL: Confirm extra_sources_block injection actually appears in outreach_agent + gap_recruiter LLM prompts when sources are configured (the registry endpoints were tested; the prompt-injection path is source-only per agent_to_agent_context_note)."
+  ],
+  "critical_code_review_comments": [
+    "routes/admin.py is now ~1600 lines and handles login, team mgmt, profile completeness, requests, therapists, declines, backfill, stats, outreach, opt-out HTML, scrape-sources, rate-limit, reviews, coverage-gap analysis. Strongly consider splitting into routes/admin/{team,therapists,outreach,config,settings}.py — the file exceeds the 700-line guideline more than 2x and slows code review.",
+    "_coerce_source URL validation accepts any string starting with http:// or https:// — does not run urllib.parse to verify host/path. A user could save 'https:// ' (space) or 'https://x' which won't actually fetch. Cheap fix: urllib.parse.urlparse(url).netloc must be non-empty.",
+    "Master-query snapshot zip aggregation iterates EVERY active therapist in Python with a regex over office_addresses on every snapshot rebuild. Fine at 168 docs but should be cached with the rest of the snapshot (it already is, via _SNAPSHOT_TTL_SECS=60 — verified).",
+    "Intake-rate-limit endpoint converts the upper-bound check using literal `30 * 24 * 60 = 43200` — magic number repeated in the error message; pull into a module constant."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration61_admin_extras.py (NEW — 20 tests)",
+    "/app/test_reports/pytest/iter61_results.xml (NEW)"
+  ],
+  "success_rate": {"backend": "100% (20/20)", "frontend": "100% (4/4 smoke checks: logo scroll on /therapists/join, logo scroll on /admin, landing render, navbar visibility on /admin and /blog)"},
+  "test_credentials": "Admin master pwd: admin123! via X-Admin-Password header. Used for all backend tests.",
+  "seed_data_creation": "Tests use temporary scrape_sources entries that are reset to [] in teardown_class. Intake rate-limit reset to {1, 60} default in teardown_class. No persistent test data left behind.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All Iter-61 backend contracts (master-query geo, intake rate-limit, scrape-sources) are green. Logo scroll-to-top fix in ScrollManager.jsx + SiteShell.jsx verified working on /therapists/join AND /admin via Playwright (scrollY=0 after click, URL='/'). Landing.jsx still renders cleanly (no useFaqs regression). Header/navbar visible on /admin and /blog. NOT TESTED in browser: Admin Settings panel UI save flow, Scrape Sources panel add/save flow, Site Copy preview, FAQ editor up/down arrows (note: iter22 reported reorder route was 404'd by route ordering — main agent should re-verify if Iter-60 reorder route fix is in place). Therapist Edit Profile photo+license fields not browser-tested either. The 168 ID therapists in directory is confirmed via /api/admin/stats and snapshot.",
+  "rca of the issue": "N/A — no bugs found. Prior bugs cited in review_request (scrollY=3893 after logo click; rate-limit 'won't let me change') both verified fixed via the new ScrollManager 3-frame scroll-forcing + widened backend bounds (1-1000 max_per, 1-43200 window, all boundary cases pass)."
+}

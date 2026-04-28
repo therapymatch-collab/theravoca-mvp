@@ -16,10 +16,28 @@ export default function ScrollManager() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (hash) return; // let anchor-jumps target their element
-    // Use auto (instant) so the user doesn't see the page rocket from
-    // 4000px → 0 — the new route hasn't painted yet at this moment so
-    // an instant top is what the user perceives as "I'm at the top now".
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    // The browser may try to restore a cached scroll position once the
+    // new route's content makes the page tall enough. To beat that, we
+    // force scroll(0,0) across THREE frames: synchronous, next paint,
+    // and 60ms post-paint. This covers React's render commit, the
+    // browser's scroll-restore window, and any lazy section that grows
+    // the document after first paint.
+    const jump = () => {
+      window.scrollTo(0, 0);
+      // Some browsers honour `documentElement.scrollTop` instead.
+      if (document.documentElement) document.documentElement.scrollTop = 0;
+      if (document.body) document.body.scrollTop = 0;
+    };
+    jump();
+    const r1 = requestAnimationFrame(() => {
+      jump();
+      requestAnimationFrame(jump);
+    });
+    const t1 = setTimeout(jump, 60);
+    return () => {
+      cancelAnimationFrame(r1);
+      clearTimeout(t1);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, key]);
   return null;

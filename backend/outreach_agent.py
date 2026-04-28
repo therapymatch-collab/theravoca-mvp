@@ -123,6 +123,24 @@ async def _find_candidates_llm(
     state = request.get("location_state", "ID")
     city = request.get("location_city") or "Boise"
 
+    # Inject any admin-configured external directory URLs so Claude grounds
+    # its candidate suggestions on those rosters in addition to PT/DOPL.
+    extra_sources_block = ""
+    try:
+        from routes.admin import get_enabled_scrape_sources
+        extra = await get_enabled_scrape_sources()
+    except Exception:
+        extra = []
+    if extra:
+        bullets = "\n".join(
+            f"  - {s['url']}" + (f"  ({s.get('label')})" if s.get("label") else "")
+            for s in extra
+        )
+        extra_sources_block = (
+            "\n\nADDITIONAL DIRECTORY SOURCES (consult these in addition to PT/DOPL):\n"
+            f"{bullets}\n"
+        )
+
     prompt = f"""You are an outreach research agent for TheraVoca, a therapist matching service in Idaho.
 
 We need {count} REAL Idaho-licensed therapist candidates for a patient request that we couldn't fill from our directory. Search your training data for therapists you have HIGH CONFIDENCE about — people with real Idaho licenses (LCSW/LMFT/LPC/LCPC/PsyD/PhD) who have public profiles on Psychology Today, Idaho DOPL, group-practice websites, or established Idaho mental-health clinics.
@@ -137,7 +155,7 @@ CRITICAL RULES:
 4. Email must be plausible (their first.last @ their public website domain, or @gmail.com / @yahoo.com for solo practitioners). Don't invent fake domains.
 5. License_type must match what their actual license is — don't guess LMFT for someone you only remember as LCSW.
 6. Specialties must come from this exact slug list: anxiety, depression, ocd, adhd, trauma_ptsd, relationship_issues, life_transitions, parenting_family, substance_use, eating_concerns, autism_neurodivergence, school_academic_stress.
-7. estimated_score should reflect your CONFIDENCE in the match (70=barely confident, 95=very confident this real person fits this brief).
+7. estimated_score should reflect your CONFIDENCE in the match (70=barely confident, 95=very confident this real person fits this brief).{extra_sources_block}
 
 For each candidate, return strict JSON with these fields:
 - name: full name + license suffix (e.g. "Sarah Chen, LCSW")

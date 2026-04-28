@@ -11,6 +11,7 @@ export default function SettingsPanel({ client }) {
   const [maxPer, setMaxPer] = useState(1);
   const [windowMin, setWindowMin] = useState(60);
   const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -36,16 +37,23 @@ export default function SettingsPanel({ client }) {
 
   const save = async () => {
     setSaving(true);
+    setErrorMsg("");
     try {
-      await client.put("/admin/intake-rate-limit", {
+      const r = await client.put("/admin/intake-rate-limit", {
         max_requests_per_window: Number(maxPer),
         window_minutes: Number(windowMin),
       });
-      toast.success("Rate limit saved");
-    } catch (e) {
-      toast.error(
-        e?.response?.data?.detail || e.message || "Save failed",
+      // Reflect the server-confirmed values so the form always matches
+      // what's actually persisted (avoids stale-form confusion).
+      setMaxPer(r.data.max_requests_per_window);
+      setWindowMin(r.data.window_minutes);
+      toast.success(
+        `Saved — ${r.data.max_requests_per_window} per ${r.data.window_minutes} min`,
       );
+    } catch (e) {
+      const msg = e?.response?.data?.detail || e.message || "Save failed";
+      setErrorMsg(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -82,7 +90,7 @@ export default function SettingsPanel({ client }) {
                   id="rl-max"
                   type="number"
                   min={1}
-                  max={50}
+                  max={1000}
                   value={maxPer}
                   onChange={(e) => setMaxPer(e.target.value)}
                   className="mt-1"
@@ -100,7 +108,7 @@ export default function SettingsPanel({ client }) {
                   id="rl-window"
                   type="number"
                   min={1}
-                  max={10080}
+                  max={43200}
                   value={windowMin}
                   onChange={(e) => setWindowMin(e.target.value)}
                   className="mt-1"
@@ -115,6 +123,14 @@ export default function SettingsPanel({ client }) {
               </strong>{" "}
               per <strong>{windowMin} minutes</strong> per email address.
             </p>
+            {errorMsg ? (
+              <p
+                className="text-xs text-[#B0382A] bg-[#FBE9E5] border border-[#F4C7BE] rounded-md px-3 py-2"
+                data-testid="rate-limit-error"
+              >
+                {errorMsg}
+              </p>
+            ) : null}
             <button
               type="button"
               onClick={save}
