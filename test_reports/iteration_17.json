@@ -1,0 +1,26 @@
+{
+  "summary": "Iteration 17 frontend-only verification of (1) AdminTabsBar refactor with primary tabs inline + 'More' dropdown, (2) Master Query AI panel, (3) Blog Admin panel CRUD, (4) IntakeForm mobile smooth scroll. All 4 in-progress items pass end-to-end against https://care-matcher-1.preview.emergentagent.com.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AdminDashboard.jsx is now 5555 lines — MasterQueryPanel (~5041) and BlogAdminPanel (~5241) are appended at the end. Strong recommendation (carrying over from iteration 15/16) to extract these and ProfileCompletionPanel to their own files under src/pages/admin/panels/ for maintainability.",
+    "BlogAdminPanel.startEdit sets `editing = post object` and uses `editing.id` in the PUT URL (line 5310). If the admin clicks Edit then immediately changes another post's data, this works correctly because each Edit click resets state — no concern, just noting the implicit dependency.",
+    "BlogAdminPanel uses native window.confirm() for delete (line 5335). Functional but inconsistent with the rest of the app's shadcn dialog pattern. Low priority polish.",
+    "MasterQueryPanel does not surface the snapshot-fetch network error in any user-actionable way beyond the inline pill — if the snapshot endpoint is slow on first paint (>2s) the panel still allows asking questions which is correct behavior; just noting the UX choice is intentional.",
+    "IntakeForm smooth-scroll uses `isFirstRender` ref to skip initial mount (line 132-137) — verified working: scrollY samples [4007, 3982, 3981...] show 3 distinct intermediate positions during step transition, confirming the `behavior: 'smooth'` animation is taking effect rather than an instant jump. Card top settles at 79.9px from viewport top (target ~80px header offset). Excellent."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100% on validated paths (admin tabs refactor + Master Query Q&A + Blog CRUD + intake mobile smooth scroll + public blog endpoint)"},
+  "test_credentials": "Admin master password: admin123! (login at /admin → 'Master password' tab → admin-login-btn).",
+  "seed_data_creation": "Created + then immediately deleted one TEST_Blog_Post_E2E post via the admin UI (slug test-blog-e2e-<ts>). DB clean after run. Pre-existing 'welcome-to-theravoca' published post was left untouched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "AdminTabsBar PRIMARY = [requests, therapists, all_therapists, patients, completion, master_query]; SECONDARY (under tab-more-btn → tab-more-menu) = [invited_therapists, coverage_gap, opt_outs, feedback, referrals, referral_sources, team, blog, email_templates]. Secondary items use testid `more-tab-{id}` while the inline pinned active secondary uses plain `tab-{id}`. Master Query testids: master-query-panel / master-query-input / master-query-ask-btn / master-query-history / master-query-entry-{i} / master-query-toggle-snapshot / master-query-snapshot-json / master-query-snapshot-error. Blog testids: blog-admin-panel / blog-new-btn / blog-editor / blog-title-input / blog-slug-input / blog-summary-input / blog-body-input / blog-hero-input / blog-publish-checkbox / blog-save-btn / blog-cancel-btn / blog-row-{slug} / blog-edit-{slug} / blog-toggle-{slug} / blog-delete-{slug}. Delete uses native window.confirm — Playwright must register a dialog handler. Public endpoints verified: GET /api/blog returned 1 post (welcome-to-theravoca) all published; GET /api/blog/welcome-to-theravoca returned body_markdown.",
+  "rca of the issue": "N/A — all four in-progress items verified working. Detailed evidence: (a) AdminTabsBar — all 6 primary + 9 secondary testids present, tab-more-menu opens on tab-more-btn click, clicking more-tab-blog activates blog panel and pins tab-blog inline. (b) Master Query — snapshot loaded, toggle reveals JSON, asking 'How many requests came in this week?' returned an LLM answer in master-query-entry-0 within 30s. (c) Blog CRUD — create, toggle-publish, edit-populate, delete-after-confirm all worked; save button correctly disabled when title empty. (d) Intake mobile smooth scroll — at 390x844 viewport, click of next-btn animated scrollY from 4113 → 4007 → 3982 → 3981 (3 distinct intermediate samples, confirming behavior:'smooth' is firing); final card top is 79.9px below viewport top, matching the intended 80px header offset; step-label updated to 'Step 2 of 7' and remained visible. Initial mount did not auto-scroll (isFirstRender guard works). Public /api/blog returns only published posts as expected."
+}

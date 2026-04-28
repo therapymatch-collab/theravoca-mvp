@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatUsPhone } from "@/lib/phone";
 import { toast } from "sonner";
@@ -123,6 +123,24 @@ export default function IntakeForm() {
   const [agreed, setAgreed] = useState(false);
   const [confirmAdult, setConfirmAdult] = useState(false);
   const [confirmNotEmergency, setConfirmNotEmergency] = useState(false);
+  // Scroll the form card into view on step change. Without this the step
+  // animation re-renders mid-scroll and the page lurches up/down on
+  // mobile when the new step has a different content height. We pin the
+  // top of the white card just below the page header so users see the
+  // step heading + first input immediately.
+  const cardRef = useRef(null);
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    const el = cardRef.current;
+    if (!el) return;
+    const top =
+      el.getBoundingClientRect().top + window.scrollY - 80; /* header offset */
+    window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  }, [step]);
   const [data, setData] = useState({
     client_type: "",
     age_group: "",
@@ -362,7 +380,7 @@ export default function IntakeForm() {
           </p>
         </div>
 
-        <div className="bg-white border border-[#E8E5DF] rounded-3xl shadow-sm p-6 sm:p-10">
+        <div ref={cardRef} className="bg-white border border-[#E8E5DF] rounded-3xl shadow-sm p-6 sm:p-10">
           <div className="mb-6">
             <div className="flex justify-between text-xs text-[#6D6A65] mb-2">
               <span data-testid="step-label">

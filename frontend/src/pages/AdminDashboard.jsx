@@ -1475,6 +1475,10 @@ export default function AdminDashboard() {
                 />
               )}
 
+              {tab === "master_query" && <MasterQueryPanel client={client} />}
+
+              {tab === "blog" && <BlogAdminPanel client={client} />}
+
               {tab === "email_templates" && (
                 <div className="mt-6 space-y-3" data-testid="email-templates-list">
                   {emailTemplates.length === 0 ? (
@@ -2655,7 +2659,7 @@ function TabBtn({ active, onClick, icon, label, count, testid, highlight }) {
     <button
       onClick={onClick}
       data-testid={testid}
-      className={`flex items-center gap-2 px-4 py-3 text-sm border-b-2 transition -mb-px ${
+      className={`flex items-center gap-2 px-4 py-3 text-sm border-b-2 transition -mb-px whitespace-nowrap ${
         active
           ? "border-[#2D4A3E] text-[#2D4A3E] font-semibold"
           : "border-transparent text-[#6D6A65] hover:text-[#2D4A3E]"
@@ -2677,6 +2681,246 @@ function TabBtn({ active, onClick, icon, label, count, testid, highlight }) {
         </span>
       )}
     </button>
+  );
+}
+
+// AdminTabsBar — primary tabs visible inline; everything else goes into a
+// "More" dropdown so the bar stops overflowing horizontally on smaller
+// screens. Adding/removing tabs only touches the PRIMARY/SECONDARY arrays
+// below.
+function AdminTabsBar({
+  tab,
+  setTab,
+  requestsCount,
+  pendingTherapists,
+  allTherapists,
+  emailTemplatesCount,
+  onLoadEmailTemplates,
+  refSources,
+  onLoadReferralSources,
+  outreach,
+  onLoadOutreach,
+  optOuts,
+  onLoadOptOuts,
+  feedback,
+  onLoadFeedback,
+  patientsByEmail,
+  onLoadPatients,
+  team,
+  onLoadTeam,
+  completion,
+  onLoadCompletion,
+  coverageGap,
+  onLoadCoverageGap,
+  referralAnalytics,
+  onLoadReferralAnalytics,
+}) {
+  const PRIMARY = [
+    {
+      id: "requests",
+      label: "Requests",
+      icon: <Inbox size={14} />,
+      count: requestsCount,
+    },
+    {
+      id: "therapists",
+      label: "Pending therapists",
+      icon: <UserCheck size={14} />,
+      count: pendingTherapists,
+      highlight: pendingTherapists > 0,
+    },
+    {
+      id: "all_therapists",
+      label: "All providers",
+      icon: <Users size={14} />,
+      count: allTherapists,
+    },
+    {
+      id: "patients",
+      label: "Patients (by email)",
+      icon: <Users size={14} />,
+      count: patientsByEmail?.total ?? null,
+      onClick: onLoadPatients,
+    },
+    {
+      id: "completion",
+      label: "Profile completion",
+      icon: <UserCheck size={14} />,
+      count: completion?.incomplete ?? null,
+      highlight: (completion?.incomplete || 0) > 0,
+      onClick: onLoadCompletion,
+    },
+    {
+      id: "master_query",
+      label: "Master Query",
+      icon: <Sparkles size={14} />,
+    },
+  ];
+
+  const SECONDARY = [
+    {
+      id: "invited_therapists",
+      label: "Invited therapists",
+      icon: <UserPlus size={14} />,
+      count: outreach?.total ?? null,
+      onClick: onLoadOutreach,
+    },
+    {
+      id: "coverage_gap",
+      label: "Coverage gaps",
+      icon: <AlertTriangle size={14} />,
+      count:
+        (coverageGap?.summary?.critical_gaps || 0) +
+        (coverageGap?.summary?.warning_gaps || 0) || null,
+      highlight: (coverageGap?.summary?.critical_gaps || 0) > 0,
+      onClick: onLoadCoverageGap,
+    },
+    {
+      id: "opt_outs",
+      label: "Opt-outs",
+      icon: <Ban size={14} />,
+      count: optOuts?.total ?? null,
+      onClick: onLoadOptOuts,
+    },
+    {
+      id: "feedback",
+      label: "Feedback",
+      icon: <MessageSquare size={14} />,
+      count: feedback?.total ?? null,
+      onClick: onLoadFeedback,
+    },
+    {
+      id: "referrals",
+      label: "Referral analytics",
+      icon: <Share2 size={14} />,
+      onClick: onLoadReferralAnalytics,
+    },
+    {
+      id: "referral_sources",
+      label: "Referral sources",
+      icon: <TrendingUp size={14} />,
+      onClick: onLoadReferralSources,
+    },
+    {
+      id: "team",
+      label: "Team",
+      icon: <Users size={14} />,
+      count: team?.total ?? null,
+      onClick: onLoadTeam,
+    },
+    {
+      id: "blog",
+      label: "Blog",
+      icon: <Pencil size={14} />,
+    },
+    {
+      id: "email_templates",
+      label: "Email templates",
+      icon: <Mail size={14} />,
+      count: emailTemplatesCount,
+      onClick: onLoadEmailTemplates,
+    },
+  ];
+
+  const [moreOpen, setMoreOpen] = useState(false);
+  const activeSecondary = SECONDARY.find((t) => t.id === tab);
+
+  const handleClick = (entry) => {
+    if (entry.onClick) entry.onClick();
+    setTab(entry.id);
+    setMoreOpen(false);
+  };
+
+  return (
+    <div
+      className="mt-8 border-b border-[#E8E5DF] flex flex-wrap items-end gap-x-1"
+      data-testid="admin-tabs-bar"
+    >
+      {PRIMARY.map((entry) => (
+        <TabBtn
+          key={entry.id}
+          active={tab === entry.id}
+          onClick={() => handleClick(entry)}
+          icon={entry.icon}
+          label={entry.label}
+          count={entry.count}
+          testid={`tab-${entry.id}`}
+          highlight={entry.highlight}
+        />
+      ))}
+
+      {/* Active secondary tab gets pinned inline so admins know where they
+          are; the rest stay tucked under "More". */}
+      {activeSecondary && (
+        <TabBtn
+          active
+          onClick={() => handleClick(activeSecondary)}
+          icon={activeSecondary.icon}
+          label={activeSecondary.label}
+          count={activeSecondary.count}
+          testid={`tab-${activeSecondary.id}`}
+          highlight={activeSecondary.highlight}
+        />
+      )}
+
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setMoreOpen((v) => !v)}
+          className="flex items-center gap-1.5 px-4 py-3 text-sm border-b-2 border-transparent text-[#6D6A65] hover:text-[#2D4A3E] -mb-px whitespace-nowrap"
+          data-testid="tab-more-btn"
+          aria-expanded={moreOpen}
+        >
+          More
+          <ChevronDown
+            size={14}
+            className={`transition ${moreOpen ? "rotate-180" : ""}`}
+          />
+        </button>
+        {moreOpen && (
+          <>
+            <button
+              type="button"
+              onClick={() => setMoreOpen(false)}
+              aria-label="Close menu"
+              className="fixed inset-0 z-10 cursor-default"
+            />
+            <div
+              className="absolute right-0 z-20 mt-1 w-64 bg-white border border-[#E8E5DF] rounded-xl shadow-lg py-1"
+              data-testid="tab-more-menu"
+            >
+              {SECONDARY.map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  onClick={() => handleClick(entry)}
+                  className={`flex items-center gap-2 w-full text-left px-3 py-2 text-sm hover:bg-[#FDFBF7] ${
+                    tab === entry.id
+                      ? "text-[#2D4A3E] font-semibold bg-[#FDFBF7]"
+                      : "text-[#3F3D3B]"
+                  }`}
+                  data-testid={`more-tab-${entry.id}`}
+                >
+                  <span className="text-[#6D6A65]">{entry.icon}</span>
+                  <span className="flex-1">{entry.label}</span>
+                  {entry.count != null && (
+                    <span
+                      className={`text-[11px] rounded-full px-2 py-0.5 ${
+                        entry.highlight
+                          ? "bg-[#C87965] text-white"
+                          : "bg-[#E8E5DF] text-[#6D6A65]"
+                      }`}
+                    >
+                      {entry.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -4790,3 +5034,521 @@ function Block({ label, children }) {
   );
 }
 
+
+// ── Master Query: natural-language Q&A backed by /api/admin/master-query.
+// Snapshot is loaded lazily so we only hit the backend once the admin
+// actually opens the tab.
+function MasterQueryPanel({ client }) {
+  const [snapshot, setSnapshot] = useState(null);
+  const [snapshotErr, setSnapshotErr] = useState("");
+  const [question, setQuestion] = useState("");
+  const [history, setHistory] = useState([]); // [{q, a, at}]
+  const [asking, setAsking] = useState(false);
+  const [showSnapshot, setShowSnapshot] = useState(false);
+
+  const SUGGESTIONS = [
+    "How many requests came in over the last 7 days vs the prior 7?",
+    "Which presenting concerns are most common right now?",
+    "What share of active therapists are publishable?",
+    "Which referral sources are driving the most patients in the last 90 days?",
+    "Are there repeat-submitter emails I should look at?",
+  ];
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await client.get("/admin/master-query/snapshot");
+        if (alive) setSnapshot(r.data);
+      } catch (e) {
+        if (alive)
+          setSnapshotErr(
+            e?.response?.data?.detail || e.message || "Snapshot unavailable",
+          );
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [client]);
+
+  const ask = async (q) => {
+    const text = (q || question || "").trim();
+    if (!text || asking) return;
+    setAsking(true);
+    try {
+      const r = await client.post("/admin/master-query", { question: text });
+      setHistory((h) => [
+        { q: text, a: r.data.answer, at: r.data.snapshot_at },
+        ...h,
+      ]);
+      setQuestion("");
+    } catch (e) {
+      const msg =
+        e?.response?.data?.detail || e.message || "Master Query call failed";
+      toast.error(msg);
+    } finally {
+      setAsking(false);
+    }
+  };
+
+  return (
+    <div className="mt-6 space-y-4" data-testid="master-query-panel">
+      <div className="bg-white border border-[#E8E5DF] rounded-2xl p-6">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-[#2D4A3E] text-white flex items-center justify-center shrink-0">
+            <Sparkles size={18} />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-serif-display text-2xl text-[#2D4A3E]">
+              Ask Master Query
+            </h3>
+            <p className="text-sm text-[#6D6A65] mt-1">
+              Natural-language questions answered from a live business
+              snapshot. Numbers are pulled from MongoDB at call time and
+              answered by Claude — no guesses, no outside data.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <label
+            htmlFor="mq-input"
+            className="text-xs uppercase tracking-wider text-[#6D6A65]"
+          >
+            Your question
+          </label>
+          <div className="mt-1 flex gap-2 flex-col sm:flex-row">
+            <input
+              id="mq-input"
+              type="text"
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  ask();
+                }
+              }}
+              placeholder="e.g. how many requests this week?"
+              className="flex-1 bg-white border border-[#E8E5DF] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2D4A3E]"
+              data-testid="master-query-input"
+              maxLength={600}
+              disabled={asking}
+            />
+            <button
+              type="button"
+              onClick={() => ask()}
+              disabled={!question.trim() || asking}
+              className="tv-btn-primary !py-2 !px-4 text-sm disabled:opacity-50"
+              data-testid="master-query-ask-btn"
+            >
+              {asking ? (
+                <Loader2 size={14} className="inline mr-1.5 animate-spin" />
+              ) : (
+                <Send size={14} className="inline mr-1.5" />
+              )}
+              Ask
+            </button>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {SUGGESTIONS.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => ask(s)}
+                disabled={asking}
+                className="text-xs border border-[#E8E5DF] hover:border-[#2D4A3E] text-[#3F3D3B] hover:text-[#2D4A3E] rounded-full px-3 py-1.5 transition disabled:opacity-50"
+                data-testid={`master-query-suggestion-${s.slice(0, 12).replace(/\W+/g, "-").toLowerCase()}`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {snapshotErr && (
+          <div
+            className="mt-4 text-sm text-[#D45D5D] bg-[#FDF1EF] border border-[#F2C9C0] rounded-lg p-3"
+            data-testid="master-query-snapshot-error"
+          >
+            {snapshotErr}
+          </div>
+        )}
+      </div>
+
+      {history.length > 0 && (
+        <div className="space-y-3" data-testid="master-query-history">
+          {history.map((entry, i) => (
+            <div
+              key={i}
+              className="bg-white border border-[#E8E5DF] rounded-2xl p-5"
+              data-testid={`master-query-entry-${i}`}
+            >
+              <div className="text-xs uppercase tracking-wider text-[#6D6A65]">
+                Question
+              </div>
+              <div className="text-sm text-[#2B2A29] mt-1 font-medium">
+                {entry.q}
+              </div>
+              <div className="text-xs uppercase tracking-wider text-[#6D6A65] mt-4">
+                Answer
+              </div>
+              <div className="text-sm text-[#2B2A29] mt-1 whitespace-pre-wrap leading-relaxed">
+                {entry.a || "(no answer)"}
+              </div>
+              {entry.at && (
+                <div className="text-[11px] text-[#9A938A] mt-3">
+                  Snapshot at {new Date(entry.at).toLocaleString()}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {snapshot && (
+        <div className="bg-white border border-[#E8E5DF] rounded-2xl p-5">
+          <button
+            type="button"
+            onClick={() => setShowSnapshot((v) => !v)}
+            className="text-sm text-[#2D4A3E] hover:underline inline-flex items-center gap-1.5"
+            data-testid="master-query-toggle-snapshot"
+          >
+            {showSnapshot ? (
+              <ChevronUp size={14} />
+            ) : (
+              <ChevronDown size={14} />
+            )}
+            {showSnapshot ? "Hide" : "Show"} the raw snapshot Master Query is
+            reasoning over
+          </button>
+          {showSnapshot && (
+            <pre
+              className="mt-3 text-[11px] leading-relaxed text-[#3F3D3B] bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg p-3 overflow-auto max-h-96"
+              data-testid="master-query-snapshot-json"
+            >
+              {JSON.stringify(snapshot, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Blog admin: list, create, edit, publish/unpublish, delete posts.
+function BlogAdminPanel({ client }) {
+  const [posts, setPosts] = useState(null);
+  const [editing, setEditing] = useState(null); // null | "new" | post
+  const [form, setForm] = useState({
+    title: "",
+    slug: "",
+    summary: "",
+    body_markdown: "",
+    hero_image_url: "",
+    published: false,
+  });
+  const [saving, setSaving] = useState(false);
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await client.get("/admin/blog");
+        if (alive) setPosts(r.data.posts || []);
+      } catch (e) {
+        toast.error(
+          e?.response?.data?.detail || e.message || "Failed to load posts",
+        );
+        if (alive) setPosts([]);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [client, reload]);
+
+  const startNew = () => {
+    setEditing("new");
+    setForm({
+      title: "",
+      slug: "",
+      summary: "",
+      body_markdown: "",
+      hero_image_url: "",
+      published: false,
+    });
+  };
+
+  const startEdit = (p) => {
+    setEditing(p);
+    setForm({
+      title: p.title || "",
+      slug: p.slug || "",
+      summary: p.summary || "",
+      body_markdown: p.body_markdown || "",
+      hero_image_url: p.hero_image_url || "",
+      published: !!p.published,
+    });
+  };
+
+  const cancel = () => setEditing(null);
+
+  const save = async () => {
+    if (!form.title.trim()) {
+      toast.error("Title is required");
+      return;
+    }
+    setSaving(true);
+    try {
+      if (editing === "new") {
+        await client.post("/admin/blog", form);
+        toast.success("Post created");
+      } else {
+        await client.put(`/admin/blog/${editing.id}`, form);
+        toast.success("Post updated");
+      }
+      setEditing(null);
+      setReload((n) => n + 1);
+    } catch (e) {
+      toast.error(
+        e?.response?.data?.detail || e.message || "Save failed",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const togglePublish = async (p) => {
+    try {
+      await client.put(`/admin/blog/${p.id}`, { published: !p.published });
+      toast.success(p.published ? "Unpublished" : "Published");
+      setReload((n) => n + 1);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message || "Update failed");
+    }
+  };
+
+  const remove = async (p) => {
+    if (!window.confirm(`Delete "${p.title}"? This cannot be undone.`)) return;
+    try {
+      await client.delete(`/admin/blog/${p.id}`);
+      toast.success("Post deleted");
+      setReload((n) => n + 1);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message || "Delete failed");
+    }
+  };
+
+  return (
+    <div className="mt-6 space-y-4" data-testid="blog-admin-panel">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h3 className="font-serif-display text-2xl text-[#2D4A3E]">
+            Blog posts
+          </h3>
+          <p className="text-sm text-[#6D6A65]">
+            Markdown-based posts that appear at <code>/blog</code>.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="tv-btn-primary !py-2 !px-4 text-sm"
+          onClick={startNew}
+          data-testid="blog-new-btn"
+        >
+          + New post
+        </button>
+      </div>
+
+      {editing && (
+        <div
+          className="bg-white border border-[#E8E5DF] rounded-2xl p-6 space-y-3"
+          data-testid="blog-editor"
+        >
+          <div className="text-xs uppercase tracking-wider text-[#C87965]">
+            {editing === "new" ? "New post" : `Editing — ${editing.title}`}
+          </div>
+          <div>
+            <label className="text-xs text-[#6D6A65]">Title *</label>
+            <Input
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              data-testid="blog-title-input"
+            />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-[#6D6A65]">
+                Slug{" "}
+                <span className="text-[#9A938A]">(auto-generated if blank)</span>
+              </label>
+              <Input
+                value={form.slug}
+                onChange={(e) => setForm({ ...form, slug: e.target.value })}
+                placeholder="auto-from-title"
+                data-testid="blog-slug-input"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-[#6D6A65]">Hero image URL</label>
+              <Input
+                value={form.hero_image_url}
+                onChange={(e) =>
+                  setForm({ ...form, hero_image_url: e.target.value })
+                }
+                placeholder="https://…"
+                data-testid="blog-hero-input"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-[#6D6A65]">Summary</label>
+            <Textarea
+              rows={2}
+              value={form.summary}
+              onChange={(e) => setForm({ ...form, summary: e.target.value })}
+              placeholder="One-sentence teaser shown on the listing page"
+              data-testid="blog-summary-input"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-[#6D6A65]">Body (Markdown)</label>
+            <Textarea
+              rows={14}
+              value={form.body_markdown}
+              onChange={(e) =>
+                setForm({ ...form, body_markdown: e.target.value })
+              }
+              placeholder="Write the post body using Markdown…"
+              className="font-mono text-sm"
+              data-testid="blog-body-input"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="blog-published"
+              checked={form.published}
+              onCheckedChange={(c) =>
+                setForm({ ...form, published: c === true })
+              }
+              data-testid="blog-publish-checkbox"
+            />
+            <label
+              htmlFor="blog-published"
+              className="text-sm text-[#2B2A29] cursor-pointer"
+            >
+              Published (visible at <code>/blog</code>)
+            </label>
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t border-[#E8E5DF]">
+            <button
+              type="button"
+              className="tv-btn-secondary !py-2 !px-4 text-sm"
+              onClick={cancel}
+              disabled={saving}
+              data-testid="blog-cancel-btn"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="tv-btn-primary !py-2 !px-4 text-sm disabled:opacity-50"
+              onClick={save}
+              disabled={saving || !form.title.trim()}
+              data-testid="blog-save-btn"
+            >
+              {saving ? (
+                <Loader2 size={14} className="inline mr-1.5 animate-spin" />
+              ) : null}
+              {editing === "new" ? "Create post" : "Save changes"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {posts == null ? (
+        <div className="bg-white border border-[#E8E5DF] rounded-2xl p-12 text-center text-[#6D6A65]">
+          <Loader2 className="animate-spin mx-auto mb-3 text-[#2D4A3E]" />
+          Loading posts…
+        </div>
+      ) : posts.length === 0 ? (
+        <div className="bg-white border border-[#E8E5DF] rounded-2xl p-12 text-center text-[#6D6A65]">
+          No posts yet. Click <strong>+ New post</strong> to get started.
+        </div>
+      ) : (
+        <div className="bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-[#FDFBF7] text-[#6D6A65] border-b border-[#E8E5DF]">
+              <tr>
+                <Th>Title</Th>
+                <Th>Slug</Th>
+                <Th>Status</Th>
+                <Th>Updated</Th>
+                <Th>Actions</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {posts.map((p) => (
+                <tr
+                  key={p.id}
+                  className="border-b border-[#E8E5DF] last:border-0"
+                  data-testid={`blog-row-${p.slug}`}
+                >
+                  <td className="p-4 text-[#2B2A29]">{p.title}</td>
+                  <td className="p-4 text-[#6D6A65]">
+                    <code>/blog/{p.slug}</code>
+                  </td>
+                  <td className="p-4">
+                    {p.published ? (
+                      <span className="text-xs bg-[#2D4A3E] text-white rounded-full px-2 py-1">
+                        Published
+                      </span>
+                    ) : (
+                      <span className="text-xs bg-[#E8E5DF] text-[#6D6A65] rounded-full px-2 py-1">
+                        Draft
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-4 text-[#6D6A65] text-xs">
+                    {p.updated_at ? new Date(p.updated_at).toLocaleString() : "—"}
+                  </td>
+                  <td className="p-4">
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(p)}
+                        className="text-[#2D4A3E] hover:underline text-sm inline-flex items-center gap-1"
+                        data-testid={`blog-edit-${p.slug}`}
+                      >
+                        <Pencil size={12} /> Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => togglePublish(p)}
+                        className="text-[#2D4A3E] hover:underline text-sm"
+                        data-testid={`blog-toggle-${p.slug}`}
+                      >
+                        {p.published ? "Unpublish" : "Publish"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => remove(p)}
+                        className="text-[#D45D5D] hover:underline text-sm inline-flex items-center gap-1"
+                        data-testid={`blog-delete-${p.slug}`}
+                      >
+                        <Trash2 size={12} /> Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
