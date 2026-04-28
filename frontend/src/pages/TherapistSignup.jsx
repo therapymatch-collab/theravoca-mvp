@@ -117,6 +117,7 @@ export default function TherapistSignup() {
     modalities: [],
     modality_offering: "both",
     office_locations: [],
+    office_addresses: [],
     insurance_accepted: [],
     cash_rate: 150,
     sliding_scale: false,
@@ -1712,7 +1713,7 @@ function PillRow({ items, selected, onSelect, testid }) {
 }
 
 function Tags({ items, onRemove }) {
-  if (items.length === 0) return null;
+  if (!items || items.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-2 mt-2">
       {items.map((c) => (

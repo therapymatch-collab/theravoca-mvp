@@ -652,3 +652,23 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
   on the therapist payload so the new UI panel can compute flags
   client-side without an extra round-trip.
 
+
+## Iteration 52 — Step-3 crash fix, mobile burger, password auth, repeat-submitter prompt, admin patients tab (Apr 28, 2026)
+
+- **Bug fix — TherapistSignup step 4 crash**: `data.office_addresses` was missing from initial state, so `<Tags>` crashed with `Cannot read properties of undefined (reading 'length')` the moment the user reached step 5 (Modalities & Format). Initialised the field to `[]` and made `<Tags>` defensive.
+- **Mobile burger menu**: `SiteShell.Header` now ships a hamburger trigger below `md`, sliding a drawer with all nav links + Sign-in options + Get-matched CTA. Drawer auto-closes on route change and locks body scroll while open.
+- **Sign-in page keeps full main nav**: removed `Header minimal` so visitors don't lose their bearings during sign-in.
+- **Emergent badge hidden**: `index.html` `#emergent-badge` is now `display:none` so the floating Feedback button isn't covered.
+- **Password auth (optional, alongside magic-code)**:
+   - `POST /api/auth/login-password` — bcrypt verify + brute-force lockout in `password_login_attempts` (15 min after 5 failures, keyed by `{ip}:{role}:{email}`).
+   - `POST /api/auth/set-password` — requires a magic-link session, persists hash on the existing `therapists` row or creates a `patient_accounts` row lazily for patients.
+   - `GET /api/auth/password-status?email=...&role=...` — public, lets the SignIn page swap between password input and magic-code based on whether a password is already set.
+   - Forgot-password recovery: existing magic-code flow.
+- **SignIn page (frontend)**: three-step UX — email → password (if account exists) OR magic-code (fallback) → optional `setup-password` step triggered by `?setup=1` for first-time account creation.
+- **Repeat-submitter account prompt**: `VerifyEmail` success state now surfaces a "You've matched with us before — want one place to track everything?" card when `prior_request_count >= 2 && !has_password_account`. Links to `/sign-in?role=patient&setup=1`.
+- **In-portal "Set a password" prompt**: shared `<SetPasswordPrompt>` component shown in PatientPortal & TherapistPortal when the user has no password set.
+- **Admin: Patients (by email) tab**: new `/api/admin/patients` aggregates `requests` by lowercased email; new `<PatientsByEmailPanel>` shows total emails / repeat / accounts stats + searchable table.
+
+### Tests
+- `tests/test_iteration51_password_auth.py` — 9 new tests covering password-status, set-password, login-password, patient_accounts lazy create, admin patients endpoint contract, verify-endpoint email echo, prefill has_password_account flag.
+- `tests/test_iteration5_auth.py` — updated for the new dict-shaped `/portal/patient/requests` response.

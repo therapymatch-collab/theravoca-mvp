@@ -449,6 +449,60 @@ async def admin_list_feedback(_: bool = Depends(require_admin)):
     return {"feedback": docs, "total": len(docs)}
 
 
+@router.get("/admin/patients")
+async def admin_list_patients_by_email(_: bool = Depends(require_admin)):
+    """Aggregate every email that has submitted a request and how many
+    requests they've filed. Useful for spotting power users / repeat
+    submitters. Sorted by most-recent request first.
+
+    Each row also reports whether the patient has set a password (i.e.
+    has a row in `patient_accounts` with a hash) so the admin can see
+    who's converted to a tracked account.
+    """
+    pipeline = [
+        {"$match": {"email": {"$exists": True, "$ne": None}}},
+        {"$group": {
+            "_id": {"$toLower": "$email"},
+            "request_count": {"$sum": 1},
+            "first_request_at": {"$min": "$created_at"},
+            "last_request_at": {"$max": "$created_at"},
+            "verified_count": {
+                "$sum": {"$cond": [{"$eq": ["$verified", True]}, 1, 0]}
+            },
+            "matched_count": {
+                "$sum": {"$cond": [{"$eq": ["$status", "matched"]}, 1, 0]}
+            },
+            "completed_count": {
+                "$sum": {"$cond": [{"$eq": ["$status", "completed"]}, 1, 0]}
+            },
+            "latest_state": {"$last": "$location_state"},
+            "latest_referral_source": {"$last": "$referral_source"},
+        }},
+        {"$sort": {"last_request_at": -1}},
+        {"$limit": 2000},
+    ]
+    rows = await db.requests.aggregate(pipeline).to_list(2000)
+    out: list[dict] = []
+    for r in rows:
+        email = r["_id"]
+        has_pw = await db.patient_accounts.count_documents(
+            {"email": email, "password_hash": {"$exists": True, "$ne": None}},
+        )
+        out.append({
+            "email": email,
+            "request_count": r["request_count"],
+            "verified_count": r.get("verified_count", 0),
+            "matched_count": r.get("matched_count", 0),
+            "completed_count": r.get("completed_count", 0),
+            "first_request_at": r.get("first_request_at"),
+            "last_request_at": r.get("last_request_at"),
+            "latest_state": r.get("latest_state"),
+            "latest_referral_source": r.get("latest_referral_source"),
+            "has_password_account": bool(has_pw),
+        })
+    return {"patients": out, "total": len(out)}
+
+
 @router.post("/admin/outreach/{invite_id}/convert")
 async def admin_convert_outreach_invite(
     invite_id: str, _: bool = Depends(require_admin),

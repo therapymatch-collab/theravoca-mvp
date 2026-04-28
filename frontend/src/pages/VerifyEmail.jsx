@@ -12,6 +12,8 @@ export default function VerifyEmail() {
   const requestId = params.get("id");
   const [state, setState] = useState(isPending ? "pending" : "loading");
   const [verifiedId, setVerifiedId] = useState(null);
+  const [verifiedEmail, setVerifiedEmail] = useState(null);
+  const [offerAccount, setOfferAccount] = useState(false);
 
   useEffect(() => {
     if (isPending) return;
@@ -19,7 +21,22 @@ export default function VerifyEmail() {
       .get(`/requests/verify/${token}`)
       .then((res) => {
         setVerifiedId(res.data.id);
+        setVerifiedEmail(res.data.email || null);
         setState("verified");
+        // If this email has filed multiple requests but hasn't set a
+        // password yet, surface the "create an account" CTA so they can
+        // start tracking everything in one dashboard.
+        const emailFromResponse = res.data.email;
+        if (emailFromResponse) {
+          api
+            .get(`/requests/prefill?email=${encodeURIComponent(emailFromResponse)}`)
+            .then((p) => {
+              const count = p.data?.prior_request_count || 0;
+              const hasAcct = !!p.data?.has_password_account;
+              if (count >= 2 && !hasAcct) setOfferAccount(true);
+            })
+            .catch(() => {});
+        }
       })
       .catch(() => setState("error"));
   }, [token, isPending]);
@@ -71,6 +88,28 @@ export default function VerifyEmail() {
               >
                 Track responses
               </Link>
+              {offerAccount && (
+                <div
+                  className="mt-7 bg-[#F2F4F0] border border-[#D9DDD2] rounded-2xl p-5 text-left"
+                  data-testid="offer-account-prompt"
+                >
+                  <div className="text-sm font-semibold text-[#2D4A3E]">
+                    You've matched with us before — want one place to track everything?
+                  </div>
+                  <p className="text-xs text-[#6D6A65] mt-1.5 leading-relaxed">
+                    Create a quick account so you can sign in with a password and see all
+                    your past requests, responses, and matches in one dashboard — no more
+                    one-time codes.
+                  </p>
+                  <Link
+                    to={`/sign-in?role=patient&email=${encodeURIComponent(verifiedEmail || "")}&setup=1&next=/portal/patient`}
+                    className="tv-btn-primary !py-2 !px-4 text-sm mt-3 inline-flex"
+                    data-testid="offer-account-cta"
+                  >
+                    Create my account
+                  </Link>
+                </div>
+              )}
             </>
           )}
           {state === "error" && (

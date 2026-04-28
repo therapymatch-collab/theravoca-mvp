@@ -12,12 +12,14 @@ import {
   ClipboardCheck,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
+import SetPasswordPrompt from "@/components/SetPasswordPrompt";
 import { sessionClient, getSession, clearSession } from "@/lib/api";
 
 export default function PatientPortal() {
   const navigate = useNavigate();
   const session = getSession();
   const [requests, setRequests] = useState(null);
+  const [hasPassword, setHasPassword] = useState(false);
 
   useEffect(() => {
     if (!session || session.role !== "patient") {
@@ -26,7 +28,17 @@ export default function PatientPortal() {
     }
     sessionClient()
       .get("/portal/patient/requests")
-      .then((res) => setRequests(res.data))
+      .then((res) => {
+        // Backend returns `{requests, has_password, email}` — fall back to
+        // the older array shape just in case (during a rolling deploy).
+        if (Array.isArray(res.data)) {
+          setRequests(res.data);
+          setHasPassword(false);
+        } else {
+          setRequests(res.data?.requests || []);
+          setHasPassword(!!res.data?.has_password);
+        }
+      })
       .catch((e) => {
         if (e?.response?.status === 401) {
           clearSession();
@@ -92,6 +104,10 @@ export default function PatientPortal() {
                 Get matched
               </Link>
             </div>
+          )}
+
+          {requests?.length > 0 && !hasPassword && (
+            <SetPasswordPrompt />
           )}
 
           {requests?.length > 0 && (

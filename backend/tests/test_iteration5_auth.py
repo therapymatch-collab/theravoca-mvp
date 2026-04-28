@@ -159,10 +159,14 @@ class TestPatientRequests:
         r = requests.get(f"{API}/portal/patient/requests", headers={"Authorization": f"Bearer {token}"}, timeout=15)
         assert r.status_code == 200
         data = r.json()
-        assert isinstance(data, list)
+        # Response shape: {"requests": [...], "has_password": bool, "email": str}
+        assert isinstance(data, dict), f"Expected dict, got {type(data)}"
+        assert "requests" in data and isinstance(data["requests"], list)
+        assert "has_password" in data
+        items = data["requests"]
         # context says 4 requests exist; assert at least 1 to avoid flake from data churn
-        assert len(data) >= 1, f"Expected >=1 patient requests, got {len(data)}"
-        for d in data:
+        assert len(items) >= 1, f"Expected >=1 patient requests, got {len(items)}"
+        for d in items:
             assert "id" in d and "status" in d
             assert "verification_token" not in d
             assert "application_count" in d

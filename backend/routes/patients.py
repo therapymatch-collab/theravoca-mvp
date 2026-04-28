@@ -50,7 +50,11 @@ async def prefill_from_prior_request(email: str):
         sort=[("created_at", -1)],
     )
     if not prior:
-        return {"returning": False}
+        return {"returning": False, "has_password_account": False}
+    has_account = await db.patient_accounts.find_one(
+        {"email": email_norm, "password_hash": {"$exists": True, "$ne": None}},
+        {"_id": 0, "email": 1},
+    )
     return {
         "returning": True,
         "prefill": {
@@ -63,6 +67,7 @@ async def prefill_from_prior_request(email: str):
         "prior_request_count": await db.requests.count_documents(
             {"email": {"$regex": f"^{re.escape(email_norm)}$", "$options": "i"}},
         ),
+        "has_password_account": bool(has_account),
     }
 
 
@@ -148,7 +153,7 @@ async def verify_request(token: str):
             _trigger_matching(req["id"]),
             name=f"match_for_{req['id'][:8]}",
         )
-    return {"id": req["id"], "verified": True}
+    return {"id": req["id"], "verified": True, "email": req.get("email")}
 
 
 @router.get("/requests/{request_id}/public", response_model=dict)

@@ -1,5 +1,6 @@
+import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Leaf, ChevronDown } from "lucide-react";
+import { Leaf, ChevronDown, Menu, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,6 +32,27 @@ function useScrollTopNavigate(to) {
 export function Header({ minimal = false }) {
   const onLogoClick = useScrollTopNavigate("/");
   const onTherapistsClick = useScrollTopNavigate("/therapists/join");
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Close the mobile drawer whenever the route changes so it never leaks
+  // into the next page load.
+  const location = useLocation();
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname, location.hash]);
+
+  // Lock body scroll while drawer is open.
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileOpen]);
+
   return (
     <header
       className="sticky top-0 z-30 border-b border-[#E8E5DF] bg-[#FDFBF7]/85 backdrop-blur-md"
@@ -50,86 +72,180 @@ export function Header({ minimal = false }) {
             TheraVoca
           </span>
         </a>
+
         {!minimal && (
-          <nav className="hidden md:flex items-center gap-7 text-sm text-[#6D6A65]">
-            <a href="/#how" className="hover:text-[#2D4A3E] transition" data-testid="nav-how">
+          <>
+            {/* Desktop nav */}
+            <nav
+              className="hidden md:flex items-center gap-7 text-sm text-[#6D6A65]"
+              data-testid="desktop-nav"
+            >
+              <a href="/#how" className="hover:text-[#2D4A3E] transition" data-testid="nav-how">
+                How it works
+              </a>
+              <a href="/#different" className="hover:text-[#2D4A3E] transition" data-testid="nav-diff">
+                Why TheraVoca
+              </a>
+              <a href="/#faq" className="hover:text-[#2D4A3E] transition" data-testid="nav-faq">
+                FAQs
+              </a>
+              <a
+                href="/therapists/join"
+                onClick={onTherapistsClick}
+                className="hover:text-[#2D4A3E] transition"
+                data-testid="nav-therapists"
+              >
+                For therapists
+              </a>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  className="inline-flex items-center gap-1.5 hover:text-[#2D4A3E] transition outline-none"
+                  data-testid="nav-signin-trigger"
+                >
+                  Sign in <ChevronDown size={14} strokeWidth={2} />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="bg-white border-[#E8E5DF] w-56"
+                  data-testid="nav-signin-menu"
+                >
+                  <DropdownMenuItem asChild>
+                    <Link
+                      to="/sign-in?role=patient"
+                      className="cursor-pointer"
+                      data-testid="signin-as-patient"
+                    >
+                      <div>
+                        <div className="font-medium text-[#2B2A29]">Patient</div>
+                        <div className="text-xs text-[#6D6A65]">Track your matches</div>
+                      </div>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link
+                      to="/sign-in?role=therapist"
+                      className="cursor-pointer"
+                      data-testid="signin-as-therapist"
+                    >
+                      <div>
+                        <div className="font-medium text-[#2B2A29]">Therapist</div>
+                        <div className="text-xs text-[#6D6A65]">View your referrals</div>
+                      </div>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link
+                      to="/admin"
+                      className="cursor-pointer"
+                      data-testid="signin-as-admin"
+                    >
+                      <div>
+                        <div className="font-medium text-[#2B2A29]">Admin</div>
+                        <div className="text-xs text-[#6D6A65]">Operations console</div>
+                      </div>
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <a
+                href="/#start"
+                className="tv-btn-primary !py-2 !px-5 text-sm"
+                data-testid="nav-cta"
+              >
+                Get matched
+              </a>
+            </nav>
+
+            {/* Mobile burger */}
+            <button
+              type="button"
+              onClick={() => setMobileOpen((s) => !s)}
+              className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-full text-[#2D4A3E] hover:bg-[#E8E5DF]/50 transition"
+              aria-label={mobileOpen ? "Close menu" : "Open menu"}
+              aria-expanded={mobileOpen}
+              data-testid="mobile-menu-trigger"
+            >
+              {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Mobile drawer — slides down under the sticky header */}
+      {!minimal && mobileOpen && (
+        <div
+          className="md:hidden border-t border-[#E8E5DF] bg-[#FDFBF7]"
+          data-testid="mobile-nav"
+        >
+          <nav className="max-w-7xl mx-auto px-5 py-5 flex flex-col gap-1 text-base text-[#2B2A29]">
+            <a
+              href="/#how"
+              className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition"
+              data-testid="mobile-nav-how"
+            >
               How it works
             </a>
-            <a href="/#different" className="hover:text-[#2D4A3E] transition" data-testid="nav-diff">
+            <a
+              href="/#different"
+              className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition"
+              data-testid="mobile-nav-diff"
+            >
               Why TheraVoca
             </a>
-            <a href="/#faq" className="hover:text-[#2D4A3E] transition" data-testid="nav-faq">
+            <a
+              href="/#faq"
+              className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition"
+              data-testid="mobile-nav-faq"
+            >
               FAQs
             </a>
             <a
               href="/therapists/join"
               onClick={onTherapistsClick}
-              className="hover:text-[#2D4A3E] transition"
-              data-testid="nav-therapists"
+              className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition"
+              data-testid="mobile-nav-therapists"
             >
               For therapists
             </a>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                className="inline-flex items-center gap-1.5 hover:text-[#2D4A3E] transition outline-none"
-                data-testid="nav-signin-trigger"
-              >
-                Sign in <ChevronDown size={14} strokeWidth={2} />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="bg-white border-[#E8E5DF] w-56"
-                data-testid="nav-signin-menu"
-              >
-                <DropdownMenuItem asChild>
-                  <Link
-                    to="/sign-in?role=patient"
-                    className="cursor-pointer"
-                    data-testid="signin-as-patient"
-                  >
-                    <div>
-                      <div className="font-medium text-[#2B2A29]">Patient</div>
-                      <div className="text-xs text-[#6D6A65]">Track your matches</div>
-                    </div>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link
-                    to="/sign-in?role=therapist"
-                    className="cursor-pointer"
-                    data-testid="signin-as-therapist"
-                  >
-                    <div>
-                      <div className="font-medium text-[#2B2A29]">Therapist</div>
-                      <div className="text-xs text-[#6D6A65]">View your referrals</div>
-                    </div>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link
-                    to="/admin"
-                    className="cursor-pointer"
-                    data-testid="signin-as-admin"
-                  >
-                    <div>
-                      <div className="font-medium text-[#2B2A29]">Admin</div>
-                      <div className="text-xs text-[#6D6A65]">Operations console</div>
-                    </div>
-                  </Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="border-t border-[#E8E5DF] my-2" />
+            <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] px-2 pt-1">
+              Sign in
+            </div>
+            <Link
+              to="/sign-in?role=patient"
+              className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition flex items-baseline justify-between"
+              data-testid="mobile-signin-patient"
+            >
+              <span>Patient</span>
+              <span className="text-xs text-[#6D6A65]">Track your matches</span>
+            </Link>
+            <Link
+              to="/sign-in?role=therapist"
+              className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition flex items-baseline justify-between"
+              data-testid="mobile-signin-therapist"
+            >
+              <span>Therapist</span>
+              <span className="text-xs text-[#6D6A65]">View referrals</span>
+            </Link>
+            <Link
+              to="/admin"
+              className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition flex items-baseline justify-between"
+              data-testid="mobile-signin-admin"
+            >
+              <span>Admin</span>
+              <span className="text-xs text-[#6D6A65]">Console</span>
+            </Link>
             <a
               href="/#start"
-              className="tv-btn-primary !py-2 !px-5 text-sm"
-              data-testid="nav-cta"
+              className="tv-btn-primary justify-center mt-3"
+              data-testid="mobile-nav-cta"
             >
               Get matched
             </a>
           </nav>
-        )}
-      </div>
+        </div>
+      )}
     </header>
   );
 }

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header, Footer } from "@/components/SiteShell";
+import SetPasswordPrompt from "@/components/SetPasswordPrompt";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { api, sessionClient, getSession, clearSession } from "@/lib/api";
@@ -422,6 +423,11 @@ export default function TherapistPortal() {
           {/* Profile health (red-flag callouts) — only for approved therapists */}
           {therapist && !isPending && (
             <ProfileHealthCallouts therapist={therapist} />
+          )}
+
+          {/* Set-a-password prompt — magic-code-only users */}
+          {therapist && !isPending && !therapist.has_password && (
+            <SetPasswordPrompt onDone={loadAll} />
           )}
 
           {/* Refer-a-colleague tile (always visible for active therapists) */}

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowRight, Mail, KeyRound, ArrowLeft } from "lucide-react";
+import { ArrowRight, Mail, KeyRound, ArrowLeft, Lock, Eye, EyeOff } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { api, setSession, getSession } from "@/lib/api";
 import { Input } from "@/components/ui/input";
@@ -24,26 +24,65 @@ export default function SignIn() {
   const [params] = useSearchParams();
   const initialRole = params.get("role") === "therapist" ? "therapist" : "patient";
   const [role, setRole] = useState(initialRole);
-  const [step, setStep] = useState("email"); // email | code
-  const [email, setEmail] = useState("");
+  // step: email | code | password | setup-password
+  const [step, setStep] = useState("email");
+  const [email, setEmail] = useState(params.get("email") || "");
+  const [password, setPassword] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [newPw2, setNewPw2] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const [code, setCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
-  const [sp] = useSearchParams();
-  const nextPath = sp.get("next");
+  const [hasPassword, setHasPassword] = useState(null); // null = unknown, true/false
+  const nextPath = params.get("next");
+  const setupFlag = params.get("setup") === "1";
 
+  // If already signed in, bounce straight to the portal (or the requested
+  // `next` path).
   useEffect(() => {
     const session = getSession();
-    if (session?.role) {
+    if (session?.role && !setupFlag) {
       navigate(nextPath || ROLE_INFO[session.role]?.portal || "/", { replace: true });
     }
-  }, [navigate, nextPath]);
+  }, [navigate, nextPath, setupFlag]);
 
   useEffect(() => {
     if (resendCooldown <= 0) return undefined;
     const t = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
     return () => clearTimeout(t);
   }, [resendCooldown]);
+
+  // Whenever the email input changes (debounced) or role flips, look up
+  // whether the account already has a password set so we can choose the
+  // right primary input (password vs. magic code).
+  useEffect(() => {
+    if (step !== "email") return;
+    if (!email.includes("@")) {
+      setHasPassword(null);
+      return;
+    }
+    const t = setTimeout(() => {
+      api
+        .get(`/auth/password-status?email=${encodeURIComponent(email)}&role=${role}`)
+        .then((r) => setHasPassword(!!r.data?.has_password))
+        .catch(() => setHasPassword(null));
+    }, 350);
+    return () => clearTimeout(t);
+  }, [email, role, step]);
+
+  const finishLogin = (data) => {
+    setSession(data);
+    if (setupFlag && !data.has_password) {
+      // Returning intake flow asked us to nudge for a password — drop them
+      // straight into the setup step instead of bouncing to the portal.
+      setStep("setup-password");
+      toast.success("Email verified — set a password to finish setup.");
+      return;
+    }
+    toast.success("Signed in");
+    navigate(nextPath || ROLE_INFO[role].portal);
+  };
 
   const sendCode = async () => {
     if (!email.includes("@")) {
@@ -71,9 +110,7 @@ export default function SignIn() {
     setSubmitting(true);
     try {
       const res = await api.post("/auth/verify-code", { email, role, code });
-      setSession(res.data);
-      toast.success("Signed in");
-      navigate(nextPath || ROLE_INFO[role].portal);
+      finishLogin(res.data);
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Invalid or expired code");
     } finally {
@@ -81,16 +118,53 @@ export default function SignIn() {
     }
   };
 
+  const loginWithPassword = async () => {
+    if (!password) {
+      toast.error("Enter your password");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await api.post("/auth/login-password", { email, password, role });
+      finishLogin(res.data);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Email or password is incorrect");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const submitNewPassword = async () => {
+    if (newPw.length < 8) {
+      toast.error("Password must be at least 8 characters.");
+      return;
+    }
+    if (newPw !== newPw2) {
+      toast.error("Passwords don't match.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api.post("/auth/set-password", { password: newPw });
+      toast.success("Password set! You can now sign in with email + password.");
+      navigate(nextPath || ROLE_INFO[role].portal);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Could not set password");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
-      <Header minimal />
+      <Header />
       <main className="flex-1 flex items-center justify-center px-5 py-16">
         <div className="w-full max-w-md bg-white border border-[#E8E5DF] rounded-3xl p-8 sm:p-10" data-testid="signin-card">
           <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] text-center">
             Sign in
           </p>
           <h1 className="font-serif-display text-4xl text-[#2D4A3E] text-center mt-2 leading-tight">
-            Welcome back
+            {step === "setup-password" ? "Almost done" : "Welcome back"}
           </h1>
 
           {step === "email" && (
@@ -99,7 +173,11 @@ export default function SignIn() {
                 {Object.entries(ROLE_INFO).map(([key, info]) => (
                   <button
                     key={key}
-                    onClick={() => setRole(key)}
+                    onClick={() => {
+                      setRole(key);
+                      setHasPassword(null);
+                      setPassword("");
+                    }}
                     className={`text-sm py-2 rounded-full transition ${
                       role === key
                         ? "bg-[#2D4A3E] text-white font-semibold"
@@ -114,6 +192,7 @@ export default function SignIn() {
               <p className="text-sm text-[#6D6A65] text-center mt-4 leading-relaxed">
                 {ROLE_INFO[role].blurb}
               </p>
+
               <label className="mt-7 block text-xs uppercase tracking-wider text-[#6D6A65] mb-2">
                 Email address
               </label>
@@ -128,20 +207,81 @@ export default function SignIn() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
                   className="pl-10 bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                  onKeyDown={(e) => e.key === "Enter" && sendCode()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      if (hasPassword) loginWithPassword();
+                      else sendCode();
+                    }
+                  }}
                   data-testid="signin-email"
                 />
               </div>
-              <button
-                type="button"
-                onClick={sendCode}
-                disabled={submitting || !email}
-                className="tv-btn-primary w-full mt-5 justify-center disabled:opacity-50"
-                data-testid="signin-send-code"
-              >
-                {submitting ? "Sending..." : "Send me a code"}{" "}
-                <ArrowRight size={16} />
-              </button>
+
+              {/* Password input — shown when the email has a password set */}
+              {hasPassword && (
+                <>
+                  <label className="mt-4 block text-xs uppercase tracking-wider text-[#6D6A65] mb-2">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Lock
+                      size={16}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6D6A65]"
+                    />
+                    <Input
+                      type={showPw ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="pl-10 pr-10 bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                      onKeyDown={(e) => e.key === "Enter" && loginWithPassword()}
+                      data-testid="signin-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPw((v) => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6D6A65] hover:text-[#2D4A3E]"
+                      tabIndex={-1}
+                      aria-label={showPw ? "Hide password" : "Show password"}
+                    >
+                      {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={loginWithPassword}
+                    disabled={submitting || !password}
+                    className="tv-btn-primary w-full mt-5 justify-center disabled:opacity-50"
+                    data-testid="signin-login-password"
+                  >
+                    {submitting ? "Signing in..." : "Sign in"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={sendCode}
+                    disabled={submitting}
+                    className="w-full mt-3 text-xs text-[#2D4A3E] hover:underline"
+                    data-testid="signin-use-code"
+                  >
+                    Forgot password? Email me a one-time code instead
+                  </button>
+                </>
+              )}
+
+              {/* Magic-code primary path — when no password is set */}
+              {!hasPassword && (
+                <button
+                  type="button"
+                  onClick={sendCode}
+                  disabled={submitting || !email}
+                  className="tv-btn-primary w-full mt-5 justify-center disabled:opacity-50"
+                  data-testid="signin-send-code"
+                >
+                  {submitting ? "Sending..." : "Send me a code"}{" "}
+                  <ArrowRight size={16} />
+                </button>
+              )}
+
               {role === "therapist" && (
                 <p className="mt-5 text-xs text-[#6D6A65] text-center">
                   Not in our network yet?{" "}
@@ -154,7 +294,7 @@ export default function SignIn() {
                   </Link>
                 </p>
               )}
-              <p className="mt-5 text-xs text-[#6D6A65] text-center">
+              <p className="mt-3 text-xs text-[#6D6A65] text-center">
                 Admin? <Link to="/admin" className="text-[#2D4A3E] underline">Sign in here</Link>
               </p>
             </>
@@ -217,6 +357,75 @@ export default function SignIn() {
                     : "Resend code"}
                 </button>
               </div>
+            </>
+          )}
+
+          {step === "setup-password" && (
+            <>
+              <p className="text-sm text-[#6D6A65] text-center mt-6 leading-relaxed">
+                Set a password so next time you can sign in with one tap —
+                no codes needed.
+              </p>
+              <label className="mt-6 block text-xs uppercase tracking-wider text-[#6D6A65] mb-2">
+                New password
+              </label>
+              <div className="relative">
+                <Lock
+                  size={16}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6D6A65]"
+                />
+                <Input
+                  type={showPw ? "text" : "password"}
+                  value={newPw}
+                  onChange={(e) => setNewPw(e.target.value)}
+                  placeholder="At least 8 characters"
+                  className="pl-10 pr-10 bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                  data-testid="signin-newpw-1"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPw((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6D6A65] hover:text-[#2D4A3E]"
+                  tabIndex={-1}
+                >
+                  {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+              <label className="mt-4 block text-xs uppercase tracking-wider text-[#6D6A65] mb-2">
+                Confirm password
+              </label>
+              <div className="relative">
+                <Lock
+                  size={16}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6D6A65]"
+                />
+                <Input
+                  type={showPw ? "text" : "password"}
+                  value={newPw2}
+                  onChange={(e) => setNewPw2(e.target.value)}
+                  placeholder="Re-enter password"
+                  className="pl-10 bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                  onKeyDown={(e) => e.key === "Enter" && submitNewPassword()}
+                  data-testid="signin-newpw-2"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={submitNewPassword}
+                disabled={submitting || newPw.length < 8 || newPw !== newPw2}
+                className="tv-btn-primary w-full mt-5 justify-center disabled:opacity-50"
+                data-testid="signin-newpw-save"
+              >
+                {submitting ? "Saving..." : "Save & continue"}
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(nextPath || ROLE_INFO[role].portal)}
+                className="w-full mt-3 text-xs text-[#6D6A65] hover:text-[#2D4A3E]"
+                data-testid="signin-newpw-skip"
+              >
+                Skip for now — I'll do this later
+              </button>
             </>
           )}
         </div>

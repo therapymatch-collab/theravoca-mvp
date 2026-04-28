@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 51 (password auth + admin patients-by-email + mobile burger + sign-in main nav + therapist signup crash fix) verified end-to-end. Backend: 12/12 pytest passing (9 in test_iteration51_password_auth.py + 3 new tests in test_iteration51_extras.py covering brute-force lockout, /portal/patient/requests new dict shape, and /portal/therapist/referrals therapist.has_password). Frontend: full main nav renders on /sign-in (How it works / Why TheraVoca / FAQs / For therapists / Sign in / Get matched), password-status auto-detection works on Therapist tab (portaltest@example.com auto-shows password input + 'Sign in' button), wrong password yields 'Email or password is incorrect' banner. /portal/patient renders SetPasswordPrompt (data-testid=set-password-prompt) for patients with >=1 request and no password. /admin tab-patients renders 62 emails table with header counter '62 emails • 7 repeat • 3 with account', search box, and rows showing email/#requests/verified/matched/last_request/source/account. Mobile burger at 390px viewport: data-testid=mobile-menu-trigger visible, click opens data-testid=mobile-nav drawer with all 4 main nav links + Patient/Therapist/Admin sign-in shortcuts + Get matched CTA, drawer auto-closes on navigation. Emergent badge hidden via display:none. TherapistSignup.jsx initial state line 120 contains office_addresses:[] — crash regression fix confirmed at source level.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration51_password_auth.py",
+    "/app/backend/tests/test_iteration51_extras.py",
+    "/app/test_reports/pytest/iteration51_results.xml",
+    "/app/test_reports/pytest/iteration51_extras_results.xml"
+  ],
+  "action_items": [
+    "(MINOR/NAMING) Spec asked for data-testid=signin-password-submit on the password Sign-in button, but SignIn.jsx uses data-testid=signin-login-password (line 255). Functionally identical — consider aliasing or updating spec.",
+    "(MINOR/UX) /sign-in?role=patient&setup=1 by itself does NOT render the new-password setup form — it only renders after a successful verify-code call inside SignIn.jsx finishLogin() (line 76). This matches the source contract but the testing-spec wording '?setup=1 after verify-code' is correct; just flagging that visiting the URL directly without a session shows the email/code form.",
+    "(NICE-TO-HAVE) PatientPortal SetPasswordPrompt is gated by `requests?.length > 0 && !hasPassword` (line 109). New patients with zero requests will not see the prompt — likely intentional (no reason to set password if nothing to revisit), but spec wording 'when patient has no password' is broader than the actual UI condition."
+  ],
+  "critical_code_review_comments": [
+    "TherapistSignup.jsx L120: office_addresses:[] now in initial state — Tags multi-input on step 5 (Modalities) reads data.office_addresses.length safely, so the previously-reported step 4→5 crash 'Cannot read properties of undefined (reading length)' is resolved at the source level.",
+    "SiteShell.jsx mobile drawer: drawer auto-closes on navigation as expected (verified via Playwright — clicking first link inside [data-testid=mobile-nav] hides the drawer). data-testid wiring on burger trigger is correct.",
+    "AdminDashboard PatientsByEmailPanel: tab-patients renders aggregate (62 rows) with sort-by-last_request_at, search box, and account badges (yes/—) — backend /api/admin/patients pagination payload matches frontend expectation.",
+    "PatientPortal.jsx L32-39: gracefully handles both old bare-list and new dict-shape /portal/patient/requests responses — defensive parsing is good.",
+    "SignIn.jsx debounced password-status lookup (L65-71, 350ms) — clean implementation; wrong-pw banner is shown via toast/inline 'Email or password is incorrect' message. Brute-force 401 lockout asserted by backend test (status_code in {401,423,429}).",
+    "Brute-force lockout: 5 wrong attempts → subsequent attempt with CORRECT password is still blocked (verified by tests/test_iteration51_extras.py::TestBruteForceLockout — pass)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration51_extras.py",
+    "/app/test_reports/pytest/iteration51_results.xml",
+    "/app/test_reports/pytest/iteration51_extras_results.xml",
+    "/app/test_reports/iteration_14.json"
+  ],
+  "success_rate": {"backend": "100% (12/12 — 9 existing + 3 new)", "frontend": "100% (all 6 review items verified via Playwright + source review)"},
+  "test_credentials": "Admin: admin123!. Therapist (with password): portaltest@example.com (password rotated by tests; mint via deps._create_session_token + POST /api/auth/set-password to set fresh).",
+  "seed_data_creation": "test_iteration51_extras.py creates: bruteforce_<uuid>@example.com (lockout test), portalpatient_<ts>@example.com (portal shape test). Pre-existing: portalpatient_1777375328@example.com used for live UI verification of SetPasswordPrompt.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: `REACT_APP_BACKEND_URL=https://care-matcher-1.preview.emergentagent.com ADMIN_PASSWORD='admin123!' pytest /app/backend/tests/test_iteration51_password_auth.py /app/backend/tests/test_iteration51_extras.py -v`. UI testids confirmed live: signin-email, signin-password, signin-login-password (NOT signin-password-submit), signin-newpw-1/2/save (only rendered post verify-code with setup=1), set-password-prompt, set-password-save, mobile-menu-trigger, mobile-nav, tab-patients. To inject auth in Playwright: sessionStorage.setItem('tv_session_token'/role/email) — minted via `python -c \"from deps import _create_session_token; print(_create_session_token('email','role'))\"`. Brute-force lockout collection name: password_login_attempts. Note: portaltest@example.com password is rotated by every test run — re-mint + set-password in setup if writing new tests.",
+  "rca_of_the_issue": "Original step 4→5 crash RCA: the Tags multi-input on step 5 read data.office_addresses.length where data.office_addresses was undefined (it was never seeded in initial state). Fix at TherapistSignup.jsx:120 adds `office_addresses: []` to initial state, so .length is always safe. Verified at source level (no regression observed during signup walk)."
+}
