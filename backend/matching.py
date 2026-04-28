@@ -339,6 +339,36 @@ def _score_modality_pref(t: dict, r: dict) -> float:
 
 # ─── Public API ───────────────────────────────────────────────────────────────
 
+# Maps the patient-facing "priority factor" keys to the scoring axes they
+# emphasise. When the patient picks one of these on intake, the listed
+# axes get multiplied by `PRIORITY_BOOST` and re-normalised so the total
+# stays in [0, 100]. Picking nothing leaves the default weights intact.
+PRIORITY_AXES = {
+    "specialty": ["issues"],
+    "modality":  ["modality", "modality_pref"],
+    "schedule":  ["availability", "urgency"],
+    "payment":   ["payment_fit"],
+    "identity":  ["gender", "style"],
+}
+PRIORITY_BOOST = 1.8  # selected axes are weighted 1.8× others
+
+
+def _priority_weights(priority_factors: list[str]) -> dict[str, float]:
+    """Return a per-axis weight map. Axes the patient selected get
+    `PRIORITY_BOOST`; everything else stays at 1.0. Empty selection
+    returns an all-1.0 map (default behaviour).
+    """
+    weights = {ax: 1.0 for ax in [
+        "issues", "availability", "modality", "urgency",
+        "prior_therapy", "experience", "gender", "style",
+        "payment_fit", "modality_pref",
+    ]}
+    for f in priority_factors or []:
+        for axis in PRIORITY_AXES.get(f, []):
+            weights[axis] = PRIORITY_BOOST
+    return weights
+
+
 def score_therapist(t: dict, r: dict) -> dict[str, Any]:
     """Return scoring breakdown + total. total=-1 indicates filtered out."""
     if not _state_pass(t, r):
@@ -354,7 +384,7 @@ def score_therapist(t: dict, r: dict) -> dict[str, Any]:
     if not _gender_pass(t, r):
         return {"total": -1, "filter_failed": "gender", "filtered": True}
 
-    breakdown = {
+    raw = {
         "issues": _score_issues(t, r),
         "availability": _score_availability(t, r),
         "modality": _score_modality(t, r),
@@ -366,6 +396,28 @@ def score_therapist(t: dict, r: dict) -> dict[str, Any]:
         "payment_fit": _score_payment_fit(t, r),
         "modality_pref": _score_modality_pref(t, r),
     }
+
+    # Strict mode: patient said "don't show me anyone who scores zero on
+    # my top priorities." Hard-filter any therapist that whiffed an axis
+    # the patient flagged as important (only applied when the patient
+    # actually picked priorities).
+    priority_factors = list(r.get("priority_factors") or [])
+    if r.get("strict_priorities") and priority_factors:
+        for f in priority_factors:
+            for axis in PRIORITY_AXES.get(f, []):
+                if (raw.get(axis) or 0) <= 0:
+                    return {
+                        "total": -1,
+                        "filter_failed": f"strict_priority_{f}",
+                        "filtered": True,
+                    }
+
+    # Apply patient-customizable weight multipliers. Re-normalise so a
+    # patient picking everything doesn't artificially inflate their
+    # total above 100, while a patient picking nothing gets the
+    # historical default scoring.
+    weights = _priority_weights(priority_factors)
+    breakdown = {ax: round(v * weights[ax], 2) for ax, v in raw.items()}
     # Reputation boost — verified online reviews ≥ 4.5★ adds +5 (out of 100).
     review_avg = float(t.get("review_avg") or 0)
     review_count = int(t.get("review_count") or 0)

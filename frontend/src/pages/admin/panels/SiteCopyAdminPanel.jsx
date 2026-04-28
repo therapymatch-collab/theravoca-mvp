@@ -127,8 +127,8 @@ const SEED_KEYS = [
   },
   {
     key: "btn.therapist.signup_cta",
-    label: "Button — Therapist signup primary",
-    fallback: "Start matching with patients",
+    label: "Button — Therapist signup hero CTA",
+    fallback: "Sign up — start free trial",
     previewPath: "/therapists/join",
   },
   {
@@ -139,32 +139,70 @@ const SEED_KEYS = [
   },
   {
     key: "btn.intake.next",
-    label: "Button — Intake form 'Next' label",
-    fallback: "Next",
-    previewPath: "/get-matched",
+    label: "Button — Intake form 'Continue' label",
+    fallback: "Continue",
+    previewPath: "/#start",
   },
   {
     key: "btn.intake.back",
     label: "Button — Intake form 'Back' label",
-    fallback: "Back",
-    previewPath: "/get-matched",
+    fallback: "← Back",
+    previewPath: "/#start",
   },
   {
     key: "btn.intake.submit",
-    label: "Button — Intake form final submit",
-    fallback: "Send my referral request",
-    previewPath: "/get-matched",
+    label: "Button — Intake form 'Review & submit'",
+    fallback: "Review & submit",
+    previewPath: "/#start",
+  },
+  {
+    key: "btn.intake.preview_edit",
+    label: "Button — Review modal 'Edit answers'",
+    fallback: "← Edit answers",
+    previewPath: "/#start",
+  },
+  {
+    key: "btn.intake.preview_submit",
+    label: "Button — Review modal 'Confirm & submit'",
+    fallback: "Confirm & find my matches",
+    previewPath: "/#start",
+  },
+  {
+    key: "intake.priorities.label",
+    label: "Intake · 'What matters most?' question",
+    fallback: "Which of these matter most to you?",
+    previewPath: "/#start",
+  },
+  {
+    key: "intake.priorities.hint",
+    label: "Intake · 'What matters most?' hint",
+    fallback:
+      "Tap any that really matter — we'll lean your matches toward those. Skip if you'd rather we use our default ranking.",
+    previewPath: "/#start",
+  },
+  {
+    key: "intake.priorities.strict_label",
+    label: "Intake · Strict-priorities toggle label",
+    fallback: "Strict mode",
+    previewPath: "/#start",
+  },
+  {
+    key: "intake.priorities.strict_desc",
+    label: "Intake · Strict-priorities toggle description",
+    fallback:
+      "only show me therapists who are a real fit on every priority I picked. (Fewer matches, but tighter.)",
+    previewPath: "/#start",
   },
   {
     key: "btn.signin.send_code",
-    label: "Button — 'Email me a sign-in code'",
-    fallback: "Email me a sign-in code",
+    label: "Button — Sign-in 'Send me a code'",
+    fallback: "Send me a code",
     previewPath: "/sign-in",
   },
   {
     key: "btn.signin.verify",
-    label: "Button — 'Verify and sign in'",
-    fallback: "Verify and sign in",
+    label: "Button — Sign-in 'Verify & sign in'",
+    fallback: "Verify & sign in",
     previewPath: "/sign-in",
   },
   {

@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowRight, Mail, KeyRound, ArrowLeft, Lock, Eye, EyeOff } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
+import useSiteCopy from "@/lib/useSiteCopy";
 import { api, setSession, getSession } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 
@@ -21,6 +22,7 @@ const ROLE_INFO = {
 
 export default function SignIn() {
   const navigate = useNavigate();
+  const t = useSiteCopy();
   const [params] = useSearchParams();
   const initialRole = params.get("role") === "therapist" ? "therapist" : "patient";
   const [role, setRole] = useState(initialRole);
@@ -457,7 +459,9 @@ export default function SignIn() {
                 className="tv-btn-primary w-full mt-5 justify-center disabled:opacity-50"
                 data-testid="signin-verify"
               >
-                {submitting ? "Verifying..." : "Verify & sign in"}
+                {submitting
+                  ? "Verifying..."
+                  : t("btn.signin.verify", "Verify & sign in")}
               </button>
               <div className="mt-5 flex items-center justify-between text-xs text-[#6D6A65]">
                 <button

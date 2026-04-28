@@ -4,6 +4,7 @@ import { formatUsPhone } from "@/lib/phone";
 import { toast } from "sonner";
 import { ArrowRight, Check } from "lucide-react";
 import { api } from "@/lib/api";
+import useSiteCopy from "@/lib/useSiteCopy";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -25,7 +26,16 @@ const STEPS = [
   "Payment",
   "Logistics",
   "Therapist preferences",
+  "What matters most?",
   "Where to reach you",
+];
+
+const PRIORITY_FACTORS = [
+  { v: "specialty", l: "Issue / specialty fit", d: "Therapist treats your specific concern" },
+  { v: "modality",  l: "Therapy approach",       d: "CBT, EMDR, IFS, etc." },
+  { v: "schedule",  l: "Schedule & availability", d: "When they can see you" },
+  { v: "payment",   l: "Insurance / cost fit",    d: "In-network or your budget" },
+  { v: "identity",  l: "Identity & style",        d: "Gender, faith, LGBTQ+ affirming, etc." },
 ];
 
 const CLIENT_TYPES = [
@@ -117,12 +127,20 @@ const MODALITY_PREFS = [
 
 export default function IntakeForm() {
   const navigate = useNavigate();
+  const t = useSiteCopy();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [confirmAdult, setConfirmAdult] = useState(false);
   const [confirmNotEmergency, setConfirmNotEmergency] = useState(false);
+  // Bot-defense: capture the moment the form first mounts. We pass this
+  // to the backend on submit; if the delta is < 2s, the request is
+  // dropped as bot-likely. Real humans can't fill this form in <2s.
+  const [formStartedAt] = useState(() => Date.now());
+  // Honeypot field — kept off-screen via aria-hidden + tabindex=-1 so
+  // real users won't see/tab into it. Bots auto-fill it.
+  const [fax, setFax] = useState("");
   // Scroll the form card into view on step change. Without this the step
   // animation re-renders mid-scroll and the page lurches up/down on
   // mobile when the new step has a different content height. We pin the
@@ -167,6 +185,8 @@ export default function IntakeForm() {
     email: "",
     phone: "",
     sms_opt_in: false,
+    priority_factors: [],
+    strict_priorities: false,
   });
   const set = (k, v) => setData((d) => ({ ...d, [k]: v }));
   const toggleArr = (k, v, max) =>
@@ -269,7 +289,8 @@ export default function IntakeForm() {
         data.availability_windows.length >= 1 && data.urgency && data.prior_therapy
       );
     if (step === 5) return true;
-    if (step === 6)
+    if (step === 6) return true; // priority factors are optional
+    if (step === 7)
       return (
         emailLooksOk(data.email) &&
         !!data.referral_source &&
@@ -292,6 +313,10 @@ export default function IntakeForm() {
         referral_source: refSrc,
         referred_by_patient_code: referredByPatientCode,
         budget: data.budget ? parseInt(data.budget, 10) : null,
+        // Bot-defense fields — backend rejects if honeypot has any value
+        // OR if form completion took less than ~2s.
+        fax_number: fax,
+        form_started_at_ms: formStartedAt,
       };
       delete payload.referral_source_other;
       const res = await api.post("/requests", payload);
@@ -363,7 +388,7 @@ export default function IntakeForm() {
       if (!data.prior_therapy) return "Tell us about prior therapy experience.";
       return "";
     }
-    if (step === 6) {
+    if (step === 7) {
       if (!emailLooksOk(data.email))
         return "Enter a valid personal email — disposable / temp addresses aren't accepted.";
       if (!data.referral_source) return "Pick how you heard about us.";
@@ -719,6 +744,82 @@ export default function IntakeForm() {
 
             {step === 6 && (
               <div className="space-y-5">
+                <Group
+                  label={t(
+                    "intake.priorities.label",
+                    "Which of these matter most to you?",
+                  )}
+                  hint={t(
+                    "intake.priorities.hint",
+                    "Tap any that really matter — we'll lean your matches toward those. Skip if you'd rather we use our default ranking.",
+                  )}
+                >
+                  <div className="space-y-2">
+                    {PRIORITY_FACTORS.map((p) => {
+                      const on = data.priority_factors.includes(p.v);
+                      return (
+                        <button
+                          key={p.v}
+                          type="button"
+                          onClick={() => toggleArr("priority_factors", p.v)}
+                          data-testid={`priority-${p.v}`}
+                          className={`w-full text-left rounded-xl border px-4 py-3 transition flex items-center gap-3 ${
+                            on
+                              ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
+                              : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+                          }`}
+                        >
+                          <div
+                            className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
+                              on ? "bg-white border-white" : "border-[#A4A29E]"
+                            }`}
+                          >
+                            {on && <div className="w-2.5 h-2.5 rounded-full bg-[#2D4A3E]" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-semibold break-words">
+                              {p.l}
+                            </div>
+                            <div
+                              className={`text-xs break-words ${
+                                on ? "text-white/80" : "text-[#6D6A65]"
+                              }`}
+                            >
+                              {p.d}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Group>
+                {data.priority_factors.length > 0 && (
+                  <label className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer hover:border-[#2D4A3E] transition">
+                    <Switch
+                      checked={data.strict_priorities}
+                      onCheckedChange={(v) => set("strict_priorities", !!v)}
+                      data-testid="strict-priorities"
+                    />
+                    <span className="text-sm text-[#2B2A29] leading-relaxed break-words">
+                      <strong className="text-[#2D4A3E]">
+                        {t(
+                          "intake.priorities.strict_label",
+                          "Strict mode",
+                        )}
+                      </strong>{" "}
+                      —{" "}
+                      {t(
+                        "intake.priorities.strict_desc",
+                        "only show me therapists who are a real fit on every priority I picked. (Fewer matches, but tighter.)",
+                      )}
+                    </span>
+                  </label>
+                )}
+              </div>
+            )}
+
+            {step === 7 && (
+              <div className="space-y-5">
                 <Field label="Your email (we'll send your matches here)">
                   <Input
                     type="email"
@@ -912,7 +1013,7 @@ export default function IntakeForm() {
               className="text-sm text-[#6D6A65] hover:text-[#2D4A3E] disabled:opacity-30 transition"
               data-testid="back-btn"
             >
-              ← Back
+              {t("btn.intake.back", "← Back")}
             </button>
             {step < STEPS.length - 1 ? (
               <button
@@ -922,7 +1023,7 @@ export default function IntakeForm() {
                 className="tv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 data-testid="next-btn"
               >
-                Continue <ArrowRight size={18} strokeWidth={1.8} />
+                {t("btn.intake.next", "Continue")} <ArrowRight size={18} strokeWidth={1.8} />
               </button>
             ) : (
               <button
@@ -932,12 +1033,38 @@ export default function IntakeForm() {
                 className="tv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 data-testid="submit-btn"
               >
-                Review & submit{" "}
+                {t("btn.intake.submit", "Review & submit")}{" "}
                 <ArrowRight size={18} strokeWidth={1.8} />
               </button>
             )}
             </div>
           </div>
+        </div>
+        {/* ── Honeypot: bots fill this; humans never see it. ────────────── */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            left: "-10000px",
+            top: "auto",
+            width: 1,
+            height: 1,
+            overflow: "hidden",
+          }}
+        >
+          <label htmlFor="fax-number-confirm">
+            Fax number (leave blank)
+          </label>
+          <input
+            id="fax-number-confirm"
+            name="fax_number"
+            type="text"
+            tabIndex={-1}
+            autoComplete="off"
+            value={fax}
+            onChange={(e) => setFax(e.target.value)}
+            data-testid="intake-honeypot"
+          />
         </div>
       </div>
       {showPreview && (
@@ -958,6 +1085,7 @@ export default function IntakeForm() {
 // send so they can scan it once before committing. Edit goes back to the
 // form (just closes the modal); Submit triggers the actual POST.
 function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
+  const t = useSiteCopy();
   const issues = (data.presenting_issues || []).join(", ");
   const insurance =
     data.payment_type === "insurance" || data.payment_type === "either"
@@ -1056,7 +1184,7 @@ function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
             className="tv-btn-secondary"
             data-testid="intake-preview-edit"
           >
-            ← Edit answers
+            {t("btn.intake.preview_edit", "← Edit answers")}
           </button>
           <button
             type="button"
@@ -1065,7 +1193,9 @@ function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
             className="tv-btn-primary disabled:opacity-50"
             data-testid="intake-preview-submit"
           >
-            {submitting ? "Submitting..." : "Confirm & find my matches"}
+            {submitting
+              ? "Submitting..."
+              : t("btn.intake.preview_submit", "Confirm & find my matches")}
           </button>
         </div>
       </div>

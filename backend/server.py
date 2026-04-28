@@ -57,6 +57,16 @@ async def lifespan(_app: FastAPI):
         logger.info("Cold start — seeded %d Idaho therapists with v2 schema", len(therapists))
 
     asyncio.create_task(_backfill_therapist_geo())
+    # Best-effort indexes: the rate-limit lookup is the only hot path on
+    # `intake_ip_log`. We also use a TTL index so old IPs auto-expire
+    # after 24h — keeps the collection bounded without needing a cron.
+    try:
+        await db.intake_ip_log.create_index("ip")
+        await db.intake_ip_log.create_index(
+            "ts_at", expireAfterSeconds=24 * 3600,
+        )
+    except Exception as _idx_err:  # noqa: BLE001
+        logger.warning("intake_ip_log index setup failed: %s", _idx_err)
     sweep_interval = int(os.environ.get("SWEEP_INTERVAL_SECONDS", "300"))
     _sweep_task = asyncio.create_task(_sweep_loop(sweep_interval))
     _daily_task = asyncio.create_task(_daily_loop())

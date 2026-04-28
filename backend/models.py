@@ -101,6 +101,20 @@ class RequestCreate(BaseModel):
     referred_by_patient_code: Optional[str] = None
     phone: Optional[str] = ""  # patient phone — only used for SMS receipt
     sms_opt_in: bool = False  # patient explicitly opted into SMS receipt
+    # Patient-customizable matching: list of axes the patient cares about
+    # most ("specialty", "modality", "schedule", "payment", "identity").
+    # Each selected axis triggers a weight multiplier in matching.py so the
+    # ranked results lean toward what the patient told us matters.
+    priority_factors: list[str] = Field(default_factory=list, max_length=5)
+    # If True, hard-filter therapists who score 0 on any priority axis.
+    strict_priorities: bool = False
+    # ─── Bot defenses (rejected at the route layer; never persisted) ───
+    # Honeypot input — a hidden field bots auto-fill. Real users leave it
+    # blank because they never see it.
+    fax_number: Optional[str] = Field(default="", max_length=200)
+    # Client timestamp (ms since epoch) when the form was first rendered.
+    # If the gap from this to submit is < ~2s, it's almost certainly a bot.
+    form_started_at_ms: Optional[int] = None
 
 
 class RequestOut(BaseModel):

@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from deps import db, DEFAULT_THRESHOLD, _decode_session_from_authorization, require_admin
 from email_service import send_verification_email
@@ -72,7 +72,50 @@ async def prefill_from_prior_request(email: str):
 
 
 @router.post("/requests", response_model=dict)
-async def create_request(payload: RequestCreate):
+async def create_request(payload: RequestCreate, request: Request):
+    # ─── Bot defenses (run before anything expensive) ──────────────────
+    # 1. Honeypot: a hidden form field bots auto-fill. Real users never
+    #    see it, so any non-empty value is a clear signal. We respond
+    #    with a generic 400 so scrapers don't learn what tripped them.
+    if (payload.fax_number or "").strip():
+        raise HTTPException(400, "Submission rejected.")
+    # 2. Timing heuristic: humans take >2s to fill the form, bots fire
+    #    instantly. We compare the client timestamp against now; if the
+    #    delta is <2s OR the client clock is wildly off (>1h skew),
+    #    drop the request.
+    if payload.form_started_at_ms is not None:
+        try:
+            started_ms = int(payload.form_started_at_ms)
+            now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+            delta_s = (now_ms - started_ms) / 1000.0
+            if delta_s < 2.0 or delta_s > 24 * 3600.0:
+                raise HTTPException(400, "Submission rejected.")
+        except (TypeError, ValueError):
+            pass
+    # 3. Per-IP rate limit: cap intake submissions per IP per hour.
+    #    `X-Forwarded-For` is set by our k8s ingress; fall back to the
+    #    raw socket address. Track in `intake_ip_log` collection (no
+    #    PII — just the IP and a timestamp).
+    fwd = request.headers.get("x-forwarded-for") or ""
+    client_ip = (fwd.split(",")[0].strip() if fwd else None) or (
+        getattr(request.client, "host", None) or ""
+    )
+    if client_ip:
+        ip_cutoff_iso = (
+            datetime.now(timezone.utc) - timedelta(hours=1)
+        ).isoformat()
+        ip_recent = await db.intake_ip_log.count_documents(
+            {"ip": client_ip, "ts": {"$gte": ip_cutoff_iso}},
+        )
+        # 3 requests per IP per hour — enough room for shared networks
+        # (clinic / family wifi) but tight enough to stop scripted spam.
+        if ip_recent >= 3:
+            raise HTTPException(
+                429,
+                "Too many submissions from this network in the last hour. "
+                "Please try again later.",
+            )
+
     # ─── Spam / sanity gates (run before any DB writes) ────────────────
     if not email_is_plausible(payload.email):
         raise HTTPException(400, "That email address doesn't look right. Please double-check it.")
@@ -188,7 +231,25 @@ async def create_request(payload: RequestCreate):
         "results_sent_at": None,
         "created_at": _now_iso(),
     }
+    # Bot-defense fields are interrogated above — never persist them.
+    doc.pop("fax_number", None)
+    doc.pop("form_started_at_ms", None)
     await db.requests.insert_one(doc.copy())
+    # Log the IP for the rate-limit window. We only keep these for ~24h
+    # via a TTL index on `ts_at` (BSON Date) — see server.py startup.
+    if client_ip:
+        try:
+            now_dt = datetime.now(timezone.utc)
+            await db.intake_ip_log.insert_one(
+                {
+                    "ip": client_ip,
+                    "ts": now_dt.isoformat(),  # human-readable
+                    "ts_at": now_dt,  # BSON Date — used by TTL index
+                    "request_id": rid,
+                },
+            )
+        except Exception:
+            pass
     await send_verification_email(payload.email, rid, token)
     # Optional SMS receipt — only if patient gave a phone AND opted in
     if payload.sms_opt_in and (payload.phone or "").strip():

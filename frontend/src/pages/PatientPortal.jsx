@@ -66,9 +66,9 @@ export default function PatientPortal() {
                 Your matching journey
               </h1>
               {session && (
-                <p className="text-sm text-[#6D6A65] mt-2">
+                <p className="text-sm text-[#6D6A65] mt-2 break-words">
                   Signed in as{" "}
-                  <span className="text-[#2D4A3E] font-medium">{session.email}</span>
+                  <span className="text-[#2D4A3E] font-medium break-all">{session.email}</span>
                 </p>
               )}
             </div>
@@ -127,10 +127,10 @@ export default function PatientPortal() {
                           Submitted {new Date(r.created_at).toLocaleString()}
                         </span>
                       </div>
-                      <p className="text-[#2B2A29] mt-3 leading-relaxed line-clamp-2">
+                      <p className="text-[#2B2A29] mt-3 leading-relaxed line-clamp-2 break-words">
                         {r.presenting_issues}
                       </p>
-                      <div className="text-xs text-[#6D6A65] mt-3 flex flex-wrap gap-x-4 gap-y-1">
+                      <div className="text-xs text-[#6D6A65] mt-3 flex flex-wrap gap-x-4 gap-y-1 break-words">
                         <span>Age {r.client_age}</span>
                         <span>{r.location_state}</span>
                         <span>{r.session_format}</span>
@@ -272,10 +272,10 @@ function StatusTimeline({ req }) {
               >
                 <Icon size={14} strokeWidth={2.2} />
               </div>
-              <div className={`mt-2 text-[11px] font-semibold leading-tight ${labelColor}`}>
+              <div className={`mt-2 text-[11px] font-semibold leading-tight break-words ${labelColor}`}>
                 {step.label}
               </div>
-              <div className="text-[10px] text-[#6D6A65] mt-0.5 leading-tight line-clamp-2">
+              <div className="text-[10px] text-[#6D6A65] mt-0.5 leading-tight line-clamp-2 break-words">
                 {step.sublabel}
               </div>
             </div>

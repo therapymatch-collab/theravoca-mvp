@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { CheckCircle2, ArrowRight, X, Plus, Camera, Sparkles } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import useFaqs from "@/lib/useFaqs";
+import useSiteCopy from "@/lib/useSiteCopy";
 import { formatUsPhone } from "@/lib/phone";
 import { api } from "@/lib/api";
 import { IDAHO_INSURERS } from "@/lib/insurers";
@@ -137,6 +138,7 @@ export default function TherapistSignup() {
   const inviteCode = searchParams.get("ref");
   const recruitCode = searchParams.get("recruit_code");
   const therapistFaqs = useFaqs("therapist", THERAPIST_FAQS);
+  const t = useSiteCopy();
 
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -631,7 +633,12 @@ export default function TherapistSignup() {
               data-testid="signup-checkout-btn"
               className="tv-btn-primary mt-6 w-full disabled:opacity-50"
             >
-              {checkoutLoading ? "Redirecting…" : "Add payment method & start free trial"}
+              {checkoutLoading
+                ? "Redirecting…"
+                : t(
+                    "btn.therapist.add_payment",
+                    "Add payment method & start free trial",
+                  )}
               <ArrowRight size={18} className="inline ml-2" />
             </button>
             <button
@@ -640,7 +647,7 @@ export default function TherapistSignup() {
               className="tv-btn-secondary mt-3 inline-flex"
               data-testid="signup-skip-payment-btn"
             >
-              I'll do this later
+              {t("btn.therapist.skip_payment", "I'll do this later")}
             </button>
             {skippedPayment ? (
               <div
@@ -730,7 +737,8 @@ export default function TherapistSignup() {
                       ?.scrollIntoView({ behavior: "smooth", block: "start" });
                   }}
                 >
-                  Sign up — start free trial <ArrowRight size={18} />
+                  {t("btn.therapist.signup_cta", "Sign up — start free trial")}{" "}
+                  <ArrowRight size={18} />
                 </a>
                 <a
                   href="/sign-in?role=therapist"
