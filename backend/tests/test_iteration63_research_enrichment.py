@@ -190,7 +190,7 @@ class TestAdminRequestDetailKeys:
         # Seed a request so there's at least one notified therapist.
         # Unique email so the per-email rate-limit (1/hour) doesn't trip on reruns.
         import uuid as _uuid
-        from tests.conftest import v2_request_payload
+        from conftest import v2_request_payload
         payload = v2_request_payload(
             email=f"TEST_iter63_{_uuid.uuid4().hex[:8]}@example.com",
         )
