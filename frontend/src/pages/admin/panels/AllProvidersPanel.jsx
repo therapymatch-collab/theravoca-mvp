@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Th } from "./_shared";
 
 // "All providers" tab — paginated, column-customizable table of every
@@ -26,12 +27,42 @@ export default function AllProvidersPanel({
   onArchive,
   onRestore,
   onDelete,
+  onDeepResearch,
 }) {
-  const filtered = showOnlyReapproval
+  // "Active only" toggle — defaults to true so archived providers don't
+  // clutter the daily view. Admin can flip to see archived rows.
+  const [activeOnly, setActiveOnly] = useState(true);
+  let filtered = showOnlyReapproval
     ? filteredAllTherapists.filter((t) => t.pending_reapproval)
     : filteredAllTherapists;
+  if (activeOnly) {
+    filtered = filtered.filter((t) => t.is_active !== false);
+  }
+  const archivedCount = filteredAllTherapists.filter(
+    (t) => t.is_active === false,
+  ).length;
   return (
     <div className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
+      <div className="px-4 pt-4 flex items-center justify-end gap-3 text-xs text-[#6D6A65]">
+        <label
+          className="inline-flex items-center gap-1.5 cursor-pointer select-none"
+          data-testid="active-only-toggle-label"
+        >
+          <input
+            type="checkbox"
+            checked={activeOnly}
+            onChange={(e) => setActiveOnly(e.target.checked)}
+            className="accent-[#2D4A3E]"
+            data-testid="active-only-toggle"
+          />
+          Active only{" "}
+          {archivedCount > 0 ? (
+            <span className="text-[#6D6A65]">
+              ({archivedCount} archived hidden)
+            </span>
+          ) : null}
+        </label>
+      </div>
       <ProviderTableControls
         total={allTherapists.length}
         visibleTotal={filtered.length}
@@ -88,6 +119,9 @@ export default function AllProvidersPanel({
                   onArchive={() => onArchive(t)}
                   onRestore={() => onRestore(t)}
                   onDelete={() => onDelete(t)}
+                  onDeepResearch={
+                    onDeepResearch ? () => onDeepResearch(t) : undefined
+                  }
                   visibleCols={visibleCols}
                 />
               ))}

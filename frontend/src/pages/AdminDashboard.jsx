@@ -396,6 +396,29 @@ export default function AdminDashboard() {
     }
   };
 
+  // Deep web-research for ONE therapist — DDG search + 5 page fetches +
+  // LLM evidence extraction. Slow (~30-60s) so we show a loader on the row.
+  const deepResearchTherapist = async (t) => {
+    try {
+      const tStart = Date.now();
+      const res = await client.post(
+        `/admin/research-enrichment/deep/${t.id}`,
+        {},
+        { timeout: 90000 },
+      );
+      const sec = Math.round((Date.now() - tStart) / 1000);
+      toast.success(
+        `Deep research done — ${(res.data?.extra_sources || []).length} sources in ${sec}s`,
+      );
+      return res.data;
+    } catch (e) {
+      toast.error(
+        e?.response?.data?.detail || e.message || "Deep research failed",
+      );
+      return null;
+    }
+  };
+
   const saveTherapist = async () => {
     if (!editTherapist) return;
     setSavingTherapist(true);
@@ -415,10 +438,19 @@ export default function AdminDashboard() {
   const sendTestSms = async () => {
     try {
       const res = await client.post("/admin/test-sms", {});
-      if (res.data?.ok) {
-        toast.success(`SMS queued — sid ${res.data.sid?.slice(0, 12)}…`);
+      if (res.data?.ok && res.data?.final_status === "delivered") {
+        toast.success(`SMS delivered ✓ — sid ${res.data.sid?.slice(0, 12)}…`);
+      } else if (res.data?.error_code) {
+        toast.error(
+          `SMS ${res.data.final_status || "failed"} (Twilio err ${res.data.error_code}): ${res.data.troubleshooting_hint || res.data.error_message || ""}`,
+          { duration: 12000 },
+        );
+      } else if (res.data?.ok) {
+        toast.success(
+          `SMS queued — sid ${res.data.sid?.slice(0, 12)}… (status: ${res.data.final_status || "pending"})`,
+        );
       } else {
-        toast.error(res.data?.detail || "SMS not sent — check Twilio config");
+        toast.error(res.data?.detail || "SMS send returned no result");
       }
     } catch (e) {
       toast.error(e?.response?.data?.detail || "SMS send failed");
@@ -946,6 +978,7 @@ export default function AdminDashboard() {
                   onArchive={archiveTherapist}
                   onRestore={restoreTherapist}
                   onDelete={deleteTherapist}
+                  onDeepResearch={deepResearchTherapist}
                 />
               )}
               {tab === "referral_sources" && (
@@ -3564,10 +3597,29 @@ function useProviderColumnPrefs() {
   return { visibleCols, setVisibleCols, defaultCols, setDefaultCols };
 }
 
-function ProviderRow({ t, onEdit, onArchive, onRestore, onDelete, visibleCols }) {
+function ProviderRow({
+  t, onEdit, onArchive, onRestore, onDelete, onDeepResearch, visibleCols,
+}) {
   const cols = PROVIDER_COLUMNS.filter((c) => visibleCols.includes(c.key));
   const archived = t.is_active === false;
+  const [drExpanded, setDrExpanded] = useState(false);
+  const [drBusy, setDrBusy] = useState(false);
+  const [drResult, setDrResult] = useState(null);
+
+  const runDeep = async () => {
+    if (!onDeepResearch) return;
+    setDrBusy(true);
+    try {
+      const res = await onDeepResearch(t);
+      setDrResult(res);
+      setDrExpanded(true);
+    } finally {
+      setDrBusy(false);
+    }
+  };
+
   return (
+    <>
     <tr
       className={`border-t border-[#E8E5DF] hover:bg-[#FDFBF7] align-top ${archived ? "opacity-50" : ""}`}
       data-testid={`provider-row-${t.id}`}
@@ -3584,6 +3636,22 @@ function ProviderRow({ t, onEdit, onArchive, onRestore, onDelete, visibleCols })
           >
             <Pencil size={12} /> Edit
           </button>
+          {onDeepResearch ? (
+            <button
+              className="text-[#C87965] hover:text-[#a96050] hover:underline text-xs inline-flex items-center gap-1 disabled:opacity-50"
+              onClick={runDeep}
+              disabled={drBusy}
+              title="Run LLM deep research — DuckDuckGo + 5 web pages + AI extraction (~30-60s)"
+              data-testid={`deep-research-provider-${t.id}`}
+            >
+              {drBusy ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                <Sparkles size={12} />
+              )}{" "}
+              {drBusy ? "Researching…" : "Deep research"}
+            </button>
+          ) : null}
           {archived ? (
             <button
               className="text-[#2D4A3E] hover:underline text-xs inline-flex items-center gap-1"
@@ -3614,6 +3682,84 @@ function ProviderRow({ t, onEdit, onArchive, onRestore, onDelete, visibleCols })
         </div>
       </td>
     </tr>
+    {drExpanded && drResult ? (
+      <tr
+        className="border-t border-[#F4C7BE] bg-[#FBE9E5]"
+        data-testid={`deep-research-result-${t.id}`}
+      >
+        <td colSpan={cols.length + 1} className="p-4 text-xs">
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div className="flex-1">
+              <div className="text-[10px] uppercase tracking-wider text-[#C87965] font-semibold">
+                Deep research · {drResult.depth_signal} depth ·{" "}
+                {(drResult.extra_sources || []).length} extra sources fetched
+              </div>
+              <div className="mt-1 text-[#2B2A29] leading-relaxed">
+                {drResult.summary || "(no summary returned)"}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDrExpanded(false)}
+              className="text-[#6D6A65] hover:text-[#2B2A29] text-[10px]"
+            >
+              Close
+            </button>
+          </div>
+          {Object.keys(drResult.evidence_themes || {}).length > 0 ? (
+            <div className="mt-2">
+              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-1">
+                Specialty evidence
+              </div>
+              <ul className="space-y-1">
+                {Object.entries(drResult.evidence_themes).map(([k, v]) => (
+                  <li key={k} className="text-[#2B2A29]">
+                    <strong className="text-[#2D4A3E]">
+                      {k.replaceAll("_", " ")}:
+                    </strong>{" "}
+                    {v}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {(drResult.public_footprint || []).length > 0 ? (
+            <div className="mt-3">
+              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-1">
+                Public footprint
+              </div>
+              <ul className="list-disc ml-4 space-y-0.5">
+                {drResult.public_footprint.map((f, i) => (
+                  <li key={i}>{f}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {(drResult.extra_sources || []).length > 0 ? (
+            <div className="mt-3">
+              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-1">
+                Sources researched
+              </div>
+              <ul className="space-y-0.5">
+                {drResult.extra_sources.map((u, i) => (
+                  <li key={i}>
+                    <a
+                      href={u}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#2D4A3E] hover:underline break-all"
+                    >
+                      {u}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </td>
+      </tr>
+    ) : null}
+    </>
   );
 }
 

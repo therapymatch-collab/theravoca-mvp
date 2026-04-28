@@ -393,6 +393,7 @@ export default function TherapistSignup() {
   const [therapistId, setTherapistId] = useState(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [trialActivated, setTrialActivated] = useState(false);
+  const [skippedPayment, setSkippedPayment] = useState(false);
 
   // Detect ?subscribed=ID&session_id=cs_test_... return from Stripe
   useEffect(() => {
@@ -537,6 +538,33 @@ export default function TherapistSignup() {
                 You'll receive your first anonymous referral as soon as a patient match scores ≥71%.
                 We'll email you 3 days before your first $45 charge — cancel any time before then with no fees.
               </p>
+              <div
+                className="mt-6 bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-5 text-left"
+                data-testid="check-email-prompt-paid"
+              >
+                <div className="text-xs uppercase tracking-wider text-[#C87965] font-semibold">
+                  Check your email
+                </div>
+                <p className="text-sm text-[#2B2A29] mt-1.5 leading-relaxed">
+                  We just sent a welcome email to{" "}
+                  <strong className="text-[#2D4A3E]">{data.email}</strong> with:
+                </p>
+                <ul className="text-sm text-[#2B2A29] mt-2 space-y-1.5 list-disc ml-5">
+                  <li>How patient referrals reach you (email + SMS)</li>
+                  <li>How to apply or decline a referral</li>
+                  <li>Your portal login link + setup checklist</li>
+                  <li>A 5-minute onboarding video walkthrough</li>
+                </ul>
+                <p className="text-xs text-[#6D6A65] mt-3">
+                  Don't see it within 5 minutes? Check spam, or write us at{" "}
+                  <a
+                    className="text-[#2D4A3E] underline"
+                    href="mailto:support@theravoca.com"
+                  >
+                    support@theravoca.com
+                  </a>.
+                </p>
+              </div>
               <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
                 <Link
                   to="/portal/therapist"
@@ -591,13 +619,56 @@ export default function TherapistSignup() {
               {checkoutLoading ? "Redirecting…" : "Add payment method & start free trial"}
               <ArrowRight size={18} className="inline ml-2" />
             </button>
-            <Link
-              to="/sign-in?role=therapist"
+            <button
+              type="button"
+              onClick={() => setSkippedPayment(true)}
               className="tv-btn-secondary mt-3 inline-flex"
-              data-testid="signup-success-home"
+              data-testid="signup-skip-payment-btn"
             >
               I'll do this later
-            </Link>
+            </button>
+            {skippedPayment ? (
+              <div
+                className="mt-6 bg-[#FBE9E5] border border-[#F4C7BE] rounded-2xl p-5 text-left"
+                data-testid="check-email-prompt-skip"
+              >
+                <div className="text-xs uppercase tracking-wider text-[#C87965] font-semibold">
+                  Check your email — next steps
+                </div>
+                <p className="text-sm text-[#2B2A29] mt-1.5 leading-relaxed">
+                  No problem — your profile is saved as{" "}
+                  <strong>pending review</strong>. We just sent a welcome email
+                  to <strong className="text-[#2D4A3E]">{data.email}</strong>{" "}
+                  with:
+                </p>
+                <ul className="text-sm text-[#2B2A29] mt-2 space-y-1.5 list-disc ml-5">
+                  <li>A link to add your payment method any time</li>
+                  <li>How patient referrals work and what we'll send you</li>
+                  <li>How to log into your portal and complete onboarding</li>
+                  <li>What we need from you before you can start receiving matches</li>
+                </ul>
+                <p className="text-xs text-[#6D6A65] mt-3">
+                  <strong className="text-[#B0382A]">Important:</strong> we
+                  can't send patient referrals until your payment method is
+                  on file. Most therapists complete this step within 24 hours.
+                </p>
+                <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                  <Link
+                    to="/sign-in?role=therapist"
+                    className="tv-btn-primary !py-2 inline-flex text-center justify-center"
+                    data-testid="signup-skip-signin"
+                  >
+                    Sign in to my portal
+                  </Link>
+                  <Link
+                    to="/"
+                    className="tv-btn-secondary !py-2 inline-flex text-center justify-center"
+                  >
+                    Back home
+                  </Link>
+                </div>
+              </div>
+            ) : null}
           </div>
         </main>
         <Footer />

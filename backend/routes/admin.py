@@ -880,7 +880,59 @@ async def admin_test_sms(payload: dict, _: bool = Depends(require_admin)):
     result = await send_sms(to, body)
     if not result:
         return {"ok": False, "detail": "SMS send returned no result (check TWILIO_ENABLED + creds + logs)"}
-    return {"ok": True, **result}
+
+    # Twilio's API returns "queued" immediately but the message can still
+    # fail at the carrier (A2P 10DLC, blocked numbers, invalid format).
+    # Poll the message status briefly so the admin sees the real outcome.
+    sid = result.get("sid")
+    final_status = result.get("status")
+    error_code = None
+    error_message = None
+    if sid:
+        try:
+            from twilio.rest import Client as _TwilioClient
+            tw = _TwilioClient(
+                os.environ.get("TWILIO_ACCOUNT_SID"),
+                os.environ.get("TWILIO_AUTH_TOKEN"),
+            )
+            # Poll up to 6s for terminal status
+            import asyncio as _asyncio
+            for _ in range(6):
+                await _asyncio.sleep(1.0)
+                m = await _asyncio.to_thread(lambda: tw.messages(sid).fetch())
+                final_status = m.status
+                error_code = m.error_code
+                error_message = m.error_message
+                if final_status in ("delivered", "undelivered", "failed", "sent"):
+                    break
+        except Exception:
+            # Pollers are best-effort; don't fail the test endpoint on this.
+            pass
+
+    # Map common Twilio error codes to human-readable troubleshooting hints.
+    hint = None
+    if error_code in (30034, 30032):
+        hint = (
+            "A2P 10DLC registration required. US carriers block unregistered "
+            "numbers from sending SMS. Register at "
+            "twilio.com/console/sms/a2p-messaging — or switch to a "
+            "verified toll-free number."
+        )
+    elif error_code == 21610:
+        hint = "Recipient unsubscribed (replied STOP). Reply START from that phone."
+    elif error_code == 21408:
+        hint = "Permission to send SMS to this country has not been enabled."
+    elif error_code == 21211:
+        hint = "Invalid 'To' phone number format. Use E.164 (+12035551234)."
+
+    return {
+        "ok": final_status not in ("undelivered", "failed"),
+        **result,
+        "final_status": final_status,
+        "error_code": error_code,
+        "error_message": error_message,
+        "troubleshooting_hint": hint,
+    }
 
 
 @router.get("/admin/email-templates")
