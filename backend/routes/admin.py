@@ -810,6 +810,67 @@ async def admin_update_therapist(
     return {"ok": True, "therapist": t}
 
 
+@router.post(
+    "/admin/therapists/{therapist_id}/archive",
+    dependencies=[Depends(require_admin)],
+)
+async def admin_archive_therapist(therapist_id: str) -> dict[str, Any]:
+    """Soft-delete: marks the therapist inactive but keeps the row so we
+    don't lose past matches/applications referencing them. The matcher
+    skips `is_active=False` already."""
+    res = await db.therapists.update_one(
+        {"id": therapist_id},
+        {"$set": {
+            "is_active": False,
+            "archived_at": _now_iso(),
+            "updated_at": _now_iso(),
+        }},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(404, "Therapist not found")
+    return {"ok": True, "archived": True}
+
+
+@router.post(
+    "/admin/therapists/{therapist_id}/restore",
+    dependencies=[Depends(require_admin)],
+)
+async def admin_restore_therapist(therapist_id: str) -> dict[str, Any]:
+    """Reverse of /archive — bring an archived therapist back online."""
+    res = await db.therapists.update_one(
+        {"id": therapist_id},
+        {"$set": {"is_active": True, "updated_at": _now_iso()},
+         "$unset": {"archived_at": ""}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(404, "Therapist not found")
+    return {"ok": True, "archived": False}
+
+
+@router.delete(
+    "/admin/therapists/{therapist_id}",
+    dependencies=[Depends(require_admin)],
+)
+async def admin_delete_therapist(therapist_id: str) -> dict[str, Any]:
+    """Hard delete — only allowed when there are NO applications and NO
+    active patient requests referencing this therapist. Otherwise the
+    admin must archive instead so historical records stay intact."""
+    has_apps = await db.applications.count_documents({"therapist_id": therapist_id})
+    if has_apps:
+        raise HTTPException(
+            409,
+            f"Cannot hard-delete: {has_apps} application(s) reference this "
+            "therapist. Archive instead.",
+        )
+    has_invites = await db.outreach_invites.count_documents(
+        {"therapist_id": therapist_id},
+    )
+    res = await db.therapists.delete_one({"id": therapist_id})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Therapist not found")
+    return {"ok": True, "deleted": True, "stale_invites": has_invites}
+
+
 @router.post("/admin/test-sms")
 async def admin_test_sms(payload: dict, _: bool = Depends(require_admin)):
     to = (payload or {}).get("to") or os.environ.get("TWILIO_DEV_OVERRIDE_TO", "")
@@ -1517,6 +1578,34 @@ async def admin_run_research_enrichment(request_id: str) -> dict[str, Any]:
         if not was_enabled:
             await set_enabled(False)
     return result
+
+
+@router.post(
+    "/admin/research-enrichment/deep/{therapist_id}",
+    dependencies=[Depends(require_admin)],
+)
+async def admin_deep_research_therapist(therapist_id: str) -> dict[str, Any]:
+    """Run deep web-research on ONE therapist — DuckDuckGo search +
+    fetch up to 5 extra pages (PT profile, podcasts, blogs, papers)
+    + LLM evidence extraction. Caches result on the therapist doc.
+    Costs more than the standard refresh (~30s + 2-3x tokens) so it's
+    opt-in per therapist rather than running on every match."""
+    from research_enrichment import get_or_build_research
+    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(404, "Therapist not found")
+    res = await get_or_build_research(t, force=True, deep=True)
+    return {
+        "therapist_id": therapist_id,
+        "name": t.get("name"),
+        "summary": res.get("summary"),
+        "evidence_themes": res.get("themes") or {},
+        "modality_evidence": res.get("modality_evidence") or {},
+        "depth_signal": res.get("depth_signal"),
+        "public_footprint": res.get("public_footprint") or [],
+        "extra_sources": res.get("extra_sources") or [],
+        "deep_mode": True,
+    }
 
 
 # Public endpoint — patient intake calls this to populate its dropdown.

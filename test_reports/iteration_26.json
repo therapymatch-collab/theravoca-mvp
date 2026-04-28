@@ -1,0 +1,44 @@
+{
+  "summary": "Iter-64 backend testing complete. 13/13 new tests PASS — covering Twilio /admin/test-sms, archive/restore/delete therapist endpoints (incl. 409-with-applications path, 404, auth rejection), and POST /admin/research-enrichment/deep/{id} (success on Ann Omodt with deep_mode=true + extra_sources/public_footprint/depth_signal returned, 404 on bad id, 401/403 without admin). Iter-63 regression run: 15/16 pass — one pre-existing failure unrelated to this iter (broken import path 'from tests.conftest import v2_request_payload' in test_iteration63_research_enrichment.py:193). Frontend admin UI verified to have correct data-testid attributes (provider-row-{id}, edit-/archive-/restore-/delete-provider-{id}, opacity-50 logic on archived rows) via code inspection of AdminDashboard.jsx ProviderRow lines 3567-3617. Live FE browser test of the archive/restore round-trip could NOT be completed because the admin login button click did not advance navigation in two attempts (URL stayed at /admin even after switching to 'Master password' tab and submitting admin123!). Loop-prevention threshold reached, so handing back to main agent for FE smoke test.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Admin login (Master password mode)",
+        "issue": "Clicking 'Sign in' after filling admin123! in Master password tab did not navigate away from /admin in playwright (page stayed showing the same login form). Could be a click-vs-submit handler issue on the form, or a missing data-testid making my selector lookup fall back to a non-form button. Needs a manual smoke from main agent to confirm whether real users see the same behaviour or it's just a Playwright selector issue.",
+        "affected_selectors": ["button:has-text('Sign in') in admin master-password form"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration64_archive_deep_research.py",
+    "/app/test_reports/pytest/iter64_results.xml"
+  ],
+  "action_items": [
+    "Add data-testid='admin-master-password-input' and data-testid='admin-master-signin-btn' to the admin master-password login form so future Playwright runs are not ambiguous (there are two 'Sign in' buttons on the page — one in nav, one in the form).",
+    "Fix pre-existing iter63 test import: replace `from tests.conftest import v2_request_payload` with `from backend.tests.conftest import v2_request_payload` (or similar) so the regression suite is green.",
+    "OPTIONAL: Main agent should manually click through Admin → All Providers tab → search 'Ann Omodt' → Archive (confirm dialog) → verify row goes opacity-50 and Restore button replaces Archive → Restore. Backend round-trip is already proven by tests."
+  ],
+  "critical_code_review_comments": [
+    "AdminDashboard.jsx is 4060 lines — violates the >700-line guideline. Should be split into per-panel modules (ProviderRow, ProviderCell, hooks, etc).",
+    "admin.py is 2270 lines — same concern; split into resource-based routers (therapists.py, requests.py, research.py, sms.py).",
+    "The deep-research endpoint reuses get_or_build_research with force=True+deep=True and returns the result inline without persisting `research_deep_mode=true`/`research_extra_sources` flags onto the therapist doc that PRD calls out — verify the persistence happens inside get_or_build_research."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration64_archive_deep_research.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 new + 15/16 iter63 regression; the 1 fail is a pre-existing import path bug unrelated to this iter)",
+    "frontend": "code-only verified — live browser test blocked by login navigation issue"
+  },
+  "test_credentials": "Admin master password: admin123! via X-Admin-Password header (backend) and via 'Master password' tab on /admin (frontend).",
+  "seed_data_creation": "Created (and cleaned up) 2 ephemeral therapists with TEST_ITER64_ prefix + 1 synthetic application doc to exercise the 409-with-applications and 200-fresh-delete branches.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend for iter-64 fully covered by /app/backend/tests/test_iteration64_archive_deep_research.py — re-run with `REACT_APP_BACKEND_URL=https://care-matcher-1.preview.emergentagent.com pytest -v`. The deep-research test takes ~25-30s due to live DDG + LLM. Ann Omodt id b54d5535-8647-4fe6-9a52-106b1b79632d is the canonical happy-path therapist. Note iter-63 test file has a broken `from tests.conftest import` line that needs fixing before that suite can be fully green. Frontend admin login: must click 'Master password' tab BEFORE filling the password input (default tab is Team email which expects a real account from admin_users collection)."
+}

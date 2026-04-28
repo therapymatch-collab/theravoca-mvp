@@ -23,6 +23,9 @@ export default function AllProvidersPanel({
   ProviderRow,
   ProviderTablePager,
   onEdit,
+  onArchive,
+  onRestore,
+  onDelete,
 }) {
   const filtered = showOnlyReapproval
     ? filteredAllTherapists.filter((t) => t.pending_reapproval)
@@ -82,6 +85,9 @@ export default function AllProvidersPanel({
                   key={t.id}
                   t={t}
                   onEdit={() => onEdit(t)}
+                  onArchive={() => onArchive(t)}
+                  onRestore={() => onRestore(t)}
+                  onDelete={() => onDelete(t)}
                   visibleCols={visibleCols}
                 />
               ))}

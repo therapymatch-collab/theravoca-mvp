@@ -357,6 +357,45 @@ export default function AdminDashboard() {
     }
   };
 
+  const archiveTherapist = async (t) => {
+    if (!window.confirm(
+      `Archive "${t.name}"?\n\nThey'll be hidden from matching but their history (past matches, applications) stays intact. You can restore them later.`,
+    )) return;
+    try {
+      await client.post(`/admin/therapists/${t.id}/archive`);
+      toast.success(`${t.name} archived`);
+      refresh();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to archive");
+    }
+  };
+
+  const restoreTherapist = async (t) => {
+    try {
+      await client.post(`/admin/therapists/${t.id}/restore`);
+      toast.success(`${t.name} restored — back in matching`);
+      refresh();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to restore");
+    }
+  };
+
+  const deleteTherapist = async (t) => {
+    if (!window.confirm(
+      `HARD DELETE "${t.name}"?\n\nThis is irreversible. If they have any applications on file, the request will fail and you'll need to archive instead.\n\nProceed?`,
+    )) return;
+    try {
+      const res = await client.delete(`/admin/therapists/${t.id}`);
+      const stale = res.data?.stale_invites || 0;
+      toast.success(
+        `${t.name} deleted${stale ? ` (${stale} stale invite${stale === 1 ? "" : "s"} remain)` : ""}`,
+      );
+      refresh();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to delete");
+    }
+  };
+
   const saveTherapist = async () => {
     if (!editTherapist) return;
     setSavingTherapist(true);
@@ -904,6 +943,9 @@ export default function AdminDashboard() {
                   ProviderRow={ProviderRow}
                   ProviderTablePager={ProviderTablePager}
                   onEdit={(t) => setEditTherapist({ ...t })}
+                  onArchive={archiveTherapist}
+                  onRestore={restoreTherapist}
+                  onDelete={deleteTherapist}
                 />
               )}
               {tab === "referral_sources" && (
@@ -3522,24 +3564,54 @@ function useProviderColumnPrefs() {
   return { visibleCols, setVisibleCols, defaultCols, setDefaultCols };
 }
 
-function ProviderRow({ t, onEdit, visibleCols }) {
+function ProviderRow({ t, onEdit, onArchive, onRestore, onDelete, visibleCols }) {
   const cols = PROVIDER_COLUMNS.filter((c) => visibleCols.includes(c.key));
+  const archived = t.is_active === false;
   return (
     <tr
-      className="border-t border-[#E8E5DF] hover:bg-[#FDFBF7] align-top"
+      className={`border-t border-[#E8E5DF] hover:bg-[#FDFBF7] align-top ${archived ? "opacity-50" : ""}`}
       data-testid={`provider-row-${t.id}`}
     >
       {cols.map((c) => (
         <ProviderCell key={c.key} column={c} therapist={t} />
       ))}
       <td className="p-4 text-right whitespace-nowrap">
-        <button
-          className="text-[#2D4A3E] hover:underline text-xs inline-flex items-center gap-1"
-          onClick={onEdit}
-          data-testid={`edit-provider-${t.id}`}
-        >
-          <Pencil size={12} /> Edit
-        </button>
+        <div className="inline-flex items-center gap-2">
+          <button
+            className="text-[#2D4A3E] hover:underline text-xs inline-flex items-center gap-1"
+            onClick={onEdit}
+            data-testid={`edit-provider-${t.id}`}
+          >
+            <Pencil size={12} /> Edit
+          </button>
+          {archived ? (
+            <button
+              className="text-[#2D4A3E] hover:underline text-xs inline-flex items-center gap-1"
+              onClick={onRestore}
+              data-testid={`restore-provider-${t.id}`}
+              title="Restore — make this provider active again"
+            >
+              <RotateCw size={12} /> Restore
+            </button>
+          ) : (
+            <button
+              className="text-[#6D6A65] hover:text-[#2D4A3E] hover:underline text-xs inline-flex items-center gap-1"
+              onClick={onArchive}
+              data-testid={`archive-provider-${t.id}`}
+              title="Archive — hides from matching but keeps history"
+            >
+              <Ban size={12} /> Archive
+            </button>
+          )}
+          <button
+            className="text-[#B0382A] hover:underline text-xs inline-flex items-center gap-1"
+            onClick={onDelete}
+            data-testid={`delete-provider-${t.id}`}
+            title="Hard delete — only allowed if no applications reference this provider"
+          >
+            <Trash2 size={12} /> Delete
+          </button>
+        </div>
       </td>
     </tr>
   );

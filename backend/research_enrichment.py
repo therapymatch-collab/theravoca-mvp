@@ -44,11 +44,54 @@ logger = logging.getLogger("theravoca.research")
 EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 HTTP_TIMEOUT_SEC = 8.0
 MAX_HTML_TEXT_BYTES = 20_000  # ~5K tokens — keeps each call cheap
+MAX_DEEP_TEXT_BYTES = 40_000  # bigger budget for the deep-research mode
+DEEP_FETCH_LIMIT = 5          # fetch up to N search results per therapist
 RESEARCH_TTL_DAYS = 30
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 )
+
+
+# ─── DuckDuckGo HTML search (no API key required) ──────────────────────────
+async def _ddg_search(query: str, *, limit: int = DEEP_FETCH_LIMIT) -> list[str]:
+    """Return up to `limit` non-DDG result URLs for `query`.
+    Uses the `html.duckduckgo.com` endpoint which works without JS or
+    an API key. Best-effort — failures return [] silently so the
+    enrichment pipeline degrades to website-only mode."""
+    url = "https://html.duckduckgo.com/html/"
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as c:
+            r = await c.post(
+                url,
+                data={"q": query, "kl": "us-en"},
+                headers={"User-Agent": USER_AGENT},
+                timeout=HTTP_TIMEOUT_SEC,
+            )
+            if r.status_code != 200:
+                return []
+            html = r.text
+    except (httpx.HTTPError, Exception):  # noqa: BLE001
+        return []
+    # The DDG HTML endpoint redirects through `//duckduckgo.com/l/?uddg=<encoded>`.
+    raw_urls = re.findall(r'href="(?:https?:)?//duckduckgo\.com/l/\?uddg=([^"&]+)', html)
+    out: list[str] = []
+    seen: set[str] = set()
+    from urllib.parse import unquote
+    for u in raw_urls:
+        decoded = unquote(u)
+        if any(bad in decoded for bad in (
+            "duckduckgo.com", "google.com/search", "bing.com",
+            "youtube.com/results", "/ads/", "facebook.com/share",
+        )):
+            continue
+        if decoded in seen:
+            continue
+        seen.add(decoded)
+        out.append(decoded)
+        if len(out) >= limit:
+            break
+    return out
 
 
 # ─── Admin toggle ───────────────────────────────────────────────────────────
@@ -103,15 +146,53 @@ def _is_research_fresh(t: dict) -> bool:
     return datetime.now(timezone.utc) - dt < timedelta(days=RESEARCH_TTL_DAYS)
 
 
-async def _build_research_summary(t: dict) -> dict[str, Any]:
+async def _build_research_summary(t: dict, *, deep: bool = False) -> dict[str, Any]:
     """One LLM call per therapist that returns a structured summary of
-    what we can verify about them from their public web presence."""
+    what we can verify about them from their public web presence.
+
+    `deep=True` also runs a DuckDuckGo search for the therapist's
+    name and pulls up to 5 additional pages (PT profile, podcast
+    episodes, blog posts, papers) before sending the combined corpus
+    to Claude. Costs more but materially raises evidence_depth
+    precision — recommended for the marquee 30-50 therapists in your
+    directory rather than every cold pull.
+    """
     if not EMERGENT_KEY:
         return {"summary": "", "themes": {}, "no_web": True}
 
+    name = t.get("name") or ""
     web_text = await _fetch_website_text(t.get("website") or "")
     bio = (t.get("bio") or "").strip()
-    if not web_text and not bio:
+
+    extra_sources: list[str] = []
+    deep_text = ""
+    if deep and name:
+        # Build a focused query — name + license + state + practice keywords
+        license_str = (t.get("credential_type") or "").strip()
+        city = (t.get("office_locations") or [None])[0] or "Idaho"
+        query = f'"{name}" {license_str} {city} therapist'
+        urls = await _ddg_search(query)
+        # Skip URLs we already have (the therapist's primary website domain)
+        primary_host = ""
+        if t.get("website"):
+            from urllib.parse import urlparse
+            primary_host = (urlparse(t["website"]).netloc or "").lower().lstrip("www.")
+        chunks: list[str] = []
+        for u in urls:
+            from urllib.parse import urlparse
+            host = (urlparse(u).netloc or "").lower().lstrip("www.")
+            if primary_host and host.endswith(primary_host):
+                continue
+            page = await _fetch_website_text(u)
+            if not page:
+                continue
+            chunks.append(f"=== SOURCE: {u} ===\n{page[:8000]}")
+            extra_sources.append(u)
+            if sum(len(c) for c in chunks) > MAX_DEEP_TEXT_BYTES:
+                break
+        deep_text = "\n\n".join(chunks)[:MAX_DEEP_TEXT_BYTES]
+
+    if not web_text and not bio and not deep_text:
         return {"summary": "", "themes": {}, "no_web": True}
 
     try:
@@ -119,9 +200,14 @@ async def _build_research_summary(t: dict) -> dict[str, Any]:
     except ImportError:
         return {"summary": "", "themes": {}, "no_web": True}
 
-    name = t.get("name") or ""
     listed_primary = t.get("primary_specialties") or []
     listed_modalities = t.get("modalities") or []
+
+    deep_block = (
+        f"\n\nADDITIONAL WEB SOURCES ({len(extra_sources)} pages — "
+        f"PT profiles, podcasts, blogs, etc.):\n{deep_text}"
+        if deep_text else ""
+    )
 
     prompt = f"""You are reviewing a therapist's PUBLIC WEB PRESENCE to extract
 *evidence* of what they actually practice — not just what they list.
@@ -133,8 +219,8 @@ PROFILE-CLAIMED MODALITIES: {", ".join(listed_modalities) or "(none)"}
 BIO (from our directory):
 {bio or "(no bio)"}
 
-WEBSITE TEXT (extracted):
-{web_text or "(no website)"}
+PRIMARY WEBSITE TEXT (extracted):
+{web_text or "(no website)"}{deep_block}
 
 Return a STRICT JSON object with these keys:
 - summary: 2-3 sentence factual summary of their public-facing approach
@@ -151,10 +237,16 @@ Return a STRICT JSON object with these keys:
 - depth_signal: one of "deep" (multiple service pages, blog posts, podcasts
   on a primary topic), "moderate" (mentioned but not detailed), "shallow"
   (just a checkbox list), "none" (no web content).
+- public_footprint: zero-to-three short citations of OTHER public web
+  presence beyond their main site (e.g. "Guest on Anxiety Sisters podcast
+  Ep 47", "Author of 2023 paper on trauma-informed care in JCP"). Empty
+  list when none. Cite ONLY what appears in the source text above.
 
 Rules:
-- Cite ONLY what appears in the bio or website. Never invent.
-- If the website is just a Calendly or PT shell, mark depth_signal="shallow".
+- Cite ONLY what appears in the bio or website or additional sources.
+  Never invent.
+- If the website is just a Calendly or PT shell AND no extra sources
+  yielded content, mark depth_signal="shallow".
 - Return ONLY the JSON. No prose, no markdown fences.
 """
 
@@ -195,23 +287,35 @@ Rules:
         "modality_evidence": data.get("modality_evidence") or {},
         "style_signals": data.get("style_signals") or [],
         "depth_signal": data.get("depth_signal") or "none",
+        "public_footprint": data.get("public_footprint") or [],
         "no_web": False,
+        "deep_mode": bool(deep),
+        "extra_sources": extra_sources,
     }
 
 
-async def get_or_build_research(t: dict, *, force: bool = False) -> dict[str, Any]:
+async def get_or_build_research(
+    t: dict, *, force: bool = False, deep: bool = False,
+) -> dict[str, Any]:
     """Return the therapist's cached web-research summary, building it if
-    stale or missing. Writes the result back to the therapist document."""
-    if not force and _is_research_fresh(t):
+    stale or missing. Writes the result back to the therapist document.
+
+    `deep=True` always rebuilds (deep research is opt-in per call so the
+    admin can promote a therapist from shallow → deep on demand).
+    """
+    if not force and not deep and _is_research_fresh(t):
         return {
             "summary": t.get("research_summary") or "",
             "themes": t.get("research_themes") or {},
             "modality_evidence": t.get("research_modality_evidence") or {},
             "style_signals": t.get("research_style_signals") or [],
             "depth_signal": t.get("research_depth_signal") or "none",
+            "public_footprint": t.get("research_public_footprint") or [],
             "no_web": bool(t.get("research_no_web")),
+            "deep_mode": bool(t.get("research_deep_mode")),
+            "extra_sources": t.get("research_extra_sources") or [],
         }
-    res = await _build_research_summary(t)
+    res = await _build_research_summary(t, deep=deep)
     await db.therapists.update_one(
         {"id": t["id"]},
         {"$set": {
@@ -220,7 +324,10 @@ async def get_or_build_research(t: dict, *, force: bool = False) -> dict[str, An
             "research_modality_evidence": res.get("modality_evidence") or {},
             "research_style_signals": res.get("style_signals") or [],
             "research_depth_signal": res.get("depth_signal") or "none",
+            "research_public_footprint": res.get("public_footprint") or [],
             "research_no_web": bool(res.get("no_web")),
+            "research_deep_mode": bool(res.get("deep_mode")),
+            "research_extra_sources": res.get("extra_sources") or [],
             "research_refreshed_at": datetime.now(timezone.utc).isoformat(),
         }},
     )
