@@ -18,7 +18,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Save, AlertTriangle, Eye } from "lucide-react";
+import { ArrowLeft, Loader2, Save, AlertTriangle, Eye, FileText, Upload, CheckCircle2 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -272,6 +272,9 @@ export default function TherapistEditProfile() {
                 data-testid="input-license-expires"
               />
             </Field>
+          </div>
+          <div className="mt-4 pt-4 border-t border-[#E8E5DF]">
+            <LicenseDocUploader />
           </div>
         </Section>
 
@@ -685,6 +688,134 @@ function PreviewKV({ label, value, span = 1 }) {
   );
 }
 
+
+// LicenseDocUploader — therapist self-uploads a PDF/JPG of their license
+// for admin verification. POSTs base64 to /api/therapists/me/license-document
+// which flags the row pending_reapproval. Capped at 5 MB.
+function LicenseDocUploader() {
+  const inputRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const [meta, setMeta] = useState(null);
+  const client = sessionClient();
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await client.get("/therapists/me/license-document");
+        if (alive) setMeta(r.data?.present ? r.data : null);
+      } catch (_e) {
+        // silent — endpoint just shows fresh state
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const onFile = async (file) => {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("License file must be under 5 MB.");
+      return;
+    }
+    const allowed = [
+      "application/pdf",
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/webp",
+    ];
+    if (!allowed.includes(file.type)) {
+      toast.error("Allowed: PDF, JPG, PNG, WEBP.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const data_base64 = await new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(String(fr.result || ""));
+        fr.onerror = reject;
+        fr.readAsDataURL(file);
+      });
+      const r = await client.post("/therapists/me/license-document", {
+        filename: file.name,
+        content_type: file.type,
+        data_base64,
+      });
+      setMeta({
+        present: true,
+        filename: r.data.filename,
+        content_type: file.type,
+        size_bytes: r.data.size_bytes,
+        uploaded_at: r.data.uploaded_at,
+      });
+      toast.success("License uploaded — admin will review for re-approval.");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Upload failed");
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  return (
+    <div data-testid="license-doc-uploader">
+      <div className="text-sm font-medium text-[#2D4A3E] flex items-center gap-2">
+        <FileText size={14} /> License document
+      </div>
+      <p className="text-xs text-[#6D6A65] mt-1 leading-relaxed">
+        Upload a copy of your active license (PDF, JPG, or PNG, max 5 MB).
+        We use this to verify your license number and expiration date.
+        Uploads trigger a quick admin re-approval.
+      </p>
+      {meta?.present ? (
+        <div
+          className="mt-3 inline-flex items-center gap-2 text-xs px-3 py-2 rounded-md bg-[#FDFBF7] border border-[#E8E5DF]"
+          data-testid="license-doc-current"
+        >
+          <CheckCircle2 size={14} className="text-[#2D4A3E]" />
+          <span className="text-[#2B2A29]">
+            <strong>{meta.filename}</strong> ·{" "}
+            {Math.round((meta.size_bytes || 0) / 1024)} KB · uploaded{" "}
+            {meta.uploaded_at
+              ? new Date(meta.uploaded_at).toLocaleDateString()
+              : ""}
+          </span>
+        </div>
+      ) : (
+        <div className="mt-2 text-xs text-[#B0382A]">
+          No license document on file yet.
+        </div>
+      )}
+      <div className="mt-3">
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/*"
+          onChange={(e) => onFile(e.target.files?.[0])}
+          className="hidden"
+          data-testid="license-doc-input"
+        />
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={busy}
+          className="inline-flex items-center gap-1.5 text-xs px-3 py-2 rounded-full border border-[#E8E5DF] hover:bg-[#FDFBF7] disabled:opacity-50"
+          data-testid="license-doc-upload-btn"
+        >
+          {busy ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
+            <Upload size={12} />
+          )}
+          {meta?.present ? "Replace document" : "Upload license"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // PhotoUploader — accepts an image, downscales it client-side to fit
 // within 600×600 (whichever side is bigger), encodes it as a JPEG

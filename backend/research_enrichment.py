@@ -351,17 +351,31 @@ def _score_axes(research: dict, request: dict) -> dict[str, Any]:
     issues = [i.lower() for i in (request.get("presenting_issues") or [])]
     primary = issues[0] if issues else None
 
-    # evidence_depth — primary issue match weighted heaviest
-    depth_word = (research.get("depth_signal") or "none").lower()
-    base_depth = {"deep": 6.0, "moderate": 4.0, "shallow": 2.0, "none": 0.0}[
-        depth_word if depth_word in ("deep", "moderate", "shallow", "none") else "none"
-    ]
+    # evidence_depth — purely DRIVEN by patient-specific theme overlap.
+    # Web-presence depth alone (deep/moderate/shallow) only adds a small
+    # baseline because a "deep depth" therapist who doesn't treat the
+    # patient's concern shouldn't out-rank one who does.
     primary_hit = primary in themes if primary else False
     secondary_hits = sum(1 for i in issues[1:] if i in themes)
+
     if primary_hit:
-        base_depth += 3.0
-    if secondary_hits:
-        base_depth += min(1.0, secondary_hits * 0.5)
+        # Strong evidence the therapist treats the patient's primary concern.
+        depth_word = (research.get("depth_signal") or "none").lower()
+        primary_quality = {
+            "deep": 7.0, "moderate": 5.0, "shallow": 3.0, "none": 2.0,
+        }.get(depth_word, 2.0)
+        base_depth = primary_quality
+        if secondary_hits:
+            base_depth += min(2.0, secondary_hits * 0.7)
+    elif secondary_hits:
+        # Some secondary-concern overlap — small partial credit.
+        base_depth = min(3.0, secondary_hits * 1.0)
+    else:
+        # No theme overlap with patient's concerns at all. Pure
+        # web-presence depth gets at most 1 point so it can't outweigh
+        # better-matched therapists.
+        depth_word = (research.get("depth_signal") or "none").lower()
+        base_depth = 1.0 if depth_word in ("deep", "moderate") else 0.0
     evidence_depth = round(min(10.0, base_depth), 1)
 
     # approach_alignment — patient style prefs + modality prefs vs evidence

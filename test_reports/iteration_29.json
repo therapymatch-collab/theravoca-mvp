@@ -1,0 +1,66 @@
+{
+  "summary": "Iter-67 testing complete. 7/12 backend pytest pass. CRITICAL BUG FOUND in license-document endpoints: both POST and GET /api/therapists/me/license-document return 422 to every caller because routes/therapists.py:484 and :544 use Depends(require_session) without invoking the factory — FastAPI then exposes the inner function's parameters (allowed_roles, payload) as required body fields. The frontend uploader is wired correctly but no upload can ever succeed against this backend. SMS A2P panel verified live (verdict=blocked_a2p_10dlc with err 30034 banner, A2P PUT/GET roundtrip persists, save toast shows). Research-enrichment scoring fix verified (no-overlap capped at 1.0; primary_hit + deep ≥ 7.0). Matching tiebreaker + differentiator bonus verified (review_signal sorts higher first; differentiator key present in breakdown; top-15 scores have ≥8 unique values across 124 therapists). All Providers action column verified vertical (flex-col items-end gap-1.5, 96×82px, row=116px).",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/therapists/me/license-document AND GET /api/therapists/me/license-document",
+        "issue": "Dependency factory not invoked. Code: `Depends(require_session)` should be `Depends(require_session((\"therapist\",)))`. Currently every request returns HTTP 422 with body `{detail:[{loc:[body,allowed_roles],msg:Field required}, {loc:[body,payload],msg:Field required}]}` because FastAPI introspects require_session's signature (allowed_roles, payload) and treats them as request body fields. The handlers never run. Both POST upload and GET metadata are completely non-functional. Spec says POST should return 200, reject unsupported types with 400, reject >5MB with 400, reject bad base64 with 400, and patient session should get 403 — none of these are reachable.",
+        "priority": "CRITICAL",
+        "fix": "In /app/backend/routes/therapists.py change `role_email: tuple[str, str] = Depends(require_session)` to `session: dict = Depends(require_session((\"therapist\",)))` on lines 484 and 544. Then unpack `email = session[\"email\"]` instead of `role, email = role_email` (drop the `if role != \"therapist\"` check since the factory already enforces it, OR keep the factory parameter as `(\"therapist\",)` for clarity). Note: require_session returns the JWT payload dict, not a (role,email) tuple — the existing tuple-unpacking code is also wrong and needs to read `session.get(\"email\")` and `session.get(\"role\")`."
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "matching.rank_therapists",
+        "issue": "Top scores still show ties at the rounded-to-1-decimal display level (e.g. 88.8 appears 3×, 84.2 appears 4×, 84.0 appears 3× across the 124-therapist Idaho set when scoring an anxiety request). The differentiator bonus (cap 1.5) successfully diverges the underlying floats but rounding via `round(min(100.0, sum(breakdown.values())), 1)` collapses many of them. Spec says NO two therapists should share the same score — consider rounding to 2 decimals OR using a wider differentiator range OR storing both the rounded display score and the raw score for sorting."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "TherapistEditProfile.LicenseDocUploader",
+        "issue": "UI exists with all expected testids (license-doc-uploader, license-doc-input, license-doc-upload-btn, license-doc-current) but the backend endpoint it POSTs to returns 422 — uploads will always fail with toast `Field required: body.allowed_roles`. The bug is in the backend, not the frontend, but it makes the entire feature non-functional end-to-end.",
+        "selector": "[data-testid=license-doc-uploader]",
+        "priority": "CRITICAL"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Therapist license upload",
+        "issue": "Backend dependency bug breaks the whole flow (see backend critical above). E2E flow could not be validated because POST returns 422 before the handler runs.",
+        "affected_selectors": ["[data-testid=license-doc-input]", "[data-testid=license-doc-upload-btn]"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration67_sms_license_match.py",
+    "/app/test_reports/pytest/iter67_results.xml"
+  ],
+  "action_items": [
+    "FIX (CRITICAL) /app/backend/routes/therapists.py:484 and :544 — change `Depends(require_session)` to `Depends(require_session((\"therapist\",)))`. Update handler body to read role/email from the returned payload dict rather than tuple-unpacking. After fix, re-run TestLicenseUpload (5 tests) — they should all pass.",
+    "(MINOR) Tighten matching score divergence — current rounding produces multiple 88.8s and 84.2s within the top 15. Either round to 2 decimals on display OR widen the differentiator bonus range OR sort by raw float and display rounded.",
+    "(CARRY-OVER from iter-66) admin.py count=0 clamp bug still open."
+  ],
+  "critical_code_review_comments": [
+    "routes/therapists.py:484, :544 — Depends(require_session) is missing the factory invocation. This is a pattern that the same file uses correctly on line 236 with `Depends(require_session((\"therapist\",)))`. Easy oversight — could be caught by a quick lint that flags Depends(callable_factory) without parens.",
+    "routes/therapists.py:484 — type hint says `role_email: tuple[str, str]` but require_session's inner _dep returns a dict (the JWT payload). Even if the factory were invoked correctly the tuple unpacking `role, email = role_email` would fail at runtime. Both bugs need fixing together.",
+    "matching.py:397 — `total = round(min(100.0, sum(breakdown.values())), 1)` rounds to 1 decimal which defeats the differentiator's 0-1.5 fractional bonus when raw scores cluster within 0.05 of each other. Round to 2 decimals or store raw and rounded separately.",
+    "research_enrichment.py:354-380 — fix is good. The new branching is readable and the 1.0 cap on no-overlap is defensible.",
+    "AdminDashboard.jsx is still ~4060+ lines (carry-over). SmsStatusPanel.jsx adding ~280 lines is reasonable and well-scoped."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration67_sms_license_match.py (new)"
+  ],
+  "success_rate": {
+    "backend": "58% (7/12 — all 5 license-upload failures share the same root cause)",
+    "frontend": "67% (SMS panel + All Providers vertical icons verified; license uploader UI present but blocked by backend 422)"
+  },
+  "test_credentials": "Admin master pwd admin123! via 'Master password' tab → password input → Enter (Sign in button got blocked by sticky nav popover; pressing Enter inside the password field worked). Therapist token mintable via deps._create_session_token(email, role='therapist'). Patient token via same helper.",
+  "seed_data_creation": "PUT /api/admin/sms-status/a2p stored brand_id=BN_TEST_67 / campaign_id=CM_TEST_67 / status=brand_pending / notes='iter67 test - delete me' in db.app_config. POST /api/admin/test-sms triggered a Twilio call which stored last_test_sms with error_code 30034 in db.app_config (expected, the +16467606274 number is unregistered).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "After main agent fixes the require_session factory invocation in routes/therapists.py:484 and :544, the 5 license-upload pytest cases in test_iteration67_sms_license_match.py should all pass. The handler also needs to switch from `role, email = role_email` (currently tuple-unpacking a dict) to reading `session.get(\"email\")` from the payload. The test file already uses Depends-correct patient-headers fixture to verify the 403 path. Don't re-trigger /admin/test-sms more than once per minute — it actually calls Twilio. The differentiator-divergence test uses the live therapists collection and asserts at least 8 unique scores in the top 15 (currently 8/15 = passes).",
+  "rca of the issue": "ROOT CAUSE for all 5 license-upload failures: routes/therapists.py defines two endpoints with `Depends(require_session)` (line 484 POST, line 544 GET) but require_session is a factory function defined in deps.py:116 as `def require_session(allowed_roles: tuple[str, ...]):` returning an inner async _dep. By passing the factory itself (not the result of calling it), FastAPI introspects require_session's signature and finds one positional parameter `allowed_roles` — which it treats as a required body field. It also somehow surfaces `payload` (probably from the handler's own parameter list shadowing) as required. Net result: every request to either endpoint gets back HTTP 422 with body `{detail:[{loc:[body,allowed_roles]}, {loc:[body,payload]}]}` and the actual handler code never executes. REPRO: `curl -X POST $BASE/api/therapists/me/license-document -H 'Authorization: Bearer <valid_therapist_jwt>' -H 'Content-Type: application/json' -d '{\"filename\":\"a.pdf\",\"content_type\":\"application/pdf\",\"data_base64\":\"JVBERi0xLjQK\"}'` → HTTP 422. FIX: line 484 → `session: dict = Depends(require_session((\"therapist\",)))`, then `email = session.get(\"email\")`; same on line 544. Drop the manual `if role != 'therapist'` check (the factory enforces it). MITIGATION: until fixed, no therapist can upload a license document; the pending_reapproval flag will not flip; admin will not be able to re-verify any therapist that uses this UI flow."
+}

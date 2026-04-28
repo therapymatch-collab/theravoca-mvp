@@ -30,6 +30,7 @@ import {
   ChevronUp,
   Sparkles,
   ExternalLink,
+  MessageSquareWarning,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
@@ -44,6 +45,7 @@ import MasterQueryPanel from "@/pages/admin/panels/MasterQueryPanel";
 import BlogAdminPanel from "@/pages/admin/panels/BlogAdminPanel";
 import SettingsPanel from "@/pages/admin/panels/SettingsPanel";
 import ScrapeSourcesPanel from "@/pages/admin/panels/ScrapeSourcesPanel";
+import SmsStatusPanel from "@/pages/admin/panels/SmsStatusPanel";
 import SiteCopyAdminPanel from "@/pages/admin/panels/SiteCopyAdminPanel";
 import FaqAdminPanel from "@/pages/admin/panels/FaqAdminPanel";
 import RequestsPanel from "@/pages/admin/panels/RequestsPanel";
@@ -1445,6 +1447,8 @@ export default function AdminDashboard() {
 
               {tab === "scrape_sources" && <ScrapeSourcesPanel client={client} />}
 
+              {tab === "sms_status" && <SmsStatusPanel client={client} />}
+
               {tab === "email_templates" && (
                 <div className="mt-6 space-y-3" data-testid="email-templates-list">
                   {emailTemplates.length === 0 ? (
@@ -2646,6 +2650,11 @@ function AdminTabsBar({
       icon: <ExternalLink size={14} />,
     },
     {
+      id: "sms_status",
+      label: "SMS status",
+      icon: <MessageSquareWarning size={14} />,
+    },
+    {
       id: "email_templates",
       label: "Email templates",
       icon: <Mail size={14} />,
@@ -3627,8 +3636,8 @@ function ProviderRow({
       {cols.map((c) => (
         <ProviderCell key={c.key} column={c} therapist={t} />
       ))}
-      <td className="p-4 text-right whitespace-nowrap">
-        <div className="inline-flex items-center gap-2">
+      <td className="p-4 text-right whitespace-nowrap w-px">
+        <div className="inline-flex flex-col items-end gap-1.5">
           <button
             className="text-[#2D4A3E] hover:underline text-xs inline-flex items-center gap-1"
             onClick={onEdit}
@@ -3649,7 +3658,7 @@ function ProviderRow({
               ) : (
                 <Sparkles size={12} />
               )}{" "}
-              {drBusy ? "Researching…" : "Deep research"}
+              {drBusy ? "Researching" : "Deep research"}
             </button>
           ) : null}
           {archived ? (

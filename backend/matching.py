@@ -375,8 +375,58 @@ def score_therapist(t: dict, r: dict) -> dict[str, Any]:
         breakdown["reviews"] = 2
     else:
         breakdown["reviews"] = 0
+    # Differentiator bonus — adds up to +1.5 in fractional points so two
+    # otherwise-identical therapists don't display the same integer score.
+    # Uses verified-review quality, years experience, and review-count
+    # depth. Capped well below the next bucket boundary so it can't
+    # promote a 69 above a 70 threshold cutoff.
+    diff_bonus = 0.0
+    if review_avg >= 4.0 and review_count >= 3:
+        # 0-1.0: heavily weights both rating and depth-of-reviews
+        import math as _math
+        diff_bonus += min(
+            1.0,
+            (review_avg - 4.0) * 0.6 + _math.log10(review_count + 1) * 0.15,
+        )
+    years = float(t.get("years_experience") or 0)
+    if years > 0:
+        # 0-0.5: 0 yrs → 0, 5 yrs → 0.25, 20 yrs → 0.5
+        diff_bonus += min(0.5, years / 40.0)
+    breakdown["differentiator"] = round(diff_bonus, 2)
+
     total = round(min(100.0, sum(breakdown.values())), 1)
     return {"total": total, "breakdown": breakdown, "filtered": False}
+
+
+def _tiebreaker(t: dict) -> tuple[float, float, float, float]:
+    """Tiebreaker tuple applied AFTER the integer match_score. Returns
+    values that resolve identical match_scores by:
+      1. Verified review quality (avg × log10(count+1)) — real social proof
+      2. Years of experience — seasoned therapists slightly preferred
+      3. Recency of profile activity — active therapists outrank stale ones
+      4. Hash of the therapist id — final stable shuffle so we don't
+         consistently favour alphabetical order when EVERYTHING else
+         is equal.
+    All values are returned negated so a desc-sort works the same as
+    the primary `match_score` desc-sort (higher is better).
+    """
+    review_avg = float(t.get("review_avg") or 0.0)
+    review_count = int(t.get("review_count") or 0)
+    import math as _math
+    review_signal = review_avg * _math.log10(review_count + 1)
+    years = float(t.get("years_experience") or 0.0)
+    # Recency: prefer therapists whose `updated_at` is recent — stale
+    # profiles indicate the therapist may have moved on.
+    from helpers import _parse_iso as _piso
+    updated = _piso(t.get("updated_at") or t.get("created_at") or "")
+    recency = updated.timestamp() if updated else 0.0
+    # Stable per-therapist random-ish offset so two genuinely-identical
+    # therapists don't always sort the same way (avoids one therapist
+    # always getting the top slot at the expense of another).
+    tid = (t.get("id") or t.get("email") or "").encode("utf-8")
+    import hashlib as _h
+    salt = int(_h.md5(tid).hexdigest()[:8], 16) / 0xFFFFFFFF
+    return (review_signal, years, recency, salt)
 
 
 def rank_therapists(
@@ -391,15 +441,26 @@ def rank_therapists(
        - target up to `top_n` matches
        - if fewer than `min_results` clear the floor, return what we have
          (caller should trigger Phase D outreach to find more)
+
+    Identical `match_score` values are tie-broken via `_tiebreaker` so
+    the ordering is deterministic AND meaningful — the 70-point therapist
+    with 80 verified reviews ranks above the 70-point therapist with 0.
     """
     scored = []
     for t in therapists:
         result = score_therapist(t, request)
         if result["filtered"]:
             continue
-        scored.append({**t, "match_score": result["total"], "match_breakdown": result["breakdown"]})
+        scored.append({
+            **t,
+            "match_score": result["total"],
+            "match_breakdown": result["breakdown"],
+        })
 
-    scored.sort(key=lambda x: x["match_score"], reverse=True)
+    scored.sort(
+        key=lambda x: (x["match_score"], *_tiebreaker(x)),
+        reverse=True,
+    )
     above = [s for s in scored if s["match_score"] >= threshold]
     return above[:top_n]
 

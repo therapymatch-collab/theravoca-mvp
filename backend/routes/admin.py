@@ -925,7 +925,7 @@ async def admin_test_sms(payload: dict, _: bool = Depends(require_admin)):
     elif error_code == 21211:
         hint = "Invalid 'To' phone number format. Use E.164 (+12035551234)."
 
-    return {
+    response = {
         "ok": final_status not in ("undelivered", "failed"),
         **result,
         "final_status": final_status,
@@ -933,6 +933,19 @@ async def admin_test_sms(payload: dict, _: bool = Depends(require_admin)):
         "error_message": error_message,
         "troubleshooting_hint": hint,
     }
+    # Persist the most recent test-SMS result so the SMS-status panel can
+    # show a live deliverability badge without re-issuing a Twilio call.
+    await db.app_config.update_one(
+        {"key": "last_test_sms"},
+        {"$set": {
+            "key": "last_test_sms",
+            **{k: v for k, v in response.items() if k != "ok"},
+            "ok": response["ok"],
+            "tested_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+    return response
 
 
 @router.get("/admin/email-templates")
@@ -1579,6 +1592,74 @@ async def admin_scrape_sources_test(payload: dict) -> dict[str, Any]:
         "error": res.get("error"),
         "elapsed_sec": bundle.get("elapsed_sec"),
     }
+
+
+@router.get(
+    "/admin/sms-status",
+    dependencies=[Depends(require_admin)],
+)
+async def admin_sms_status() -> dict[str, Any]:
+    """Read the stored A2P 10DLC config plus the last test-SMS result.
+    Used by the dashboard banner to show a green/red deliverability badge.
+    """
+    cfg = await db.app_config.find_one({"key": "a2p_10dlc"}, {"_id": 0}) or {}
+    last = await db.app_config.find_one(
+        {"key": "last_test_sms"}, {"_id": 0},
+    ) or {}
+    enabled = os.environ.get("TWILIO_ENABLED", "").lower() == "true"
+    has_creds = bool(
+        os.environ.get("TWILIO_ACCOUNT_SID")
+        and os.environ.get("TWILIO_AUTH_TOKEN"),
+    )
+    last_status = last.get("final_status")
+    last_error = last.get("error_code")
+    # Deliverability verdict — pessimistic by design.
+    if not has_creds:
+        verdict = "missing_credentials"
+    elif not enabled:
+        verdict = "twilio_disabled"
+    elif last_error in (30034, 30032):
+        verdict = "blocked_a2p_10dlc"
+    elif last_status == "delivered":
+        verdict = "delivered_recently"
+    elif last_status in ("undelivered", "failed"):
+        verdict = "blocked"
+    else:
+        verdict = "untested"
+    return {
+        "verdict": verdict,
+        "twilio_enabled": enabled,
+        "has_credentials": has_creds,
+        "from_number": os.environ.get("TWILIO_FROM_NUMBER", ""),
+        "dev_override_to": os.environ.get("TWILIO_DEV_OVERRIDE_TO", ""),
+        "a2p_brand_id": cfg.get("brand_id") or "",
+        "a2p_campaign_id": cfg.get("campaign_id") or "",
+        "a2p_status": cfg.get("status") or "unregistered",
+        "a2p_notes": cfg.get("notes") or "",
+        "last_test_sms": last,
+    }
+
+
+@router.put(
+    "/admin/sms-status/a2p",
+    dependencies=[Depends(require_admin)],
+)
+async def admin_set_a2p(payload: dict) -> dict[str, Any]:
+    """Save the A2P brand_id + campaign_id + admin-entered status. Lets
+    the team document where they are in registration without leaving
+    the admin dashboard."""
+    cfg = {
+        "key": "a2p_10dlc",
+        "brand_id": (payload.get("brand_id") or "").strip()[:120],
+        "campaign_id": (payload.get("campaign_id") or "").strip()[:120],
+        "status": (payload.get("status") or "unregistered").strip(),
+        "notes": (payload.get("notes") or "").strip()[:500],
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.app_config.update_one(
+        {"key": "a2p_10dlc"}, {"$set": cfg}, upsert=True,
+    )
+    return cfg
 
 
 # ─── Research enrichment toggle + manual triggers ──────────────────────────
