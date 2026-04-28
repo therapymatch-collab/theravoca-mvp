@@ -475,7 +475,7 @@ export default function TherapistPortal() {
               <Inbox className="mx-auto text-[#C87965] mb-4" size={32} strokeWidth={1.5} />
               <h2 className="font-serif-display text-2xl text-[#2D4A3E]">No referrals yet</h2>
               <p className="text-[#6D6A65] mt-2">
-                When a patient request matches your profile (60%+), it will appear here and we'll
+                When a patient request matches your profile (70%+), it will appear here and we'll
                 send you an email.
               </p>
             </div>

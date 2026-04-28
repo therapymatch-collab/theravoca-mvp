@@ -138,6 +138,8 @@ export default function AdminDashboard() {
   const [outreachLoading, setOutreachLoading] = useState(false);
   const [outreachShowAll, setOutreachShowAll] = useState(false);
   const [convertingInviteId, setConvertingInviteId] = useState(null);
+  const [optOuts, setOptOuts] = useState(null);
+  const [optOutsLoading, setOptOutsLoading] = useState(false);
 
   // Coverage-gap analysis — recruiting recommendations.
   const [coverageGap, setCoverageGap] = useState(null);
@@ -473,6 +475,18 @@ export default function AdminDashboard() {
       toast.error(err?.response?.data?.detail || "Couldn't load invited therapists");
     } finally {
       setOutreachLoading(false);
+    }
+  }, [client]);
+
+  const loadOptOuts = useCallback(async () => {
+    setOptOutsLoading(true);
+    try {
+      const res = await client.get("/admin/outreach/opt-outs");
+      setOptOuts(res.data);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Couldn't load opt-outs");
+    } finally {
+      setOptOutsLoading(false);
     }
   }, [client]);
 
@@ -954,72 +968,40 @@ export default function AdminDashboard() {
 
               {tab === "all_therapists" && (
                 <div className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
-                  <table className="w-full text-sm" data-testid="all-therapists-table">
+                  <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[1400px]" data-testid="all-therapists-table">
                     <thead className="bg-[#FDFBF7] text-[#6D6A65]">
                       <tr className="text-left">
                         <Th>Name</Th>
-                        <Th>Email</Th>
                         <Th>Status</Th>
+                        <Th>Reviews</Th>
                         <Th>Rate</Th>
+                        <Th>Insurance</Th>
                         <Th>Specialties</Th>
-                        <Th>Cities</Th>
+                        <Th>Format</Th>
+                        <Th>Offices / City</Th>
+                        <Th>Contact</Th>
                         <Th></Th>
                       </tr>
                     </thead>
                     <tbody>
                       {allTherapists.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="p-10 text-center text-[#6D6A65]">
+                          <td colSpan={10} className="p-10 text-center text-[#6D6A65]">
                             No providers in the directory yet.
                           </td>
                         </tr>
                       )}
                       {filteredAllTherapists.map((t) => (
-                        <tr
+                        <ProviderRow
                           key={t.id}
-                          className="border-t border-[#E8E5DF] hover:bg-[#FDFBF7]"
-                          data-testid={`provider-row-${t.id}`}
-                        >
-                          <td className="p-4">
-                            <div className="font-medium text-[#2B2A29]">{t.name}</div>
-                            <div className="text-xs text-[#6D6A65]">
-                              {t.years_experience ?? "?"} yrs •{" "}
-                              {(t.gender || "—")}
-                            </div>
-                          </td>
-                          <td className="p-4 text-[#2B2A29] text-xs break-all">{t.email}</td>
-                          <td className="p-4">
-                            <ProviderStatus t={t} />
-                            <SubBadge t={t} />
-                          </td>
-                          <td className="p-4 text-[#2B2A29]">
-                            ${t.cash_rate ?? "—"}
-                            {t.sliding_scale ? (
-                              <span className="ml-1 text-[10px] uppercase tracking-wider text-[#C87965]">
-                                + sliding
-                              </span>
-                            ) : null}
-                          </td>
-                          <td className="p-4 text-xs text-[#2B2A29]">
-                            {(t.primary_specialties || []).slice(0, 2).join(", ") || "—"}
-                          </td>
-                          <td className="p-4 text-xs text-[#6D6A65]">
-                            {(t.office_locations || []).slice(0, 2).join(", ") ||
-                              (t.modality_offering === "telehealth" ? "telehealth" : "—")}
-                          </td>
-                          <td className="p-4 text-right">
-                            <button
-                              className="text-[#2D4A3E] hover:underline text-xs inline-flex items-center gap-1"
-                              onClick={() => setEditTherapist({ ...t })}
-                              data-testid={`edit-provider-${t.id}`}
-                            >
-                              <Pencil size={12} /> Edit
-                            </button>
-                          </td>
-                        </tr>
+                          t={t}
+                          onEdit={() => setEditTherapist({ ...t })}
+                        />
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               )}
               {tab === "referral_sources" && (
@@ -3135,4 +3117,166 @@ function SubBadge({ t }) {
     </div>
   );
 }
+
+function ProviderRow({ t, onEdit }) {
+  const offices = t.office_locations || [];
+  const inPerson = t.offers_in_person ?? (offices.length > 0);
+  const telehealth = t.telehealth ?? (t.modality_offering === "telehealth" || t.modality_offering === "both");
+  const specs = [
+    ...(t.primary_specialties || []),
+    ...(t.secondary_specialties || []),
+  ];
+  const insurances = t.insurance_accepted || [];
+  return (
+    <tr
+      className="border-t border-[#E8E5DF] hover:bg-[#FDFBF7] align-top"
+      data-testid={`provider-row-${t.id}`}
+    >
+      <td className="p-4 min-w-[200px]">
+        <div className="font-medium text-[#2B2A29]">{t.name}</div>
+        <div className="text-xs text-[#6D6A65] mt-0.5">
+          {t.credential_type || "—"}
+          {t.years_experience != null && (
+            <span> · {t.years_experience} yrs exp</span>
+          )}
+          {t.gender && t.gender !== "prefer_not_to_say" && (
+            <span> · {t.gender}</span>
+          )}
+        </div>
+      </td>
+
+      <td className="p-4 whitespace-nowrap">
+        <ProviderStatus t={t} />
+        <SubBadge t={t} />
+      </td>
+
+      <td className="p-4 whitespace-nowrap">
+        {t.review_count > 0 ? (
+          <>
+            <div className="font-medium text-[#C87965] text-sm">
+              {"★".repeat(Math.round(t.review_avg || 0))}
+              <span className="text-[#E8E5DF]">
+                {"★".repeat(5 - Math.round(t.review_avg || 0))}
+              </span>
+            </div>
+            <div className="text-[11px] text-[#6D6A65]">
+              {(t.review_avg ?? 0).toFixed(1)} · {t.review_count} review
+              {t.review_count === 1 ? "" : "s"}
+            </div>
+            {t.review_sources && t.review_sources.length > 0 && (
+              <div className="text-[10px] text-[#6D6A65] mt-0.5">
+                via {t.review_sources.map((r) => r.platform || "src").join(", ")}
+              </div>
+            )}
+          </>
+        ) : (
+          <span className="text-xs text-[#C8C4BB]">No reviews</span>
+        )}
+      </td>
+
+      <td className="p-4 whitespace-nowrap">
+        <div className="text-[#2B2A29] font-medium">
+          ${t.cash_rate ?? "—"}
+        </div>
+        <div className="text-[11px] text-[#6D6A65]">
+          {t.sliding_scale && (
+            <span className="text-[#C87965]">sliding scale</span>
+          )}
+          {t.free_consult && (
+            <span className={t.sliding_scale ? "ml-2" : ""}>free consult</span>
+          )}
+          {!t.sliding_scale && !t.free_consult && "per session"}
+        </div>
+      </td>
+
+      <td className="p-4 text-xs text-[#2B2A29] min-w-[140px] max-w-[220px]">
+        {insurances.length > 0 ? (
+          <div
+            className="leading-snug"
+            title={insurances.join(", ")}
+          >
+            {insurances.slice(0, 3).join(", ")}
+            {insurances.length > 3 && (
+              <span className="text-[#6D6A65]"> +{insurances.length - 3}</span>
+            )}
+          </div>
+        ) : (
+          <span className="text-[#C8C4BB]">Cash only</span>
+        )}
+      </td>
+
+      <td className="p-4 text-xs text-[#2B2A29] min-w-[160px] max-w-[240px]">
+        {specs.length > 0 ? (
+          <div className="leading-snug" title={specs.join(", ")}>
+            {specs.slice(0, 3).map((s) => (typeof s === "string" ? s : s?.name || "")).filter(Boolean).join(", ")}
+            {specs.length > 3 && (
+              <span className="text-[#6D6A65]"> +{specs.length - 3}</span>
+            )}
+          </div>
+        ) : (
+          <span className="text-[#C8C4BB]">—</span>
+        )}
+      </td>
+
+      <td className="p-4 whitespace-nowrap">
+        <div className="flex flex-col gap-1">
+          {inPerson && (
+            <span className="inline-flex items-center gap-1 text-[10px] bg-[#2D4A3E]/10 text-[#2D4A3E] rounded-full px-2 py-0.5 w-fit">
+              In-person
+            </span>
+          )}
+          {telehealth && (
+            <span className="inline-flex items-center gap-1 text-[10px] bg-[#C87965]/15 text-[#C87965] rounded-full px-2 py-0.5 w-fit">
+              Telehealth
+            </span>
+          )}
+          {!inPerson && !telehealth && (
+            <span className="text-[11px] text-[#C8C4BB]">—</span>
+          )}
+        </div>
+      </td>
+
+      <td className="p-4 text-xs text-[#2B2A29] min-w-[200px] max-w-[280px]">
+        {inPerson && (t.office_addresses?.length > 0 || offices.length > 0) ? (
+          <div className="leading-snug">
+            {(t.office_addresses || offices).slice(0, 2).map((a, i) => (
+              <div key={i} className="text-[11px] text-[#2B2A29]">
+                {typeof a === "string" ? a : a?.address || a?.city || ""}
+              </div>
+            ))}
+            {(t.office_addresses || offices).length > 2 && (
+              <div className="text-[10px] text-[#6D6A65]">
+                +{(t.office_addresses || offices).length - 2} more
+              </div>
+            )}
+          </div>
+        ) : telehealth ? (
+          <span className="text-[11px] text-[#6D6A65]">telehealth only</span>
+        ) : (
+          <span className="text-[#C8C4BB]">—</span>
+        )}
+      </td>
+
+      <td className="p-4 text-xs min-w-[180px]">
+        <div className="text-[#2B2A29] break-all">{t.email}</div>
+        {t.phone && (
+          <div className="text-[11px] text-[#6D6A65] mt-0.5 whitespace-nowrap">
+            {t.phone}
+          </div>
+        )}
+      </td>
+
+      <td className="p-4 text-right whitespace-nowrap">
+        <button
+          className="text-[#2D4A3E] hover:underline text-xs inline-flex items-center gap-1"
+          onClick={onEdit}
+          data-testid={`edit-provider-${t.id}`}
+        >
+          <Pencil size={12} /> Edit
+        </button>
+      </td>
+    </tr>
+  );
+}
+
 
