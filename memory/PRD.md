@@ -715,3 +715,63 @@ User asked for the "Claim & complete your profile" outreach campaign to be ready
 
 ### Tests
 - `tests/test_iteration54_completeness.py` — 11 tests: unit (empty/all-required/telehealth/short-bio/100%) + admin endpoint contract + dry-run + selected-mode + claim_email_sent_at stamping + portal payload includes completeness.
+
+## Iteration 55 — Admin tabs refactor, Master Query UI, Blog Admin UI, mobile intake smooth-scroll (Apr 28, 2026)
+
+User wanted to (a) tame the horizontally-scrolling admin tab bar, (b) get the
+Master Query AI panel wired up, (c) get a Blog admin UI wired to the
+existing `/api/admin/blog` backend, and (d) stop the abrupt scroll on
+mobile when stepping through the intake form.
+
+### AdminTabsBar (`AdminDashboard.jsx`)
+- New `AdminTabsBar` component renders **PRIMARY** tabs inline:
+  Requests · Pending therapists · All providers · Patients (by email) ·
+  Profile completion · Master Query.
+- All other tabs (Invited therapists, Coverage gaps, Opt-outs, Feedback,
+  Referral analytics, Referral sources, Team, **Blog**, Email templates)
+  live under a single "More" dropdown — `tab-more-btn` opens
+  `tab-more-menu`. The currently-active secondary tab is also pinned
+  inline next to the primary tabs so admins always see where they are.
+
+### Master Query panel (`MasterQueryPanel`)
+- Loads `GET /api/admin/master-query/snapshot` on mount, surfaces a 5
+  suggestion-chip list, accepts free-form questions (max 600 chars),
+  fires `POST /api/admin/master-query` and renders the LLM answer +
+  question history. Includes a "Show the raw snapshot" toggle that
+  reveals the snapshot JSON pre-formatted so admins can verify Claude is
+  reasoning over real data.
+
+### Blog admin panel (`BlogAdminPanel`)
+- Full CRUD UI for `/api/admin/blog`:
+  - Posts list (title / slug / status / updated / actions).
+  - "+ New post" form (title, optional slug, summary, hero image URL,
+    Markdown body, published checkbox).
+  - Edit / Toggle publish / Delete actions per row.
+  - Native `window.confirm()` guards delete.
+
+### IntakeForm mobile smooth-scroll
+- Added a `cardRef` + `useEffect` that — on every `step` change after
+  the initial mount — smooth-scrolls the form card top to ~80px below
+  the viewport top so users always see the new step's heading + first
+  input without an abrupt jump. `isFirstRender` ref guards the initial
+  mount so the page doesn't auto-scroll on landing.
+
+### Tests / Verification
+- Frontend testing agent (iteration_17.json) verified **100%** of the
+  refactor: admin tab bar testids all present, "More" dropdown opens,
+  Master Query end-to-end Q&A returns an LLM answer, Blog CRUD all work
+  (create + toggle publish + edit + delete with confirm), public
+  `/api/blog` only returns published posts, and the intake mobile
+  smooth-scroll animates between 3 intermediate scrollY samples
+  (confirming `behavior:'smooth'` firing) with the card top settling at
+  79.9px from viewport top after a `next-btn` click on a 390×844
+  viewport.
+
+## Backlog (post iter-55)
+### P1
+- Replace Resend test mode with verified domain (BLOCKED on user verifying domain on Resend dashboard).
+- Multi-state rollout (Idaho → WA, OR, MT, UT, WY, NV).
+### P2
+- Live DOPL JSON API integration (when Idaho DOPL publishes).
+- Extract `MasterQueryPanel`, `BlogAdminPanel`, `ProfileCompletionPanel`, `TeamPanel`, etc. from the now ~5550-line `AdminDashboard.jsx` into `src/pages/admin/panels/` (maintainability — non-functional).
+
