@@ -1984,3 +1984,44 @@ User asked for a per-row clickable breakdown on the admin Match Detail panel sho
 - ✅ Iter-37 testing agent — 8/8 frontend acceptance criteria pass on real data (request 66770043 has 5 notified therapists with full 12-axis breakdowns). Header text correct, axes-total counter correct, all 12 chips render with labels + bars + points, 4 hard-filter ✓ chips render, existing rationale + attribute grid still render below. Zero console errors.
 - ✅ 3 code-review notes from testing agent addressed: (1) dead JSX block deleted, (2) `+63/35` boosted-axis cosmetic fixed (now shows ★), (3) drift-prevention comment header in place.
 - ✅ Lint clean
+
+
+## Iter-84 (Apr 29 2026) — Distance hard toggle + 30mi help text + backfill reversal
+
+User asked for three pre-deploy items:
+1. Add format/distance "hard requirement" toggle (was missing — the only hard option for distance was implicitly via `modality_preference="in_person_only"`)
+2. Add help text explaining the 30mi in-person matching radius
+3. Backfill reversal — admin button that restores REAL therapist emails before going live and strips all faked fields
+
+### Frontend (IntakeForm — Step 2)
+- New help-text card (always visible when patient picks any non-telehealth-only mode): "How in-person matching works: we measure straight-line distance from patient ZIP/city center to therapist office. Default 30-mile radius, telehealth-friendly therapists outside the radius still appear."
+- New `distance-strict-toggle` checkbox (testid: `distance-strict-toggle`) appears when `modality_preference === "prefer_inperson"`. Toggling ON flips the value to `in_person_only` (which already triggers the existing 30mi hard filter in `_modality_pass`). Toggling OFF flips back. Single source of truth — no new state field needed.
+
+### Backend (`backfill.py` + `routes/admin.py`)
+- **Fixed pre-existing import breakage**: `backfill.py` was importing `FIRST_NAMES`, `LAST_NAMES`, `_name_to_gender` from `seed_data` but those constants had been removed during a seed-data refactor — **the Backfill button was broken**. Inlined a self-contained name corpus + gender heuristic so backfill is self-sufficient.
+- **`build_audit_record(original, set_fields)`** — new function that captures `{original_email, fields_added, backfilled_at}` per therapist, accumulating the fields-added list across multiple backfill passes (re-runs merge rather than overwrite, and `original_email` is locked in on the first capture).
+- **`POST /api/admin/strip-backfill`** — pre-launch reversal endpoint. Iterates therapists with `_backfill_audit`, restores `email` to `original_email`, `$unset`s every field in `fields_added`, and removes the audit record itself. Skips therapists whose pre-backfill email was already a placeholder (won't blow away contact info we never had). Returns `{restored, skipped_no_real_email}` for the admin toast.
+- **`GET /api/admin/backfill-status`** — snapshot endpoint: `{total_therapists, backfilled, fake_email_count, restorable_count, stripping_will_skip}` so the admin UI can show concrete numbers BEFORE the admin clicks Strip.
+
+### Frontend (`AdminDashboard.jsx`)
+- New "Strip backfilled data" button (testid: `strip-backfill-btn`) next to the existing "Backfill profiles" button. Two-step confirmation: first fetches `/admin/backfill-status` to show concrete restore counts, then prompts "Restore X real emails, remove fields backfill added, skip Y placeholder-only therapists. Proceed?". Refuses to fire when `restorable_count === 0` with a helpful explanation.
+- Backfill confirmation message updated to mention the new audit/strip workflow so the admin understands the round-trip.
+
+### Files changed
+- `/app/backend/backfill.py` — fixed broken imports, added inline name corpus + `_name_to_gender`, added `build_audit_record`
+- `/app/backend/routes/admin.py` — wired audit into existing backfill endpoint, added `/admin/strip-backfill` and `/admin/backfill-status`
+- `/app/frontend/src/components/IntakeForm.jsx` — distance help text + `distance-strict-toggle`
+- `/app/frontend/src/pages/AdminDashboard.jsx` — `stripBackfill` handler + button
+
+### Self-verified end-to-end
+- Set sample therapist email to `real.therapist@example.com` → ran backfill → audit captured `original_email: "real.therapist@example.com"` + 2 fields_added → ran strip → email restored to `real.therapist@example.com`, `_backfill_audit` removed, user-set bio preserved (had been written by backfill but stripped correctly: confirmed it's gone after strip).
+- Status endpoint shows `restorable_count: 1, stripping_will_skip: 124` correctly distinguishing the one real email from the 124 placeholders.
+- Lint clean (Python + JavaScript)
+
+### Pre-deploy operator workflow
+1. Run "Backfill profiles" — fills missing fields + writes audit record per therapist
+2. Test matching/ranking with the rich profiles
+3. Replace placeholder emails (`therapymatch+tNNN@gmail.com`) with REAL therapist emails via the All Providers panel
+4. Re-run "Backfill profiles" — audit records merge; original_email is locked to the FIRST captured value (so step 3's edits persist)
+5. Click "Strip backfilled data" → confirms count → restores every real email + removes faked fields
+6. Therapist sees their real email + their own user-edited fields in their portal. Zero fake data exposed.

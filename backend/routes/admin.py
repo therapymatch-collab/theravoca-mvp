@@ -1010,19 +1010,113 @@ async def admin_list_declines(_: bool = Depends(require_admin)):
 
 @router.post("/admin/backfill-therapists")
 async def admin_backfill_therapists(_: bool = Depends(require_admin)):
-    from backfill import backfill_therapist
+    from backfill import backfill_therapist, build_audit_record
     cur = db.therapists.find({}, {"_id": 0}).sort("created_at", 1)
     therapists = await cur.to_list(length=2000)
     updated = 0
     for idx, t in enumerate(therapists, 1):
         set_fields = backfill_therapist(t, idx)
         if set_fields:
+            audit = build_audit_record(t, set_fields)
+            if audit:
+                # Preserve the original audit if one already exists — re-runs
+                # of backfill should NOT reset `original_email` to a fake one.
+                existing_audit = t.get("_backfill_audit") or {}
+                if existing_audit.get("original_email"):
+                    audit["original_email"] = existing_audit["original_email"]
+                # Merge the fields_added lists so a second backfill pass
+                # adds onto (rather than replaces) the audit trail.
+                merged_fields = sorted(
+                    set(audit["fields_added"]) | set(existing_audit.get("fields_added") or [])
+                )
+                audit["fields_added"] = merged_fields
+                set_fields["_backfill_audit"] = audit
             set_fields["updated_at"] = _now_iso()
             await db.therapists.update_one(
                 {"id": t["id"]}, {"$set": set_fields}
             )
             updated += 1
     return {"ok": True, "scanned": len(therapists), "updated": updated}
+
+
+@router.post("/admin/strip-backfill")
+async def admin_strip_backfill(_: bool = Depends(require_admin)):
+    """Reverse the most-recent backfill: restore each therapist's original
+    email (saved in `_backfill_audit.original_email`) and $unset every
+    field that backfill itself populated. User-edited values (which were
+    NEVER touched by backfill — backfill only fills empty fields) are
+    preserved verbatim.
+
+    This is the pre-launch sanity step: run backfill to flesh out fake
+    profiles for matching tests, then strip-backfill before going live so
+    therapists never see fabricated bios/specialties/availability/etc.
+    """
+    cur = db.therapists.find(
+        {"_backfill_audit": {"$exists": True}}, {"_id": 0},
+    )
+    therapists = await cur.to_list(length=2000)
+    restored = 0
+    skipped_no_real_email = 0
+    for t in therapists:
+        audit = t.get("_backfill_audit") or {}
+        original_email = (audit.get("original_email") or "").strip()
+        fields_added = audit.get("fields_added") or []
+        # If we have nothing real to fall back to (the original email was
+        # blank or already a therapymatch+ placeholder), DO NOT strip —
+        # we'd leave the doc with no email at all. Flag for manual review.
+        is_placeholder = (
+            not original_email
+            or "therapymatch+" in original_email.lower()
+        )
+        if is_placeholder:
+            skipped_no_real_email += 1
+            continue
+        unset: dict[str, str] = {f: "" for f in fields_added}
+        # Always remove the audit record itself once we restore.
+        unset["_backfill_audit"] = ""
+        update_doc: dict[str, Any] = {
+            "$set": {"email": original_email, "updated_at": _now_iso()},
+            "$unset": unset,
+        }
+        await db.therapists.update_one({"id": t["id"]}, update_doc)
+        restored += 1
+    return {
+        "ok": True,
+        "scanned": len(therapists),
+        "restored": restored,
+        "skipped_no_real_email": skipped_no_real_email,
+        "note": (
+            "Therapists whose pre-backfill email was missing or was "
+            "already a therapymatch+ placeholder were skipped. Review "
+            "those manually before going live."
+        ),
+    }
+
+
+@router.get("/admin/backfill-status")
+async def admin_backfill_status(_: bool = Depends(require_admin)):
+    """Snapshot of backfill state — used by the admin UI to confirm
+    whether a strip operation is needed before going live."""
+    total = await db.therapists.count_documents({})
+    backfilled = await db.therapists.count_documents(
+        {"_backfill_audit": {"$exists": True}},
+    )
+    fake_emails = await db.therapists.count_documents(
+        {"email": {"$regex": "therapymatch\\+", "$options": "i"}},
+    )
+    real_emails_in_audit = await db.therapists.count_documents(
+        {
+            "_backfill_audit": {"$exists": True},
+            "_backfill_audit.original_email": {"$regex": "@", "$not": {"$regex": "therapymatch\\+"}},
+        },
+    )
+    return {
+        "total_therapists": total,
+        "backfilled": backfilled,
+        "fake_email_count": fake_emails,
+        "restorable_count": real_emails_in_audit,
+        "stripping_will_skip": backfilled - real_emails_in_audit,
+    }
 
 
 @router.post("/admin/seed")

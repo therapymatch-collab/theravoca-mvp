@@ -538,7 +538,7 @@ export default function AdminDashboard() {
 
   const runBackfill = async () => {
     if (!confirm(
-      "Backfill ALL therapist profiles with realistic fake data + therapymatch+tNNN@gmail.com emails?\n\nThis is idempotent (only fills missing fields)."
+      "Backfill ALL therapist profiles with realistic fake data + therapymatch+tNNN@gmail.com emails?\n\nThis is idempotent (only fills missing fields).\n\nNote: every backfill pass writes a `_backfill_audit` record so you can later run \"Strip backfilled data\" to restore real emails before going live."
     )) return;
     try {
       const res = await client.post("/admin/backfill-therapists", {});
@@ -546,6 +546,48 @@ export default function AdminDashboard() {
       refresh();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Backfill failed");
+    }
+  };
+
+  const stripBackfill = async () => {
+    // Two-step confirmation since this is destructive: first fetch status
+    // so the admin sees how many will actually restore, then prompt with
+    // those concrete numbers before firing.
+    let status;
+    try {
+      const r = await client.get("/admin/backfill-status");
+      status = r.data;
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Couldn't fetch backfill status");
+      return;
+    }
+    if (status.restorable_count === 0) {
+      alert(
+        `No therapists are eligible for restoration.\n\n` +
+        `Total backfilled: ${status.backfilled}\n` +
+        `Therapists whose pre-backfill email was a real address: ${status.restorable_count}\n\n` +
+        `Run "Backfill profiles" only AFTER you've added real therapist emails — otherwise the audit captures placeholder emails and there's nothing to restore.`,
+      );
+      return;
+    }
+    const ok = confirm(
+      `STRIP BACKFILLED DATA — pre-launch reversal\n\n` +
+      `This will:\n` +
+      `  • Restore ${status.restorable_count} therapists' REAL email addresses\n` +
+      `  • REMOVE every field that backfill itself populated (bio, specialties, modalities, availability, etc.)\n` +
+      `  • Skip ${status.stripping_will_skip} therapists whose pre-backfill email was already a placeholder\n\n` +
+      `User-edited fields are NEVER touched.\n\n` +
+      `Proceed?`,
+    );
+    if (!ok) return;
+    try {
+      const res = await client.post("/admin/strip-backfill", {});
+      toast.success(
+        `Stripped — restored ${res.data.restored}, skipped ${res.data.skipped_no_real_email}.`,
+      );
+      refresh();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Strip failed");
     }
   };
 
@@ -907,6 +949,14 @@ export default function AdminDashboard() {
                 title="Complete every therapist profile with realistic fake data"
               >
                 Backfill profiles
+              </button>
+              <button
+                className="!py-2 !px-4 text-sm rounded-md border border-[#D45D5D] text-[#D45D5D] bg-white hover:bg-[#D45D5D] hover:text-white transition"
+                onClick={stripBackfill}
+                data-testid="strip-backfill-btn"
+                title="Pre-launch reversal: restore real emails + remove all fields backfill added. User-edited fields are preserved."
+              >
+                Strip backfilled data
               </button>
               <button
                 className="tv-btn-secondary !py-2 !px-4 text-sm disabled:opacity-60"

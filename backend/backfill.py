@@ -3,6 +3,10 @@ fake data so the entire app feels production-like during demos.
 
 Each pass through `backfill_therapist` will fill missing fields ONLY — never
 overwrite ones the admin or therapist explicitly set. Safe to re-run.
+
+The pre-launch reversal lives at `POST /api/admin/strip-backfill` and reads
+each therapist's `_backfill_audit` record (written here) to undo every field
+this module added. See `build_audit_record()` below.
 """
 from __future__ import annotations
 
@@ -10,9 +14,60 @@ import random
 from typing import Any
 
 from seed_data import (
-    FIRST_NAMES, LAST_NAMES, IDAHO_CITIES, ALL_ISSUES, ALL_MODALITIES,
-    INSURERS, AGE_GROUPS, AVAILABILITY, STYLE_TAGS, _name_to_gender,
+    IDAHO_CITIES, ALL_ISSUES, ALL_MODALITIES,
+    INSURERS, AGE_GROUPS, AVAILABILITY, STYLE_TAGS,
 )
+
+# Self-contained name lists — historically these lived in seed_data but
+# were removed during a seed-data refactor. We don't need a huge corpus
+# here; any first name we generate is purely for fallback bios on
+# already-seeded records.
+FIRST_NAMES = [
+    "Sarah", "Jessica", "Emily", "Megan", "Hannah", "Rachel", "Anna",
+    "Ashley", "Lauren", "Amanda", "Michelle", "Stephanie", "Nicole",
+    "Heather", "Rebecca", "Erica", "Christina", "Katherine", "Caroline",
+    "Olivia", "Sophia", "Isabella", "Charlotte", "Amelia", "Mia",
+    "Michael", "David", "James", "John", "Robert", "Daniel", "Matthew",
+    "Andrew", "Jacob", "Christopher", "Joshua", "Ryan", "Tyler", "Brandon",
+    "Justin", "William", "Thomas", "Brian", "Kevin", "Anthony", "Paul",
+    "Alex", "Benjamin", "Samuel", "Ethan", "Noah", "Liam", "Mason",
+]
+LAST_NAMES = [
+    "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller",
+    "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez",
+    "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin",
+    "Lee", "Perez", "Thompson", "White", "Harris", "Sanchez", "Clark",
+    "Ramirez", "Lewis", "Robinson", "Walker", "Young", "Allen", "King",
+    "Wright", "Scott", "Torres", "Nguyen", "Hill", "Flores", "Green",
+    "Adams", "Nelson", "Baker", "Hall", "Rivera", "Campbell", "Mitchell",
+    "Carter", "Roberts", "Phillips",
+]
+
+# Loose first-name → likely gender heuristic. Falls back to non_binary so
+# downstream code (which surfaces gender as a soft preference) doesn't
+# default-bias every backfilled profile to one gender. Patient-facing
+# code only ever uses this when the therapist hasn't set their own.
+_FEMALE_HINTS = {
+    "sarah", "jessica", "emily", "megan", "hannah", "rachel", "anna",
+    "ashley", "lauren", "amanda", "michelle", "stephanie", "nicole",
+    "heather", "rebecca", "erica", "christina", "katherine", "caroline",
+    "olivia", "sophia", "isabella", "charlotte", "amelia", "mia",
+}
+_MALE_HINTS = {
+    "michael", "david", "james", "john", "robert", "daniel", "matthew",
+    "andrew", "jacob", "christopher", "joshua", "ryan", "tyler", "brandon",
+    "justin", "william", "thomas", "brian", "kevin", "anthony", "paul",
+    "alex", "benjamin", "samuel", "ethan", "noah", "liam", "mason",
+}
+
+
+def _name_to_gender(first_name: str) -> str:
+    fn = (first_name or "").strip().lower()
+    if fn in _FEMALE_HINTS:
+        return "female"
+    if fn in _MALE_HINTS:
+        return "male"
+    return "non_binary"
 
 CREDENTIAL_TYPES = [
     ("psychologist", ["PhD", "PsyD"]),
@@ -200,3 +255,35 @@ def backfill_therapist(t: dict[str, Any], idx: int) -> dict[str, Any]:
         set_fields["profile_picture"] = DEFAULT_PROFILE_PICTURE
 
     return set_fields
+
+
+def build_audit_record(
+    original: dict[str, Any], set_fields: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Build the `_backfill_audit` record for a single therapist update.
+
+    The audit captures (a) the pre-backfill email so the strip operation
+    can put it back, and (b) the list of fields the backfill ACTUALLY
+    populated this run (the diff against the pre-existing therapist doc).
+    Without this we couldn't tell which fields were faked vs. user-edited
+    later. Returns None when nothing was changed (e.g. re-run on a doc
+    that's already complete).
+    """
+    if not set_fields:
+        return None
+    # Only the fields we wrote that weren't already on the therapist
+    # count as "added by backfill". `updated_at` and `_backfill_audit`
+    # itself aren't user data — exclude them.
+    EXCLUDE = {"updated_at", "_backfill_audit"}
+    fields_added = sorted(
+        k for k in set_fields.keys()
+        if k not in EXCLUDE and (k not in original or original.get(k) in (None, "", [], {}))
+    )
+    if not fields_added and "email" not in set_fields:
+        return None
+    from datetime import datetime, timezone
+    return {
+        "original_email": original.get("email") or "",
+        "fields_added": fields_added,
+        "backfilled_at": datetime.now(timezone.utc).isoformat(),
+    }
