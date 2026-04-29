@@ -282,17 +282,25 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
     research_scores: dict[str, dict] = req.get("research_scores") or {}
     for m in new_matches:
         axes = m.get("research_axes") or {}
-        if axes:
-            research_scores[m["id"]] = {
-                "raw_score": (m.get("match_breakdown") or {}).get("research_bonus", 0) and m["match_score"] - (m["match_breakdown"]["research_bonus"]) or m["match_score"],
-                "enriched_score": m["match_score"],
-                "delta": (m.get("match_breakdown") or {}).get("research_bonus", 0),
-                "evidence_depth": axes.get("evidence_depth") or 0,
-                "approach_alignment": axes.get("approach_alignment") or 0,
-                "rationale": axes.get("rationale") or "",
-                "themes": axes.get("themes") or {},
-                "computed_at": _now_iso(),
-            }
+        if not axes:
+            continue
+        bd = m.get("match_breakdown") or {}
+        # research_bonus is the delta the cache contributed to the final
+        # score; raw_score is what the score WOULD have been without the
+        # cache. Explicit subtraction is clearer than chained and/or.
+        research_bonus = float(bd.get("research_bonus") or 0)
+        final_score = float(m.get("match_score") or 0)
+        raw_score = round(final_score - research_bonus, 2)
+        research_scores[m["id"]] = {
+            "raw_score": raw_score,
+            "enriched_score": final_score,
+            "delta": research_bonus,
+            "evidence_depth": axes.get("evidence_depth") or 0,
+            "approach_alignment": axes.get("approach_alignment") or 0,
+            "rationale": axes.get("rationale") or "",
+            "themes": axes.get("themes") or {},
+            "computed_at": _now_iso(),
+        }
     notified_distances: dict[str, float] = req.get("notified_distances") or {}
     patient_geo = req.get("patient_geo")
     if patient_geo:

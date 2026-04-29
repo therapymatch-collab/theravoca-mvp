@@ -708,14 +708,16 @@ def rank_therapists(
         result = score_therapist(t, request, research_cache=cache)
         if result["filtered"]:
             continue
-        # Decline-history penalty (soft). We don't filter — the therapist
-        # may have changed capacity since — but ranking accounts for it.
+        # Decline-history penalty (soft re-rank, not a strict filter).
+        # We don't filter outright — capacity may have changed since the
+        # decline — but the -10pt penalty re-ranks them lower. NOTE: a
+        # therapist sitting just above the threshold (e.g. score 75)
+        # will drop to 65 and fall below the 70-point cutoff applied
+        # below — that's intended. They've actively declined a similar
+        # request in the last 30 days; we'd rather route to someone who
+        # hasn't recently said no, even if their raw score was a hair lower.
         dh = decline_history.get(t.get("id")) or {}
         if dh.get("has_recent_similar_decline"):
-            # 10-point soft penalty for declining a similar request in the
-            # last 30 days. Uses the AXIS (specialty) overlap from the
-            # decline reason codes, so a "wrong-specialty" decline
-            # specifically penalises future referrals on that specialty.
             result["total"] = max(0.0, result["total"] - 10.0)
             result.setdefault("breakdown", {})["decline_penalty"] = -10.0
         scored.append({

@@ -1908,3 +1908,58 @@ User asked for a pre-deploy refactor/code-review sweep. Scope: full lint, mobile
 - [ ] Confirm `MASTER_QUERY_PASSWORD` and `EMERGENT_LLM_KEY` are present and not test placeholders
 - [ ] Verify `RESEND_API_KEY` / `TWILIO_*` keys are production keys (not the sandbox set)
 - [ ] Confirm Cloudflare Turnstile site/secret keys match the production hostname
+
+
+## Iter-82 (Apr 29 2026) — Matching pipeline refactor + filter restructure
+
+### What user asked for
+1. Fold LLM enrichment into the live matching/scoring pass (was post-hoc, caused score divergence between therapist email & patient page; can't re-rank)
+2. New ALWAYS-HARD filters: state license, type of therapy needed, **main concerns**, age group
+3. New patient-toggleable hard filters (soft by default): insurance carrier, format/distance, availability, urgency, gender
+4. Update Patient Priorities section to reflect the new model
+5. If patient picks `prior_therapy=yes`, conditional textbox for what worked/didn't (and use it for matching)
+6. Apply 3-toggles → ranking
+7. Decline → factor into future matches
+
+### Backend (matching pipeline overhaul)
+- **`matching.py::score_therapist`** now takes a `research_cache` kwarg. When the therapist has a warm cache (themes extracted), it inlines `_score_axes()` (zero LLM calls — pure set arithmetic) and adds `evidence_depth + approach_alignment` to the final score. Returns the rationale + chips alongside the score.
+- **NEW always-hard filter**: `_primary_concern_pass()` — the patient's primary presenting issue must be in therapist's primary, secondary, or general specialties. Filters out a therapist who treats *nothing* the patient asked for, regardless of credentials.
+- **NEW patient-toggleable hards**:
+  - `_payment_pass()` — soft by default (insurance mismatch ranks lower but doesn't filter); hard when `request.insurance_strict=True`.
+  - `_availability_pass()` — soft by default; hard when `request.availability_strict=True`. Strict mode requires window overlap unless patient picked 'flexible'.
+  - `_urgency_pass()` — soft by default; hard when `request.urgency_strict=True`. asap → therapist must be asap/within_2_3_weeks.
+- **`rank_therapists`** now accepts `research_caches: {tid: cache}` and `decline_history: {tid: {has_recent_similar_decline}}`. Cold-cache therapists score without bonus; therapists who declined a similar request in the last 30 days get a soft −10 ranking penalty (intentional: penalty CAN drop a 75 below the 70 threshold — we'd rather route to someone who hasn't recently said no).
+- **`PRIORITY_AXES`** trimmed to soft-only: `modality`, `experience`, `identity`. Specialty/schedule/payment moved to either always-hard or patient-toggleable hard.
+
+### Backend (helpers.py orchestration)
+- **`_trigger_matching`** pre-fetches ALL therapist research caches in ONE Mongo query, builds `decline_history` via the new `_build_decline_history()` helper, passes both into `rank_therapists`. After scoring, persists `research_scores[tid]` (rationale + axes) inline — no separate post-hoc enrichment task. Cold-cache therapists trigger a background `cold_cache_warmup` task so the *next* match for them is warm.
+- **`_deliver_results`** now scores the apply 3-toggles: `commit_bonus = 3*confirms_availability + 3*confirms_urgency + 3*confirms_payment` (max +9). Removed the old `research_bonus` add (was double-counting since enrichment is now part of `match_score`). Old `apply_fit` (LLM grading of message text) still adds 0-5.
+
+### Backend (models.py)
+- `RequestCreate` adds: `insurance_strict: bool = False`, `availability_strict: bool = False`, `urgency_strict: bool = False`. Backwards-compatible default values.
+
+### Frontend (IntakeForm.jsx)
+- New form state: `insurance_strict`, `availability_strict`, `urgency_strict`, `prior_therapy_helped`.
+- **Step 3 (payment)**: when payment=insurance + carrier picked, "Hard requirement" toggle appears (`insurance-strict-toggle`).
+- **Step 4 (availability/urgency)**: per-section "Hard requirement" toggles (`availability-strict-toggle`, `urgency-strict-toggle`) appear when the section has a non-flexible value. Prior therapy: notes textarea now appears for BOTH `yes_helped` and `yes_not_helped` with adaptive label/placeholder ("What worked?" vs "What didn't work?").
+- **Step 6 (Priorities)**: new "How matching works" info box explaining always-hard vs patient-toggleable-hard vs soft. `PRIORITY_FACTORS` trimmed from 6 → 3 (modality, experience, identity).
+
+### Files changed
+- `/app/backend/matching.py` — new filters, refactored `score_therapist` + `rank_therapists`, trimmed `PRIORITY_AXES`
+- `/app/backend/helpers.py` — pre-fetch caches + decline history, inline enrichment, 3-toggle commit_bonus, `_build_decline_history` helper, cold-cache warmup
+- `/app/backend/models.py` — 3 new strict toggles on `RequestCreate`
+- `/app/frontend/src/components/IntakeForm.jsx` — new state, conditional UI, Priority Factors restructure
+- `/app/backend/tests/test_iteration82_matching_refactor.py` (new) — 21 regression tests, runs in <1s
+
+### Tests
+- ✅ Iter-36 testing agent — **21/21 backend pytest pass**, frontend source-level verified (PRIORITY_FACTORS=3, all new testids present, prior-notes shown for both yes branches, "How matching works" info box wired). 0 critical / 0 minor / 0 design issues.
+- ✅ Self-verified 5 unit cases live (primary_concern hard filter, insurance soft/strict, urgency soft/strict, availability soft/strict, research_cache bonus folds in: 95.67 → 104.17 with rationale)
+- ✅ Lint clean
+- ⚠️ Note: `score_therapist` total can now exceed 100 (up to 120) when research bonus pushes a 100-axis score higher. Patient UI already handles >100 gracefully (cap at 100% display, ordering preserved).
+
+### Architectural improvements
+- Single source of truth: notification email score == admin dashboard score == patient results score (no more divergence)
+- Re-ranking actually works: a deeply-cached therapist can earn into the top N (was previously frozen by raw score before enrichment ran)
+- One Mongo round-trip for all caches (was N+1)
+- Decline learning: providers stop receiving the same kind of referrals they routinely turn down
+- Apply 3-toggles now have ranking impact (were previously cosmetic flags)
