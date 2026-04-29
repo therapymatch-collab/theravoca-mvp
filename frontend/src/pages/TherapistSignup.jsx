@@ -9,6 +9,7 @@ import { formatUsPhone } from "@/lib/phone";
 import credentialLabel from "@/lib/credentialLabel";
 import { api } from "@/lib/api";
 import { IDAHO_INSURERS } from "@/lib/insurers";
+import { ADDITIONAL_LANGUAGES } from "@/lib/languages";
 import { imageToDataUrl } from "@/lib/image";
 import { Input } from "@/components/ui/input";
 import {
@@ -165,6 +166,8 @@ export default function TherapistSignup() {
     office_locations: [],
     office_addresses: [],
     insurance_accepted: [],
+    languages_spoken: [],
+    languages_spoken_other: "",
     cash_rate: 150,
     sliding_scale: false,
     years_experience: 1,
@@ -518,6 +521,10 @@ export default function TherapistSignup() {
         recruit_code: recruitCode || null,
         turnstile_token: turnstileToken,
       };
+      // `languages_spoken_other` is a UI staging field — once Add was
+      // clicked the entries already merged into `languages_spoken`.
+      // Strip it so the backend model doesn't see an unknown key.
+      delete payload.languages_spoken_other;
       const res = await api.post("/therapists/signup", payload);
       setTherapistId(res.data?.id);
       setSubmitted(true);
@@ -1537,6 +1544,69 @@ export default function TherapistSignup() {
                         setInsuranceOther("");
                       }}
                       data-testid="signup-insurance-other-add"
+                    >
+                      <Plus size={14} className="inline mr-1" /> Add
+                    </button>
+                  </div>
+                </Group>
+
+                <Group
+                  title="Languages spoken (beyond English)"
+                  hint="Tap any additional languages you can conduct sessions in. English is implicit — leave everything off if you only see clients in English. Patients searching for non-English-speaking therapists will be matched to you here."
+                >
+                  <div className="flex flex-wrap gap-2">
+                    {ADDITIONAL_LANGUAGES.filter((l) => l !== "Other").map(
+                      (lang) => {
+                        const active = data.languages_spoken.includes(lang);
+                        return (
+                          <button
+                            key={lang}
+                            type="button"
+                            onClick={() => toggleArr("languages_spoken", lang)}
+                            data-testid={`signup-language-${lang.toLowerCase()}`}
+                            className={`text-sm px-3.5 py-1.5 rounded-full border transition ${
+                              active
+                                ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
+                                : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+                            }`}
+                          >
+                            {lang}
+                          </button>
+                        );
+                      },
+                    )}
+                  </div>
+                  <div className="mt-3 flex gap-2 items-end">
+                    <Field
+                      label="Other (specify)"
+                      hint="Comma-separated. We'll add each entry to your spoken-languages list."
+                    >
+                      <Input
+                        value={data.languages_spoken_other}
+                        onChange={(e) =>
+                          set("languages_spoken_other", e.target.value)
+                        }
+                        placeholder="e.g. French, Hindi, Portuguese"
+                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                        data-testid="signup-language-other"
+                      />
+                    </Field>
+                    <button
+                      type="button"
+                      className="tv-btn-secondary !py-2 !px-4 text-sm shrink-0 mb-px"
+                      onClick={() => {
+                        const parts = (data.languages_spoken_other || "")
+                          .split(",")
+                          .map((p) => p.trim())
+                          .filter(Boolean);
+                        if (parts.length === 0) return;
+                        const merged = Array.from(
+                          new Set([...data.languages_spoken, ...parts]),
+                        );
+                        set("languages_spoken", merged);
+                        set("languages_spoken_other", "");
+                      }}
+                      data-testid="signup-language-other-add"
                     >
                       <Plus size={14} className="inline mr-1" /> Add
                     </button>

@@ -34,7 +34,15 @@ export default function PendingSignupRow({ t, onApprove, onReject, onEdit }) {
         {/* Core identity + quick stats */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
-            <h4 className="font-medium text-[#2B2A29] text-base">{t.name}</h4>
+            <button
+              type="button"
+              onClick={onEdit}
+              className="font-medium text-[#2D4A3E] hover:text-[#3A5E50] hover:underline text-base text-left"
+              title={`Edit ${t.name}'s profile`}
+              data-testid={`pending-name-link-${t.id}`}
+            >
+              {t.name}
+            </button>
             {t.credential_type && (
               <span className="text-xs text-[#2D4A3E] bg-[#F2F4F0] border border-[#D9DDD2] rounded-full px-2 py-0.5">
                 {t.credential_type}

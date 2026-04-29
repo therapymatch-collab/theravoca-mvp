@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PATIENT_INSURER_OPTIONS } from "@/lib/insurers";
+import { PATIENT_LANGUAGE_OPTIONS } from "@/lib/languages";
 
 const STEPS_DEFAULTS = [
   "Who is this for?",
@@ -246,6 +247,8 @@ export default function IntakeForm() {
     experience_preference: ["no_pref"],
     gender_preference: "no_pref",
     gender_required: false,
+    preferred_language: "English",
+    language_strict: false,
     style_preference: [],
     referral_source: "",
     email: "",
@@ -934,6 +937,58 @@ export default function IntakeForm() {
                   )}
                 </Group>
                 <Group
+                  label="Preferred session language"
+                  hint="English is the default. Pick a different language if you'd rather have sessions in it — we'll prioritise therapists who speak it."
+                >
+                  <Select
+                    value={data.preferred_language}
+                    onValueChange={(v) => {
+                      set("preferred_language", v);
+                      if (v === "English") set("language_strict", false);
+                    }}
+                  >
+                    <SelectTrigger
+                      className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                      data-testid="language-select"
+                    >
+                      <SelectValue placeholder="Pick a language" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PATIENT_LANGUAGE_OPTIONS.filter(
+                        (l) => l !== "Other",
+                      ).map((lang) => (
+                        <SelectItem key={lang} value={lang}>
+                          {lang}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {data.preferred_language &&
+                    data.preferred_language !== "English" && (
+                      <label
+                        className="flex items-start gap-3 mt-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer hover:border-[#2D4A3E] transition"
+                        data-testid="language-strict-row"
+                      >
+                        <Checkbox
+                          checked={data.language_strict}
+                          onCheckedChange={(v) => set("language_strict", !!v)}
+                          className="mt-0.5 border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
+                          data-testid="language-strict-toggle"
+                        />
+                        <span className="text-sm text-[#2B2A29] leading-relaxed">
+                          <strong>Hard requirement:</strong> only show
+                          therapists who speak{" "}
+                          {data.preferred_language}.{" "}
+                          <span className="text-[#6D6A65]">
+                            Off (default) means English-speaking therapists
+                            still appear, just ranked lower than{" "}
+                            {data.preferred_language}-speaking ones.
+                          </span>
+                        </span>
+                      </label>
+                    )}
+                </Group>
+                <Group
                   label="Therapist style (optional)"
                   hint="Pick any that resonate"
                 >
@@ -1388,6 +1443,11 @@ function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
     ...(isInPersonHard ? ["Session format"] : []),
     ...(data.availability_strict ? ["Availability"] : []),
     ...(data.urgency_strict ? ["Urgency"] : []),
+    ...(data.language_strict &&
+      data.preferred_language &&
+      data.preferred_language !== "English"
+      ? ["Preferred language"]
+      : []),
   ]);
   const rows = [
     ["Who this referral is for", lookup(CLIENT_TYPES, data.client_type)],

@@ -2403,7 +2403,11 @@ export default function AdminDashboard() {
                   {[...detail.notified]
                     .sort((a, b) => (b.match_score || 0) - (a.match_score || 0))
                     .map((t) => (
-                      <MatchedProviderCard key={t.id} t={t} />
+                      <MatchedProviderCard
+                        key={t.id}
+                        t={t}
+                        onEdit={setEditTherapist}
+                      />
                     ))}
                 </div>
               </div>
@@ -3058,11 +3062,23 @@ const PROVIDER_COLUMNS = [
     label: "Provider",
     required: true,
     headClass: "",
-    render: (t) => (
+    render: (t, ctx) => (
       <td className="p-4 max-w-[320px]">
-        <div className="font-medium text-[#2B2A29] truncate" title={t.name}>
-          {t.name}
-        </div>
+        {ctx?.onEdit ? (
+          <button
+            type="button"
+            onClick={ctx.onEdit}
+            className="font-medium text-[#2D4A3E] hover:text-[#3A5E50] hover:underline truncate text-left max-w-full"
+            title={`Edit ${t.name}'s profile`}
+            data-testid={`provider-name-link-${t.id}`}
+          >
+            {t.name}
+          </button>
+        ) : (
+          <div className="font-medium text-[#2B2A29] truncate" title={t.name}>
+            {t.name}
+          </div>
+        )}
         <div className="text-xs text-[#6D6A65] mt-0.5 truncate" title={t.email}>
           {t.credential_type ? `${t.credential_type} · ` : ""}
           {t.years_experience != null && `${t.years_experience} yrs · `}
@@ -3377,7 +3393,7 @@ function ProviderRow({
       data-testid={`provider-row-${t.id}`}
     >
       {cols.map((c) => (
-        <ProviderCell key={c.key} column={c} therapist={t} />
+        <ProviderCell key={c.key} column={c} therapist={t} onEdit={onEdit} />
       ))}
       <td className="p-4 text-right whitespace-nowrap w-px">
         <div className="inline-flex flex-col items-end gap-1">
@@ -3533,8 +3549,8 @@ function ProviderRow({
 
 // Wrapper so React can key off `column.key` while still rendering the
 // real <td> element produced by `column.render(therapist)`.
-function ProviderCell({ column, therapist }) {
-  return column.render(therapist);
+function ProviderCell({ column, therapist, onEdit }) {
+  return column.render(therapist, { onEdit });
 }
 
 function ProviderTableControls({

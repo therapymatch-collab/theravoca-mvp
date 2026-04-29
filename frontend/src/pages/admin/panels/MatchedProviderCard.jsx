@@ -17,6 +17,7 @@ const AXIS_MAX = {
   style: 2,
   reviews: 5,
   differentiator: 1.5,
+  language: 4,
   research_bonus: 15,  // evidence_depth (0-10) + approach_alignment (0-5)
   decline_penalty: -10,
 };
@@ -34,6 +35,7 @@ const AXIS_LABEL = {
   style: "Style preference",
   reviews: "Verified reviews",
   differentiator: "Tiebreaker",
+  language: "Language match",
   research_bonus: "LLM research bonus",
   decline_penalty: "Recent decline penalty",
 };
@@ -47,7 +49,7 @@ const HARD_FILTERS_PASSED = [
   "Offers therapy format patient needs",
 ];
 
-export default function MatchedProviderCard({ t }) {
+export default function MatchedProviderCard({ t, onEdit }) {
   const [open, setOpen] = useState(false);
   const breakdown = t.match_breakdown || {};
   // Show every axis the backend reported (including zeros & negatives —
@@ -70,7 +72,22 @@ export default function MatchedProviderCard({ t }) {
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="font-medium text-[#2B2A29] truncate">{t.name}</span>
+            {onEdit ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(t);
+                }}
+                className="font-medium text-[#2D4A3E] hover:text-[#3A5E50] hover:underline truncate text-left"
+                title={`Edit ${t.name}'s profile`}
+                data-testid={`matched-name-link-${t.id}`}
+              >
+                {t.name}
+              </button>
+            ) : (
+              <span className="font-medium text-[#2B2A29] truncate">{t.name}</span>
+            )}
             <span className="text-xs text-[#6D6A65]">{t.credential_type || "—"}</span>
             {t.review_count >= 10 && t.review_avg >= 4.0 && (
               <span className="text-[10px] text-[#C87965]">

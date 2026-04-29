@@ -145,6 +145,24 @@ def _urgency_pass(t: dict, r: dict) -> bool:
     return True
 
 
+def _language_pass(t: dict, r: dict) -> bool:
+    """Language hard-filter when patient has ticked `language_strict`.
+    Skipped entirely when patient's preferred_language is empty/English
+    (English is the implicit default — no filter needed). Skipped when
+    `language_strict=False` (soft scoring axis handles preference).
+    """
+    pl = (r.get("preferred_language") or "").strip().lower()
+    if not pl or pl == "english":
+        return True
+    if not r.get("language_strict"):
+        return True
+    spoken = {
+        (s or "").strip().lower()
+        for s in (t.get("languages_spoken") or [])
+    }
+    return pl in spoken
+
+
 def _insurance_match(t: dict, r: dict) -> bool:
     plan = (r.get("insurance_name") or "").lower().strip()
     # "Other / not listed" = patient doesn't know exact carrier — skip the filter entirely
@@ -518,6 +536,8 @@ def score_therapist(
         return {"total": -1, "filter_failed": "availability", "filtered": True}
     if not _urgency_pass(t, r):
         return {"total": -1, "filter_failed": "urgency", "filtered": True}
+    if not _language_pass(t, r):
+        return {"total": -1, "filter_failed": "language", "filtered": True}
 
     raw = {
         "issues": _score_issues(t, r),
@@ -592,6 +612,20 @@ def score_therapist(
         # 0-0.5: 0 yrs → 0, 5 yrs → 0.25, 20 yrs → 0.5
         diff_bonus += min(0.5, years / 40.0)
     breakdown["differentiator"] = round(diff_bonus, 2)
+
+    # Language soft axis — small bonus when the patient's preferred
+    # language is in the therapist's `languages_spoken`. Skipped when
+    # patient's preferred_language is empty or English (the implicit
+    # default) so we don't bias every match toward "Spanish-speaking
+    # but not your language" therapists. The corresponding hard filter
+    # at `_language_pass` already covers strict-mode requests.
+    pl = (r.get("preferred_language") or "").strip().lower()
+    if pl and pl != "english":
+        spoken = {
+            (s or "").strip().lower()
+            for s in (t.get("languages_spoken") or [])
+        }
+        breakdown["language"] = 4 if pl in spoken else 0
 
     raw_total = sum(breakdown.values())
     # Proportional scale-down (only when boosted) so we don't squash

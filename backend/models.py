@@ -51,6 +51,11 @@ class TherapistSignup(BaseModel):
     modality_offering: str = "both"
     office_locations: list[str] = Field(default_factory=list)
     insurance_accepted: list[str] = Field(default_factory=list)
+    # Languages the therapist can conduct sessions in BEYOND English
+    # (English is implicit). Patient matching uses this as a soft axis
+    # (small bonus when patient's preferred_language is in this list)
+    # OR a hard filter when the patient flips `language_strict=True`.
+    languages_spoken: list[str] = Field(default_factory=list)
     cash_rate: int = Field(ge=0, le=1000, default=150)
     sliding_scale: bool = False
     years_experience: int = Field(ge=0, le=70, default=1)
@@ -101,6 +106,12 @@ class RequestCreate(BaseModel):
     urgency_strict: bool = False
     prior_therapy: str = "not_sure"
     prior_therapy_notes: Optional[str] = ""
+    # Preferred therapy language. Defaults to English (no filter / no bonus).
+    # When set to a non-English value, the matcher gives a soft bonus to
+    # therapists with that language in `languages_spoken`. When the
+    # patient also flips `language_strict=True`, it becomes a hard filter.
+    preferred_language: str = "English"
+    language_strict: bool = False
     # Patients can pick multiple experience preferences (e.g. ["seasoned",
     # "mid_career"]); legacy clients sending a single string still work via
     # the field validator below.
