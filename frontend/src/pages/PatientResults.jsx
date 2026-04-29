@@ -7,6 +7,10 @@ import useSiteCopy from "@/lib/useSiteCopy";
 import credentialLabel from "@/lib/credentialLabel";
 import { api, getSession } from "@/lib/api";
 import { RESULTS_POLL_INTERVAL_MS } from "@/lib/constants";
+import {
+  P1_OPTIONS,
+  P2_OPTIONS,
+} from "@/components/intake/deepMatchOptions";
 
 // Friendly labels for each scoring axis. Each entry maps axis -> { max, label }.
 // We surface the top 3 axes (where score > 50% of max) on the patient result card.
@@ -390,6 +394,70 @@ function YourReferralPanel({ request }) {
           )}
           {request.notes && (
             <RefDetail label="Notes you shared" value={request.notes} span={2} />
+          )}
+          {/* Deep-match answers (P1/P2/P3) — only shown when the
+              patient opted into the deeper intake. Visually separated
+              (full-width spanning row with a dusty-rose background) so
+              the patient can see the extra signals their match is
+              scored on. Slugs are mapped back to human-readable
+              labels via the same option arrays used by the form. */}
+          {request.deep_match_opt_in && (
+            <div
+              className="sm:col-span-2 mt-2 rounded-2xl bg-[#FBF5F2] border border-[#EBD5CB] p-4 sm:p-5"
+              data-testid="patient-request-deep-section"
+            >
+              <p className="text-[10px] uppercase tracking-[0.2em] text-[#A8553F] font-semibold">
+                ✦ Deep-match · 3 extra answers
+              </p>
+              <p className="text-xs text-[#2B2A29]/80 mt-1 mb-4 leading-relaxed">
+                These boost your matching on Relationship Style, Way of
+                Working, and Contextual Resonance.
+              </p>
+              <div className="space-y-3.5">
+                <div data-testid="patient-request-row-p1">
+                  <div className="text-[10px] uppercase tracking-wider text-[#8B3220]">
+                    Relationship style (P1)
+                  </div>
+                  <div className="text-[#2B2A29] mt-1 leading-snug">
+                    {(request.p1_communication || []).length
+                      ? (request.p1_communication || [])
+                          .map(
+                            (v) =>
+                              P1_OPTIONS.find((o) => o.v === v)?.l || v,
+                          )
+                          .join(" · ")
+                      : "—"}
+                  </div>
+                </div>
+                <div data-testid="patient-request-row-p2">
+                  <div className="text-[10px] uppercase tracking-wider text-[#8B3220]">
+                    Way of working (P2)
+                  </div>
+                  <div className="text-[#2B2A29] mt-1 leading-snug">
+                    {(request.p2_change || []).length
+                      ? (request.p2_change || [])
+                          .map(
+                            (v) =>
+                              P2_OPTIONS.find((o) => o.v === v)?.l || v,
+                          )
+                          .join(" · ")
+                      : "—"}
+                  </div>
+                </div>
+                <div data-testid="patient-request-row-p3">
+                  <div className="text-[10px] uppercase tracking-wider text-[#8B3220]">
+                    What they should already get (P3)
+                  </div>
+                  <div className="text-[#2B2A29] mt-1 leading-relaxed whitespace-pre-wrap">
+                    {(request.p3_resonance || "").trim() || (
+                      <span className="text-[#6D6A65] italic">
+                        Skipped — that's okay.
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       )}

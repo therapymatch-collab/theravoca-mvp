@@ -31,6 +31,16 @@ const SEED_KEYS = [
   { section: "Landing — Hero", key: "landing.hero.subhead",  label: "Subhead",          fallback: "No more searching, cold-calls, or waiting to hear back. Pick what matters, and we'll route your request to therapists in your network who actually want to work with you.", previewPath: "/" },
   { section: "Landing — Hero", key: "landing.hero.cta",      label: "Primary CTA",      fallback: "Get matched — free", previewPath: "/" },
   { section: "Landing — Hero", key: "landing.hero.subcta",   label: "Secondary CTA hint", fallback: "Free · No login required · ~2 min", previewPath: "/" },
+  // Three proof-point bullets under the hero CTA. Each has a short
+  // title + a 1-2 sentence body — same structure as we used to have
+  // duplicated in the "How we're different" block but moved up so
+  // first-time visitors see it before they scroll.
+  { section: "Landing — Hero", key: "landing.hero.bullet1.title", label: "Bullet 1 · title", fallback: "Structured intake — no vague free-text guesses", previewPath: "/" },
+  { section: "Landing — Hero", key: "landing.hero.bullet1.body",  label: "Bullet 1 · body",  fallback: "Multi-step questions about schedule, payment, identity, and your style preferences — so therapists see a real picture, not a paragraph they have to parse.", previewPath: "/" },
+  { section: "Landing — Hero", key: "landing.hero.bullet2.title", label: "Bullet 2 · title", fallback: "Smarter matching across 5 weighted axes", previewPath: "/" },
+  { section: "Landing — Hero", key: "landing.hero.bullet2.body",  label: "Bullet 2 · body",  fallback: "We score each therapist on hard filters, soft preferences, relationship style, way of working, and contextual resonance — not a single keyword search.", previewPath: "/" },
+  { section: "Landing — Hero", key: "landing.hero.bullet3.title", label: "Bullet 3 · title", fallback: "Anonymous referrals, contact info revealed last", previewPath: "/" },
+  { section: "Landing — Hero", key: "landing.hero.bullet3.body",  label: "Bullet 3 · body",  fallback: "Therapists see your needs, not your identity. You only share contact details with the one you choose, after they've opted in.", previewPath: "/" },
 
   // ─── LANDING — How it works ────────────────────────────────────────
   { section: "Landing — How it works", key: "landing.how.heading", label: "Section heading", fallback: "How it works", previewPath: "/#how" },
@@ -46,15 +56,9 @@ const SEED_KEYS = [
   { section: "Landing — Why TheraVoca", key: "landing.different.eyebrow", label: "Eyebrow", fallback: "How we're different", previewPath: "/#different" },
   { section: "Landing — Why TheraVoca", key: "landing.different.heading", label: "Heading", fallback: "Finding the right therapist shouldn't feel like a full-time job.", previewPath: "/#different" },
   { section: "Landing — Why TheraVoca", key: "landing.different.subhead", label: "Subhead", fallback: "We flip the script. You describe what you need. Therapists come to you.", previewPath: "/#different" },
-  // Three positive proof-point bullets shown directly below the "TheraVoca
-  // does the logistical work" callout. Each has a short title + a 1-2
-  // sentence body.
-  { section: "Landing — Why TheraVoca", key: "landing.different.bullet1.title", label: "Bullet 1 · title", fallback: "Structured intake — no vague free-text guesses", previewPath: "/#different" },
-  { section: "Landing — Why TheraVoca", key: "landing.different.bullet1.body",  label: "Bullet 1 · body",  fallback: "Multi-step questions about schedule, payment, identity, and your style preferences — so therapists see a real picture, not a paragraph they have to parse.", previewPath: "/#different" },
-  { section: "Landing — Why TheraVoca", key: "landing.different.bullet2.title", label: "Bullet 2 · title", fallback: "Smarter matching across 5 weighted axes", previewPath: "/#different" },
-  { section: "Landing — Why TheraVoca", key: "landing.different.bullet2.body",  label: "Bullet 2 · body",  fallback: "We score each therapist on hard filters, soft preferences, relationship style, way of working, and contextual resonance — not a single keyword search.", previewPath: "/#different" },
-  { section: "Landing — Why TheraVoca", key: "landing.different.bullet3.title", label: "Bullet 3 · title", fallback: "Anonymous referrals, contact info revealed last", previewPath: "/#different" },
-  { section: "Landing — Why TheraVoca", key: "landing.different.bullet3.body",  label: "Bullet 3 · body",  fallback: "Therapists see your needs, not your identity. You only share contact details with the one you choose, after they've opted in.", previewPath: "/#different" },
+  // Note: the old `landing.different.bullet{1,2,3}.{title,body}` keys
+  // moved into the Hero section (`landing.hero.bullet*`) — they render
+  // above-the-fold now, not inside this differentiator block.
 
   // ─── LANDING — Our promise (manifesto card between How-it-works and Testimonials) ───
   { section: "Landing — Our promise", key: "landing.promise.eyebrow",  label: "Eyebrow",  fallback: "the match — our promise", previewPath: "/#promise" },

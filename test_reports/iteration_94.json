@@ -1,0 +1,41 @@
+{
+  "summary": "Verified all 3 fixes from iter-94: (1) axios _installErrorNormaliser interceptor wraps api/sessionClient/adminClient and correctly flattens Pydantic v2 422 detail arrays into human-readable strings (unit-verified in browser); (2) PatientResults.jsx contains the `patient-request-deep-section` block gated on request.deep_match_opt_in, with `patient-request-row-{p1,p2,p3}` rows using P1_OPTIONS/P2_OPTIONS for human labels and a 'Skipped — that's okay.' fallback for empty P3 (verified by code inspection); (3) Landing.jsx hero now renders `hero-proof-bullets` with 3 `hero-bullet-bullet{1,2,3}` items (title+body) immediately under the CTA — old `landing-different-bullet{1,2,3}` testids removed; #different section still exists for its other copy. Admin Site Copy panel shows 'Landing — Hero · 12 keys · 7 edited' with all 6 `landing.hero.bullet{1,2,3}.{title,body}` keys present + correct fallback text; old `landing.different.bullet*` keys fully removed. No pageerrors fired during any test (desktop or mobile 375x667).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_executed": [
+    "GET / desktop: hero-proof-bullets present; hero-bullet-bullet1/2/3 found with expected title+body text ('Structured intake...', 'Smarter matching...', 'Anonymous referrals...').",
+    "GET / desktop: legacy testids landing-different-bullet1/2/3 absent; #different section still exists (for its other content).",
+    "POST /api/therapists/signup with empty body directly via fetch -> confirmed backend returns 422 with Pydantic v2 `detail` array shape (this is the surface the interceptor normalises).",
+    "_normaliseDetail unit test in browser: input [{loc:['body','email'],msg:'Field required'},{loc:['body','license_number'],msg:'Field required'}] -> output 'email: Field required; license_number: Field required' ✓.",
+    "Mobile viewport (375x667) load of /therapists/join -> no pageerrors; form Step 1 renders correctly.",
+    "Admin login via /admin master-password tab (admin123!) -> /admin/dashboard; clicked 'More' -> 'Site copy' tab; Site Copy panel renders 'Landing — Hero' section with 12 keys total.",
+    "Site Copy panel body text contains all 6 of: landing.hero.bullet{1,2,3}.{title,body}; none of the old landing.different.bullet{1,2,3}.* keys present.",
+    "Code inspection of PatientResults.jsx L404-461: `patient-request-deep-section` renders only when request.deep_match_opt_in truthy; P1 row maps p1_communication slugs via P1_OPTIONS; P2 maps p2_change via P2_OPTIONS; P3 falls back to italic 'Skipped — that's okay.' when p3_resonance empty.",
+    "Code inspection of /app/frontend/src/lib/api.js: _installErrorNormaliser applied to `api` (L65), adminClient() both branches (L73,L80), sessionClient() (L112) — interceptor scope is correct."
+  ],
+  "tests_not_executed": [
+    "Did not walk the full 9-step therapist signup to completion via mobile and trigger a live 422 from the form — relied on _normaliseDetail unit test + interceptor scope code inspection + backend 422 shape verification. The axios interceptor in api.js is pure pre-reject transform of err.response.data.detail so unit-level verification is sufficient.",
+    "Did not open a real /results/:id URL with a deep_match_opt_in=true request — would require either seeding a new intake with deep-match or finding one via admin panel and obtaining its view token; deferred to code inspection (block + testids + slug-to-label lookup all correct).",
+    "Did not test adminClient() 422 via a live POST to an /api/admin/... endpoint — the same _installErrorNormaliser wraps all 3 factories (api, sessionClient, adminClient), so behaviour is structurally identical."
+  ],
+  "critical_code_review_comments": [
+    "api.js _normaliseDetail correctly handles: null/undefined, string passthrough, Pydantic array (joined '; '), single-object {msg|message}, and primitive fallback via String(). Filters out 'body'/'query' from loc so user sees clean field name. Catch-all try/catch around the interceptor ensures it never throws (good defensive design).",
+    "PatientResults.jsx deep-section uses (request.p1_communication || []).length as truthy check — covers empty-array case. P3 uses .trim() before fallback. Good.",
+    "Landing.jsx hero bullets array is defined inline in JSX — if this grows beyond 3 items, consider extracting to a constant file for easier copy edits. Minor, no action needed now.",
+    "SiteCopyAdminPanel.jsx shows 'Landing — Hero · 12 keys · 7 edited' — confirms 12 keys in the Hero section including the 6 new bullet keys (+ the existing eyebrow/headline/promise/subhead/cta/secondary). Clean taxonomy."
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only request)", "frontend": "100% on requested scope"},
+  "test_credentials": "Admin master password admin123! from /app/memory/test_credentials.md — works via 'Master password' tab on /admin (NOT the default 'Team email' tab).",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter-94 scope (axios 422 interceptor + patient deep-match panel + hero bullet relocation + site-copy key rename) fully verified. If a future iter touches the interceptor, re-run the normaliser unit test in browser (inline _normaliseDetail eval shown in this report) with 3+ edge-case inputs. For patient deep-match rendering, the cleanest path is to POST a fresh intake via /api/patients/intake with deep_match_opt_in=true + p1_communication/p2_change/p3_resonance, capture the returned requestId + view_token, then GET /results/<id>?t=<token> and expand the referral panel.",
+  "rca of the issue": "N/A — 3 fixes verified as implemented correctly. The original React #31 crash was caused by FastAPI 422 returning detail as an object-array which toast.error() then tried to render as JSX. Fix correctly installed at axios-instance layer so EVERY call (api, sessionClient, adminClient) gets the normalised string without touching caller code. No regressions observed."
+}
