@@ -193,26 +193,26 @@ export default function Landing() {
             {[
               {
                 n: "01",
-                title: t("landing.how.step1.title", "Tap what fits"),
+                title: t("landing.how.step1.title", "Tell us what you need"),
                 body: t(
                   "landing.how.step1.body",
-                  "Pick from a curated list of presenting issues, then a few specifics — age, format, payment. Two minutes, no rambling required.",
+                  "Two minutes, anonymous. No login. Pick what matters most: schedule, modality, identity, payment.",
                 ),
               },
               {
                 n: "02",
-                title: t("landing.how.step2.title", "We reach out for you"),
+                title: t("landing.how.step2.title", "We do the work"),
                 body: t(
                   "landing.how.step2.body",
-                  "We anonymously share your referral with our network of pre-qualified therapists in your state.",
+                  "Our matching engine ranks every Idaho therapist against your needs and reaches out to the top picks. They opt in or out.",
                 ),
               },
               {
                 n: "03",
-                title: t("landing.how.step3.title", "Therapists come to you"),
+                title: t("landing.how.step3.title", "Pick your match"),
                 body: t(
                   "landing.how.step3.body",
-                  "Within 24 hours you get a personalized list of therapists who read your needs and want to work with you.",
+                  "Within 24h you get a ranked list of therapists who actually want to work with you. Pick one. Done.",
                 ),
               },
             ].map((s, i) => (

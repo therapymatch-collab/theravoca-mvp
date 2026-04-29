@@ -57,7 +57,7 @@ const STEPS = [
     icon: Sparkles,
     title: "4. Score against registered therapists (Step-1 score)",
     body:
-      "The matching engine compares each request's variables to every active therapist's profile. Hard filters knock out ineligible therapists; soft axes produce a 0-100 fit score. Deep research (LLM web pull from Psychology Today, podcasts, blogs, LinkedIn) and LLM enrichment add evidence_depth + approach_alignment so the Step-1 score isn't purely self-reported.",
+      "The matching engine compares each request's variables to every active therapist's profile. Hard filters knock out ineligible therapists; soft axes produce a 0-100 fit score. Deep research (LLM web pull across public sources) and LLM enrichment add evidence_depth + approach_alignment so the Step-1 score isn't purely self-reported.",
   },
   {
     icon: UserPlus,
@@ -167,13 +167,13 @@ export default function HowItWorksPanel() {
         <p className="text-sm text-[#6D6A65] leading-relaxed">
           A solo therapist's website often lists every specialty
           they've ever trained in. Without independent corroboration,
-          every match looks equally strong. By pulling Psychology Today
-          profiles, LinkedIn pages, podcasts, blog posts, and local
-          press, we can verify which specialties actually appear in
-          their <em>practice</em> — not just their checkbox list — and
-          re-rank Step-1 scores accordingly. This is the difference
-          between "matches their stated profile" and "matches the
-          shape of their actual practice."
+          every match looks equally strong. By pulling public
+          professional pages, long-form interviews, writing samples,
+          and local press, we can verify which specialties actually
+          appear in their <em>practice</em> — not just their checkbox
+          list — and re-rank Step-1 scores accordingly. This is the
+          difference between "matches their stated profile" and
+          "matches the shape of their actual practice."
         </p>
       </div>
       <div

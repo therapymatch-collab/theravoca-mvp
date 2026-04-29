@@ -56,14 +56,19 @@ def _score_pt_candidate(c: dict, request: dict) -> tuple[int, str]:
     loc_score = 20 if c.get("city") and c.get("state") else 10
 
     score = max(70, min(95, 50 + spec_score + license_score + loc_score - 30))
+    # Match rationale is shown in the invite email to the therapist and
+    # in internal admin dashboards. Do NOT reveal where we sourced the
+    # candidate (Psychology Today / BetterHelp / a private directory /
+    # state-board list) — we don't want those sources feeling poached.
+    # Keep the language generic and focused on practice-fit only.
     if overlap:
         rationale = (
-            f"Public PT profile lists {', '.join(sorted(overlap)).replace('_', ' ')} as a "
-            f"specialty — matches this patient's primary concern."
+            f"Their practice focus on {', '.join(sorted(overlap)).replace('_', ' ')} "
+            f"matches this patient's primary concern."
         )
     else:
         rationale = (
-            f"Licensed in {c.get('state', 'ID')} per PT directory; "
+            f"Licensed in {c.get('state', 'ID')}; "
             f"located in {c.get('city') or 'the requested area'} for in-person availability."
         )
     return score, rationale
@@ -324,14 +329,12 @@ async def _send_outreach_invite(
             f'<td style="padding:5px 0;color:{BRAND["text"]};font-size:14px;">{v}</td></tr>'
             for k, v in summary.items()
         )
+        # We intentionally do NOT include a "we found you via <source>"
+        # attribution line here. Directories like Psychology Today, the
+        # state board, or any private list we pull from don't love
+        # being cited as recruiting channels. The invite stands on the
+        # merits of the match, not the sourcing story.
         source_note = ""
-        if candidate.get("source") == "psychology_today" and candidate.get("profile_url"):
-            source_note = (
-                f'<p style="color:{BRAND["muted"]};font-size:12px;line-height:1.5;'
-                f'margin-top:6px;">We found your practice via your '
-                f'<a href="{candidate["profile_url"]}" style="color:{BRAND["primary"]};">'
-                f'Psychology Today profile</a>.</p>'
-            )
 
         opt_out_footer = (
             f'<hr style="border:none;border-top:1px solid {BRAND["border"]};margin:28px 0 14px;">'
@@ -347,7 +350,7 @@ async def _send_outreach_invite(
         <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
           I run TheraVoca, a small Idaho-based therapist matching service. We just received
           a referral request that looks like a strong fit for your practice — estimated
-          <strong>{score}% match</strong> based on the specialties listed in your public profile.
+          <strong>{score}% match</strong> based on your public practice information.
         </p>
         <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
           <em>{rationale}</em>

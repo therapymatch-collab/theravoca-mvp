@@ -384,7 +384,7 @@ export default function AdminDashboard() {
   const runOutreachNow = async (id) => {
     if (!confirm(
       "Run LLM outreach for this patient now?\n\n" +
-      "Searches Psychology Today's live directory + Claude for additional Idaho therapists who match this patient's brief, " +
+      "Searches our external directory pool + Claude for additional Idaho therapists who match this patient's brief, " +
       "then queues invite emails (or SMS for therapists with no public email) to fill the gap. " +
       "Use this if the auto-trigger didn't run or the directory had < 30 matches."
     )) return;
@@ -625,7 +625,7 @@ export default function AdminDashboard() {
   const runReviewResearch = async () => {
     if (!confirm(
       "Run LLM review research across all active therapists who haven't been researched in 30+ days?\n\n" +
-      "This calls Claude Sonnet 4.5 to recall public review data (Psychology Today, Google, Yelp, Healthgrades). " +
+      "This calls Claude Sonnet 4.5 to recall public review data across the open web. " +
       "It can take several minutes for large batches. Found data is folded into the matching score automatically."
     )) return;
     setResearchingReviews(true);
@@ -1395,9 +1395,10 @@ export default function AdminDashboard() {
                       </li>
                     </ol>
                     <p className="text-xs text-[#6D6A65] mt-3">
-                      Production note: real Psychology Today / state-board
-                      scraping is not yet wired up — the LLM uses its training
-                      data to seed plausible candidates. Swap in a scraper at{" "}
+                      Production note: live third-party directory
+                      scraping is not yet wired up — the LLM uses its
+                      training data to seed plausible candidates. Swap
+                      in a scraper at{" "}
                       <code className="text-xs bg-white px-1.5 py-0.5 rounded border border-[#E8E5DF]">
                         outreach_agent._find_candidates()
                       </code>
@@ -2580,9 +2581,13 @@ export default function AdminDashboard() {
                           )}
                           <div className="text-[11px] text-[#6D6A65] mt-2 flex items-center gap-2 flex-wrap">
                             <span>Sent {inv.created_at ? new Date(inv.created_at).toLocaleString() : "—"}</span>
-                            {(inv.source || c.source) === "psychology_today" && (
+                            {(inv.source || c.source) && (inv.source || c.source) !== "manual" && (
+                              // Admin-only badge — intentionally generic
+                              // so screenshots / share-outs don't reveal
+                              // the specific third-party directory we
+                              // sourced the candidate from.
                               <span className="inline-flex items-center gap-1 bg-[#F2F4F0] text-[#2D4A3E] border border-[#D9DDD2] rounded-full px-2 py-0.5">
-                                Psychology Today
+                                External source
                               </span>
                             )}
                             {c.profile_url && (
@@ -2592,7 +2597,7 @@ export default function AdminDashboard() {
                                 rel="noopener noreferrer"
                                 className="text-[#2D4A3E] underline hover:text-[#3A5E50]"
                               >
-                                View PT profile ↗
+                                View public profile ↗
                               </a>
                             )}
                             {c.phone && (
