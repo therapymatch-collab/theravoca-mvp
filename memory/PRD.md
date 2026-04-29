@@ -1811,3 +1811,24 @@ User-reported issues from preview screenshots (referrals from `therapymatch+2323
 - ✅ Self-verified PatientResults: API now returns `Age teen · ID · telehealth_only · concerns: anxiety` for the `+232323@gmail.com` referral (was previously just "ID"), Insurance resolves to "Aetna", Therapy history to "First-time"
 - ✅ Admin search "psychologist" narrows 125 → 47 (credential humanization match), "aetna" narrows similarly, "Boise" / "telehealth" also narrow correctly
 - ⚠️ Pre-existing: `tests/test_iteration69_priorities_botdef.py::test_ip_rate_limit_9th_is_429` is blocked by strict Turnstile (iter-71); /api/requests POST can't be reached server-side without a valid token. Code path verified by review + Iter-33 admin-config tests.
+
+
+## Iter-79 (Apr 29 2026) — Admin Test Mode (time-boxed rate-limit bypass)
+
+User asked for "test mode in admin" so admins can run end-to-end intake tests without tripping their own anti-spam guards. Honeypot, timing heuristic, and Turnstile remain enforced — only the rate throttle is relaxed.
+
+### Backend
+- `routes/admin.py` — added `POST /api/admin/intake-rate-limit/test-mode` (accepts `{minutes: 1..1440}`, default 60; persists `test_mode_until` ISO timestamp; also flushes `intake_ip_log` so the next submission starts fresh) and `DELETE /api/admin/intake-rate-limit/test-mode` (clears `test_mode_until`). The existing `GET /api/admin/intake-rate-limit` now also returns `test_mode_until` and `test_mode_seconds_remaining` (auto-clearing the field once expired).
+- `routes/patients.py` — `POST /api/requests` reuses a single `rate_cfg_doc` fetch and short-circuits both the per-IP and per-email rate-limit branches when `test_mode_until > now`.
+
+### Frontend
+- `pages/admin/panels/SettingsPanel.jsx` — new "Test mode" card under the rate-limit card with duration input (default 60 min, capped at 24h), Enable/Disable buttons, an ACTIVE badge with a live `Mm Ss left` countdown that ticks locally every 1s, and an Off badge in the resting state. testids: `test-mode-card`, `test-mode-active-badge`, `test-mode-inactive-badge`, `test-mode-minutes-input`, `test-mode-enable-btn`, `test-mode-disable-btn`.
+
+### Files changed
+- `/app/backend/routes/admin.py`
+- `/app/backend/routes/patients.py`
+- `/app/frontend/src/pages/admin/panels/SettingsPanel.jsx`
+
+### Tests
+- ✅ Iter-34 testing agent — 13/13 backend pytest pass, frontend round-trip (Off → Enable → ACTIVE with countdown → Turn off → Off) verified via Playwright. Test mode left DISABLED on exit.
+- ⚠️ Minor: missing/zero `minutes` in POST silently defaults to 60 instead of returning 400 (invalid-type and out-of-range still 400). Acceptable.
