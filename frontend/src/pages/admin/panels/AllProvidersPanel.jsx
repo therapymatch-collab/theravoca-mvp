@@ -24,6 +24,7 @@ export default function AllProvidersPanel({
   ProviderRow,
   ProviderTablePager,
   onEdit,
+  onPreview,
   onArchive,
   onRestore,
   onDelete,
@@ -116,6 +117,7 @@ export default function AllProvidersPanel({
                   key={t.id}
                   t={t}
                   onEdit={() => onEdit(t)}
+                  onPreview={onPreview}
                   onArchive={() => onArchive(t)}
                   onRestore={() => onRestore(t)}
                   onDelete={() => onDelete(t)}

@@ -350,7 +350,13 @@ PRIORITY_AXES = {
     "payment":   ["payment_fit"],
     "identity":  ["gender", "style"],
 }
-PRIORITY_BOOST = 1.8  # selected axes are weighted 1.8× others
+# Multiplier applied to score axes the patient flagged as a priority.
+# Tuned down from 1.8 → 1.15 in iter-77 because the larger boost
+# blew past the 100-pt ceiling for *every* qualifying therapist when
+# the patient picked 3+ priorities — the proportional scale-back then
+# crushed everyone to 100, removing all differentiation. 1.15 is
+# enough to nudge ranking while keeping totals well within 0-100.
+PRIORITY_BOOST = 1.15
 
 
 def _priority_weights(priority_factors: list[str]) -> dict[str, float]:
@@ -442,10 +448,18 @@ def score_therapist(t: dict, r: dict) -> dict[str, Any]:
                         "filtered": True,
                     }
 
-    # Apply patient-customizable weight multipliers. We min-clamp the
-    # total to 100 (see end of function) — picking many priorities can
-    # pin a therapist at 100 by design, since the patient told us many
-    # axes matter and the therapist scored full marks across them.
+    # Apply patient-customizable weight multipliers. To preserve
+    # discrimination on the 0-100 scale (instead of crushing every
+    # decent match to 100 via a hard cap), we scale the breakdown
+    # PROPORTIONALLY when the boosted sum exceeds 100. This keeps the
+    # SAME relative ordering as if there were no cap, while still
+    # bounding all displayed scores in [0, 100].
+    #
+    # Worked example: patient picks 3 axes (specialty/schedule/payment)
+    # and a therapist scores 140 raw across the boosted axes. We
+    # multiply every axis by 100/140 ≈ 0.714, so the therapist now
+    # scores 100. A weaker therapist whose raw total is 110 gets
+    # 110*0.714 ≈ 78.6 — they're still meaningfully behind the top.
     weights = _priority_weights(priority_factors)
     breakdown = {ax: round(v * weights[ax], 2) for ax, v in raw.items()}
     # Reputation boost — verified online reviews ≥ 4.5★ adds +5 (out of 100).
@@ -476,7 +490,19 @@ def score_therapist(t: dict, r: dict) -> dict[str, Any]:
         diff_bonus += min(0.5, years / 40.0)
     breakdown["differentiator"] = round(diff_bonus, 2)
 
-    total = round(min(100.0, sum(breakdown.values())), 2)
+    raw_total = sum(breakdown.values())
+    # Proportional scale-down (only when boosted) so we don't squash
+    # everyone to 100. Threshold filtering still uses the displayed
+    # `total`, but because we scale BEFORE truncation, a therapist
+    # who originally scored 70 (no boost) doesn't get penalised — the
+    # scaling only kicks in when raw_total > 100.
+    if raw_total > 100.0 and raw_total > 0:
+        scale = 100.0 / raw_total
+        for ax in list(breakdown.keys()):
+            breakdown[ax] = round(breakdown[ax] * scale, 2)
+        total = 100.0
+    else:
+        total = round(raw_total, 2)
     return {"total": total, "breakdown": breakdown, "filtered": False}
 
 

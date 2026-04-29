@@ -3790,22 +3790,30 @@ function ProviderRow({
         <ProviderCell key={c.key} column={c} therapist={t} />
       ))}
       <td className="p-4 text-right whitespace-nowrap w-px">
-        <div className="inline-flex flex-col items-end gap-1.5">
-          <button
-            className="text-[#2D4A3E] hover:underline text-xs inline-flex items-center gap-1"
-            onClick={onEdit}
-            data-testid={`edit-provider-${t.id}`}
-          >
-            <Pencil size={12} /> Edit
-          </button>
-          <button
-            className="text-[#C87965] hover:underline text-xs inline-flex items-center gap-1"
-            onClick={() => onPreview && onPreview(t)}
-            data-testid={`preview-provider-${t.id}`}
-            title="Preview the therapist's profile as a patient would see it"
-          >
-            <Eye size={12} /> Preview
-          </button>
+        <div className="inline-flex flex-col items-end gap-1">
+          {/* Edit · Preview share a row — most-used actions, side-by-side */}
+          <div className="inline-flex items-center gap-3">
+            <button
+              className="text-[#2D4A3E] hover:underline text-xs inline-flex items-center gap-1"
+              onClick={onEdit}
+              data-testid={`edit-provider-${t.id}`}
+            >
+              <Pencil size={12} /> Edit
+            </button>
+            <span className="text-[#E8E5DF]">|</span>
+            <button
+              className="text-[#C87965] hover:underline text-xs inline-flex items-center gap-1"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (onPreview) onPreview(t);
+              }}
+              data-testid={`preview-provider-${t.id}`}
+              title="Preview the therapist's profile as a patient would see it"
+            >
+              <Eye size={12} /> Preview
+            </button>
+          </div>
           {onDeepResearch ? (
             <button
               className="text-[#C87965] hover:text-[#a96050] hover:underline text-xs inline-flex items-center gap-1 disabled:opacity-50"

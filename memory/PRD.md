@@ -1734,3 +1734,43 @@ After iter-73 user reported "design looks the same" — the changes weren't visi
 - Verified credentialLabel mappings via node smoke test (LCSW → Social Worker, PhD → Psychologist, etc.).
 - Verified mobile `/results/{id}` loads without runtime error via Playwright screenshot.
 - Verified subtitle now reads "Social Worker · 12 years experience • CBT" instead of "LCSW · 12 years experience"
+
+---
+
+## Iter-77 (Apr 28 2026) — Score discrimination + outreach dedupe + admin Preview fix + mobile smoke tests
+
+### Investigated
+User reported request `therapymatch+232323@gmail.com` (id `721c39e7…`) had:
+- 18 therapists notified, all at 100% match (no differentiation)
+- Outreach ran but sent 0 emails (`outreach_sent_count: 0`)
+
+### Root causes found
+1. **`PRIORITY_BOOST = 1.8` was too aggressive.** Patient picked 3 priority axes (specialty/schedule/payment), boosting 4 score axes (`issues`, `availability`, `urgency`, `payment_fit`) by 1.8×. For any therapist passing the filters, the raw total exceeded 100, then `min(100, sum)` collapsed everyone to 100. Result: all matches tied at 100%, no ranking signal.
+2. **Outreach dedupe killed every Psychology Today candidate.** All scraped PT therapists share the inbox `info@member.psychologytoday.com`. The dedupe set treated this as one row, so the 2nd candidate onward was always skipped as "already invited" → 0 outreach sent.
+3. **Admin "Preview" button silently broke** because `AllProvidersPanel` didn't pass `onPreview` down to `ProviderRow`.
+
+### Fixes
+1. **`matching.py`**:
+   - `PRIORITY_BOOST` 1.8 → **1.15** (tunable; smaller bump preserves 0-100 scale).
+   - `min(100, sum)` ceiling replaced with **proportional scaling**: when `raw_total > 100`, all axes scale by `100/raw_total`. Verified empirically: same request now produces 100.00, 97.39, 96.42, 95.81, 94.88, 91.27, 90.30 — meaningful ranking signal.
+2. **`outreach_agent.py`**: added `SHARED_INBOX_PREFIXES` (`info@`, `contact@`, `hello@`, `support@`, `admin@`, `office@`) — these emails NO longer dedupe (we fall back to phone-only dedupe for them). Comment cites the iter-76 logs.
+3. **`AdminDashboard.jsx` + `AllProvidersPanel.jsx`**: wired `onPreview` prop through; "Edit | Preview" now share a row inline (was 2 stacked buttons).
+
+### Mobile smoke tests (auto-fail CI on iter-73-class bugs)
+- New `backend/tests/test_mobile_smoke.py` runs Playwright at `390x844` viewport against 6 public routes: `/`, `/#start`, `/sign-in`, `/portal/patient`, `/therapists/join`, `/blog/...` plus dynamic `/results/{id}` route (looks up real verified request from DB).
+- Listens for `pageerror` (uncaught JS) and `console.error`; allow-lists known third-party noise (Turnstile telemetry, CSP nonces, browser permission policy, etc.).
+- Suite runs in ~21s. All 7 tests green. Will catch the next iter-73-style crash.
+- Run: `pytest /app/backend/tests/test_mobile_smoke.py`.
+
+### Files changed
+- `/app/backend/matching.py` — PRIORITY_BOOST + scale-back
+- `/app/backend/outreach_agent.py` — shared-inbox dedupe relaxation
+- `/app/frontend/src/pages/AdminDashboard.jsx` — Edit|Preview row + onPreview prop
+- `/app/frontend/src/pages/admin/panels/AllProvidersPanel.jsx` — onPreview pass-through
+- `/app/backend/tests/test_mobile_smoke.py` — new (7 tests, 21s)
+- `/app/backend/requirements.txt` (no change — playwright + pytest-asyncio installed at runtime)
+
+### Tests
+- ✅ 7/7 mobile smoke tests pass
+- ✅ Verified score variation on user's exact request (100, 97, 96, 95, 91, 90, …)
+- ✅ Backend lint green

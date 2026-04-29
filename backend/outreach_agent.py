@@ -474,6 +474,20 @@ async def _filter_existing_contacts(candidates: list[dict]) -> tuple[list[dict],
     skip_opt = 0
     out: list[dict] = []
 
+    # Treat shared-mailbox emails (e.g. `info@member.psychologytoday.com`,
+    # `contact@…`) as NON-DEDUPING. Many directory scrapes return the
+    # same generic mailbox for hundreds of unique therapists, and prior
+    # iter-76 logs showed ALL Psychology Today candidates being skipped
+    # because of one shared mailbox row. We dedupe on phone alone for
+    # those — and if the candidate also lacks a phone, we let them
+    # through (the LLM agent already deduped against the public web).
+    SHARED_INBOX_PREFIXES = (
+        "info@", "contact@", "hello@", "support@", "admin@", "office@",
+    )
+
+    def _is_shared_inbox(email: str) -> bool:
+        return any(email.startswith(p) for p in SHARED_INBOX_PREFIXES)
+
     # Bulk-fetch the opt-out subset so we don't round-trip per candidate.
     from outreach_optout import get_opted_out_set
     opted_emails, opted_phones = await get_opted_out_set(emails, phones)
@@ -481,15 +495,16 @@ async def _filter_existing_contacts(candidates: list[dict]) -> tuple[list[dict],
     for c in candidates:
         e = (c.get("email") or "").strip().lower()
         p = normalize_us_phone(c.get("phone") or "")
+        e_for_dedupe = "" if _is_shared_inbox(e) else e
         if (e and e in opted_emails) or (p and p in opted_phones):
             skip_opt += 1
             logger.info("Outreach: skipping %s/%s (opted out)", e, p)
             continue
-        if (e and e in therapist_emails) or (p and p in therapist_phones):
+        if (e_for_dedupe and e_for_dedupe in therapist_emails) or (p and p in therapist_phones):
             skip_t += 1
             logger.info("Outreach: skipping %s/%s (already in therapists)", e, p)
             continue
-        if (e and e in invite_emails) or (p and p in invite_phones):
+        if (e_for_dedupe and e_for_dedupe in invite_emails) or (p and p in invite_phones):
             skip_i += 1
             logger.info("Outreach: skipping %s/%s (already invited)", e, p)
             continue
