@@ -926,7 +926,7 @@ export default function TherapistSignup() {
                 className="tv-btn-primary"
                 data-testid="therapist-faq-cta-btn"
               >
-                Get more referrals
+                {t("btn.therapist.cta.headline", "Get more referrals")}
                 <ArrowRight size={16} className="ml-1.5 inline" />
               </a>
             </div>

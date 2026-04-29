@@ -1558,3 +1558,64 @@ User asked for 8 changes; all shipped in one batch.
   proves insufficient for less-well-known therapists
 - Patient prefs persistence (remember `priority_factors` for return
   visits)
+
+---
+
+## Iter-71 (Apr 28 2026) — Turnstile LIVE + site-copy editor expansion (~95 keys, 14+ sections)
+
+### Implemented
+1. **Cloudflare Turnstile is now LIVE.** User pasted real keys:
+   - `backend/.env`: `TURNSTILE_SECRET_KEY` + `TURNSTILE_SITE_KEY`
+   - `frontend/.env`: `REACT_APP_TURNSTILE_SITE_KEY`
+   Backend gates `POST /api/requests` AND `POST /api/therapists/signup`
+   on a valid token (rejection contract: 400 if missing/invalid).
+   Network/timeout still fails-soft so a Cloudflare outage doesn't take
+   intake down.
+
+2. **Therapist signup gets Turnstile too.** `TherapistSignup.jsx`
+   renders the widget (`data-testid="signup-turnstile"`) on the last
+   step before "Preview profile". Token sent in payload; verified at
+   `routes/therapists.py` start.
+
+3. **Site-copy editor expansion (33 → ~102 keys, 19 sections):**
+   - Full rewrite of `SiteCopyAdminPanel.jsx` with:
+     - Search bar (`copy-search`) — filters by key, label, or default
+     - Group-by-section collapsible UI with per-section "X edited" counter
+     - "Only overridden" toggle (`copy-filter-overridden`)
+     - Counter showing `<edited>/<total>` overridden
+     - "EDITED" tag on overridden rows
+   - Sections include: Landing (Hero / How it works / Why TheraVoca /
+     Social proof / FAQ / Final CTA), Header & Footer, Therapist Join
+     (Hero / Why join / Pricing / FAQ), Intake form (Step titles /
+     Priorities / Final step / Confirmation), Sign in, Patient portal,
+     Patient results, Buttons.
+
+4. **`useSiteCopy` t() wired into many more places:**
+   - `Landing.jsx`: how-it-works step1/2/3 titles+bodies, FAQ subhead
+   - `SiteShell.jsx`: full Header nav (How it works / Testimonials /
+     Why TheraVoca / FAQs / For therapists / Sign in / Get matched
+     CTA), Footer crisis & privacy headings/bodies
+   - `IntakeForm.jsx`: step titles via `intake.step.{0..7}`,
+     final.adult + final.not_emergency labels
+   - `SignIn.jsx`: signin.heading / signin.subhead / signin.role.{patient,therapist}
+   - `PatientPortal.jsx`: portal.heading + portal.empty.{heading,body,cta}
+   - `PatientResults.jsx`: results.heading + results.subhead
+   - `TherapistSignup.jsx`: hero eyebrow/headline/subhead, and BOTH
+     "Get more referrals" CTAs (Why-join section + FAQ section)
+
+### Backend
+- `models.py`: `TherapistSignup.turnstile_token`, `RequestCreate.turnstile_token`
+- `routes/therapists.py`: imports `verify_token`, calls before geocoding
+- `routes/patients.py`: unchanged from iter-70 (already had the gate)
+- `turnstile_service.py`: unchanged — fail-soft logic stays in place
+
+### Tests
+- `backend/tests/test_iteration71_turnstile_strict.py` (new, 9/9 pass via testing agent iter-32)
+- One frontend ui_bug flagged by testing agent (1 of 2 "Get more referrals" CTAs hardcoded) — fixed mid-iteration before finish.
+
+### Backlog
+- Refactor monolithic React components — **next session**
+- Patient prefs persistence
+- Multi-state rollout (Idaho only)
+- DOPL live API integration when published
+- (deferred) SerpAPI or Google Custom Search if free DDG+Bing coverage proves insufficient
