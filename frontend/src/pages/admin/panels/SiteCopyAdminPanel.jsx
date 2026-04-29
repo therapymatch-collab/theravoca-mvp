@@ -47,6 +47,12 @@ const SEED_KEYS = [
   { section: "Landing — Why TheraVoca", key: "landing.different.heading", label: "Heading", fallback: "Finding the right therapist shouldn't feel like a full-time job.", previewPath: "/#different" },
   { section: "Landing — Why TheraVoca", key: "landing.different.subhead", label: "Subhead", fallback: "We flip the script. You describe what you need. Therapists come to you.", previewPath: "/#different" },
 
+  // ─── LANDING — Our promise (manifesto card between How-it-works and Testimonials) ───
+  { section: "Landing — Our promise", key: "landing.promise.eyebrow",  label: "Eyebrow",  fallback: "the match — our promise", previewPath: "/#promise" },
+  { section: "Landing — Our promise", key: "landing.promise.heading",  label: "Heading",  fallback: "We exist for one outcome.", previewPath: "/#promise" },
+  { section: "Landing — Our promise", key: "landing.promise.body",     label: "Body — the success definition", fallback: "A successful match means the patient and therapist work together long enough for the patient to report feeling better about their presenting issue — and to view the relationship and time together as ultimately beneficial in their life.", previewPath: "/#promise" },
+  { section: "Landing — Our promise", key: "landing.promise.tagline",  label: "Closing tagline", fallback: "Patient + therapist + time = a third thing — a relationship that helps. Everything we build serves that.", previewPath: "/#promise" },
+
   // ─── LANDING — Testimonials / social proof ─────────────────────────
   { section: "Landing — Social proof", key: "landing.testimonials.heading", label: "Section heading", fallback: "What patients are saying", previewPath: "/#testimonials" },
   { section: "Landing — Social proof", key: "landing.testimonials.subhead", label: "Section subhead", fallback: "Real users. Lightly edited for privacy.", previewPath: "/#testimonials" },

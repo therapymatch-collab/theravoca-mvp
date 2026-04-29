@@ -205,6 +205,50 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* OUR PROMISE — manifesto card. Placed between "How it works" and
+          testimonials so visitors see the success-definition right after
+          they understand the mechanics, before social proof. All copy is
+          editable in Site Copy → "Landing — Our promise". */}
+      <section
+        id="promise"
+        className="py-16 md:py-20"
+        data-testid="landing-promise"
+      >
+        <div className="max-w-5xl mx-auto px-5 sm:px-8">
+          <div className="bg-[#FBE9E5] border-2 border-[#C87965] rounded-3xl p-8 sm:p-12 relative overflow-hidden">
+            <svg
+              viewBox="0 0 80 50"
+              className="absolute right-6 top-6 w-24 h-16 text-[#C87965]/40 hidden sm:block"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              aria-hidden="true"
+            >
+              <circle cx="28" cy="25" r="20" />
+              <circle cx="52" cy="25" r="20" />
+            </svg>
+            <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] font-semibold mb-4">
+              {t("landing.promise.eyebrow", "the match — our promise")}
+            </p>
+            <h3 className="font-serif-display text-3xl sm:text-4xl text-[#2D4A3E] leading-snug max-w-2xl">
+              {t("landing.promise.heading", "We exist for one outcome.")}
+            </h3>
+            <p className="text-base sm:text-lg text-[#2B2A29]/85 mt-5 max-w-3xl leading-relaxed">
+              {t(
+                "landing.promise.body",
+                "A successful match means the patient and therapist work together long enough for the patient to report feeling better about their presenting issue — and to view the relationship and time together as ultimately beneficial in their life.",
+              )}
+            </p>
+            <p className="text-sm text-[#6D6A65] mt-6 max-w-2xl">
+              {t(
+                "landing.promise.tagline",
+                "Patient + therapist + time = a third thing — a relationship that helps. Everything we build serves that.",
+              )}
+            </p>
+          </div>
+        </div>
+      </section>
+
       <VideoTestimonials />
 
       {/* DIFFERENT */}

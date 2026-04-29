@@ -2152,3 +2152,40 @@ User followed up: "needs review — what fields need to be fixed and how do I fi
 - ✅ Curl: `POST /api/admin/therapists/{id}/clear-reapproval` returns `{status: "reapproved"}`; subsequent `GET /admin/therapists` shows therapist no longer has the flag.
 - ✅ Lint clean (admin.py + AdminDashboard.jsx).
 
+
+
+## Iter-88 (Apr 29 2026) — "The match" promise + deep-match opt-in (P1/P2/P3)
+
+User picked manifesto card (Option 4) on Landing and Start-A for the patient intake out of 17 reviewed mockups.
+
+### Landing — "Our promise" manifesto card
+- Section between How-it-works and Testimonials (`#promise`). Coral border, dual-circle SVG, full success definition.
+- 4 strings via Site Copy: `landing.promise.{eyebrow,heading,body,tagline}`.
+
+### Patient intake — Start-A deep-match opt-in
+- Banner above the form card (only shown until the patient picks). "Yes — go deeper" or "Skip". Site-copy-editable: `intake.deep.banner.{eyebrow,heading,body,yes,skip}`.
+- Once chosen, banner replaced by badge ("Standard match" / "✦ Deep match") with `change` link.
+- Form refactored from numeric step indices (`step === 0`) to semantic IDs (`currentId === "who"`) so the list can grow dynamically.
+- Standard intake = 8 steps; deep intake = 11 (3 extra inserted before contact).
+
+### Deep-match steps (P1/P2/P3)
+- **P1** "When therapy works" — pick 2 of 5. Maps to therapist T1.
+- **P2** "What working looks like" — pick 2 of 5. Mirrors therapist T3.
+- **P3** "What they should already get" — open text ≤800 chars. Will feed Contextual Resonance axis (embeddings).
+
+### Backend
+- `RequestCreate` model + `deep_match_opt_in: Optional[bool]`, `p1_communication: list[str] max=2`, `p2_change: list[str] max=2`, `p3_resonance: Optional[str] max=2000`.
+- `model_dump()` flow auto-persists new fields on `/api/patients/intake`.
+- 3 new pytest regressions in `test_iteration88_deep_match_intake.py` (accepts deep payload, defaults when skipped, rejects >2 picks). All pass.
+
+### Tests
+- ✅ Live Playwright walkthrough: clicked all 11 deep-match steps. Labels: "Step 8 of 11: When therapy works (pick 2)", "Step 11 of 11: Where to reach you" etc.
+- ✅ Site Copy editor shows all 4 `landing.promise.*` keys.
+- ✅ Lint clean.
+
+### Still upcoming for the full a-d delivery
+- T1–T5 therapist questions (required at signup + back-fill prompt for existing therapists)
+- Communication Style (P1 ↔ T1+T4) 0.40 + Theory of Change (P2 ↔ T3) 0.35 in matching engine
+- Contextual Resonance (P3 ↔ T5+T2) 0.25 with OpenAI embeddings via Emergent LLM key
+- Promise statement on therapist signup + portal
+

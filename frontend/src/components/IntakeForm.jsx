@@ -31,6 +31,36 @@ const STEPS_DEFAULTS = [
   "Where to reach you",
 ];
 
+// Extra steps inserted into the flow when the patient taps "Yes — go
+// deeper" on the Start-A banner. Each maps to one of the P1/P2/P3
+// questions from the scoring map. Inserted BEFORE the contact step so
+// the patient finishes on the familiar "where to reach you" finale.
+const DEEP_MATCH_STEPS = [
+  "When therapy works (pick 2)",
+  "What working looks like (pick 2)",
+  "What they should already get",
+];
+
+// P1 — "When your therapist is really helping, what are they doing?"
+// Maps 1:1 to therapist T1 ranking on the same five behaviors.
+const P1_OPTIONS = [
+  { v: "truth", l: "Telling me the truth, even when it's uncomfortable" },
+  { v: "questions", l: "Asking questions that help me see things differently" },
+  { v: "tools", l: "Giving me specific tools and strategies" },
+  { v: "listen", l: "Listening deeply and letting me feel what I need to feel" },
+  { v: "patterns", l: "Sharing observations about patterns they notice in me" },
+];
+// P2 — "What would make you feel like therapy is actually working?"
+// Mirrors therapist T3 — same five concepts reworded; matching score
+// is overlap of picks ÷ 2.
+const P2_OPTIONS = [
+  { v: "self_understanding", l: "I understand myself and my patterns better" },
+  { v: "daily_life", l: "I'm handling daily life noticeably better" },
+  { v: "feelings", l: "I'm feeling emotions I've been avoiding" },
+  { v: "relationships", l: "My relationships are improving" },
+  { v: "self_regulation", l: "I have a clear plan for when I'm struggling" },
+];
+
 const PRIORITY_FACTORS = [
   // Soft axes only — the "always hard" ones (state, type of therapy, main
   // concern, age group) and the patient-toggleable hards (insurance,
@@ -256,6 +286,15 @@ export default function IntakeForm() {
     sms_opt_in: false,
     priority_factors: [],
     strict_priorities: false,
+    // ── Deep-match opt-in fields (P1/P2/P3 — only collected when the
+    // patient taps "Yes — go deeper" on the Start-A banner above the
+    // form. `deep_match_opt_in === null` means they haven't decided yet,
+    // `false` means they explicitly chose standard, `true` means they
+    // unlocked the 3 extra questions.
+    deep_match_opt_in: null,
+    p1_communication: [],   // pick 2 from P1_OPTIONS
+    p2_change: [],          // pick 2 from P2_OPTIONS
+    p3_resonance: "",       // open text — what should the therapist 'get' about you
   });
   const set = (k, v) => setData((d) => ({ ...d, [k]: v }));
   const toggleArr = (k, v, max) =>
@@ -328,9 +367,9 @@ export default function IntakeForm() {
   };
 
   const canNext = () => {
-    if (step === 0) return data.client_type && data.age_group && data.location_state;
-    if (step === 1) return data.presenting_issues.length >= 1;
-    if (step === 2) {
+    if (currentId === "who") return data.client_type && data.age_group && data.location_state;
+    if (currentId === "issues") return data.presenting_issues.length >= 1;
+    if (currentId === "format") {
       if (!data.modality_preference) return false;
       if (
         ["in_person_only", "prefer_inperson", "hybrid"].includes(
@@ -345,7 +384,7 @@ export default function IntakeForm() {
       }
       return true;
     }
-    if (step === 3) {
+    if (currentId === "payment") {
       if (!data.payment_type) return false;
       if (data.payment_type === "cash") return !!data.budget;
       const insName = data.insurance_name;
@@ -357,13 +396,16 @@ export default function IntakeForm() {
       if (data.payment_type === "either") return insOk && !!data.budget;
       return true;
     }
-    if (step === 4)
+    if (currentId === "logistics")
       return (
         data.availability_windows.length >= 1 && data.urgency && data.prior_therapy
       );
-    if (step === 5) return true;
-    if (step === 6) return true; // priority factors are optional
-    if (step === 7)
+    if (currentId === "prefs") return true;
+    if (currentId === "priority") return true; // priority factors are optional
+    if (currentId === "p1") return data.p1_communication.length === 2;
+    if (currentId === "p2") return data.p2_change.length === 2;
+    if (currentId === "p3") return true; // open-text — optional
+    if (currentId === "contact")
       return (
         emailLooksOk(data.email) &&
         !!data.referral_source &&
@@ -434,15 +476,15 @@ export default function IntakeForm() {
   };
 
   const stepBlockReason = () => {
-    if (step === 0) {
+    if (currentId === "who") {
       if (!data.client_type) return "Pick who this referral is for.";
       if (!data.age_group) return "Pick the client's age group.";
       if (!data.location_state) return "Pick a state.";
       return "";
     }
-    if (step === 1 && data.presenting_issues.length === 0)
+    if (currentId === "issues" && data.presenting_issues.length === 0)
       return "Pick at least one issue you'd like help with.";
-    if (step === 2) {
+    if (currentId === "format") {
       if (!data.modality_preference) return "Choose how the client prefers to meet.";
       if (
         ["in_person_only", "prefer_inperson", "hybrid"].includes(
@@ -459,7 +501,7 @@ export default function IntakeForm() {
       }
       return "";
     }
-    if (step === 3) {
+    if (currentId === "payment") {
       if (!data.payment_type) return "Pick how the client will pay.";
       if (data.payment_type === "cash" && !data.budget)
         return "Enter the per-session cash budget.";
@@ -478,14 +520,18 @@ export default function IntakeForm() {
       }
       return "";
     }
-    if (step === 4) {
+    if (currentId === "logistics") {
       if (data.availability_windows.length === 0)
         return "Pick at least one availability window.";
       if (!data.urgency) return "Pick how urgent this is.";
       if (!data.prior_therapy) return "Tell us about prior therapy experience.";
       return "";
     }
-    if (step === 7) {
+    if (currentId === "p1" && data.p1_communication.length !== 2)
+      return "Pick exactly 2.";
+    if (currentId === "p2" && data.p2_change.length !== 2)
+      return "Pick exactly 2.";
+    if (currentId === "contact") {
       if (!emailLooksOk(data.email))
         return "Enter a valid personal email — disposable / temp addresses aren't accepted.";
       if (!data.referral_source) return "Pick how you heard about us.";
@@ -498,7 +544,21 @@ export default function IntakeForm() {
   };
 
   // Resolve step titles via t() so admins can edit them in Site Copy.
-  const STEPS = STEPS_DEFAULTS.map((d, i) => t(`intake.step.${i}`, d));
+  // Step list grows by 3 (P1/P2/P3) when the patient opted into the
+  // deep match. We carry semantic IDs alongside the labels so render
+  // logic doesn't depend on numeric indices (which shift when deep is
+  // enabled). `currentId` is the active step's ID — used in place of
+  // literal `step === N` checks below.
+  const isDeep = data.deep_match_opt_in === true;
+  const BASE_IDS = ["who", "issues", "format", "payment", "logistics", "prefs", "priority", "contact"];
+  const STEP_IDS = isDeep
+    ? ["who", "issues", "format", "payment", "logistics", "prefs", "priority", "p1", "p2", "p3", "contact"]
+    : BASE_IDS;
+  const STEP_LABELS = isDeep
+    ? [...STEPS_DEFAULTS.slice(0, 7), ...DEEP_MATCH_STEPS, STEPS_DEFAULTS[7]]
+    : STEPS_DEFAULTS;
+  const STEPS = STEP_LABELS.map((d, i) => t(`intake.step.${STEP_IDS[i]}`, d));
+  const currentId = STEP_IDS[step] || BASE_IDS[step];
   const progressPct = ((step + 1) / STEPS.length) * 100;
 
   return (
@@ -520,6 +580,77 @@ export default function IntakeForm() {
           </p>
         </div>
 
+        {/* Start-A: Deep-match opt-in. Only shown before the patient has
+            decided. Once they pick yes/no, the banner is replaced with a
+            small badge indicating the chosen mode. */}
+        {data.deep_match_opt_in === null && (
+          <div
+            className="mb-8 bg-gradient-to-br from-[#FBE9E5] to-[#FDFBF7] border border-[#F4C7BE] rounded-2xl p-6"
+            data-testid="deep-match-banner"
+          >
+            <p className="text-xs uppercase tracking-[0.2em] text-[#C8412B] font-semibold mb-2">
+              {t("intake.deep.banner.eyebrow", "✦ Optional · ~90 seconds extra")}
+            </p>
+            <h3 className="font-serif-display text-2xl text-[#2D4A3E] mb-2 leading-snug">
+              {t("intake.deep.banner.heading", "Want a deeper match?")}
+            </h3>
+            <p className="text-sm text-[#2B2A29]/85 leading-relaxed">
+              {t(
+                "intake.deep.banner.body",
+                "Answer 3 extra questions and we'll match you with a therapist who really understands how you think — not just one who treats your diagnosis.",
+              )}
+            </p>
+            <div className="flex flex-wrap gap-3 mt-5">
+              <button
+                type="button"
+                onClick={() => set("deep_match_opt_in", true)}
+                className="tv-btn-primary text-sm"
+                data-testid="deep-match-yes"
+              >
+                {t("intake.deep.banner.yes", "Yes — go deeper")}
+              </button>
+              <button
+                type="button"
+                onClick={() => set("deep_match_opt_in", false)}
+                className="text-sm text-[#6D6A65] underline self-center"
+                data-testid="deep-match-skip"
+              >
+                {t("intake.deep.banner.skip", "Skip — standard match is fine")}
+              </button>
+            </div>
+          </div>
+        )}
+        {data.deep_match_opt_in !== null && (
+          <div
+            className="mb-4 flex items-center justify-end gap-3"
+            data-testid="deep-match-status"
+          >
+            <span
+              className={`inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider rounded-full px-3 py-1 border ${
+                data.deep_match_opt_in
+                  ? "bg-[#FBE9E5] text-[#C8412B] border-[#F4C7BE]"
+                  : "bg-[#FDFBF7] text-[#6D6A65] border-[#E8E5DF]"
+              }`}
+            >
+              {data.deep_match_opt_in ? "✦ Deep match" : "Standard match"}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                // Allow the patient to switch modes mid-flow. Reset to
+                // null and clamp the step index so we don't end up out
+                // of bounds when the steps array shrinks.
+                set("deep_match_opt_in", null);
+                setStep((s) => Math.min(s, BASE_IDS.length - 1));
+              }}
+              className="text-[11px] text-[#6D6A65] underline hover:text-[#2D4A3E]"
+              data-testid="deep-match-change"
+            >
+              change
+            </button>
+          </div>
+        )}
+
         <div ref={cardRef} className="bg-white border border-[#E8E5DF] rounded-3xl shadow-sm p-6 sm:p-10">
           <div className="mb-6">
             <div className="flex justify-between text-xs text-[#6D6A65] mb-2">
@@ -535,7 +666,7 @@ export default function IntakeForm() {
           </div>
 
           <div className="min-h-[280px] tv-fade-up" key={step}>
-            {step === 0 && (
+            {currentId === "who" && (
               <div className="space-y-6">
                 <Group label="What type of therapy is needed?">
                   <PillRow
@@ -559,7 +690,7 @@ export default function IntakeForm() {
               </div>
             )}
 
-            {step === 1 && (
+            {currentId === "issues" && (
               <div>
                 <Group
                   label="Main concerns the client wants help with"
@@ -588,7 +719,7 @@ export default function IntakeForm() {
               </div>
             )}
 
-            {step === 2 && (
+            {currentId === "format" && (
               <div className="space-y-6">
                 <Group label="How would the client prefer to meet?">
                   <PillCol
@@ -686,7 +817,7 @@ export default function IntakeForm() {
               </div>
             )}
 
-            {step === 3 && (
+            {currentId === "payment" && (
               <div className="space-y-5">
                 <Group label="How would the client like to pay?">
                   <PillRow
@@ -790,7 +921,7 @@ export default function IntakeForm() {
               </div>
             )}
 
-            {step === 4 && (
+            {currentId === "logistics" && (
               <div className="space-y-6">
                 <Group
                   label="When is the client generally available?"
@@ -888,7 +1019,7 @@ export default function IntakeForm() {
               </div>
             )}
 
-            {step === 5 && (
+            {currentId === "prefs" && (
               <div className="space-y-6">
                 <Group label="Therapist experience preference (pick all that apply)">
                   <PillRow
@@ -1027,7 +1158,7 @@ export default function IntakeForm() {
               </div>
             )}
 
-            {step === 6 && (
+            {currentId === "priority" && (
               <div className="space-y-5">
                 <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl p-4 text-sm text-[#2B2A29] leading-relaxed">
                   <p className="font-semibold text-[#2D4A3E] mb-1.5">
@@ -1123,7 +1254,113 @@ export default function IntakeForm() {
               </div>
             )}
 
-            {step === 7 && (
+            {/* P1 — Communication style. Pick exactly 2. Maps 1:1 to
+                therapist T1 ranking on the same five behaviors. */}
+            {currentId === "p1" && (
+              <div className="space-y-5">
+                <div className="bg-[#FBE9E5] border border-[#F4C7BE] rounded-xl px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#C8412B] font-semibold mb-1">
+                    ✦ Deep match · 1 of 3
+                  </p>
+                  <p className="text-sm text-[#2B2A29]/85 leading-relaxed">
+                    {t(
+                      "intake.deep.p1.intro",
+                      "These 3 questions help us match you with a therapist whose style genuinely fits — not just one who treats your diagnosis.",
+                    )}
+                  </p>
+                </div>
+                <Group
+                  label={t(
+                    "intake.deep.p1.label",
+                    "When your therapist is really helping, what are they doing?",
+                  )}
+                  hint={t(
+                    "intake.deep.p1.hint",
+                    "Pick exactly 2.",
+                  )}
+                >
+                  <PillCol
+                    items={P1_OPTIONS}
+                    selected={data.p1_communication}
+                    onSelect={(v) => toggleArr("p1_communication", v, 2)}
+                    testid="p1"
+                  />
+                  <p className="text-[11px] text-[#6D6A65] mt-2">
+                    {data.p1_communication.length}/2 selected
+                  </p>
+                </Group>
+              </div>
+            )}
+
+            {/* P2 — Theory of change. Pick exactly 2. Same five concepts
+                that therapists rank in T3; matching score is overlap ÷ 2. */}
+            {currentId === "p2" && (
+              <div className="space-y-5">
+                <div className="bg-[#FBE9E5] border border-[#F4C7BE] rounded-xl px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#C8412B] font-semibold mb-1">
+                    ✦ Deep match · 2 of 3
+                  </p>
+                </div>
+                <Group
+                  label={t(
+                    "intake.deep.p2.label",
+                    "What would make you feel like therapy is actually working?",
+                  )}
+                  hint={t("intake.deep.p2.hint", "Pick exactly 2.")}
+                >
+                  <PillCol
+                    items={P2_OPTIONS}
+                    selected={data.p2_change}
+                    onSelect={(v) => toggleArr("p2_change", v, 2)}
+                    testid="p2"
+                  />
+                  <p className="text-[11px] text-[#6D6A65] mt-2">
+                    {data.p2_change.length}/2 selected
+                  </p>
+                </Group>
+              </div>
+            )}
+
+            {/* P3 — Contextual resonance. Open text; matched against
+                therapist T5 (lived experience) + T2 (best-client narrative)
+                via embeddings. Optional — empty submissions skip the
+                Contextual axis instead of penalising. */}
+            {currentId === "p3" && (
+              <div className="space-y-5">
+                <div className="bg-[#FBE9E5] border border-[#F4C7BE] rounded-xl px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#C8412B] font-semibold mb-1">
+                    ✦ Deep match · 3 of 3
+                  </p>
+                </div>
+                <Field
+                  label={t(
+                    "intake.deep.p3.label",
+                    "What should your therapist already get about you without you having to explain it?",
+                  )}
+                >
+                  <Textarea
+                    rows={5}
+                    maxLength={800}
+                    value={data.p3_resonance}
+                    onChange={(e) => set("p3_resonance", e.target.value)}
+                    placeholder={t(
+                      "intake.deep.p3.placeholder",
+                      "e.g. growing up in an immigrant household, the weight of being the 'responsible one,' how exhausting it is to mask all day…",
+                    )}
+                    className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                    data-testid="p3-input"
+                  />
+                  <p className="text-[11px] text-[#6D6A65] mt-2 leading-snug">
+                    {t(
+                      "intake.deep.p3.helper",
+                      "Optional, but the more you share, the better we match for lived-experience fit. Therapists never see this verbatim — we use it to rank for resonance.",
+                    )}
+                  </p>
+                </Field>
+              </div>
+            )}
+
+            {currentId === "contact" && (
               <div className="space-y-5">
                 <Field label="Your email (we'll send your matches here)">
                   <Input

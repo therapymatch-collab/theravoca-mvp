@@ -132,6 +132,25 @@ class RequestCreate(BaseModel):
     priority_factors: list[str] = Field(default_factory=list, max_length=5)
     # If True, hard-filter therapists who score 0 on any priority axis.
     strict_priorities: bool = False
+    # ─── Deep match opt-in (P1/P2/P3 — Iter-88) ──────────────────────
+    # Patients can optionally answer 3 nuance questions that map onto
+    # the therapist T1/T3/T5+T2 questions. When `deep_match_opt_in` is
+    # True, P1+P2+P3 are stored on the request doc and the matching
+    # engine is allowed to add the "Communication Style" + "Theory of
+    # Change" + "Contextual Resonance" axes. False/None means standard
+    # matching with the existing axes only.
+    deep_match_opt_in: Optional[bool] = None
+    # P1 — "When your therapist is really helping, what are they
+    # doing?" Pick exactly 2 from the slug set
+    # {truth, questions, tools, listen, patterns}.
+    p1_communication: list[str] = Field(default_factory=list, max_length=2)
+    # P2 — "What would make you feel like therapy is actually working?"
+    # Pick exactly 2 from {self_understanding, daily_life, feelings,
+    # relationships, self_regulation}.
+    p2_change: list[str] = Field(default_factory=list, max_length=2)
+    # P3 — "What should your therapist already get about you without
+    # you having to explain it?" Open text, optional.
+    p3_resonance: Optional[str] = Field(default="", max_length=2000)
     # ─── Bot defenses (rejected at the route layer; never persisted) ───
     # Honeypot input — a hidden field bots auto-fill. Real users leave it
     # blank because they never see it.
