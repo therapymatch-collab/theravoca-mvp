@@ -1,0 +1,35 @@
+{
+  "summary": "Iter-86 verified end-to-end. Backend: 4/4 backfill+strip pytest cases pass — POST /api/admin/backfill-therapists adds languages_spoken, license_picture, bio, free_consult, sliding_scale to audit.fields_added (along with iter-84/85 license_number/license_expires_at/profile_picture/secondary_specialties), and POST /api/admin/strip-backfill cleanly $unsets all 9 fields and restores the real email. Frontend: completed full 8-step intake on '/' (Get smart matched - free!) with in_person_only modality + insurance_strict + availability_strict + urgency_strict toggled. Preview modal renders the HARD legend pill, all 4 always-hard rows (Who-this-referral-is-for, Age group, Location, Concerns) AND all 4 patient-toggleable hards (Session format, Insurance, Availability, Urgency) carry the HARD badge + orange background, while Cash budget/Therapy history/Preferred gender/age/language/Style/Therapy approaches/Referred by/Email/Phone are correctly soft (no badge, no orange).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Intake preview modal", "issues": ["Cosmetic: enum slugs surface raw in the preview (e.g. Session format = 'in_person_only', Concerns = 'anxiety', Availability = 'weekday_evening', Preferred gender = 'no_pref'). Patient-facing copy should map these to human labels ('In-person only', 'Anxiety', 'Weekday evenings', 'No preference') matching the labels used on the form. Same logic exists in MODALITY/AGE_GROUPS/AVAILABILITY/URGENCY/GENDERS arrays — just look up the .l for each .v. Not blocking iter-86 acceptance but worth a polish pass."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration86_backfill.py",
+    "/app/test_reports/pytest/iter86_backfill.xml"
+  ],
+  "action_items": [
+    "(Polish, optional) Map enum values to display labels in ReviewPreviewModal (modality_preference, age_group, presenting_issues, availability_windows, gender_preference, urgency)."
+  ],
+  "critical_code_review_comments": [
+    "backfill.py:284 — `if not (t.get('license_picture') or '').strip()`: works for str but if license_picture is ever stored as a list/dict (e.g. multi-image upload), `.strip()` on non-str will TypeError. Defensive cast or isinstance check would future-proof.",
+    "routes/admin.py:795 admin_update_therapist whitelist does NOT include `_backfill_audit`, languages_spoken, or office_phone — verify that's intentional. Tests had to bypass via direct mongo write to reset audit. If admin UI ever needs to clear/rotate the audit (e.g. correcting a wrong original_email), there's no API surface.",
+    "routes/admin.py:1067 strip skips therapists whose original_email is blank or contains 'therapymatch+'. After mass demo-seeding, MOST therapists will be in this 'cannot strip' bucket. Pre-launch UX should expose backfill-status counts + a manual override (force unset audit) so the admin doesn't have to mongo-shell each one.",
+    "IntakeForm.jsx:1374 hardRows Set — labels are matched by exact string ('Who this referral is for' etc). If anyone localises the intake copy or renames a row label, the badge silently disappears. Better to tag rows with a stable slug/role at the data source (rows = [[slug, label, value, isHard?]]) rather than reverse-mapping label→hard-set.",
+    "IntakeForm.jsx ReviewPreviewModal renders raw enum values (`in_person_only`, `weekday_evening`, `no_pref`, `anxiety`) instead of human labels — the form already has MODALITY/AGE_GROUPS/AVAILABILITY/URGENCY/GENDERS arrays with .l labels. Missed mapping is a UX paper cut."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration86_backfill.py"
+  ],
+  "success_rate": {"backend": "100% (4/4)", "frontend": "100% (HARD legend + 8/8 expected hard rows + 10/10 non-hard rows correct)"},
+  "test_credentials": "admin / admin123! (X-Admin-Password header)",
+  "seed_data_creation": "Test mutates one therapist (id ac9465a2-2edf-48b9-aed4-993c5fad08c5, original email therapymatch+44444@gmail.com). Mongo $unset of 9 fields + audit, then sets email='real.test@example.com', then runs backfill, then strip. After strip the therapist is left in a clean stripped state with email='real.test@example.com'. NOTE: original email therapymatch+44444@gmail.com is NOT restored (it was already a placeholder so strip would have skipped — instead the test pre-set a real email so strip would actually run). Fixture explicitly resets the email back to the original via direct mongo write at end of test. Re-running test_followup_backfill_repopulates_after_strip then re-fakes the rest of the corpus.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-86 acceptance criteria fully met. Backend backfill audit now captures 9 fields; strip cleanly removes them. Frontend preview modal correctly highlights HARD rows with both badge and orange background, conditionally including the 4 toggleable hards based on insurance_strict/in_person_only/availability_strict/urgency_strict form state. Verified screenshot at .screenshots/preview_modal_full.png. The only outstanding nit is enum-vs-label rendering in the preview (purely cosmetic). Backfill state of corpus: a fresh backfill was run during the followup test, so all therapists have iter-86 fields populated again — fine for next iteration.",
+  "rca of the issue": "n/a — no bugs found"
+}

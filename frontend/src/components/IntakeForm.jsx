@@ -1366,6 +1366,21 @@ function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
       ? `Other: ${data.referral_source_other}`
       : data.referral_source || "—";
   const notes = (data.notes || "").trim();
+  // Which rows count as "hard requirements" for this referral. Always-hard
+  // fields are flagged unconditionally. Patient-toggleable hards (insurance,
+  // format/distance, availability, urgency) only get the badge when the
+  // patient ticked the corresponding `*_strict` box on the form.
+  const isInPersonHard = data.modality_preference === "in_person_only";
+  const hardRows = new Set([
+    "Who this referral is for",   // client_type — always hard
+    "Age group",                  // always hard
+    "Location",                   // state license — always hard
+    "Concerns",                   // primary concern — always hard
+    ...(data.insurance_strict ? ["Insurance"] : []),
+    ...(isInPersonHard ? ["Session format"] : []),
+    ...(data.availability_strict ? ["Availability"] : []),
+    ...(data.urgency_strict ? ["Urgency"] : []),
+  ]);
   const rows = [
     ["Who this referral is for", data.client_type],
     ["Age group", data.age_group],
@@ -1374,6 +1389,7 @@ function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
     ["Session format", data.modality_preference],
     ["Insurance", insurance],
     ["Cash budget", cash],
+    ["Availability", (data.availability_windows || []).join(", ") || "—"],
     ["Urgency", data.urgency],
     ["Therapy history", data.previous_therapy ? "Has prior therapy" : "First-time"],
     ["Preferred gender", data.gender_preference || "Any"],
@@ -1418,17 +1434,48 @@ function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
             Take a quick look — therapists will only see this anonymized
             version (no contact info shared until you reach out).
           </p>
+          <div
+            className="mt-3 flex items-center gap-2 text-xs text-[#2B2A29] bg-[#FBE9E5] border border-[#F4C7BE] rounded-lg px-3 py-2"
+            data-testid="intake-preview-hard-legend"
+          >
+            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold text-[#C8412B] bg-white border border-[#F4C7BE] rounded-full px-2 py-0.5">
+              HARD
+            </span>
+            <span className="leading-snug">
+              Fields marked HARD are filters — therapists must match them
+              exactly to appear in your results.
+            </span>
+          </div>
           <dl className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
-            {rows.map(([label, value]) => (
-              <div key={label}>
-                <dt className="text-[10px] uppercase tracking-wider text-[#6D6A65]">
-                  {label}
-                </dt>
-                <dd className="text-[#2B2A29] font-medium leading-snug break-words">
-                  {value || "—"}
-                </dd>
-              </div>
-            ))}
+            {rows.map(([label, value]) => {
+              const isHard = hardRows.has(label);
+              return (
+                <div
+                  key={label}
+                  className={
+                    isHard
+                      ? "rounded-lg bg-[#FBE9E5] border border-[#F4C7BE] px-3 py-2 -mx-1"
+                      : ""
+                  }
+                  data-testid={`intake-preview-row-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+                >
+                  <dt className="text-[10px] uppercase tracking-wider text-[#6D6A65] flex items-center gap-1.5">
+                    {label}
+                    {isHard && (
+                      <span
+                        className="inline-flex text-[9px] font-semibold tracking-wider text-[#C8412B] bg-white border border-[#F4C7BE] rounded-full px-1.5 py-[1px]"
+                        title="This is a hard filter — therapists must match exactly"
+                      >
+                        HARD
+                      </span>
+                    )}
+                  </dt>
+                  <dd className="text-[#2B2A29] font-medium leading-snug break-words mt-1">
+                    {value || "—"}
+                  </dd>
+                </div>
+              );
+            })}
             {notes && (
               <div className="sm:col-span-2">
                 <dt className="text-[10px] uppercase tracking-wider text-[#6D6A65]">

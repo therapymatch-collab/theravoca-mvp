@@ -257,6 +257,38 @@ def backfill_therapist(t: dict[str, Any], idx: int) -> dict[str, Any]:
             f"with practical tools."
         )
 
+    # Languages spoken — convention is the list captures languages BEYOND
+    # English (English is implicit). ~35% of therapists offer one or two
+    # additional languages; bias Spanish since that matches Idaho demand.
+    if t.get("languages_spoken") is None or t.get("languages_spoken") == []:
+        roll = random.random()
+        if roll < 0.20:
+            set_fields["languages_spoken"] = ["Spanish"]
+        elif roll < 0.30:
+            set_fields["languages_spoken"] = random.sample(
+                ["Spanish", "Korean", "Vietnamese", "Mandarin", "Arabic", "ASL"],
+                k=random.randint(1, 2),
+            )
+        elif roll < 0.35:
+            set_fields["languages_spoken"] = ["ASL"]
+        else:
+            # English-only — explicit empty list so we don't keep
+            # re-rolling on every backfill pass.
+            set_fields["languages_spoken"] = []
+
+    # License document upload (base64 image / PDF in production). For
+    # backfill we drop in a placehold.co URL that obviously labels itself
+    # as a placeholder — admins glancing at the doc viewer immediately
+    # see "this is fake". Strip-backfill removes the field entirely so the
+    # therapist must upload the real one before going live.
+    if not (t.get("license_picture") or "").strip():
+        cred = (
+            set_fields.get("credential_type") or t.get("credential_type") or "License"
+        ).replace(" ", "+")
+        set_fields["license_picture"] = (
+            f"https://placehold.co/600x800/EEE5DF/2D4A3E/png?text=Sample+{cred}+License+Doc"
+        )
+
     # Notification prefs default true
     if "notify_email" not in t:
         set_fields["notify_email"] = True
