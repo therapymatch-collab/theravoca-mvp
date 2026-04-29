@@ -238,7 +238,8 @@ class TestMatchingDifferentiator:
     def test_rank_therapists_diverges_match_scores(self):
         """Pull ≥10 therapists from live DB, run rank_therapists, verify
         the differentiator bonus diverges identical raw scores."""
-        import sys, asyncio
+        import sys
+        import asyncio
         sys.path.insert(0, "/app/backend")
         from matching import rank_therapists
         from deps import db

@@ -166,7 +166,7 @@ def test_admin_site_copy_upsert_and_delete_round_trip(s, admin_headers):
     r2 = s.get(f"{BASE_URL}/api/admin/site-copy", headers=admin_headers, timeout=10)
     rows = r2.json().get("rows", [])
     found = next((row for row in rows if row.get("key") == test_key), None)
-    assert found is not None, f"upserted key not found in admin list"
+    assert found is not None, "upserted key not found in admin list"
     assert found.get("value") == test_value
 
     # Verify via public GET

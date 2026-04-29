@@ -96,6 +96,7 @@ def created_inperson_eagle_request(s):
     # fetch verification token via admin
     detail = s.get(f"{BASE_URL}/api/admin/requests/{rid}",
                    headers={"x-admin-password": ADMIN_PASSWORD}, timeout=15).json()
+    _ = detail  # admin fetch is the side-effect we care about; payload not asserted
     # verify via known token by querying mongo? Not available — instead use public verify path via admin field
     # The token isn't returned by admin (excluded). Use mongoshell via subprocess.
     import subprocess
@@ -187,7 +188,8 @@ class TestAdminRequestDetailDistance:
             assert "office_locations" in n
         # Eagle area should have at least one therapist <15mi (Boise/Meridian/Eagle)
         close = [n for n in with_dist if n["distance_miles"] < 15]
-        far = [n for n in with_dist if n["distance_miles"] > 100]
+        # Note: previously captured a `far` slice for an inverse-distance
+        # assertion that was removed. Range is exercised below via max/min.
         assert close, "Expected at least 1 therapist within 15mi for Eagle 83616"
         # If any far therapist made it (telehealth fallback), distance must be > 75
         # Either way, distances span > 0 → confirms haversine compute
