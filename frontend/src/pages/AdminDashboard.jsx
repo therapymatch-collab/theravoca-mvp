@@ -3099,11 +3099,16 @@ const PROVIDER_COLUMNS = [
         <SubBadge t={t} />
         {t.pending_reapproval && (
           <span
-            className="mt-1 inline-flex items-center gap-1 text-[10px] bg-[#FBF2E8] text-[#B8742A] border border-[#F0DEC8] rounded-full px-2 py-0.5 w-fit"
-            title={`Changes awaiting admin re-review: ${(t.pending_reapproval_fields || []).join(", ") || "fields"}`}
+            className="mt-1 inline-flex items-center gap-1 text-[10px] bg-[#FBF2E8] text-[#B8742A] border border-[#F0DEC8] rounded-full px-2 py-0.5 w-fit max-w-[220px]"
+            title={`Therapist edited ${(t.pending_reapproval_fields || []).join(", ") || "sensitive fields"}. Open their profile, review the change, and click "Approve changes" to publish.`}
             data-testid={`pending-reapproval-badge-${t.id}`}
           >
-            ⚠ Needs re-review
+            ⚠ Re-review:{" "}
+            <span className="font-medium truncate">
+              {((t.pending_reapproval_fields || []).map((f) =>
+                f.replace(/_/g, " "),
+              ).join(", ")) || "fields"}
+            </span>
           </span>
         )}
       </td>

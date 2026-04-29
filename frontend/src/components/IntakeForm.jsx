@@ -1434,6 +1434,10 @@ function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
   // format/distance, availability, urgency) only get the badge when the
   // patient ticked the corresponding `*_strict` box on the form.
   const isInPersonHard = data.modality_preference === "in_person_only";
+  const isGenderHard =
+    !!data.gender_required &&
+    data.gender_preference &&
+    data.gender_preference !== "no_pref";
   const hardRows = new Set([
     "Who this referral is for",   // client_type — always hard
     "Age group",                  // always hard
@@ -1443,6 +1447,7 @@ function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
     ...(isInPersonHard ? ["Session format"] : []),
     ...(data.availability_strict ? ["Availability"] : []),
     ...(data.urgency_strict ? ["Urgency"] : []),
+    ...(isGenderHard ? ["Preferred gender"] : []),
     ...(data.language_strict &&
       data.preferred_language &&
       data.preferred_language !== "English"
@@ -1459,12 +1464,18 @@ function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
     ["Cash budget", cash],
     ["Availability", lookupMany(AVAILABILITY, data.availability_windows)],
     ["Urgency", lookup(URGENCY, data.urgency)],
-    ["Therapy history", data.previous_therapy ? "Has prior therapy" : "First-time"],
+    ["Therapy history", lookup(PRIOR_THERAPY, data.prior_therapy)],
     ["Preferred gender", lookup(GENDERS, data.gender_preference) || "Any"],
-    ["Preferred therapist age", data.therapist_age_preference || "Any"],
+    [
+      "Therapist experience",
+      lookupMany(EXPERIENCE, data.experience_preference) || "Any",
+    ],
     ["Preferred language", data.preferred_language || "English"],
-    ["Style preferences", (data.style_preferences || []).join(", ") || "—"],
-    ["Therapy approaches", (data.preferred_modalities || []).join(", ") || "—"],
+    [
+      "Style preferences",
+      lookupMany(STYLES, data.style_preference) || "—",
+    ],
+    ["Therapy approaches", (data.modality_preferences || []).join(", ") || "—"],
     ["Referred by", referralLine],
     ["Email", data.email || "—"],
     ["Phone", data.phone || "—"],

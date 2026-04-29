@@ -91,6 +91,56 @@ def _suggest_credential() -> tuple[str, str]:
     return cred_type, random.choice(license_pool)
 
 
+# Normalised mapping of any saved credential_type variant (lowercase token,
+# bare abbreviation, or full title) → license_pool of matching suffixes.
+# Built once at import. Keeps `_resolve_license_pool` cheap and robust to
+# whatever case/format the therapist's profile happens to use.
+_CRED_LOOKUP: dict[str, list[str]] = {}
+for _t, _pool in CREDENTIAL_TYPES:
+    _CRED_LOOKUP[_t.lower()] = _pool
+    for _suf in _pool:
+        _CRED_LOOKUP[_suf.lower()] = _pool
+# Common spelled-out / signup-form variants → same pool. These are the
+# values therapists actually pick from the public signup dropdown
+# (e.g., "Licensed Professional Counselor (LPC)") so without this map
+# the lookup falls back to LCSW for everyone whose `credential_type`
+# wasn't a lowercase internal token.
+_CRED_TITLE_HINTS: list[tuple[str, str]] = [
+    ("psychiatrist", "psychiatrist"),
+    ("psychologist", "psychologist"),
+    ("psyd", "psychologist"), ("phd", "psychologist"),
+    ("social worker", "lcsw"), ("lcsw", "lcsw"), ("licsw", "lcsw"),
+    ("lmsw", "lcsw"),
+    ("marriage", "lmft"), ("family therapist", "lmft"), ("lmft", "lmft"),
+    ("mental health", "lmhc"), ("lmhc", "lmhc"),
+    ("professional counselor", "lpc"), ("clinical professional counselor", "lpc"),
+    ("lpc", "lpc"), ("lcpc", "lpc"), ("lpcc", "lpc"), ("lcmhc", "lpc"),
+]
+
+
+def _resolve_license_pool(cred_type: str) -> list[str]:
+    """Return the license-suffix pool that matches `cred_type` no matter
+    whether it was stored as a lowercase internal token (`lpc`), a bare
+    abbreviation (`LPC`), or a full title (`Licensed Professional
+    Counselor (LPC)`). Falls back to a generic LCSW pool only when
+    nothing in the lookup matches."""
+    raw = (cred_type or "").strip().lower()
+    if not raw:
+        return ["LCSW"]
+    if raw in _CRED_LOOKUP:
+        return _CRED_LOOKUP[raw]
+    # Strip "(ABBR)" trailing block + try again on bare abbreviation.
+    import re as _re
+    cleaned = _re.sub(r"\s*\([^)]*\)\s*$", "", raw).strip()
+    if cleaned in _CRED_LOOKUP:
+        return _CRED_LOOKUP[cleaned]
+    # Fuzzy: title-substring match.
+    for hint, key in _CRED_TITLE_HINTS:
+        if hint in raw:
+            return _CRED_LOOKUP.get(key, ["LCSW"])
+    return ["LCSW"]
+
+
 def _ensure_full_name_with_license(name: str | None, suffix: str) -> str:
     name = (name or "").strip()
     if not name:
@@ -121,10 +171,11 @@ def backfill_therapist(t: dict[str, Any], idx: int) -> dict[str, Any]:
         cred_type, license_suffix = _suggest_credential()
         set_fields["credential_type"] = cred_type
     else:
-        # Pick a sensible license suffix matching the cred_type
-        license_pool = next(
-            (p for c, p in CREDENTIAL_TYPES if c == cred_type), ["LCSW"]
-        )
+        # Pick a sensible license suffix matching the cred_type, normalised
+        # for case + spelled-out title variants so therapists with
+        # "LPC" / "Licensed Professional Counselor (LPC)" / "lpc" all
+        # land on a counselor suffix instead of falling through to LCSW.
+        license_pool = _resolve_license_pool(cred_type)
         license_suffix = random.choice(license_pool)
 
     # Name with license
@@ -314,13 +365,19 @@ def backfill_therapist(t: dict[str, Any], idx: int) -> dict[str, Any]:
     # login if it wasn't set during signup.
     if not (t.get("license_number") or "").strip():
         cred = set_fields.get("credential_type") or t.get("credential_type") or "LCSW"
+        # Use the same case-insensitive resolver as the bio so the prefix
+        # always matches the therapist's actual credential (e.g., "LPC" or
+        # "lpc" both → "LPC-NNNNNN", not the LCSW fallback).
+        suffix = (_resolve_license_pool(cred) or ["LCSW"])[0]
         prefix = {
-            "Psychologist": "PSY",
-            "LCSW": "LCS",
-            "LCPC": "LCP",
+            "PhD": "PSY", "PsyD": "PSY",
+            "LCSW": "LCS", "LICSW": "LCS",
+            "LCPC": "LCP", "LPCC": "LCP", "LCMHC": "LCP",
             "LMFT": "LMT",
             "LPC": "LPC",
-        }.get(cred, "LIC")
+            "MD": "MD",
+            "LMHC": "LMH",
+        }.get(suffix, "LIC")
         set_fields["license_number"] = (
             f"{prefix}-{random.randint(100000, 999999)}"
         )

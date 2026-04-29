@@ -2084,3 +2084,42 @@ User asked for two pre-deploy items: (1) flag fields that act as hard filters in
 - ✅ Defensive cast on `license_picture` (handles non-string types from imports)
 - 🟡 Skipped: slug-based hardRows refactor (label-based works fine since labels are stable copy)
 - 🟡 Skipped: admin force-unset audit endpoint (out of scope; manual `db.therapists.update_many({}, {$unset: {_backfill_audit: ""}})` works for the operator)
+
+
+## Iter-87 (Apr 29 2026) — Preview field-name bugs + bio prefix + re-review badge clarity
+
+User reported two issues: (1) "make something hard that was soft, doesn't register when you preview it again" in the patient intake, (2) "what does Needs re-review mean?" on Ann Omodt's row in admin. Plus the open P3 — bio prefix bug.
+
+### Frontend — `IntakeForm.jsx` `ReviewPreviewModal`
+Five distinct stale-data bugs were causing rows to render empty / unchanged regardless of the user's actual answers:
+- `data.previous_therapy` → `data.prior_therapy` (state never had `previous_therapy`; Therapy history always rendered "First-time")
+- `data.style_preferences` → `data.style_preference` (always rendered "—")
+- `data.preferred_modalities` → `data.modality_preferences` (always rendered "—")
+- "Preferred therapist age" row removed (referenced `data.therapist_age_preference` which doesn't exist; replaced with "Therapist experience" using `data.experience_preference`)
+- `gender_required` toggle now flags "Preferred gender" as HARD in the preview (was completely missing from the `hardRows` Set)
+- Lookup helpers used so `prior_therapy`, `experience_preference`, and `style_preference` render human labels instead of raw slugs.
+
+### Backend — `backfill.py` `_resolve_license_pool` + license-number prefix
+Bio was rendering "Ann is a LCSW" for an LPC because the lookup `next((p for c, p in CREDENTIAL_TYPES if c == cred_type), ["LCSW"])` was case-sensitive — only matched lowercase internal tokens (`lpc`, `lcsw`, ...), so any uppercase abbreviation (`LPC`) or full title (`Licensed Professional Counselor (LPC)`) silently fell back to LCSW. Replaced with `_resolve_license_pool` that:
+1. Builds a normalised lookup table keyed off both the lowercase token AND every license suffix.
+2. Strips trailing `(ABBR)` parens.
+3. Falls back to substring hints on common spelled-out titles (e.g., "social worker", "marriage", "professional counselor").
+4. Returns LCSW only when nothing matches.
+
+License-number prefix ("LCS-", "PSY-", "LMT-", ...) now keys off the resolved suffix instead of the raw `credential_type`, so an LPC therapist gets `LPC-NNNNNN` instead of the LCSW fallback.
+
+### Frontend — Admin "Needs re-review" badge clarity
+Pending-reapproval badge (admin dashboard provider table) used to render only `⚠ Needs re-review` with the field list hidden in a tooltip. Updated to show `⚠ Re-review: primary specialties, license number` inline (truncated to 220px), with the full explanation + action prompt still in the tooltip. Affects every therapist row on the All Providers panel.
+
+### Files changed
+- `/app/frontend/src/components/IntakeForm.jsx` (lines 1432–1471: `hardRows`, `rows`, lookups)
+- `/app/backend/backfill.py` (added `_resolve_license_pool` helper + `_CRED_LOOKUP` / `_CRED_TITLE_HINTS` tables; rewrote credential branch + license-number prefix)
+- `/app/frontend/src/pages/AdminDashboard.jsx` (lines 3100–3113: inline pending-reapproval fields)
+- `/app/backend/tests/test_backfill_bio_prefix.py` (new) — 3 regression tests
+
+### Tests
+- ✅ 3/3 new pytest pass (`test_backfill_bio_prefix.py`)
+- ✅ Live Playwright reproduction of the intake-preview flow: clicked through all 8 steps with `gender_required=false` → preview correctly showed "Therapy history: Yes, and it helped" + "Style preferences: Warm and supportive" + "Therapy approaches: CBT" + "Therapist experience: No preference" (all previously broken). Closed preview, went back to step 5, ticked `gender_required`, returned to step 7, re-opened preview → "Preferred gender" row now renders with HARD badge ✅.
+- ✅ Lint clean (`IntakeForm.jsx`, `AdminDashboard.jsx`, `backfill.py`)
+- ✅ Backend service running cleanly post-reload
+
