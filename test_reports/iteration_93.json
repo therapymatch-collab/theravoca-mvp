@@ -1,0 +1,36 @@
+{
+  "summary": "Verified iter-93 scope: testid renames (intake-{next,back,submit}-btn, signup-{next,back}-btn), modal extractions (ReviewPreviewModal, SignupPreviewModal), and new admin HowItWorksPanel copy. All smoke checks pass. No stale legacy testids found (except unrelated apply-submit-btn in TherapistApply.jsx which is a separate page). Lint clean on all 5 files.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_executed": [
+    "Admin /admin master-password login (admin123!) -> /admin/dashboard OK",
+    "Admin More dropdown -> How it works tab: how-it-works-panel renders; how-step-0..how-step-11 all 12 present; how-step-0-open and how-step-1-open callouts present; step-0 title = '1. Generate leads'; step-11 title = '12. Pricing model'; how-it-works-loop card contains 'self-improving loop' + 'Ads -> leads -> requests -> matches -> successful matches -> smarter algorithm + more targeted ads -> more leads'",
+    "Landing /#start: OLD 'next-btn' absent; NEW 'intake-next-btn' present on initial step",
+    "Therapists /therapists/join#signup-form: OLD 'signup-next'/'signup-back' (no -btn suffix) absent; NEW 'signup-next-btn' present and correctly disabled on empty Step 1 Basics",
+    "grep sweep of /app/frontend + /app/backend for legacy 'next-btn|back-btn|submit-btn|signup-next|signup-back' (no -btn) -> only hit was 'apply-submit-btn' in TherapistApply.jsx (separate apply flow, unrelated to this rename)",
+    "ESLint clean: IntakeForm.jsx, TherapistSignup.jsx, ReviewPreviewModal.jsx, SignupPreviewModal.jsx, HowItWorksPanel.jsx"
+  ],
+  "tests_not_executed": [
+    "Did not walk the full 8-step patient intake to completion and open intake preview modal (heavy flow; scope here is rename verification + prior iter_42 already covered the structural refactor).",
+    "Did not walk the full 9-step therapist signup to completion and open signup preview modal (same rationale).",
+    "Modal prop-wiring validated via code inspection only: ReviewPreviewModal receives data/submitting/onClose/onConfirm/onToggleReceipt; SignupPreviewModal receives data/onClose/onConfirm/submitting; all testids present per source (intake-preview-modal, intake-preview-submit, intake-preview-edit, intake-preview-receipt-checkbox, intake-preview-deep-section, signup-preview-modal, signup-preview-deep-match, signup-preview-back, signup-preview-confirm)."
+  ],
+  "critical_code_review_comments": [
+    "Unrelated finding (NOT part of this iter): /app/frontend/src/pages/TherapistApply.jsx still uses 'apply-submit-btn' — this is correctly scoped to the 'therapist applies to a specific referral' flow, not the signup wizard, so the naming is fine. No action needed.",
+    "HowItWorksPanel.jsx lines up cleanly: 12 STEPS entries, two with open[] arrays (indices 0 and 1) -> matches expected how-step-{0,1}-open. Read-only, no API wiring needed. Copy reads well."
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only request)", "frontend": "100% on requested scope"},
+  "test_credentials": "Admin master password admin123! from /app/memory/test_credentials.md — works.",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter-93 scope (testid renames + modal extractions + admin HowItWorks copy) verified via Playwright + lint + grep. No regressions. If next iter touches the intake/signup wizards, re-run the full 8-step / 9-step walkthroughs and actually open both preview modals to validate the onConfirm handler fires POST /api/patients/intake and the therapist signup POST respectively.",
+  "rca of the issue": "N/A"
+}

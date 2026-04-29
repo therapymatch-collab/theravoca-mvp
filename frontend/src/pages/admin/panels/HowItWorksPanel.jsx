@@ -1,54 +1,111 @@
 /**
- * Internal documentation panel that shows the team how a patient
- * request flows through the system. Read-only — no API calls. Lives
- * under Admin → "How it works" tab so a new operator can ramp up
- * without spelunking through code.
+ * Internal documentation panel — the operator's "how the whole
+ * machine fits together" page. Lives under Admin → "How it works"
+ * tab. Read-only, no API calls.
+ *
+ * Updated to walk a new operator through the *full* business loop:
+ * lead generation → conversion → matching → therapist invitations →
+ * patient hand-off → automated follow-ups → algorithm self-improvement
+ * → marketing self-improvement → pricing.
+ *
+ * Open questions are surfaced inline so the team has a concrete
+ * checklist of what's automated vs. what still needs design / build.
  */
 import {
-  ClipboardCheck,
-  Mail,
+  Megaphone,
+  Filter,
   Brain,
-  Globe,
-  Users,
   Sparkles,
-  ListOrdered,
+  UserPlus,
+  Globe,
+  ListChecks,
+  Send,
+  Repeat,
+  TrendingUp,
+  Bot,
+  DollarSign,
 } from "lucide-react";
 
 const STEPS = [
   {
-    icon: ClipboardCheck,
-    title: "1. Patient submits intake",
-    body: "Anonymous form, no login. Patient picks concerns, modality, schedule, payment, and (optionally) which factors matter most. Bot defenses (honeypot + timing + per-IP rate limit) reject obvious spam before any DB write.",
+    icon: Megaphone,
+    title: "1. Generate leads",
+    body:
+      "Run paid ads (Meta, Google, TikTok) plus organic strategies (SEO, partnerships, founder-led content) to drive traffic to the website. Each ad ideally lands on a campaign-specific landing page that mirrors the ad's promise.",
+    open: [
+      "How can ad campaigns be automated end-to-end (creative refresh, audience expansion, budget pacing)?",
+      "Build a system that auto-generates landing pages from each paid ad — same headline + CTA so message-match scores stay high.",
+    ],
   },
   {
-    icon: Mail,
-    title: "2. Email verification",
-    body: "We send a verification link via Resend. Matching does NOT run until they click. If a request shows '0 matches' but the patient hasn't verified, that's why — not a directory gap.",
+    icon: Filter,
+    title: "2. Convert visitors → submitted requests",
+    body:
+      "Optimize the website + on-site behavior so as many qualified visitors as possible submit a referral request.",
+    open: [
+      "For therapists: a website widget that estimates the number of leads/month TheraVoca would send to a clinician (input: their URL → output: estimated patient flow + patient-type breakdown).",
+      "For patients: matching education throughout the funnel + an intuitive intake flow that doesn't feel like a clinical form. (✦ Done — current intake is 8 steps standard / 11 with deep-match opt-in.)",
+    ],
   },
   {
     icon: Brain,
-    title: "3. Profile match scoring (100-point engine)",
-    body: "On verify, every active therapist is scored against the request across 10 axes (issues, schedule, modality, urgency, prior therapy, experience, gender, style, payment fit, modality preference). Hard filters: state license, age group, payment compatibility, gender (if required). Patient priorities multiply selected axes by 1.8×.",
-  },
-  {
-    icon: Globe,
-    title: "4. LLM web research enrichment",
-    body: "For top candidates we run a deep web pull — DuckDuckGo + Bing search of the therapist's name + license + city, fetch up to 5 result pages (Psychology Today profiles, podcasts, blogs, LinkedIn, Healthgrades), and feed the corpus + their own website + bio to Claude. The LLM returns evidence_depth (0-10), approach_alignment (0-5), and themes — re-ranking who the patient actually sees.",
-  },
-  {
-    icon: Users,
-    title: "5. Outreach to non-registered therapists (gap fill)",
-    body: "If after profile-matching we have <30 strong matches, an LLM agent searches the open web for therapists matching the patient's exact needs and emails them an invite to apply for THIS specific referral. Acceptance bumps them into the candidate pool.",
+    title: "3. Analyze the request",
+    body:
+      "When a request lands, the system breaks it into explicit matching variables (state, modality, payment, urgency, schedule, gender, language) and implicit ones (deep-match P1/P2/P3 — relationship style, way of working, contextual resonance via embeddings).",
   },
   {
     icon: Sparkles,
-    title: "6. Therapists opt in",
-    body: "Notified therapists click 'Apply' from email, write a short reply to the patient, and confirm availability/payment/urgency. Each application carries a `match_score` from step 3.",
+    title: "4. Score against registered therapists (Step-1 score)",
+    body:
+      "The matching engine compares each request's variables to every active therapist's profile. Hard filters knock out ineligible therapists; soft axes produce a 0-100 fit score. Deep research (LLM web pull from Psychology Today, podcasts, blogs, LinkedIn) and LLM enrichment add evidence_depth + approach_alignment so the Step-1 score isn't purely self-reported.",
   },
   {
-    icon: ListOrdered,
-    title: "7. Patient-side re-ranking",
-    body: "When the 24h window closes, we re-rank applicants on the patient's screen using: 60% match_score · 30% speed of response · 12% therapist-message quality. Quality includes length, mentions of the patient's concerns, concrete next-step language, and personal voice.",
+    icon: UserPlus,
+    title: "5. Invite high-fit therapists to apply",
+    body:
+      "Therapists with a Step-1 match score of 70%+ are automatically invited (email + SMS) to apply for THIS specific referral. They have 24 hours to respond.",
+  },
+  {
+    icon: Globe,
+    title: "6. Network gap-fill — recruit non-registered therapists",
+    body:
+      "If the system can't identify at least 30 strong matches from the registered network, it searches the open web for non-registered therapists who appear to fit this exact request and invites them to apply. Every gap-fill effort permanently expands the network for future referrals — the funnel pays for itself.",
+  },
+  {
+    icon: ListChecks,
+    title: "7. Therapist application → Step-2 ranking score",
+    body:
+      "Interested therapists confirm 'Yes', write a short personalized blurb to the patient, and toggle 3 availability confirmations (taking new clients · accepts payment type · can start within urgency window). These responses produce a Step-2 ranking score on top of the Step-1 baseline. Quality of blurb (length, mentions of patient's concerns, concrete next-step language) factors in.",
+  },
+  {
+    icon: Send,
+    title: "8. Send the patient a ranked shortlist",
+    body:
+      "After the 24-hour application window closes, the system shares the final ranked shortlist with the patient — a curated list of therapists who've actually opted in to this specific referral.",
+  },
+  {
+    icon: Repeat,
+    title: "9. Automated follow-ups (48h · 2wk · 8wk)",
+    body:
+      "The system auto-pings both the patient and the matched therapist at 48 hours, 2 weeks, and 8 weeks. The goal: did a real working relationship form? (Definition of 'successful match' = patient is in active sessions at the 8-week check.)",
+  },
+  {
+    icon: TrendingUp,
+    title: "10. Feed success back into the matching algorithm",
+    body:
+      "Every follow-up data point trains the matching algorithm. Successful axes get up-weighted, unsuccessful ones get down-weighted. Over time the engine self-tunes for actual outcomes, not just self-reported preferences.",
+  },
+  {
+    icon: Bot,
+    title: "11. Feed success back into the marketing engine",
+    body:
+      "Successful matches also produce content for the next wave of paid ads — testimonial-style creative targeting look-alike patients (same age, same concerns, same payment situation). The system breathes on its own: matches make ads, ads make leads, leads make matches.",
+  },
+  {
+    icon: DollarSign,
+    title: "12. Pricing model",
+    body:
+      "Therapists pay $0 their first month, then $45/month thereafter to keep receiving referrals. Patients pay $0 per request — for now. (We'll re-evaluate if junk requests or therapists chasing ghost requests get out of hand.)",
   },
 ];
 
@@ -57,13 +114,15 @@ export default function HowItWorksPanel() {
     <div className="mt-6 space-y-4" data-testid="how-it-works-panel">
       <div className="bg-white border border-[#E8E5DF] rounded-2xl p-6">
         <h3 className="font-serif-display text-2xl text-[#2D4A3E]">
-          How a request flows through TheraVoca
+          How TheraVoca works — end to end
         </h3>
         <p className="text-sm text-[#6D6A65] mt-2 max-w-3xl leading-relaxed">
-          End-to-end flow from intake to ranked results — useful when
-          onboarding a new operator or explaining the algorithm to a
-          partner. All numbers are tunable in <code>matching.py</code>{" "}
-          and <code>routes/patients.py</code>.
+          The full business loop: how leads come in, how requests get
+          converted, how the matching engine ranks therapists, how
+          gap-filling expands our network, how we hand patients a
+          curated shortlist, and how follow-up data trains both the
+          algorithm <em>and</em> the next round of ads. Read this
+          before your first on-call shift.
         </p>
       </div>
       <ol className="space-y-3">
@@ -83,23 +142,55 @@ export default function HowItWorksPanel() {
                 <p className="text-sm text-[#6D6A65] leading-relaxed mt-1 break-words">
                   {s.body}
                 </p>
+                {s.open && s.open.length > 0 && (
+                  <ul
+                    className="mt-3 space-y-1.5 text-xs text-[#2B2A29] bg-[#FBF5F2] border border-[#EBD5CB] rounded-lg p-3"
+                    data-testid={`how-step-${i}-open`}
+                  >
+                    {s.open.map((q, qi) => (
+                      <li key={qi} className="flex gap-2 leading-snug">
+                        <span className="text-[#A8553F] shrink-0">●</span>
+                        <span>{q}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </li>
           );
         })}
       </ol>
       <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-5">
-        <h4 className="font-medium text-[#2B2A29] mb-2">Why we go beyond the therapist's website</h4>
+        <h4 className="font-medium text-[#2B2A29] mb-2">
+          Why we pull data from outside the therapist's website
+        </h4>
         <p className="text-sm text-[#6D6A65] leading-relaxed">
-          A solo therapist's website often lists every specialty they've
-          ever trained in. Without independent corroboration, every match
-          looks equally strong. By pulling Psychology Today profiles,
-          LinkedIn pages, podcasts, blog posts, and local press from
-          DuckDuckGo + Bing, we can verify which specialties actually
-          appear in their <em>practice</em> — not just their checkbox
-          list — and re-rank accordingly. We deliberately skip paid
-          search APIs (SerpAPI, Google Custom Search) for now to keep
-          unit economics clean during the pilot.
+          A solo therapist's website often lists every specialty
+          they've ever trained in. Without independent corroboration,
+          every match looks equally strong. By pulling Psychology Today
+          profiles, LinkedIn pages, podcasts, blog posts, and local
+          press, we can verify which specialties actually appear in
+          their <em>practice</em> — not just their checkbox list — and
+          re-rank Step-1 scores accordingly. This is the difference
+          between "matches their stated profile" and "matches the
+          shape of their actual practice."
+        </p>
+      </div>
+      <div
+        className="bg-[#F2F4F0] border border-[#D9DDD2] rounded-2xl p-5"
+        data-testid="how-it-works-loop"
+      >
+        <h4 className="font-medium text-[#2B2A29] mb-2">
+          The self-improving loop in one line
+        </h4>
+        <p className="text-sm text-[#2D4A3E] leading-relaxed font-medium">
+          Ads → leads → requests → matches → successful matches →
+          smarter algorithm + more targeted ads → more leads.
+        </p>
+        <p className="text-xs text-[#6D6A65] mt-2 leading-relaxed">
+          The system breathes on its own. Our job is to make sure
+          steps 1, 2, 6 and 11 keep pace — everything in between is
+          algorithmic.
         </p>
       </div>
     </div>
