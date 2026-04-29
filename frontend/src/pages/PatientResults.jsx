@@ -282,11 +282,48 @@ function YourReferralPanel({ request }) {
   const issues = (request.presenting_issues || [])
     .map((s) => ISSUE_LABELS[s] || s.replace(/_/g, " "))
     .join(", ");
-  const insurances = (request.insurance_plans || []).join(", ");
+  // Insurance is rendered from `insurance_name` (the human-readable plan
+  // the patient typed in) when payment_type=="insurance". Older records
+  // sometimes carry an `insurance_plans` array — preserve that path so
+  // legacy referrals still render correctly.
+  const insurances = Array.isArray(request.insurance_plans)
+    ? request.insurance_plans.join(", ")
+    : (request.payment_type === "insurance" && request.insurance_name)
+      ? request.insurance_name
+      : "";
+  // Modality / session-format display. The DB stores it under
+  // `modality_preference` (telehealth_only / in_person_only / hybrid);
+  // older records may use `session_format`.
+  const sessionFormat = request.modality_preference || request.session_format;
+  // Cash budget. Newer field name is `budget`; older records used
+  // `budget_per_session`.
+  const cashBudget = request.budget || request.budget_per_session;
+  // ZIP — DB stores `location_zip`; older records may use `zip_code`.
+  const zip = request.location_zip || request.zip_code;
+  // Therapy history boolean. New field is `prior_therapy` ("yes"/"no"/
+  // "not_sure"); older was a `previous_therapy` boolean.
+  const therapyHistory = (() => {
+    const pt = request.prior_therapy;
+    if (typeof pt === "string") {
+      if (pt === "yes") return "Has prior therapy";
+      if (pt === "no") return "First-time";
+      if (pt === "not_sure") return "Not sure";
+    }
+    if (request.previous_therapy === true) return "Has prior therapy";
+    if (request.previous_therapy === false) return "First-time";
+    return "—";
+  })();
+  // Age — DB stores `client_age` (number) but older flows captured an
+  // `age_group` ("teen" / "adult" / "older_adult") instead. Render the
+  // most specific signal we have.
+  const ageDisplay = request.client_age
+    || (request.age_group
+      ? request.age_group.replace(/_/g, " ")
+      : null);
   const summary = [
-    request.client_age && `Age ${request.client_age}`,
+    ageDisplay && `Age ${ageDisplay}`,
     request.location_state,
-    request.session_format,
+    sessionFormat,
     issues && `concerns: ${issues}`,
   ]
     .filter(Boolean)
@@ -333,21 +370,21 @@ function YourReferralPanel({ request }) {
 
       {open && (
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
-          <RefDetail label="Age" value={request.client_age} />
+          <RefDetail label="Age" value={ageDisplay} />
           <RefDetail label="State" value={request.location_state} />
-          <RefDetail label="ZIP" value={request.zip_code} />
-          <RefDetail label="Format" value={request.session_format} />
+          <RefDetail label="ZIP" value={zip} />
+          <RefDetail label="Format" value={sessionFormat} />
           <RefDetail label="Insurance" value={insurances || "—"} />
-          <RefDetail label="Cash-budget / session" value={request.budget_per_session ? `$${request.budget_per_session}` : "—"} />
-          <RefDetail label="Therapy history" value={request.previous_therapy ? "Has prior therapy" : "First-time"} />
+          <RefDetail label="Cash-budget / session" value={cashBudget ? `$${cashBudget}` : "—"} />
+          <RefDetail label="Therapy history" value={therapyHistory} />
           <RefDetail label="Urgency" value={request.urgency} />
           <RefDetail label="Preferred gender" value={request.gender_preference || "Any"} />
           <RefDetail label="Preferred language" value={request.preferred_language || "English"} />
           <RefDetail label="Concerns" value={issues || "—"} span={2} />
-          {(request.preferred_modalities || []).length > 0 && (
+          {(request.preferred_modalities || request.modality_preferences || []).length > 0 && (
             <RefDetail
               label="Preferred therapy approaches"
-              value={(request.preferred_modalities || []).join(", ")}
+              value={(request.preferred_modalities || request.modality_preferences || []).join(", ")}
               span={2}
             />
           )}

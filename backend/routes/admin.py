@@ -1485,7 +1485,14 @@ async def admin_set_referral_source_options(payload: dict) -> dict[str, Any]:
 # Throttles how many requests one email can submit per rolling window.
 # Default: 1 request per 60 minutes — keeps junk down while we're still
 # learning real user patterns. Stored in `app_config.intake_rate_limit`.
-_DEFAULT_INTAKE_RATE = {"max_requests_per_window": 1, "window_minutes": 60}
+_DEFAULT_INTAKE_RATE = {
+    "max_requests_per_window": 1,
+    "window_minutes": 60,
+    # IP-level cap (separate axis from per-email): how many intake submissions
+    # we accept from a single IP per rolling hour. Default 8 — high enough
+    # for clinic / family wifi yet low enough to stop scripted spam.
+    "max_per_ip_per_hour": 8,
+}
 
 
 @router.get("/admin/intake-rate-limit", dependencies=[Depends(require_admin)])
@@ -1503,6 +1510,10 @@ async def admin_get_intake_rate_limit() -> dict[str, Any]:
         "window_minutes": int(
             doc.get("window_minutes") or _DEFAULT_INTAKE_RATE["window_minutes"]
         ),
+        "max_per_ip_per_hour": int(
+            doc.get("max_per_ip_per_hour")
+            or _DEFAULT_INTAKE_RATE["max_per_ip_per_hour"]
+        ),
     }
 
 
@@ -1515,6 +1526,23 @@ async def admin_set_intake_rate_limit(payload: dict) -> dict[str, Any]:
         raise HTTPException(
             400, "max_requests_per_window and window_minutes must be integers"
         )
+    # Optional — only validated/persisted when the admin actually sent it.
+    # Keeps backwards compat with older clients that only know the per-email
+    # axis.
+    ip_per_hour_raw = payload.get("max_per_ip_per_hour")
+    if ip_per_hour_raw is None:
+        ip_per_hour = _DEFAULT_INTAKE_RATE["max_per_ip_per_hour"]
+    else:
+        try:
+            ip_per_hour = int(ip_per_hour_raw)
+        except (TypeError, ValueError):
+            raise HTTPException(
+                400, "max_per_ip_per_hour must be an integer"
+            )
+        if ip_per_hour < 1 or ip_per_hour > 10000:
+            raise HTTPException(
+                400, "max_per_ip_per_hour must be between 1 and 10000"
+            )
     if max_per < 1 or max_per > 1000:
         raise HTTPException(400, "max_requests_per_window must be between 1 and 1000")
     if window < 1 or window > 30 * 24 * 60:
@@ -1528,11 +1556,16 @@ async def admin_set_intake_rate_limit(payload: dict) -> dict[str, Any]:
                 "key": "intake_rate_limit",
                 "max_requests_per_window": max_per,
                 "window_minutes": window,
+                "max_per_ip_per_hour": ip_per_hour,
             }
         },
         upsert=True,
     )
-    return {"max_requests_per_window": max_per, "window_minutes": window}
+    return {
+        "max_requests_per_window": max_per,
+        "window_minutes": window,
+        "max_per_ip_per_hour": ip_per_hour,
+    }
 
 
 # ─── External scrape-source registry (admin-tunable) ────────────────────

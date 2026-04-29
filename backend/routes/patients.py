@@ -108,9 +108,16 @@ async def create_request(payload: RequestCreate, request: Request):
         ip_recent = await db.intake_ip_log.count_documents(
             {"ip": client_ip, "ts": {"$gte": ip_cutoff_iso}},
         )
-        # 3 requests per IP per hour — enough room for shared networks
-        # (clinic / family wifi) but tight enough to stop scripted spam.
-        if ip_recent >= 3:
+        # Admin-tunable IP cap. Stored alongside the per-email rate limit
+        # in `app_config.intake_rate_limit.max_per_ip_per_hour`. Default
+        # 8 — enough for clinic / family wifi but tight against scripts.
+        ip_cap_doc = await db.app_config.find_one(
+            {"key": "intake_rate_limit"}, {"_id": 0},
+        )
+        ip_cap = int(
+            (ip_cap_doc or {}).get("max_per_ip_per_hour") or 8
+        )
+        if ip_cap > 0 and ip_recent >= ip_cap:
             raise HTTPException(
                 429,
                 "Too many submissions from this network in the last hour. "

@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import {
   ChevronDown,
   ExternalLink,
+  EyeOff,
   Loader2,
   Pencil,
   Search,
@@ -209,6 +210,15 @@ export default function SiteCopyAdminPanel({ client }) {
     }
   };
 
+  const hide = async (key, label) => {
+    if (!window.confirm(
+      `Hide "${label || key}" on the public site?\n\n` +
+      "This blanks the text wherever it appears. To bring the default " +
+      "back, click Reset.",
+    )) return;
+    await save(key, "");
+  };
+
   const remove = async (key) => {
     if (!window.confirm(`Reset "${key}" to default copy?`)) return;
     try {
@@ -218,6 +228,23 @@ export default function SiteCopyAdminPanel({ client }) {
       setReload((n) => n + 1);
     } catch (e) {
       toast.error(e?.response?.data?.detail || e.message || "Reset failed");
+    }
+  };
+
+  const removeCustom = async (key) => {
+    if (!window.confirm(
+      `Delete custom key "${key}"?\n\n` +
+      "This removes the override entirely. If your code references this " +
+      "key with a fallback, the fallback will render. If not, nothing " +
+      "will appear there.",
+    )) return;
+    try {
+      await client.delete(`/admin/site-copy/${encodeURIComponent(key)}`);
+      bustSiteCopyCache();
+      toast.success("Custom key deleted");
+      setReload((n) => n + 1);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message || "Delete failed");
     }
   };
 
@@ -244,6 +271,27 @@ export default function SiteCopyAdminPanel({ client }) {
     });
     return out;
   }, [search, showOnlyOverridden, overrides]);
+
+  // Custom keys = overrides whose key isn't one of our SEED_KEYS. Surface
+  // them so admins can review and delete keys they (or a previous engineer)
+  // added without losing track.
+  const customKeys = useMemo(() => {
+    if (!overrides) return [];
+    const seedSet = new Set(SEED_KEYS.map((s) => s.key));
+    const q = search.trim().toLowerCase();
+    return Object.keys(overrides)
+      .filter((k) => !seedSet.has(k))
+      .filter((k) => {
+        if (showOnlyOverridden) return true; // they're all overrides
+        return true;
+      })
+      .filter((k) => {
+        if (!q) return true;
+        const hay = `${k} ${overrides[k]?.value || ""}`.toLowerCase();
+        return hay.includes(q);
+      })
+      .sort();
+  }, [overrides, search, showOnlyOverridden]);
 
   const totalKeys = SEED_KEYS.length;
   const overriddenCount = overrides ? Object.keys(overrides).length : 0;
@@ -425,6 +473,16 @@ export default function SiteCopyAdminPanel({ client }) {
                                     Reset
                                   </button>
                                 )}
+                                <button
+                                  type="button"
+                                  onClick={() => hide(seed.key, seed.label)}
+                                  className="text-[#A4A29E] hover:text-[#2D4A3E] hover:underline text-xs inline-flex items-center gap-1"
+                                  title="Blank this text on the public site (override with empty value)."
+                                  data-testid={`copy-hide-${seed.key}`}
+                                >
+                                  <EyeOff size={11} />
+                                  Hide on site
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -436,6 +494,65 @@ export default function SiteCopyAdminPanel({ client }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {customKeys.length > 0 && (
+        <div
+          className="bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden"
+          data-testid="custom-keys-section"
+        >
+          <div className="px-5 py-3 bg-[#FDFBF7] border-b border-[#E8E5DF]">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <span className="font-medium text-[#2D4A3E]">Custom keys</span>
+                <span className="ml-3 text-xs text-[#6D6A65] font-mono">
+                  {customKeys.length} key{customKeys.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <span className="text-[11px] text-[#6D6A65]">
+                Keys you added below — not part of the seed list.
+              </span>
+            </div>
+          </div>
+          <table className="w-full text-sm">
+            <tbody>
+              {customKeys.map((k) => (
+                <tr
+                  key={k}
+                  className="border-b border-[#E8E5DF] last:border-0 align-top"
+                  data-testid={`copy-row-${k}`}
+                >
+                  <td className="p-4 w-1/3">
+                    <code className="text-[11px] text-[#6D6A65] break-all">
+                      {k}
+                    </code>
+                    <span className="ml-2 text-[10px] text-[#C87965] font-semibold">
+                      CUSTOM
+                    </span>
+                  </td>
+                  <td className="p-4 break-words text-[#2B2A29]">
+                    {overrides[k]?.value || (
+                      <span className="text-[#A4A29E] italic">
+                        (empty — hides on site)
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-4 w-32">
+                    <button
+                      type="button"
+                      onClick={() => removeCustom(k)}
+                      className="text-[#D45D5D] hover:underline text-xs inline-flex items-center gap-1"
+                      data-testid={`copy-delete-custom-${k}`}
+                    >
+                      <Trash2 size={11} />
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

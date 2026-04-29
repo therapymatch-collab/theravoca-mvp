@@ -45,14 +45,17 @@ class TestBotDefenses:
         assert r.status_code == 400, r.text
         assert "Submission rejected" in r.text
 
-    def test_ip_rate_limit_4th_is_429(self):
+    def test_ip_rate_limit_9th_is_429(self):
         # Use unique email per call to avoid email rate-limit (1/hr).
         # IP is taken from x-forwarded-for or socket.host. We send xff
-        # so all 4 attempts share a synthetic IP unique to this test.
+        # so all attempts share a synthetic IP unique to this test.
+        # The per-IP cap defaults to 8/hour but is admin-configurable
+        # via app_config.intake_rate_limit.max_per_ip_per_hour — so the
+        # 9th submission from the same IP hits the network throttle.
         synthetic_ip = f"10.99.{uuid.uuid4().int % 250}.{uuid.uuid4().int % 250}"
         headers = {"x-forwarded-for": synthetic_ip}
         statuses = []
-        for i in range(4):
+        for i in range(9):
             body = _payload(
                 email=f"TEST_iprl_{uuid.uuid4().hex[:6]}_{i}@example.com",
             )
@@ -60,12 +63,12 @@ class TestBotDefenses:
                 f"{API}/requests", json=body, headers=headers, timeout=15
             )
             statuses.append(r.status_code)
-            if i == 3:
-                # 4th submission should hit per-IP cap (>=3 already logged)
+            if i == 8:
+                # 9th submission should hit per-IP cap (>=8 already logged)
                 assert r.status_code == 429, f"Expected 429, got {r.status_code}: {r.text}"
                 assert "Too many submissions from this network" in r.text
-        # First 3 should be 200
-        assert statuses[:3] == [200, 200, 200], statuses
+        # First 8 should be 200
+        assert statuses[:8] == [200] * 8, statuses
 
 
 # ─── Valid intake with new fields ─────────────────────────────────────────

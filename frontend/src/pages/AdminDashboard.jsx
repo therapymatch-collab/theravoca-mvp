@@ -219,18 +219,78 @@ export default function AdminDashboard() {
     [requests, search, matches],
   );
   const filteredPendingTherapists = useMemo(
-    () => pendingTherapists.filter((t) =>
-      matches(search, t.name, t.email, t.credential_type, t.license_number,
-        (t.modalities || []).join(" "), (t.primary_specialties || []).join(" ")),
-    ),
+    () => pendingTherapists.filter((t) => {
+      if (!search) return true;
+      return matches(
+        search,
+        t.name, t.email, t.real_email, t.phone, t.bio,
+        t.credential_type,
+        credentialLabel(t.credential_type || ""),
+        t.license_number, t.subscription_status,
+        (t.modalities || []).join(" "),
+        (t.primary_specialties || []).join(" "),
+        (t.secondary_specialties || []).join(" "),
+        (t.office_locations || []).join(" "),
+        (t.languages_spoken || []).join(" "),
+        (t.insurance_accepted || []).join(" "),
+        (t.licensed_states || []).join(" "),
+      );
+    }),
     [pendingTherapists, search, matches],
   );
   const filteredAllTherapists = useMemo(
-    () => allTherapists.filter((t) =>
-      matches(search, t.name, t.email, t.credential_type, t.license_number,
-        (t.modalities || []).join(" "), (t.primary_specialties || []).join(" "),
-        (t.office_locations || []).join(" "), t.subscription_status),
-    ),
+    () => allTherapists.filter((t) => {
+      if (!search) return true;
+      // Wide search: stitch together every text-bearing field on the
+      // therapist record so admins can find providers by typing any
+      // attribute (e.g. "psychologist", "telehealth", "trauma",
+      // "Boise", "aetna", "spanish"). We also fold in the humanized
+      // credential label (PsyD/PhD → Psychologist, LCSW → Social Worker)
+      // so credential-type queries match the friendly word the patient sees.
+      const haystack = [
+        t.name,
+        t.email,
+        t.real_email,
+        t.phone,
+        t.office_phone,
+        t.bio,
+        t.credential_type,
+        credentialLabel(t.credential_type || ""),
+        t.license_number,
+        t.gender,
+        t.subscription_status,
+        t.modality_offering,
+        t.urgency_capacity,
+        t.research_summary,
+        t.research_depth_signal,
+        t.review_research_source,
+        t.website,
+        t.google_place_name,
+        t.google_place_address,
+        t.source,
+        (t.modalities || []).join(" "),
+        (t.primary_specialties || []).join(" "),
+        (t.secondary_specialties || []).join(" "),
+        (t.general_treats || []).join(" "),
+        (t.style_tags || []).join(" "),
+        (t.research_style_signals || []).join(" "),
+        (t.office_locations || []).join(" "),
+        (t.office_addresses || []).join(" "),
+        (t.licensed_states || []).join(" "),
+        (t.languages_spoken || []).join(" "),
+        (t.insurance_accepted || []).join(" "),
+        (t.client_types || []).join(" "),
+        (t.age_groups || []).join(" "),
+        (t.availability_windows || []).join(" "),
+        t.telehealth ? "telehealth virtual online" : "",
+        t.offers_in_person ? "in-person in person office" : "",
+        t.free_consult ? "free consult" : "",
+        t.sliding_scale ? "sliding scale" : "",
+        t.cash_rate ? `$${t.cash_rate}` : "",
+        t.years_experience ? `${t.years_experience} years` : "",
+      ];
+      return matches(search, ...haystack);
+    }),
     [allTherapists, search, matches],
   );
   const filteredOutreach = useMemo(() => {

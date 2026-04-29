@@ -10,6 +10,7 @@ export default function SettingsPanel({ client }) {
   const [loaded, setLoaded] = useState(false);
   const [maxPer, setMaxPer] = useState(1);
   const [windowMin, setWindowMin] = useState(60);
+  const [maxPerIp, setMaxPerIp] = useState(8);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -31,6 +32,9 @@ export default function SettingsPanel({ client }) {
         if (!alive) return;
         setMaxPer(r.data.max_requests_per_window);
         setWindowMin(r.data.window_minutes);
+        if (typeof r.data.max_per_ip_per_hour === "number") {
+          setMaxPerIp(r.data.max_per_ip_per_hour);
+        }
         setLoaded(true);
       } catch (e) {
         toast.error(
@@ -124,13 +128,17 @@ export default function SettingsPanel({ client }) {
       const r = await client.put("/admin/intake-rate-limit", {
         max_requests_per_window: Number(maxPer),
         window_minutes: Number(windowMin),
+        max_per_ip_per_hour: Number(maxPerIp),
       });
       // Reflect the server-confirmed values so the form always matches
       // what's actually persisted (avoids stale-form confusion).
       setMaxPer(r.data.max_requests_per_window);
       setWindowMin(r.data.window_minutes);
+      if (typeof r.data.max_per_ip_per_hour === "number") {
+        setMaxPerIp(r.data.max_per_ip_per_hour);
+      }
       toast.success(
-        `Saved — ${r.data.max_requests_per_window} per ${r.data.window_minutes} min`,
+        `Saved — ${r.data.max_requests_per_window}/${r.data.window_minutes}min per email · ${r.data.max_per_ip_per_hour}/hr per IP`,
       );
     } catch (e) {
       const msg = e?.response?.data?.detail || e.message || "Save failed";
@@ -205,6 +213,30 @@ export default function SettingsPanel({ client }) {
               </strong>{" "}
               per <strong>{windowMin} minutes</strong> per email address.
             </p>
+            <div>
+              <label
+                htmlFor="rl-ip"
+                className="text-xs uppercase tracking-wider text-[#6D6A65]"
+              >
+                Max submissions per IP per hour
+              </label>
+              <Input
+                id="rl-ip"
+                type="number"
+                min={1}
+                max={10000}
+                value={maxPerIp}
+                onChange={(e) => setMaxPerIp(e.target.value)}
+                className="mt-1 max-w-[160px]"
+                data-testid="rate-limit-ip-input"
+              />
+              <p className="text-[11px] text-[#6D6A65] mt-1.5 leading-snug">
+                Network-level cap. A single IP (clinic / family wifi)
+                hitting this limit gets a "Too many submissions from this
+                network" 429. Default 8 — raise during testing, tighten if
+                you see scripted spam.
+              </p>
+            </div>
             {errorMsg ? (
               <p
                 className="text-xs text-[#B0382A] bg-[#FBE9E5] border border-[#F4C7BE] rounded-md px-3 py-2"
@@ -216,7 +248,7 @@ export default function SettingsPanel({ client }) {
             <button
               type="button"
               onClick={save}
-              disabled={saving || !maxPer || !windowMin}
+              disabled={saving || !maxPer || !windowMin || !maxPerIp}
               className="tv-btn-primary !py-2 !px-4 text-sm disabled:opacity-50"
               data-testid="rate-limit-save-btn"
             >

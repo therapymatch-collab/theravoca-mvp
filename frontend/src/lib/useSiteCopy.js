@@ -106,9 +106,17 @@ export default function useSiteCopy() {
   return (key, fallback) => {
     if (key in previewOverrides) {
       const pv = previewOverrides[key];
-      if (typeof pv === "string" && pv.length > 0) return pv;
+      // Preview-mode honors the value verbatim (including "") so admins
+      // can preview a "hidden / blanked" element before saving.
+      if (typeof pv === "string") return pv;
     }
-    const v = map[key];
-    return typeof v === "string" && v.length > 0 ? v : fallback;
+    // When the admin has explicitly saved a value for this key — even an
+    // empty string — honor it. An empty override means "hide this text on
+    // the public site" (used by the "Hide on site" button in the editor).
+    if (Object.prototype.hasOwnProperty.call(map, key)) {
+      const v = map[key];
+      if (typeof v === "string") return v;
+    }
+    return fallback;
   };
 }
