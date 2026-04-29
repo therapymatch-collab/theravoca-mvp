@@ -229,6 +229,7 @@ export default function IntakeForm() {
     modality_preferences: [],
     payment_type: "",
     insurance_name: "",
+    insurance_name_other: "",
     budget: "",
     sliding_scale_ok: false,
     availability_windows: [],
@@ -337,9 +338,13 @@ export default function IntakeForm() {
     if (step === 3) {
       if (!data.payment_type) return false;
       if (data.payment_type === "cash") return !!data.budget;
-      if (data.payment_type === "insurance") return !!data.insurance_name;
-      if (data.payment_type === "either")
-        return !!data.insurance_name && !!data.budget;
+      const insName = data.insurance_name;
+      const insOk =
+        !!insName &&
+        (insName !== "Other / not listed"
+          || (data.insurance_name_other || "").trim().length >= 2);
+      if (data.payment_type === "insurance") return insOk;
+      if (data.payment_type === "either") return insOk && !!data.budget;
       return true;
     }
     if (step === 4)
@@ -366,9 +371,20 @@ export default function IntakeForm() {
         data.referral_source === "Other" && data.referral_source_other
           ? `Other: ${data.referral_source_other}`
           : data.referral_source;
+      // Mirror the same pattern for insurance — when the patient picks
+      // "Other / not listed", we ship the typed-in value to the backend
+      // (prefixed with "Other:") so the admin can read what they actually
+      // have. Validation above guarantees a typed value when this branch
+      // fires.
+      const insName =
+        data.insurance_name === "Other / not listed" &&
+        (data.insurance_name_other || "").trim()
+          ? `Other: ${data.insurance_name_other.trim()}`
+          : data.insurance_name;
       const payload = {
         ...data,
         referral_source: refSrc,
+        insurance_name: insName,
         referred_by_patient_code: referredByPatientCode,
         budget: data.budget ? parseInt(data.budget, 10) : null,
         // Bot-defense fields — backend rejects if honeypot has any value
@@ -380,6 +396,7 @@ export default function IntakeForm() {
         turnstile_token: turnstileToken,
       };
       delete payload.referral_source_other;
+      delete payload.insurance_name_other;
       const res = await api.post("/requests", payload);
       toast.success("Request received — please check your email to confirm.");
       navigate(`/verify/pending?id=${res.data.id}`, { replace: true });
@@ -436,10 +453,19 @@ export default function IntakeForm() {
       if (!data.payment_type) return "Pick how the client will pay.";
       if (data.payment_type === "cash" && !data.budget)
         return "Enter the per-session cash budget.";
-      if (data.payment_type === "insurance" && !data.insurance_name)
-        return "Pick the insurance plan.";
-      if (data.payment_type === "either" && (!data.insurance_name || !data.budget))
-        return "Pick the insurance plan and a cash budget for backup.";
+      const insMissing = !data.insurance_name;
+      const insOtherMissing =
+        data.insurance_name === "Other / not listed" &&
+        (data.insurance_name_other || "").trim().length < 2;
+      if (data.payment_type === "insurance") {
+        if (insMissing) return "Pick the insurance plan.";
+        if (insOtherMissing) return "Type the insurance plan name.";
+      }
+      if (data.payment_type === "either") {
+        if (insMissing || !data.budget)
+          return "Pick the insurance plan and a cash budget for backup.";
+        if (insOtherMissing) return "Type the insurance plan name.";
+      }
       return "";
     }
     if (step === 4) {
@@ -640,6 +666,25 @@ export default function IntakeForm() {
                         ))}
                       </SelectContent>
                     </Select>
+                    {data.insurance_name === "Other / not listed" && (
+                      <div className="mt-3">
+                        <Input
+                          value={data.insurance_name_other}
+                          onChange={(e) =>
+                            set("insurance_name_other", e.target.value)
+                          }
+                          placeholder="Type the plan name (e.g., Pacific Source Medicare Advantage)"
+                          maxLength={80}
+                          className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                          data-testid="insurance-other-input"
+                        />
+                        <p className="text-[11px] text-[#6D6A65] mt-1.5 leading-snug">
+                          We&rsquo;ll pass this exact wording to the matched
+                          therapists so they can confirm in-network status before
+                          booking.
+                        </p>
+                      </div>
+                    )}
                   </Field>
                 )}
                 {(data.payment_type === "cash" ||
@@ -1163,7 +1208,10 @@ function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
   const issues = (data.presenting_issues || []).join(", ");
   const insurance =
     data.payment_type === "insurance" || data.payment_type === "either"
-      ? data.insurance_name || "—"
+      ? data.insurance_name === "Other / not listed" &&
+        (data.insurance_name_other || "").trim()
+        ? `Other: ${data.insurance_name_other.trim()}`
+        : data.insurance_name || "—"
       : "Not using insurance";
   const cash =
     data.payment_type === "cash" || data.payment_type === "either"
