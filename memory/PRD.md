@@ -57,6 +57,45 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+## Iteration 102 — Auto-recruit closed-loop (Simulator + Coverage Gaps + Gap Recruiter) (Feb 8, 2026)
+
+User-requested self-healing recruitment system. The three audit tools now work together as an automated pipeline: **Simulator detects zero-pool hotspots → Auto-recruit builds a plan → Gap recruiter generates verified drafts → Admin approves → (post-launch) outreach fires**. Safety rails per user spec: dry-run only, admin must approve each batch, 10 drafts/day cap, weekly cycle targeting ≤5% zero-pool.
+
+### Backend
+- **New `backend/auto_recruit.py`** (~330 lines) orchestrates the cycle:
+  - `DEFAULT_CONFIG` singleton (`enabled`, `dry_run`, `require_approval`, `target_zero_pool_pct=5`, `max_drafts_per_cycle=10`, `max_sends_per_day_email/sms=10`, `cycle_frequency=weekly`, `sim_num_requests=200`).
+  - `_build_recruit_plan()` merges simulator `filter_failure_totals` with `_compute_coverage_gap_analysis()` into a ranked `[{dimension, slug, priority: critical|high|medium, sim_pct, gap_severity, current, target, deficit, source}]` list. Filter→dimension map aligns simulator axis names with gap-recruiter dimension names.
+  - `compute_plan_preview()` — fresh sim + gap analysis + plan, no side effects. Used by the admin "Preview plan" button.
+  - `run_cycle()` — full pipeline. Runs sim, checks if `zero_rate ≤ target` (if yes: logs `status=paused_target_reached` and exits), else calls `gap_recruiter.run_gap_recruitment(dry_run=True)`, then stamps newly-created `recruit_drafts` with `{auto_recruit_cycle_id, needs_approval, auto_generated}`. Persists cycle doc to `auto_recruit_cycles`.
+  - `approve_batch()` — clears `needs_approval` by `cycle_id` or `draft_ids` list; approval doesn't send anything (dry-run gate still enforced by config).
+- **6 new admin routes** (`/api/admin/auto-recruit/{status|config|plan|run|cycles|approve}`): status seeds defaults, config is merge-patch whitelist, plan is preview-only, run is the full cycle, cycles is history, approve flips the gate.
+- **Weekly cron** in `cron.py`: new `_run_auto_recruit_weekly()` invoked from `_daily_loop` only when `local.weekday()==0` (Monday). Self-gates: if disabled → skipped, if target met → paused.
+- **Two new collections**: `auto_recruit_config` (singleton) + `auto_recruit_cycles` (one doc per cycle with sim_run_id, plan, drafts_created, status, triggered_by).
+
+### Frontend
+- **New `AutoRecruitSection.jsx`** mounted at the top of `SimulatorPanel.jsx` (the user's mental model links simulator → gap analysis → recruiting, so collocating them reads naturally).
+- UI:
+  - Flow diagram caption: "Simulator → Coverage gaps → Gap recruiter → Admin approval".
+  - 4 status pills: **Loop** (enabled/disabled), **Mode** (dry-run), **Last cycle** (date + status), **Drafts awaiting approval** (amber-highlighted when >0).
+  - **Preview plan** button (`auto-recruit-preview-btn`) → renders the recruit plan inline with priority chips (critical/high/medium) + deficit counters (`need +8 (have 5 / target 13)`).
+  - **Run cycle now** button with confirmation dialog (describes dry-run + approval-gated behavior).
+  - **Policy & safety rails** collapsible: toggle enabled, adjust target %, drafts/cycle, send caps, require-approval gate. All saves fire `PUT /admin/auto-recruit/config`.
+  - **Amber approval bar** when drafts pending: "N drafts awaiting your approval" with "Review drafts →" (navigates to Coverage gaps tab via `setTab`) + "Approve all N" (calls `/approve`).
+  - **Recent cycles history** collapsible with per-cycle status pills.
+- `SimulatorPanel` now receives `setTab` prop (threaded from `AdminDashboard`) so both the auto-recruit review button and the earlier suggestion-card action buttons can jump to the right admin tab.
+
+### Verified (iteration_98.json)
+- **Backend: 12/12 pytest pass, 100% success rate.** Full cycle persisted with 10 drafts stamped; `paused_target_reached` triggers when `target=100`; `skipped` fires when `enabled=false`; cron Monday gate confirmed.
+- **Frontend desktop + mobile: 100% pass.** All testids render. Preview plan returns 6 ranked recruit targets against the current 122-therapist pool (Client type 68.4% of exclusions → HIGH; Age group/child need+8 → HIGH; specialty/school_academic_stress need+3 → HIGH). Mobile 375×667 has no horizontal overflow. Regression: base simulator + suggestion action buttons still functional.
+
+### Current pool → launch readiness
+Running the auto-recruit against the live seed shows the loop would recruit for (in priority order):
+1. Client type (couples/family/group) — 60% of exclusions
+2. Age group: children — 21% of exclusions, deficit ~8
+3. Clinical specialty: school_academic_stress, eating_concerns — deficit 3–5 each
+4. Geography: Pocatello, Coeur d'Alene — deficit 3 each
+To reach ≤5% zero-pool rate: **~40 more therapists** focused on child/teen specialists + group facilitators + family therapists (total pool ~160). The auto-recruit will now run weekly until that target is met, then pause automatically.
+
 ## Iteration 101 — Simulator one-click action buttons (Feb 8, 2026)
 
 - **Backend (`simulator.py`)**: every suggestion now carries `action_type` + optional `action_payload` so the frontend can dispatch without string-parsing. Types: `open_coverage_gaps`, `open_settings`, `scroll_filters`, `scroll_clusters`, `rerun_larger`, `rerun`.
