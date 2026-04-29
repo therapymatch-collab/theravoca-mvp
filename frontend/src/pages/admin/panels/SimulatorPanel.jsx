@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Activity,
   AlertCircle,
   AlertTriangle,
+  ArrowRight,
   CheckCircle2,
   ChevronDown,
   Info,
@@ -139,8 +140,16 @@ function FilterBars({ failures }) {
   );
 }
 
-function SuggestionCard({ item }) {
+function SuggestionCard({ item, onAction, disabled }) {
   const style = SEVERITY_STYLES[item.severity] || SEVERITY_STYLES.info;
+  const btnClass =
+    item.severity === "critical"
+      ? "bg-[#C87965] text-white hover:bg-[#9B5343]"
+      : item.severity === "warning"
+      ? "bg-[#E5B267] text-[#3F3D3B] hover:bg-[#C99944]"
+      : item.severity === "ok"
+      ? "bg-[#2D4A3E] text-white hover:bg-[#1F362D]"
+      : "bg-[#5F7E94] text-white hover:bg-[#4B6778]";
   return (
     <div
       className={`border rounded-2xl p-4 ${style.wrap}`}
@@ -153,12 +162,21 @@ function SuggestionCard({ item }) {
             <span className={`text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full ${style.badge}`}>
               {style.label}
             </span>
-            {item.action && (
-              <span className="text-[11px] text-[#6D6A65]">→ {item.action}</span>
-            )}
           </div>
           <div className="mt-1.5 font-semibold text-[#2D4A3E]">{item.title}</div>
           <p className="mt-1 text-sm text-[#3F3D3B] leading-relaxed">{item.body}</p>
+          {item.action && item.action_type && (
+            <button
+              type="button"
+              onClick={() => onAction?.(item)}
+              disabled={disabled}
+              className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed ${btnClass}`}
+              data-testid={`sim-suggestion-action-${item.action_type}`}
+            >
+              {item.action}
+              <ArrowRight size={12} />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -378,7 +396,7 @@ function RequestRow({ req, idx, open, onToggle }) {
   );
 }
 
-export default function SimulatorPanel({ client }) {
+export default function SimulatorPanel({ client, setTab }) {
   const [numRequests, setNumRequests] = useState(50);
   const [notifyTopN, setNotifyTopN] = useState(30);
   const [seed, setSeed] = useState("");
@@ -387,6 +405,8 @@ export default function SimulatorPanel({ client }) {
   const [runs, setRuns] = useState([]);
   const [listLoading, setListLoading] = useState(true);
   const [openIdx, setOpenIdx] = useState(null);
+  const filtersRef = useRef(null);
+  const clustersRef = useRef(null);
 
   const loadRuns = async () => {
     setListLoading(true);
@@ -404,17 +424,18 @@ export default function SimulatorPanel({ client }) {
     loadRuns();
   }, []);
 
-  const runSim = async () => {
+  const runSim = async (overrides = {}) => {
     if (running) return;
     setRunning(true);
     setReport(null);
     setOpenIdx(null);
     try {
       const payload = {
-        num_requests: Number(numRequests) || 50,
-        notify_top_n: Number(notifyTopN) || 30,
+        num_requests: Number(overrides.num_requests ?? numRequests) || 50,
+        notify_top_n: Number(overrides.notify_top_n ?? notifyTopN) || 30,
       };
-      const parsedSeed = seed.trim() === "" ? null : Number(seed);
+      const rawSeed = overrides.random_seed ?? seed;
+      const parsedSeed = rawSeed === "" || rawSeed == null ? null : Number(rawSeed);
       if (parsedSeed !== null && !Number.isNaN(parsedSeed)) {
         payload.random_seed = parsedSeed;
       }
@@ -430,6 +451,45 @@ export default function SimulatorPanel({ client }) {
       toast.error(e?.response?.data?.detail || "Simulator run failed");
     } finally {
       setRunning(false);
+    }
+  };
+
+  const scrollToRef = (ref) => {
+    ref?.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const dispatchAction = (item) => {
+    const t = item.action_type;
+    if (!t) return;
+    if (t === "open_coverage_gaps") {
+      if (typeof setTab === "function") {
+        setTab("coverage_gap");
+        toast.message("Opening Coverage gaps — recruit therapists to close this filter gap.");
+      }
+      return;
+    }
+    if (t === "open_settings") {
+      if (typeof setTab === "function") {
+        setTab("settings");
+        toast.message("Opening Settings — adjust match weights or filter thresholds here.");
+      }
+      return;
+    }
+    if (t === "scroll_filters") {
+      scrollToRef(filtersRef);
+      return;
+    }
+    if (t === "scroll_clusters") {
+      scrollToRef(clustersRef);
+      return;
+    }
+    if (t === "rerun_larger") {
+      setNumRequests(100);
+      runSim({ num_requests: 100 });
+      return;
+    }
+    if (t === "rerun") {
+      runSim();
     }
   };
 
@@ -573,12 +633,41 @@ export default function SimulatorPanel({ client }) {
           {/* Suggestions */}
           {report.suggestions?.length > 0 && (
             <div>
-              <h3 className="font-serif-display text-xl text-[#2D4A3E] mb-3">
-                Suggested fixes
-              </h3>
+              <div className="flex items-end justify-between gap-3 flex-wrap mb-3">
+                <div>
+                  <h3 className="font-serif-display text-xl text-[#2D4A3E]">
+                    Suggested fixes
+                  </h3>
+                  <p className="text-xs text-[#6D6A65] mt-0.5">
+                    Take the action, then re-run — keep iterating until this list is empty.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => runSim()}
+                  disabled={running}
+                  className="inline-flex items-center gap-1.5 bg-[#2D4A3E] text-white rounded-full px-4 py-1.5 text-xs font-semibold hover:bg-[#1F362D] disabled:opacity-50"
+                  data-testid="sim-rerun-btn"
+                >
+                  {running ? (
+                    <>
+                      <Loader2 size={12} className="animate-spin" /> Running…
+                    </>
+                  ) : (
+                    <>
+                      <Play size={12} /> Re-run with same params
+                    </>
+                  )}
+                </button>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {report.suggestions.map((s, i) => (
-                  <SuggestionCard key={i} item={s} />
+                  <SuggestionCard
+                    key={i}
+                    item={s}
+                    onAction={dispatchAction}
+                    disabled={running}
+                  />
                 ))}
               </div>
             </div>
@@ -608,7 +697,11 @@ export default function SimulatorPanel({ client }) {
 
           {/* Filter failures */}
           {Object.keys(cov.filter_failure_totals || {}).length > 0 && (
-            <div className="bg-white border border-[#E8E5DF] rounded-2xl p-4 sm:p-5">
+            <div
+              ref={filtersRef}
+              className="bg-white border border-[#E8E5DF] rounded-2xl p-4 sm:p-5 scroll-mt-24"
+              data-testid="sim-filters-section"
+            >
               <h3 className="font-serif-display text-lg text-[#2D4A3E]">
                 Which filters knocked therapists out
               </h3>
@@ -622,7 +715,11 @@ export default function SimulatorPanel({ client }) {
 
           {/* Inconsistencies */}
           {report.inconsistencies?.length > 0 && (
-            <div className="bg-white border border-[#E8E5DF] rounded-2xl p-4 sm:p-5">
+            <div
+              ref={clustersRef}
+              className="bg-white border border-[#E8E5DF] rounded-2xl p-4 sm:p-5 scroll-mt-24"
+              data-testid="sim-clusters-section"
+            >
               <h3 className="font-serif-display text-lg text-[#2D4A3E]">
                 Inconsistency clusters
               </h3>

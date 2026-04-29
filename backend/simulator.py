@@ -779,10 +779,19 @@ def _build_suggestions(
 ) -> list[dict]:
     """Turn raw coverage + inconsistency data into actionable fixes.
 
-    Each suggestion has {severity, title, body, action} — rendered as
-    a little card in the admin UI. These are intentionally LOW-
-    sophistication heuristics (no LLM) so the admin can understand
-    the reasoning at a glance."""
+    Each suggestion has {severity, title, body, action, action_type,
+    action_payload} — rendered as a little card in the admin UI.
+    `action_type` is what the frontend dispatches on:
+      * `open_coverage_gaps` — jump to the Coverage gaps tab so the
+        admin can recruit therapists to fix the flagged dimension.
+      * `open_settings`      — jump to Settings (Match weights / filter
+        thresholds config) so the admin can soften a HARD default.
+      * `scroll_filters`     — scroll to the filter-failures bar chart.
+      * `scroll_clusters`    — scroll to the inconsistency clusters.
+      * `rerun_larger`       — re-run the simulator with 100 requests.
+      * `rerun`              — re-run with current params (ok card).
+    These are intentionally LOW-sophistication heuristics (no LLM) so
+    the admin can understand the reasoning at a glance."""
     out = []
     zero_rate = coverage.get("zero_pool_rate_pct") or 0
     if zero_rate > 20:
@@ -797,6 +806,7 @@ def _build_suggestions(
                 "scarce buckets or soften the HARD defaults."
             ),
             "action": "Recruit / soften HARD filter",
+            "action_type": "open_coverage_gaps",
         })
     elif zero_rate > 10:
         out.append({
@@ -808,6 +818,7 @@ def _build_suggestions(
                 "to invest recruitment or soften defaults."
             ),
             "action": "Investigate filter distribution",
+            "action_type": "scroll_filters",
         })
 
     failures = coverage.get("filter_failure_totals") or {}
@@ -827,6 +838,8 @@ def _build_suggestions(
                 f"filter, or adjust the soft-vs-hard default."
             ),
             "action": f"Review {pretty} filter",
+            "action_type": "open_coverage_gaps",
+            "action_payload": {"dimension": name},
         })
 
     if inconsistencies:
@@ -841,6 +854,7 @@ def _build_suggestions(
                 "by side."
             ),
             "action": "Review inconsistency clusters",
+            "action_type": "scroll_clusters",
         })
 
     std = coverage.get("step1_mean_std_across_runs") or 0
@@ -856,6 +870,7 @@ def _build_suggestions(
                 "equalising the issue-score ceilings."
             ),
             "action": "Audit issue-score ceilings",
+            "action_type": "open_settings",
         })
 
     # When everything looks healthy, still return a green "all clear"
@@ -870,6 +885,7 @@ def _build_suggestions(
                 "count (e.g. 200) to stress the edge cases."
             ),
             "action": "Run a larger batch",
+            "action_type": "rerun_larger",
         })
     return out
 

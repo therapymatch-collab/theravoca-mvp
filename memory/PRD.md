@@ -57,6 +57,17 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+## Iteration 101 — Simulator one-click action buttons (Feb 8, 2026)
+
+- **Backend (`simulator.py`)**: every suggestion now carries `action_type` + optional `action_payload` so the frontend can dispatch without string-parsing. Types: `open_coverage_gaps`, `open_settings`, `scroll_filters`, `scroll_clusters`, `rerun_larger`, `rerun`.
+- **Frontend (`SimulatorPanel.jsx`)**:
+  - Each suggestion card renders a **pill-shaped action button** styled by severity (critical=dusty-rose, warning=amber, info=muted-blue, ok=forest). Copy = `action` string from backend, right-chevron icon.
+  - `dispatchAction()` handles the five action types: two call `setTab()` (injected from `AdminDashboard.jsx`) to jump to Coverage gaps / Settings; two use refs (`filtersRef`, `clustersRef`) to smooth-scroll within the panel; `rerun_larger` bumps `num_requests=100` and reruns; `rerun` reruns with current params.
+  - New **prominent "Re-run with same params"** CTA at top-right of the Suggested-fixes header so admins can iterate quickly after taking an action.
+  - Toast guidance on tab-change actions ("Opening Coverage gaps — recruit therapists to close this filter gap.") so the admin knows what to do next.
+  - Backward-compatible: old saved runs missing `action_type` simply don't render buttons.
+- **Tests**: backend curl verified all 5 suggestion types return with `action_type`; frontend smoke test verified all button testids (`sim-suggestion-action-open_coverage_gaps`, `-scroll_clusters`, `sim-rerun-btn`) render and trigger correct navigation/scroll/re-run behaviour. Lint clean.
+
 ## Iteration 100 — Matching Outcome Simulator (Admin → More → Matching simulator) (Feb 8, 2026)
 
 - **Fixed simulator therapist-pool filter bug** — `simulator.py` was using `{status:'active', approved:True, billable:True}` (wrong field names → always returned "No active therapists in pool"). Swapped to the production filter used in `helpers.py`: `{is_active != False, pending_approval != True, subscription_status not in [past_due, canceled, unpaid, incomplete]}`. Now correctly sees the 122-therapist seeded pool.

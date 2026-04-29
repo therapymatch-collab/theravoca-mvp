@@ -1636,7 +1636,7 @@ export default function AdminDashboard() {
 
               {tab === "how_it_works" && <HowItWorksPanel />}
 
-              {tab === "simulator" && <SimulatorPanel client={client} />}
+              {tab === "simulator" && <SimulatorPanel client={client} setTab={setTab} />}
 
               {tab === "email_templates" && (
                 <div className="mt-6 space-y-3" data-testid="email-templates-list">
