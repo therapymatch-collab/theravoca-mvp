@@ -57,6 +57,15 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+### iter-97 — Landing "How it works" copy fix + Directory-source scrub (Feb 7, 2026)
+- **Root-cause fix for Landing "How it works" copy drift**: admin editor showed one set of "How it works" fallback strings (e.g. "Tell us what you need") while live site rendered different hardcoded fallbacks in `Landing.jsx` (e.g. "Tap what fits"). Aligned all 5 `landing.how.*` fallback strings in `Landing.jsx` to match the `SiteCopyAdminPanel.jsx` registered seed values verbatim — admins now see the same copy live that they see in the editor.
+- **Scrubbed directory-source attribution from all USER-FACING text** (so Psychology Today / PT / state-board / Yelp / Healthgrades / LinkedIn aren't named as recruiting channels we pull from):
+  - Outreach email: rationale line rewritten to "Their practice focus on X matches this patient's primary concern" (was "Public PT profile lists X as a specialty"); "We found your practice via your Psychology Today profile" footer removed (`source_note = ""`); invite body reads "based on your public practice information" (was "specialties listed in your public profile").
+  - Admin UI: runOutreach confirm → "our external directory pool" (was "Psychology Today's live directory"); runReviewResearch confirm → "public review data across the open web" (was named-platform list); candidate chip → "External source" for any non-manual source (was PT-specific); candidate link → "View public profile ↗" (was "View PT profile ↗"); production-note → "live third-party directory scraping".
+  - HowItWorksPanel: step 4 body + sidebar card rewritten to generic "public sources" / "public professional pages, long-form interviews, writing samples".
+  - Internal code / LLM prompts / DB slug `source: 'psychology_today'` intentionally kept for telemetry.
+- Verified by testing agent (iteration_96.json): live DOM grep returns ZERO occurrences of forbidden directory names on desktop (1280px) and mobile (375px); all 8 `landing.how.*` seed keys match between Landing.jsx and SiteCopyAdminPanel.jsx; outreach email template deterministically uses generic language; 100% frontend pass.
+
 ### iter-96 — HARD badges in patient panel + mobile Turnstile hardening + admin dropdown clip fix (Feb 7, 2026)
 - **Patient "What you asked for" expanded panel now shows HARD badges**: `RefDetail` accepts a `hard` prop that renders a dusty-rose container + `HARD` chip + a legend row at the top. Always-hard (Age, State, Concerns) plus patient-toggleable hards (Format=in_person_only, Insurance when insurance_strict, Urgency when urgency_strict, Availability when availability_strict, Preferred gender when gender_required+picked, Preferred language when language_strict+not-English) all flagged. Deep-match P1/P2/P3 section still renders below when deep_match_opt_in.
 - **Mobile Turnstile crash fix** ("security error" on submit): 3 bundled changes:
