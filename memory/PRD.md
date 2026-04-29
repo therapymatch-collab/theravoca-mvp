@@ -1832,3 +1832,29 @@ User asked for "test mode in admin" so admins can run end-to-end intake tests wi
 ### Tests
 - ✅ Iter-34 testing agent — 13/13 backend pytest pass, frontend round-trip (Off → Enable → ACTIVE with countdown → Turn off → Off) verified via Playwright. Test mode left DISABLED on exit.
 - ⚠️ Minor: missing/zero `minutes` in POST silently defaults to 60 instead of returning 400 (invalid-type and out-of-range still 400). Acceptable.
+
+
+## Iter-80 (Apr 29 2026) — AdminDashboard.jsx refactor: extract 6 panels
+
+User asked to refactor monolithic components (P2 tech debt). First pass tackled `AdminDashboard.jsx` (4521 → 3658 lines, **−863 / −19%**). Pure code-organization refactor — no behavior change, no prop changes, no data-flow change.
+
+### Extracted to dedicated files
+- `pages/admin/panels/ReferralAnalyticsPanel.jsx` (~140 lines)
+- `pages/admin/panels/CoverageGapPanel.jsx` (~170 lines, includes inline `DistBlock`)
+- `pages/admin/panels/RecruitDraftsPanel.jsx` (~210 lines)
+- `pages/admin/panels/PatientsByEmailPanel.jsx` (~140 lines)
+- `pages/admin/panels/FeedbackPanel.jsx` (~135 lines, includes inline `FeedbackRow`)
+- `pages/admin/panels/ProviderPreviewCard.jsx` (~75 lines)
+- `pages/admin/panels/_panelShared.jsx` (new) — exports `StatBox` + `FactStat`
+
+### Files changed
+- `/app/frontend/src/pages/AdminDashboard.jsx` (slimmed: 6 fewer inline components, 7 new imports)
+- 7 new files under `/app/frontend/src/pages/admin/panels/`
+
+### Tests
+- ✅ Iter-35 testing agent — 5/5 reachable panels mount with their documented testids (`patients-panel`, `feedback-panel`, `coverage-gap-panel`, `recruit-drafts-panel`, `referral-analytics-panel`). 6th (`provider-preview-card`) could not be exercised because seeded data has 0 pending-review therapists — data limitation, not regression.
+- ✅ No runtime / console / page errors during initial load or tab switching
+- ✅ Lint clean (frontend)
+
+### Tech-debt note
+`AdminDashboard.jsx` is still 3658 lines. Future passes should extract the AdminTabsBar (~265 lines), the provider-table cluster (`ProviderRow` / `ProviderCell` / `ProviderTableControls` / `ProviderTablePager` / `useProviderColumnPrefs` / `PROVIDER_COLUMNS` ~400 lines), the email-template editor (~300 lines), and the request-detail dialog (~600 lines).
