@@ -5,10 +5,13 @@ import { toast } from "sonner";
 import { ArrowRight, Check } from "lucide-react";
 import { api } from "@/lib/api";
 import useSiteCopy from "@/lib/useSiteCopy";
+import { P1_OPTIONS, P2_OPTIONS } from "@/components/intake/deepMatchOptions";
+import { Group, Field, PillRow, PillCol, CheckRow } from "@/components/intake/IntakeUI";
 import {
-  P1_OPTIONS,
-  P2_OPTIONS,
-} from "@/components/intake/deepMatchOptions";
+  P1Step,
+  P2Step,
+  P3Step,
+} from "@/components/intake/DeepMatchSteps";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -1247,109 +1250,20 @@ export default function IntakeForm() {
             {/* P1 — Communication style. Pick exactly 2. Maps 1:1 to
                 therapist T1 ranking on the same five behaviors. */}
             {currentId === "p1" && (
-              <div className="space-y-5">
-                <div className="bg-[#FBE9E5] border border-[#F4C7BE] rounded-xl px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#C8412B] font-semibold mb-1">
-                    ✦ Deep match · 1 of 3
-                  </p>
-                  <p className="text-sm text-[#2B2A29]/85 leading-relaxed">
-                    {t(
-                      "intake.deep.p1.intro",
-                      "These 3 questions help us match you with a therapist whose style genuinely fits — not just one who treats your diagnosis.",
-                    )}
-                  </p>
-                </div>
-                <Group
-                  label={t(
-                    "intake.deep.p1.label",
-                    "What kind of relationship do you want with your therapist?",
-                  )}
-                  hint={t(
-                    "intake.deep.p1.hint",
-                    "Pick exactly 2.",
-                  )}
-                >
-                  <PillCol
-                    items={P1_OPTIONS}
-                    selected={data.p1_communication}
-                    onSelect={(v) => toggleArr("p1_communication", v, 2)}
-                    testid="p1"
-                  />
-                  <p className="text-[11px] text-[#6D6A65] mt-2">
-                    {data.p1_communication.length}/2 selected
-                  </p>
-                </Group>
-              </div>
+              <P1Step data={data} set={set} toggleArr={toggleArr} t={t} />
             )}
 
             {/* P2 — Theory of change. Pick exactly 2. Same five concepts
                 that therapists rank in T3; matching score is overlap ÷ 2. */}
             {currentId === "p2" && (
-              <div className="space-y-5">
-                <div className="bg-[#FBE9E5] border border-[#F4C7BE] rounded-xl px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#C8412B] font-semibold mb-1">
-                    ✦ Deep match · 2 of 3
-                  </p>
-                </div>
-                <Group
-                  label={t(
-                    "intake.deep.p2.label",
-                    "How do you want therapy to work?",
-                  )}
-                  hint={t("intake.deep.p2.hint", "Pick exactly 2.")}
-                >
-                  <PillCol
-                    items={P2_OPTIONS}
-                    selected={data.p2_change}
-                    onSelect={(v) => toggleArr("p2_change", v, 2)}
-                    testid="p2"
-                  />
-                  <p className="text-[11px] text-[#6D6A65] mt-2">
-                    {data.p2_change.length}/2 selected
-                  </p>
-                </Group>
-              </div>
+              <P2Step data={data} set={set} toggleArr={toggleArr} t={t} />
             )}
 
             {/* P3 — Contextual resonance. Open text; matched against
                 therapist T5 (lived experience) + T2 (best-client narrative)
                 via embeddings. Optional — empty submissions skip the
                 Contextual axis instead of penalising. */}
-            {currentId === "p3" && (
-              <div className="space-y-5">
-                <div className="bg-[#FBE9E5] border border-[#F4C7BE] rounded-xl px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#C8412B] font-semibold mb-1">
-                    ✦ Deep match · 3 of 3
-                  </p>
-                </div>
-                <Field
-                  label={t(
-                    "intake.deep.p3.label",
-                    "What should your therapist already get about you without you having to explain it?",
-                  )}
-                >
-                  <Textarea
-                    rows={5}
-                    maxLength={2000}
-                    minLength={20}
-                    value={data.p3_resonance}
-                    onChange={(e) => set("p3_resonance", e.target.value)}
-                    placeholder={t(
-                      "intake.deep.p3.placeholder",
-                      "Try one of these starters:\n• My background or culture…\n• My work or life situation…\n• What didn't work with a past therapist…\n• The thing most people don't understand about me…",
-                    )}
-                    className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                    data-testid="p3-input"
-                  />
-                  <p className="text-[11px] text-[#6D6A65] mt-2 leading-snug">
-                    {t(
-                      "intake.deep.p3.helper",
-                      "20+ characters helps the matching engine score for lived-experience fit. Therapists never see this verbatim — we use it to rank for resonance.",
-                    )}
-                  </p>
-                </Field>
-              </div>
-            )}
+            {currentId === "p3" && <P3Step data={data} set={set} t={t} />}
 
             {currentId === "contact" && (
               <div className="space-y-5">
@@ -1934,91 +1848,9 @@ function ReviewPreviewModal({ data, submitting, onClose, onConfirm, onToggleRece
   );
 }
 
-function Group({ label, hint, children }) {
-  return (
-    <div>
-      <label className="block text-sm font-semibold text-[#2B2A29] mb-1">
-        {label}
-      </label>
-      {hint && <p className="text-xs text-[#6D6A65] mb-3">{hint}</p>}
-      {!hint && <div className="mb-3" />}
-      {children}
-    </div>
-  );
-}
+// Note: Group / Field / PillRow / PillCol / CheckRow used to live
+// here. They were extracted to `components/intake/IntakeUI.jsx` so
+// the per-step renderers in `components/intake/DeepMatchSteps.jsx`
+// (and the planned per-step files) can import them without circular
+// references.
 
-function Field({ label, children }) {
-  return (
-    <div>
-      <label className="block text-xs font-semibold text-[#6D6A65] uppercase tracking-wider mb-1.5">
-        {label}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-function PillRow({ items, selected, onSelect, testid }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {items.map((it) => {
-        const active = selected.includes(it.v);
-        return (
-          <button
-            key={it.v}
-            type="button"
-            onClick={() => onSelect(it.v)}
-            data-testid={`${testid}-${it.v}`}
-            className={`text-sm px-4 py-2 rounded-full border transition ${
-              active
-                ? "bg-[#2D4A3E] text-white border-[#2D4A3E] shadow-sm"
-                : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
-            }`}
-          >
-            {it.l}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function PillCol({ items, selected, onSelect, testid }) {
-  return (
-    <div className="grid gap-2">
-      {items.map((it) => {
-        const active = selected.includes(it.v);
-        return (
-          <button
-            key={it.v}
-            type="button"
-            onClick={() => onSelect(it.v)}
-            data-testid={`${testid}-${it.v}`}
-            className={`text-left text-sm px-4 py-3 rounded-xl border transition ${
-              active
-                ? "bg-[#2D4A3E] text-white border-[#2D4A3E] shadow-sm"
-                : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
-            }`}
-          >
-            {it.l}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function CheckRow({ id, checked, onChange, label, testid }) {
-  return (
-    <label htmlFor={id} className="flex items-start gap-3 cursor-pointer">
-      <Checkbox
-        id={id}
-        checked={checked}
-        onCheckedChange={onChange}
-        className="mt-0.5 border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
-        data-testid={testid}
-      />
-      <span className="text-sm text-[#2B2A29] leading-relaxed">{label}</span>
-    </label>
-  );
-}

@@ -177,8 +177,9 @@ function DefaultField({ title, hint, children }) {
 }
 
 // Vertical pick-list used for T3 (pick 2 of 6) — full-width rows for
-// readability of the long labels.
-function PillCol({ items, selected, onSelect, testid }) {
+// readability of the long labels. Exported so the in-portal edit form
+// can reuse it without re-implementing.
+export function PillCol({ items, selected, onSelect, testid }) {
   return (
     <div className="flex flex-col gap-2">
       {items.map((it) => {
@@ -204,7 +205,7 @@ function PillCol({ items, selected, onSelect, testid }) {
 }
 
 // Vertical radio list used for T4 (pick 1 of 5).
-function RadioCol({ items, value, onChange, testid }) {
+export function RadioCol({ items, value, onChange, testid }) {
   return (
     <div className="flex flex-col gap-2">
       {items.map((it) => {

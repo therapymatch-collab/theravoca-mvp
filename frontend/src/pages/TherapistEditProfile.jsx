@@ -27,6 +27,10 @@ import { sessionClient, getSession } from "@/lib/api";
 import credentialLabel from "@/lib/credentialLabel";
 import DraggableRankList from "@/components/intake/DraggableRankList";
 import {
+  PillCol as DeepMatchPickList,
+  RadioCol as DeepMatchRadio,
+} from "@/pages/therapist/TherapistDeepMatchStep";
+import {
   T1_OPTIONS,
   T3_OPTIONS,
   T4_OPTIONS,
@@ -594,60 +598,11 @@ export default function TherapistEditProfile() {
   );
 }
 
-// Deep-match T1/T3/T4 options now imported from
-// `@/pages/therapist/deepMatchOptions` (single source of truth shared
-// with the signup form). The legacy arrow-based `DeepMatchRankList`
-// was replaced with the shared `DraggableRankList` component.
-
-function DeepMatchPickList({ items, selected, onSelect, testid }) {
-  return (
-    <div className="flex flex-col gap-2">
-      {items.map((it) => {
-        const active = (selected || []).includes(it.v);
-        return (
-          <button
-            type="button"
-            key={it.v}
-            onClick={() => onSelect(it.v)}
-            data-testid={`${testid}-${it.v}`}
-            className={`text-sm text-left px-4 py-2.5 rounded-xl border transition ${
-              active
-                ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
-                : "bg-white text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
-            }`}
-          >
-            {it.l}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function DeepMatchRadio({ items, value, onChange, testid }) {
-  return (
-    <div className="flex flex-col gap-2">
-      {items.map((it) => {
-        const active = value === it.v;
-        return (
-          <button
-            type="button"
-            key={it.v}
-            onClick={() => onChange(it.v)}
-            data-testid={`${testid}-${it.v}`}
-            className={`text-sm text-left px-4 py-2.5 rounded-xl border transition ${
-              active
-                ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
-                : "bg-white text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
-            }`}
-          >
-            {it.l}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+// Deep-match T1/T3/T4 options + the PillCol (DeepMatchPickList) +
+// RadioCol (DeepMatchRadio) controls now come from
+// `@/pages/therapist/TherapistDeepMatchStep` so this file shares one
+// source of truth with the signup form. The legacy arrow-based
+// `DeepMatchRankList` was replaced with the shared `DraggableRankList`.
 
 function Section({ title, children }) {
   return (
