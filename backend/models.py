@@ -66,6 +66,9 @@ class TherapistSignup(BaseModel):
     recruit_code: Optional[str] = None  # captured from gap-recruit invite link
     notify_email: bool = True
     notify_sms: bool = True
+    # Cloudflare Turnstile token (optional). Backend fail-softs when not
+    # configured; verified at the route layer.
+    turnstile_token: Optional[str] = Field(default=None, max_length=2200)
 
 
 class RequestCreate(BaseModel):

@@ -13,10 +13,12 @@ import {
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import SetPasswordPrompt from "@/components/SetPasswordPrompt";
+import useSiteCopy from "@/lib/useSiteCopy";
 import { sessionClient, getSession, clearSession } from "@/lib/api";
 
 export default function PatientPortal() {
   const navigate = useNavigate();
+  const t = useSiteCopy();
   const session = getSession();
   const [requests, setRequests] = useState(null);
   const [hasPassword, setHasPassword] = useState(false);
@@ -63,7 +65,7 @@ export default function PatientPortal() {
                 Patient portal
               </p>
               <h1 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] mt-2 leading-tight">
-                Your matching journey
+                {t("portal.heading", "Your matching journey")}
               </h1>
               {session && (
                 <p className="text-sm text-[#6D6A65] mt-2 break-words">
@@ -91,17 +93,20 @@ export default function PatientPortal() {
             <div className="mt-10 bg-white border border-[#E8E5DF] rounded-3xl p-12 text-center">
               <Inbox className="mx-auto text-[#C87965] mb-4" size={32} strokeWidth={1.5} />
               <h2 className="font-serif-display text-2xl text-[#2D4A3E]">
-                No requests yet
+                {t("portal.empty.heading", "No requests yet")}
               </h2>
               <p className="text-[#6D6A65] mt-2">
-                Submit your first request to start matching with therapists.
+                {t(
+                  "portal.empty.body",
+                  "Submit your first request to start matching with therapists.",
+                )}
               </p>
               <Link
                 to="/#start"
                 className="tv-btn-primary mt-6 inline-flex"
                 data-testid="patient-portal-cta"
               >
-                Get matched
+                {t("portal.empty.cta", "Get matched")}
               </Link>
             </div>
           )}

@@ -204,11 +204,19 @@ export default function SignIn() {
       <main className="flex-1 flex items-center justify-center px-5 py-16">
         <div className="w-full max-w-md bg-white border border-[#E8E5DF] rounded-3xl p-8 sm:p-10" data-testid="signin-card">
           <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] text-center">
-            Sign in
+            {t("signin.heading", "Sign in")}
           </p>
           <h1 className="font-serif-display text-4xl text-[#2D4A3E] text-center mt-2 leading-tight">
             {step === "setup-password" ? "Almost done" : "Welcome back"}
           </h1>
+          {step === "email" && (
+            <p className="text-sm text-[#6D6A65] text-center mt-3">
+              {t(
+                "signin.subhead",
+                "We'll email you a 6-digit code. No password required.",
+              )}
+            </p>
+          )}
 
           {step === "email" && (
             <>
@@ -228,7 +236,7 @@ export default function SignIn() {
                     }`}
                     data-testid={`role-${key}`}
                   >
-                    {info.label}
+                    {t(`signin.role.${key}`, info.label)}
                   </button>
                 ))}
               </div>

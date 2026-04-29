@@ -164,21 +164,27 @@ export default function Landing() {
             {[
               {
                 n: "01",
-                title: "Tap what fits",
-                body:
+                title: t("landing.how.step1.title", "Tap what fits"),
+                body: t(
+                  "landing.how.step1.body",
                   "Pick from a curated list of presenting issues, then a few specifics — age, format, payment. Two minutes, no rambling required.",
+                ),
               },
               {
                 n: "02",
-                title: "We reach out for you",
-                body:
+                title: t("landing.how.step2.title", "We reach out for you"),
+                body: t(
+                  "landing.how.step2.body",
                   "We anonymously share your referral with our network of pre-qualified therapists in your state.",
+                ),
               },
               {
                 n: "03",
-                title: "Therapists come to you",
-                body:
+                title: t("landing.how.step3.title", "Therapists come to you"),
+                body: t(
+                  "landing.how.step3.body",
                   "Within 24 hours you get a personalized list of therapists who read your needs and want to work with you.",
+                ),
               },
             ].map((s, i) => (
               <div
@@ -284,6 +290,12 @@ export default function Landing() {
           <h2 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] leading-tight text-center">
             {t("landing.faq.heading", "Things people ask")}
           </h2>
+          <p className="text-sm text-[#6D6A65] mt-3 text-center max-w-md mx-auto">
+            {t(
+              "landing.faq.subhead",
+              "Don't see your question? Email hello@theravoca.com.",
+            )}
+          </p>
           <Accordion type="single" collapsible className="mt-10" data-testid="faq">
             {faqs.map((f) => (
               <AccordionItem

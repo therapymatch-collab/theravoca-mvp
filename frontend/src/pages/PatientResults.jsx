@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { toast } from "sonner";
 import { Loader2, Phone, Mail, Star, Sparkles, CalendarPlus, Send, Inbox, CheckCircle2, Clock, ArrowRight, ArrowLeft, Share2, FileText, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
+import useSiteCopy from "@/lib/useSiteCopy";
 import { api, getSession } from "@/lib/api";
 import { RESULTS_POLL_INTERVAL_MS } from "@/lib/constants";
 
@@ -472,7 +473,7 @@ export default function PatientResults() {
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-[#C87965]">
-                Your matches
+                {copy("results.heading", "Your matches")}
               </p>
               <h1 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] mt-2 leading-tight">
                 Therapists who want to work with you
@@ -489,8 +490,10 @@ export default function PatientResults() {
             )}
           </div>
           <p className="text-[#6D6A65] mt-3 max-w-3xl leading-relaxed">
-            These therapists read your anonymous referral and submitted interest.
-            Reach out to whoever feels right — many offer a free consult.
+            {copy(
+              "results.subhead",
+              "These therapists read your anonymous referral and submitted interest. Reach out to whoever feels right — many offer a free consult.",
+            )}
           </p>
 
           {/* Show patient their original request so they can compare */}

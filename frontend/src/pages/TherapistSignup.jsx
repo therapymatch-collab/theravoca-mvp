@@ -189,6 +189,45 @@ export default function TherapistSignup() {
   const [step, setStep] = useState(1);
   const totalSteps = 8;
   const formCardRef = useRef(null);
+  // Cloudflare Turnstile (fail-soft) — see comments in IntakeForm.jsx
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const turnstileRef = useRef(null);
+  const turnstileSiteKey = process.env.REACT_APP_TURNSTILE_SITE_KEY || "";
+  useEffect(() => {
+    if (!turnstileSiteKey) return;
+    const SCRIPT_ID = "cf-turnstile-script";
+    const ensureScript = () =>
+      new Promise((resolve) => {
+        if (window.turnstile) return resolve();
+        const existing = document.getElementById(SCRIPT_ID);
+        if (existing) {
+          existing.addEventListener("load", () => resolve());
+          return;
+        }
+        const s = document.createElement("script");
+        s.id = SCRIPT_ID;
+        s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+        s.async = true;
+        s.defer = true;
+        s.onload = () => resolve();
+        document.head.appendChild(s);
+      });
+    let cancelled = false;
+    ensureScript().then(() => {
+      if (cancelled || !turnstileRef.current || !window.turnstile) return;
+      try {
+        window.turnstile.render(turnstileRef.current, {
+          sitekey: turnstileSiteKey,
+          theme: "light",
+          size: "flexible",
+          callback: (tok) => setTurnstileToken(tok || ""),
+          "error-callback": () => setTurnstileToken(""),
+          "expired-callback": () => setTurnstileToken(""),
+        });
+      } catch (_) { /* ignore double-render */ }
+    });
+    return () => { cancelled = true; };
+  }, [turnstileSiteKey]);
   const set = (k, v) => setData((d) => ({ ...d, [k]: v }));
   const toggleArr = (k, v, max) =>
     setData((d) => {
@@ -476,6 +515,7 @@ export default function TherapistSignup() {
         phone: data.phone_alert?.trim() || data.phone || "",
         referred_by_code: inviteCode || data.referred_by_code || null,
         recruit_code: recruitCode || null,
+        turnstile_token: turnstileToken,
       };
       const res = await api.post("/therapists/signup", payload);
       setTherapistId(res.data?.id);
@@ -1675,15 +1715,20 @@ export default function TherapistSignup() {
                     {websiteChecking ? "Checking…" : "Next"} <ArrowRight size={18} />
                   </button>
                 ) : (
-                  <button
-                    type="button"
-                    className="tv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={!valid || submitting}
-                    onClick={() => setShowPreview(true)}
-                    data-testid="signup-preview"
-                  >
-                    Preview profile <ArrowRight size={18} />
-                  </button>
+                  <div className="flex flex-col items-end gap-3">
+                    {turnstileSiteKey && (
+                      <div ref={turnstileRef} data-testid="signup-turnstile" />
+                    )}
+                    <button
+                      type="button"
+                      className="tv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={!valid || submitting}
+                      onClick={() => setShowPreview(true)}
+                      data-testid="signup-preview"
+                    >
+                      Preview profile <ArrowRight size={18} />
+                    </button>
+                  </div>
                 )}
                 </div>
               </div>

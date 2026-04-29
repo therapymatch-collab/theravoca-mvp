@@ -32,6 +32,7 @@ function useScrollTopNavigate(to) {
 }
 
 export function Header({ minimal = false }) {
+  const t = useSiteCopy();
   const onLogoClick = useScrollTopNavigate("/");
   const onTherapistsClick = useScrollTopNavigate("/therapists/join");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -83,16 +84,16 @@ export function Header({ minimal = false }) {
               data-testid="desktop-nav"
             >
               <a href="/#how" className="hover:text-[#2D4A3E] transition" data-testid="nav-how">
-                How it works
+                {t("header.nav.how", "How it works")}
               </a>
               <a href="/#testimonials" className="hover:text-[#2D4A3E] transition" data-testid="nav-testimonials">
-                Testimonials
+                {t("header.nav.testimonials", "Testimonials")}
               </a>
               <a href="/#different" className="hover:text-[#2D4A3E] transition" data-testid="nav-diff">
-                Why TheraVoca
+                {t("header.nav.different", "Why TheraVoca")}
               </a>
               <a href="/#faq" className="hover:text-[#2D4A3E] transition" data-testid="nav-faq">
-                FAQs
+                {t("header.nav.faq", "FAQs")}
               </a>
               <a
                 href="/therapists/join"
@@ -100,14 +101,14 @@ export function Header({ minimal = false }) {
                 className="hover:text-[#2D4A3E] transition"
                 data-testid="nav-therapists"
               >
-                For therapists
+                {t("header.nav.therapists", "For therapists")}
               </a>
               <DropdownMenu>
                 <DropdownMenuTrigger
                   className="inline-flex items-center gap-1.5 hover:text-[#2D4A3E] transition outline-none"
                   data-testid="nav-signin-trigger"
                 >
-                  Sign in <ChevronDown size={14} strokeWidth={2} />
+                  {t("header.nav.signin", "Sign in")} <ChevronDown size={14} strokeWidth={2} />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="end"
@@ -158,7 +159,7 @@ export function Header({ minimal = false }) {
                 className="tv-btn-primary !py-2 !px-5 text-sm"
                 data-testid="nav-cta"
               >
-                Get matched
+                {t("header.cta", "Get matched")}
               </a>
             </nav>
 
@@ -277,17 +278,28 @@ export function Footer() {
           </p>
         </div>
         <div>
-          <div className="text-[#2B2A29] font-semibold mb-2">Crisis support</div>
+          <div className="text-[#2B2A29] font-semibold mb-2">
+            {t("footer.crisis.heading", "Crisis support")}
+          </div>
           <p className="leading-relaxed">
-            If you or someone you know is in crisis, please call 911 or contact the
-            Suicide & Crisis Lifeline at <span className="text-[#2D4A3E] font-semibold">988</span> immediately.
+            {t(
+              "footer.crisis.body",
+              <>
+                If you or someone you know is in crisis, please call 911 or contact the
+                Suicide & Crisis Lifeline at <span className="text-[#2D4A3E] font-semibold">988</span> immediately.
+              </>,
+            )}
           </p>
         </div>
         <div>
-          <div className="text-[#2B2A29] font-semibold mb-2">Privacy</div>
+          <div className="text-[#2B2A29] font-semibold mb-2">
+            {t("footer.privacy.heading", "Privacy")}
+          </div>
           <p className="leading-relaxed">
-            We never share your personal information without your consent. Therapists
-            only see anonymized referrals.
+            {t(
+              "footer.privacy.body",
+              "We never share your personal information without your consent. Therapists only see anonymized referrals.",
+            )}
           </p>
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">
             <Link to="/terms" className="hover:text-[#2D4A3E] underline" data-testid="footer-terms">

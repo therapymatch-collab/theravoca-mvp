@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import { PATIENT_INSURER_OPTIONS } from "@/lib/insurers";
 
-const STEPS = [
+const STEPS_DEFAULTS = [
   "Who is this for?",
   "What's going on?",
   "Format & location",
@@ -461,6 +461,8 @@ export default function IntakeForm() {
     return "";
   };
 
+  // Resolve step titles via t() so admins can edit them in Site Copy.
+  const STEPS = STEPS_DEFAULTS.map((d, i) => t(`intake.step.${i}`, d));
   const progressPct = ((step + 1) / STEPS.length) * 100;
 
   return (
@@ -1042,14 +1044,17 @@ export default function IntakeForm() {
                     id="adult"
                     checked={confirmAdult}
                     onChange={setConfirmAdult}
-                    label="I confirm I am 18 or older."
+                    label={t("intake.final.adult", "I confirm I am 18 or older.")}
                     testid="confirm-adult"
                   />
                   <CheckRow
                     id="emergency"
                     checked={confirmNotEmergency}
                     onChange={setConfirmNotEmergency}
-                    label="I confirm this is not an emergency."
+                    label={t(
+                      "intake.final.not_emergency",
+                      "I confirm this is not an emergency.",
+                    )}
                     testid="confirm-emergency"
                   />
                 </div>

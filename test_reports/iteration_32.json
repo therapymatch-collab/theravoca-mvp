@@ -1,0 +1,42 @@
+{
+  "summary": "Iter-71 verification: Turnstile keys NOW configured strict gating + site-copy editor expansion. 9/9 backend pytest pass. Frontend admin SiteCopyAdminPanel renders all expected testids with 102 keys (≥95 spec) across 19 sections (review_request says 14 — minor doc discrepancy, not a bug; more sections is better grouping). Search + 'Only overridden' filter both narrow visible sections correctly. End-to-end edit of btn.therapist.cta.headline reflects in /api/site-copy and /therapists/join DOM, but only 1 of the 2 CTAs the spec calls out switched — the other still shows fallback 'Get more referrals' (partial t() wiring). Turnstile widget testid present on intake page; signup-turnstile testid lives in TherapistSignup.jsx but only renders on the last step (verified in source).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "TherapistSignup / Landing 'Why join' & 'FAQ' CTA buttons",
+        "issue": "When btn.therapist.cta.headline is overridden to 'TURNSTILE-LIVE-TEST', only 1 occurrence of the override appears in /therapists/join DOM, but the default 'Get more referrals' is also still present. Spec calls for BOTH the 'Why join' CTA + the FAQ CTA button to switch — at least one is still hardcoded instead of t('btn.therapist.cta.headline', 'Get more referrals').",
+        "selector": "button/a containing 'Get more referrals' on /therapists/join (likely Why-join section CTA or FAQ-section CTA — one is wired, one is not)",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration71_turnstile_strict.py",
+    "/app/test_reports/pytest/iter71_results.xml"
+  ],
+  "action_items": [
+    "Audit /therapists/join: ensure BOTH CTAs (Why-join section + FAQ section) use t('btn.therapist.cta.headline', 'Get more referrals'). Currently only one of the two switches when admin overrides the key.",
+    "OPTIONAL doc fix: review_request says '~95 SEED_KEYS across 14 sections' but actual is 102 keys / 19 sections. Either reduce to 14 by merging, or update the iteration notes."
+  ],
+  "critical_code_review_comments": [
+    "Turnstile gating now strict on both /api/requests and /api/therapists/signup — verified by 4 rejection-path tests (omit token + invalid token, both routes). Contract change confirmed.",
+    "turnstile_service.verify_token still fails-soft on httpx network/timeout exceptions (returns True). When Cloudflare is reachable but token is invalid, returns False → 400. Correct design.",
+    "SiteCopyAdminPanel works correctly: 102 keys, 19 sections, search filters live, 'Only overridden' filter, 'EDITED' tag on overridden rows, counter '3/102 overridden'.",
+    "Public /api/site-copy correctly reflects admin upserts within the same request (no cache TTL issue observed in the test window).",
+    "header.nav.how key is wired in SiteCopyAdminPanel SEED_KEYS (line 64) — frontend t() wiring on /,/sign-in,/therapists/join nav not deep-tested via Playwright; left to main agent self-test if needed.",
+    "intake.final.adult and portal.empty.heading keys are present in SEED_KEYS — t() wiring on those screens not deep-tested in this run beyond source-grep confirmation."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration71_turnstile_strict.py (new, 9 tests)"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "Partial — admin panel 100%, copy edit propagation: 1 of 2 CTAs switched"},
+  "test_credentials": "admin master pwd: admin123! (Master password tab on /admin)",
+  "seed_data_creation": "Created + cleaned up: TEST_iter71.copy.* keys via PUT/DELETE; the e2e btn.therapist.cta.headline override was DELETEd at end. Verified /api/site-copy returns null for that key after cleanup.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: `REACT_APP_BACKEND_URL=https://care-matcher-1.preview.emergentagent.com python -m pytest backend/tests/test_iteration71_turnstile_strict.py -v` — auth uses `X-Admin-Password: admin123!` header. Admin login UI default tab is 'Team email'; click 'Master password' tab first. Site copy panel reachable via admin nav: '/admin' → 'More' dropdown → 'Site copy' (data-testid='more-tab-site_copy'). Frontend testids verified: copy-counter, copy-search, copy-filter-overridden, copy-section-{slug}, EDITED tag in DOM. Turnstile testids verified via source grep: turnstile-widget (IntakeForm.jsx:1114), signup-turnstile (TherapistSignup.jsx:1720) — signup widget only renders on last form step.",
+  "rca of the issue": "Partial CTA wiring in /therapists/join: spec expected both 'Why join' CTA + FAQ CTA to honor btn.therapist.cta.headline override; only one occurrence of the override text rendered, while 'Get more referrals' default also rendered once. Likely one of the two CTA components hardcodes the string instead of calling t(). Reproduction: PUT /api/admin/site-copy {key:'btn.therapist.cta.headline', value:'X'}, hard-refresh /therapists/join, count occurrences of 'X' vs 'Get more referrals'. Mitigation: search the codebase for the string 'Get more referrals' and replace remaining hardcodes with t('btn.therapist.cta.headline', 'Get more referrals')."
+}

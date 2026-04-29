@@ -7,7 +7,7 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from deps import db, logger, require_admin, require_session, _create_session_token
 import stripe_service
@@ -17,6 +17,7 @@ from helpers import _now_iso
 from models import (
     ApplicationOut, BulkApplyIn, TherapistApplyIn, TherapistDeclineIn, TherapistSignup,
 )
+from turnstile_service import verify_token as verify_turnstile
 
 router = APIRouter()
 
@@ -24,13 +25,24 @@ router = APIRouter()
 # ─── Self-signup + Stripe onboarding ────────────────────────────────────────
 
 @router.post("/therapists/signup", response_model=dict)
-async def therapist_signup(payload: TherapistSignup):
+async def therapist_signup(payload: TherapistSignup, request: Request):
+    # Cloudflare Turnstile gate (fail-soft when secret not configured).
+    fwd = request.headers.get("x-forwarded-for") or ""
+    client_ip = (fwd.split(",")[0].strip() if fwd else None) or (
+        getattr(request.client, "host", None) or ""
+    )
+    ok, ts_err = await verify_turnstile(
+        getattr(payload, "turnstile_token", None), remote_ip=client_ip,
+    )
+    if not ok:
+        raise HTTPException(400, ts_err or "Security check failed.")
     existing = await db.therapists.find_one({"email": payload.email}, {"_id": 0, "id": 1})
     if existing:
         raise HTTPException(409, "A therapist with this email already exists.")
     tid = str(uuid.uuid4())
     office_geos = await geocode_offices(db, payload.office_locations or [], "ID")
     data = payload.model_dump()
+    data.pop("turnstile_token", None)  # not persisted
     data["telehealth"] = data["modality_offering"] in ("telehealth", "both")
     data["offers_in_person"] = data["modality_offering"] in ("in_person", "both")
     # Issue a stable refer-a-colleague code (8 chars, base32-ish)
