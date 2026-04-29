@@ -1,0 +1,39 @@
+{
+  "summary": "Iter-82 matching pipeline refactor regression test. 21/21 backend pytest cases pass — full coverage of _primary_concern_pass, _payment_pass soft/strict, _availability_pass strict, _urgency_pass strict, score_therapist research_cache bonus folding, rank_therapists decline_history -10pt penalty, RequestCreate model accepts new strict toggles. Frontend IntakeForm verified at source level: PRIORITY_FACTORS reduced from 6 to 3 (modality/experience/identity), all new testids present (insurance-strict-toggle, availability-strict-toggle, urgency-strict-toggle, prior-notes shown for both yes branches), 'How matching works' info box wired on Step 6. Form bootstraps correctly (Step 1 of 8 renders).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration82_matching_refactor.py",
+    "/app/test_reports/pytest/iter82_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: Consider exposing a dev/test-mode Turnstile bypass (currently routes/patients.py keeps Turnstile enforced even in test_mode) so future agents can run end-to-end POST /api/requests integration tests. Today, the only viable path is mongo-direct seeding.",
+    "OPTIONAL: helpers.py:287 has a confusing chained-and/or for `raw_score` calculation: `(m.get('match_breakdown') or {}).get('research_bonus', 0) and m['match_score'] - (m['match_breakdown']['research_bonus']) or m['match_score']`. When research_bonus == 0 this evaluates to 0 (falsy) → falls through to m['match_score']; works but very hard to read. Suggest rewriting as an explicit if-else for clarity."
+  ],
+  "critical_code_review_comments": [
+    "matching.py:368 has unreachable `return 0.0` after the `return best` on line 367 — minor dead code in _score_experience.",
+    "score_therapist research_bonus is added on top of `total` AFTER the proportional cap-down logic (raw_total > 100 scaling), then capped at 120. This means a deeply-researched therapist can display a score above 100 (up to 120). Confirm this is intentional — UI may need to render that case (or the cap should remain 100 with research bonus replacing some other axis).",
+    "_primary_concern_pass uses ONLY the FIRST item of presenting_issues; if a patient lists 3 issues and the first happens to be 'other', the whole list is dropped and no filter applies. Comment notes this; consider taking the first non-'other' item instead (already partially handled — verified).",
+    "rank_therapists decline_penalty: when match_score is just above the threshold (e.g. 75) the -10 penalty drops the therapist below the 70 threshold cutoff in `above = [s for s in scored if s['match_score'] >= threshold]` filter (line 732). Intended? If so, the penalty doubles as a soft filter, not just a re-rank."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration82_matching_refactor.py"
+  ],
+  "success_rate": {
+    "backend": "100% (21/21 pytest)",
+    "frontend": "100% source-level (form bootstraps; runtime 8-step click-through not exhaustively executed due to time)"
+  },
+  "test_credentials": "Admin: admin123! (X-Admin-Password header). Patient demo email: therapymatch+patient@gmail.com. See /app/memory/test_credentials.md.",
+  "seed_data_creation": "None — tests use in-process objects only; live POST /api/requests blocked by Turnstile.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_iteration82_matching_refactor.py is a clean regression suite for the iter-82 matching refactor — runs in <1s, no DB. Treat as part of the standard regression set. For end-to-end POST /api/requests in this preview env, you must seed via mongo (Turnstile is NOT bypassed by /api/admin/intake-rate-limit/test-mode — only rate limits are). The frontend intake is on `/` Landing page, NOT `/get-matched` (that's 404). Step 1 of 8 = therapy type + age; email + state are on a later step. PRIORITY_FACTORS const at IntakeForm.jsx:33 — confirm length stays at 3.",
+  "rca of the issue": "N/A — no bugs found. All 6 iter-82 changes verified per the brief: (1) score_therapist accepts research_cache and folds bonus inline ✓; (2) _primary_concern_pass always-hard filter ✓; (3) insurance_strict / availability_strict / urgency_strict patient-toggleable hard filters ✓; (4) prior_therapy_notes textarea shown for both yes_helped and yes_not_helped (IntakeForm.jsx:813-814) ✓; (5) 3-toggle commit_bonus = 9 in _deliver_results (helpers.py:446-452, no double-count of research_bonus per line 458 comment) ✓; (6) rank_therapists honours decline_history with -10pt penalty (matching.py:719-720) ✓."
+}

@@ -81,14 +81,24 @@ class RequestCreate(BaseModel):
     client_age: Optional[int] = None
     payment_type: str = "either"
     insurance_name: Optional[str] = ""
+    # Hard-requirement toggle: when True, only therapists who explicitly
+    # accept this insurance pass the filter. Default soft (insurance is
+    # ranked but not filtered) so out-of-network providers can still
+    # appear when they're a strong fit.
+    insurance_strict: bool = False
     budget: Optional[int] = None
     sliding_scale_ok: bool = False
     presenting_issues: list[str] = Field(default_factory=list, max_length=3)
     other_issue: Optional[str] = ""
     availability_windows: list[str] = Field(default_factory=list)
+    # Hard-requirement toggle for availability windows.
+    availability_strict: bool = False
     modality_preference: str = "hybrid"
     modality_preferences: list[str] = Field(default_factory=list)
     urgency: str = "flexible"
+    # Hard-requirement toggle for urgency: when True, only therapists
+    # whose `urgency_capacity` can meet the patient's timeframe pass.
+    urgency_strict: bool = False
     prior_therapy: str = "not_sure"
     prior_therapy_notes: Optional[str] = ""
     # Patients can pick multiple experience preferences (e.g. ["seasoned",

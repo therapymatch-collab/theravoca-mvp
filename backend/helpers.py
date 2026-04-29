@@ -149,6 +149,66 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
     return summary
 
 
+async def _build_decline_history(
+    req: dict, therapist_ids: list[str],
+) -> dict[str, dict]:
+    """Build a {therapist_id: {has_recent_similar_decline: bool}} map for
+    every therapist in `therapist_ids`. A decline is "similar" when the
+    declined request's primary presenting issue matches the new request's
+    primary presenting issue, AND the decline was within the last 30 days.
+
+    This is used by `rank_therapists` to apply a soft 10pt penalty so
+    we stop routing the same kind of referral to providers who routinely
+    say no to it. It's not a hard filter — capacity may have changed —
+    but it should improve our acceptance rate over time.
+    """
+    if not therapist_ids:
+        return {}
+    issues = [
+        i.lower() for i in (req.get("presenting_issues") or [])
+        if i and i.lower() != "other"
+    ]
+    if not issues:
+        return {}
+    primary = issues[0]
+    cutoff = (
+        datetime.now(timezone.utc) - timedelta(days=30)
+    ).isoformat()
+    history: dict[str, dict] = {}
+    # Pull every recent decline for these therapists in ONE query then
+    # join against requests in a second batch query — cheaper than per-
+    # therapist round-trips.
+    decline_cursor = db.declines.find(
+        {
+            "therapist_id": {"$in": therapist_ids},
+            "created_at": {"$gte": cutoff},
+        },
+        {"_id": 0, "therapist_id": 1, "request_id": 1},
+    )
+    declines = await decline_cursor.to_list(2000)
+    if not declines:
+        return {}
+    decl_request_ids = list({d["request_id"] for d in declines})
+    req_cursor = db.requests.find(
+        {"id": {"$in": decl_request_ids}},
+        {"_id": 0, "id": 1, "presenting_issues": 1},
+    )
+    decl_request_issues: dict[str, str] = {}
+    async for rdoc in req_cursor:
+        rissues = [
+            i.lower() for i in (rdoc.get("presenting_issues") or [])
+            if i and i.lower() != "other"
+        ]
+        if rissues:
+            decl_request_issues[rdoc["id"]] = rissues[0]
+    for d in declines:
+        tid = d["therapist_id"]
+        decl_primary = decl_request_issues.get(d["request_id"])
+        if decl_primary == primary:
+            history[tid] = {"has_recent_similar_decline": True}
+    return history
+
+
 async def _trigger_matching(request_id: str, threshold: Optional[float] = None) -> dict[str, Any]:
     req = await db.requests.find_one({"id": request_id}, {"_id": 0})
     if not req:
@@ -163,8 +223,49 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
         }, {"_id": 0},
     )
     therapists = await therapists_cursor.to_list(2000)
+    therapist_ids = [t["id"] for t in therapists if t.get("id")]
+
+    # Pre-fetch research caches in one Mongo round-trip so scoring can
+    # fold in the evidence-depth + approach-alignment bonus without N+1
+    # queries. Cold-cache therapists score without the bonus; we kick
+    # off a background warmup so they're ready next time.
+    research_caches: dict[str, dict] = {}
+    cold_ids: list[str] = []
+    research_enabled = False
+    try:
+        from research_enrichment import is_enabled as _re_enabled
+        research_enabled = await _re_enabled()
+    except Exception:
+        research_enabled = False
+    if research_enabled and therapist_ids:
+        cur = db.therapists.find(
+            {"id": {"$in": therapist_ids}},
+            {"_id": 0, "id": 1, "research_cache": 1},
+        )
+        async for tdoc in cur:
+            cache = tdoc.get("research_cache") or {}
+            # A cache is "warm" when the deep-research stage has actually
+            # extracted themes for this therapist. Otherwise treat as cold.
+            if cache.get("themes"):
+                research_caches[tdoc["id"]] = cache
+            else:
+                cold_ids.append(tdoc["id"])
+
+    # Pre-fetch decline history (last 30 days) for every active
+    # therapist who's seen a referral with overlapping presenting issues.
+    # Used by `rank_therapists` to apply a soft penalty so we don't keep
+    # routing the same kind of referral to providers who routinely
+    # decline it.
+    decline_history = await _build_decline_history(req, therapist_ids)
+
     matches = rank_therapists(
-        therapists, req, threshold=threshold, top_n=MIN_TARGET_MATCHES, min_results=3,
+        therapists,
+        req,
+        threshold=threshold,
+        top_n=MIN_TARGET_MATCHES,
+        min_results=3,
+        research_caches=research_caches,
+        decline_history=decline_history,
     )
 
     already = set(req.get("notified_therapist_ids") or [])
@@ -175,6 +276,23 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
     notified_scores.update({m["id"]: m["match_score"] for m in new_matches})
     notified_breakdowns: dict[str, dict] = req.get("notified_breakdowns") or {}
     notified_breakdowns.update({m["id"]: m.get("match_breakdown") or {} for m in new_matches})
+    # Persist the research axes per match (rationale + chips) so the
+    # patient results endpoint can read them directly. Folded into the
+    # SAME pass as scoring — no separate enrichment step needed.
+    research_scores: dict[str, dict] = req.get("research_scores") or {}
+    for m in new_matches:
+        axes = m.get("research_axes") or {}
+        if axes:
+            research_scores[m["id"]] = {
+                "raw_score": (m.get("match_breakdown") or {}).get("research_bonus", 0) and m["match_score"] - (m["match_breakdown"]["research_bonus"]) or m["match_score"],
+                "enriched_score": m["match_score"],
+                "delta": (m.get("match_breakdown") or {}).get("research_bonus", 0),
+                "evidence_depth": axes.get("evidence_depth") or 0,
+                "approach_alignment": axes.get("approach_alignment") or 0,
+                "rationale": axes.get("rationale") or "",
+                "themes": axes.get("themes") or {},
+                "computed_at": _now_iso(),
+            }
     notified_distances: dict[str, float] = req.get("notified_distances") or {}
     patient_geo = req.get("patient_geo")
     if patient_geo:
@@ -226,6 +344,8 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
             "notified_scores": notified_scores,
             "notified_breakdowns": notified_breakdowns,
             "notified_distances": notified_distances,
+            "research_scores": research_scores,
+            "research_enriched_at": _now_iso() if research_scores else None,
             "matched_at": _now_iso(),
             "status": "matched",
             "outreach_needed_count": outreach_needed_count,
@@ -250,17 +370,44 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
         except Exception as e:
             logger.warning("Could not schedule outreach for %s: %s", request_id, e)
 
-    # Spawn LLM web-research enrichment in background — non-blocking. The
-    # admin toggle (`app_config.research_enrichment.enabled`) is checked
-    # inside the task itself, so a flipped toggle takes effect immediately.
-    try:
-        from research_enrichment import enrich_matches_for_request
-        _spawn_bg(
-            enrich_matches_for_request(request_id),
-            name=f"research_enrich_{request_id[:8]}",
-        )
-    except Exception as e:
-        logger.warning("Could not schedule research enrichment for %s: %s", request_id, e)
+    # Spawn cold-cache warmup in background — non-blocking. Any therapist
+    # who scored without the research bonus this round (cache was missing
+    # at match time) gets their cache built now so the NEXT patient's
+    # match call has the bonus available. The warmup is itself a
+    # _spawn_bg fire-and-forget; we don't await it.
+    if research_enabled and cold_ids:
+        try:
+            from research_enrichment import get_or_build_research
+
+            async def _warmup_cold_caches():
+                # Cap parallelism to 4 — same as the previous enrichment
+                # path. Each one needs a website fetch + LLM call.
+                import asyncio as _asyncio
+                sem = _asyncio.Semaphore(4)
+
+                async def _one(tid: str):
+                    async with sem:
+                        t = await db.therapists.find_one({"id": tid}, {"_id": 0})
+                        if t:
+                            try:
+                                await get_or_build_research(t)
+                            except Exception as e:
+                                logger.debug(
+                                    "Research warmup failed for %s: %s", tid, e,
+                                )
+
+                await _asyncio.gather(*(_one(t) for t in cold_ids[:30]))
+
+            _spawn_bg(
+                _warmup_cold_caches(),
+                name=f"cold_cache_warmup_{request_id[:8]}",
+            )
+            logger.info(
+                "Scheduled cold-cache warmup for %d therapists (request %s)",
+                len(cold_ids[:30]), request_id,
+            )
+        except Exception as e:
+            logger.warning("Could not schedule cold-cache warmup for %s: %s", request_id, e)
     return {
         "notified_new": len(new_matches),
         "notified_total": notified_total,
@@ -290,16 +437,32 @@ async def _deliver_results(request_id: str) -> dict[str, Any]:
                 speed_bonus = max(0.0, min(30.0, 30.0 * (24.0 - hours) / 24.0))
         msg_len = len(a.get("message") or "")
         quality_bonus = min(10.0, msg_len / 300.0 * 10.0)
-        # Research-enrichment bonus (evidence_depth + approach_alignment +
-        # apply_fit) — only used when admin has enabled the toggle and we
-        # have stored research scores for this match.
+        # Commitment-toggle bonus — when a therapist explicitly confirms
+        # they can meet the patient's availability / urgency / payment
+        # constraints in their apply form, we boost their patient-rank
+        # score. Each toggle worth +3 (max +9). Confirms_payment is
+        # particularly valuable for insurance patients since it means
+        # the therapist personally verified network status.
+        commit_bonus = 0.0
+        if a.get("confirms_availability"):
+            commit_bonus += 3.0
+        if a.get("confirms_urgency"):
+            commit_bonus += 3.0
+        if a.get("confirms_payment"):
+            commit_bonus += 3.0
+        # apply_fit is the LLM grading of how directly the message
+        # addresses THIS patient's brief (still 0-5).
+        apply_fit = float(a.get("apply_fit") or 0)
+        # Note: ms (match_score) ALREADY includes the research-axis
+        # bonus thanks to the new inline-enrichment pipeline. The old
+        # post-hoc `research_bonus` add has been removed to prevent
+        # double-counting. We still surface the rationale + axes in the
+        # patient view (research_scores has them).
         rs = research_scores.get(a["therapist_id"]) or {}
-        research_bonus = float(rs.get("delta") or 0)  # evidence_depth + approach_alignment
-        apply_fit = float(a.get("apply_fit") or 0)    # 0-5 scored at apply time
         a["patient_rank_score"] = round(
             min(
                 120.0,
-                ms * 0.6 + speed_bonus + quality_bonus + research_bonus + apply_fit,
+                ms * 0.6 + speed_bonus + quality_bonus + commit_bonus + apply_fit,
             ),
             1,
         )

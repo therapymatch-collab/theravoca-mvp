@@ -31,11 +31,14 @@ const STEPS_DEFAULTS = [
 ];
 
 const PRIORITY_FACTORS = [
-  { v: "specialty", l: "Issue / specialty fit", d: "Therapist treats your specific concern" },
-  { v: "modality",  l: "Therapy approach",       d: "CBT, EMDR, IFS, etc." },
-  { v: "schedule",  l: "Schedule & availability", d: "When they can see you" },
-  { v: "payment",   l: "Insurance / cost fit",    d: "In-network or your budget" },
-  { v: "identity",  l: "Identity & style",        d: "Gender, faith, LGBTQ+ affirming, etc." },
+  // Soft axes only — the "always hard" ones (state, type of therapy, main
+  // concern, age group) and the patient-toggleable hards (insurance,
+  // availability, urgency, gender, format/distance) are enforced
+  // earlier in the form. Priority factors here let the patient nudge
+  // ranking on the remaining SOFT axes.
+  { v: "modality",   l: "Therapy approach",      d: "CBT / EMDR / IFS preference (soft — boosted in ranking)" },
+  { v: "experience", l: "Therapist experience",  d: "Years in practice (soft — boosted in ranking)" },
+  { v: "identity",   l: "Therapist style & gender", d: "Communication style + therapist gender preference (soft)" },
 ];
 
 const CLIENT_TYPES = [
@@ -230,12 +233,16 @@ export default function IntakeForm() {
     payment_type: "",
     insurance_name: "",
     insurance_name_other: "",
+    insurance_strict: false,
     budget: "",
     sliding_scale_ok: false,
     availability_windows: [],
+    availability_strict: false,
     urgency: "",
+    urgency_strict: false,
     prior_therapy: "",
     prior_therapy_notes: "",
+    prior_therapy_helped: "",
     experience_preference: ["no_pref"],
     gender_preference: "no_pref",
     gender_required: false,
@@ -687,6 +694,27 @@ export default function IntakeForm() {
                     )}
                   </Field>
                 )}
+                {data.payment_type === "insurance" && data.insurance_name && (
+                  <label
+                    className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer hover:border-[#2D4A3E] transition"
+                    data-testid="insurance-strict-row"
+                  >
+                    <Checkbox
+                      checked={data.insurance_strict}
+                      onCheckedChange={(v) => set("insurance_strict", !!v)}
+                      className="mt-0.5 border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
+                      data-testid="insurance-strict-toggle"
+                    />
+                    <span className="text-sm text-[#2B2A29] leading-relaxed">
+                      <strong>Hard requirement:</strong> only show therapists
+                      who explicitly accept this insurance.{" "}
+                      <span className="text-[#6D6A65]">
+                        Off (default) means out-of-network therapists can
+                        still appear if they're a strong fit.
+                      </span>
+                    </span>
+                  </label>
+                )}
                 {(data.payment_type === "cash" ||
                   data.payment_type === "either") && (
                   <>
@@ -731,6 +759,24 @@ export default function IntakeForm() {
                     testid="availability"
                   />
                 </Group>
+                {data.availability_windows.length > 0 &&
+                  !data.availability_windows.includes("flexible") && (
+                  <label
+                    className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer hover:border-[#2D4A3E] transition -mt-3"
+                    data-testid="availability-strict-row"
+                  >
+                    <Checkbox
+                      checked={data.availability_strict}
+                      onCheckedChange={(v) => set("availability_strict", !!v)}
+                      className="mt-0.5 border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
+                      data-testid="availability-strict-toggle"
+                    />
+                    <span className="text-sm text-[#2B2A29] leading-relaxed">
+                      <strong>Hard requirement:</strong> only show therapists
+                      whose published schedule overlaps these windows.
+                    </span>
+                  </label>
+                )}
                 <Group label="How soon to start?">
                   <PillRow
                     items={URGENCY}
@@ -739,6 +785,23 @@ export default function IntakeForm() {
                     testid="urgency"
                   />
                 </Group>
+                {data.urgency && data.urgency !== "flexible" && (
+                  <label
+                    className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer hover:border-[#2D4A3E] transition -mt-3"
+                    data-testid="urgency-strict-row"
+                  >
+                    <Checkbox
+                      checked={data.urgency_strict}
+                      onCheckedChange={(v) => set("urgency_strict", !!v)}
+                      className="mt-0.5 border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
+                      data-testid="urgency-strict-toggle"
+                    />
+                    <span className="text-sm text-[#2B2A29] leading-relaxed">
+                      <strong>Hard requirement:</strong> only show therapists
+                      who can start within this timeframe.
+                    </span>
+                  </label>
+                )}
                 <Group label="Has the client been in therapy before?">
                   <PillCol
                     items={PRIOR_THERAPY}
@@ -747,17 +810,35 @@ export default function IntakeForm() {
                     testid="prior-therapy"
                   />
                 </Group>
-                {data.prior_therapy === "yes_not_helped" && (
-                  <Field label="What didn't work last time? (optional)">
+                {(data.prior_therapy === "yes_helped" ||
+                  data.prior_therapy === "yes_not_helped") && (
+                  <Field
+                    label={
+                      data.prior_therapy === "yes_helped"
+                        ? "What worked? Anything you'd want again from a new therapist? (optional)"
+                        : "What didn't work last time? Anything you'd want different this time? (optional)"
+                    }
+                  >
                     <Textarea
                       rows={3}
                       value={data.prior_therapy_notes}
                       onChange={(e) =>
                         set("prior_therapy_notes", e.target.value)
                       }
+                      maxLength={600}
+                      placeholder={
+                        data.prior_therapy === "yes_helped"
+                          ? "e.g. CBT homework, weekly cadence, direct feedback style…"
+                          : "e.g. felt rushed, talked over me, only generic advice…"
+                      }
                       className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                       data-testid="prior-notes"
                     />
+                    <p className="text-[11px] text-[#6D6A65] mt-1.5 leading-snug">
+                      We feed this into matching so therapists who fit
+                      what you valued (or avoid what didn't work) rank
+                      higher.
+                    </p>
                   </Field>
                 )}
               </div>
@@ -852,14 +933,34 @@ export default function IntakeForm() {
 
             {step === 6 && (
               <div className="space-y-5">
+                <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl p-4 text-sm text-[#2B2A29] leading-relaxed">
+                  <p className="font-semibold text-[#2D4A3E] mb-1.5">
+                    {t(
+                      "intake.priorities.howmatching_title",
+                      "How matching works",
+                    )}
+                  </p>
+                  <p className="text-[#2B2A29] mb-2">
+                    {t(
+                      "intake.priorities.howmatching_hard",
+                      "We always require: state license, the type of therapy you need, your main concern, and the right age group.",
+                    )}
+                  </p>
+                  <p className="text-[#6D6A65]">
+                    {t(
+                      "intake.priorities.howmatching_soft",
+                      "The rest — therapist experience, gender, style, modality — is soft by default. Pick any below to nudge ranking toward what matters most to you. (You've already had the option to mark insurance, schedule, urgency, and gender as hard requirements above.)",
+                    )}
+                  </p>
+                </div>
                 <Group
                   label={t(
                     "intake.priorities.label",
-                    "Which of these matter most to you?",
+                    "Boost ranking on these factors",
                   )}
                   hint={t(
                     "intake.priorities.hint",
-                    "Tap any that really matter — we'll lean your matches toward those. Skip if you'd rather we use our default ranking.",
+                    "Pick the soft factors you'd like us to weigh more heavily. Skip if you'd rather we use our default ranking.",
                   )}
                 >
                   <div className="space-y-2">

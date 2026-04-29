@@ -60,14 +60,88 @@ def _age_group_pass(t: dict, r: dict) -> bool:
     return needed in served
 
 
+def _primary_concern_pass(t: dict, r: dict) -> bool:
+    """Hard filter: therapist must list the patient's primary concern in
+    primary, secondary, OR general specialties — anywhere they treat it
+    counts. The patient's primary concern is the first (top-priority)
+    item in `presenting_issues`. If the patient picked nothing or only
+    "other", we don't filter (the matcher will fall back to soft scoring).
+    """
+    issues = [
+        i.lower() for i in (r.get("presenting_issues") or [])
+        if i and i.lower() != "other"
+    ]
+    if not issues:
+        return True
+    primary = issues[0]
+    treats = (
+        {s.lower() for s in t.get("primary_specialties") or []}
+        | {s.lower() for s in t.get("secondary_specialties") or []}
+        | {s.lower() for s in t.get("general_treats") or []}
+    )
+    return primary in treats
+
+
 def _payment_pass(t: dict, r: dict) -> bool:
+    """Payment compatibility. Hard by default, but the patient can soften
+    it by leaving `insurance_strict` False — in which case insurance-only
+    plans that don't match still pass (they pay out-of-pocket later).
+    """
     pay = (r.get("payment_type") or "either").lower()
+    # When the patient hasn't explicitly demanded a specific carrier,
+    # treat insurance as a soft preference (let the score down-rank
+    # mismatches but don't filter them out entirely).
+    strict = bool(r.get("insurance_strict"))
     if pay == "either":
+        # "Either" is permissive by definition — only filter if the
+        # therapist truly accepts neither.
         return _insurance_match(t, r) or _cash_match(t, r)
     if pay == "insurance":
+        if not strict:
+            # Soft: accept if therapist takes patient's plan OR if the
+            # patient also gave a budget that the therapist's cash rate
+            # fits (lets out-of-network bookings happen).
+            return _insurance_match(t, r) or _cash_match(t, r)
         return _insurance_match(t, r)
     if pay == "cash":
         return _cash_match(t, r)
+    return True
+
+
+def _availability_pass(t: dict, r: dict) -> bool:
+    """Availability hard-filter when the patient has ticked
+    `availability_strict`. Otherwise availability is purely soft (axis
+    score). Strict mode requires at least one window overlap unless the
+    patient picked 'flexible'.
+    """
+    if not r.get("availability_strict"):
+        return True
+    patient = {w for w in (r.get("availability_windows") or []) if w}
+    if not patient or "flexible" in patient:
+        return True
+    therapist = {w for w in (t.get("availability_windows") or []) if w}
+    if not therapist:
+        # Therapist hasn't published a schedule — fail closed in strict mode.
+        return False
+    return bool(patient & therapist)
+
+
+def _urgency_pass(t: dict, r: dict) -> bool:
+    """Urgency hard-filter when the patient has ticked `urgency_strict`.
+    'asap' patients require a therapist with `urgency_capacity` of 'asap'
+    or 'within_2_3_weeks'. 'within_2_3_weeks' patients require either
+    of those two. Otherwise the filter is a no-op."""
+    if not r.get("urgency_strict"):
+        return True
+    pu = (r.get("urgency") or "").lower()
+    tu = (t.get("urgency_capacity") or "").lower()
+    if pu == "asap":
+        return tu in ("asap", "within_2_3_weeks")
+    if pu == "within_2_3_weeks":
+        return tu in ("asap", "within_2_3_weeks", "within_month")
+    if pu == "within_month":
+        return tu in ("asap", "within_2_3_weeks", "within_month")
+    # 'flexible' or empty — never filters.
     return True
 
 
@@ -344,11 +418,14 @@ def _score_modality_pref(t: dict, r: dict) -> float:
 # axes get multiplied by `PRIORITY_BOOST` and re-normalised so the total
 # stays in [0, 100]. Picking nothing leaves the default weights intact.
 PRIORITY_AXES = {
-    "specialty": ["issues"],
-    "modality":  ["modality", "modality_pref"],
-    "schedule":  ["availability", "urgency"],
-    "payment":   ["payment_fit"],
-    "identity":  ["gender", "style"],
+    # The "always hard" axes (specialty/concern via _primary_concern_pass)
+    # and the patient-toggleable hards (payment/availability/urgency/
+    # gender via *_strict flags) live OUTSIDE this boost map — they're
+    # already enforced or flagged at filter-time. Boost factors only
+    # apply to the remaining SOFT axes the patient wants weighted higher.
+    "modality":   ["modality", "modality_pref"],
+    "experience": ["experience"],
+    "identity":   ["gender", "style"],
 }
 # Multiplier applied to score axes the patient flagged as a priority.
 # Tuned down from 1.8 → 1.15 in iter-77 because the larger boost
@@ -401,20 +478,46 @@ def _patient_expressed_axis(r: dict, axis: str) -> bool:
     return False
 
 
-def score_therapist(t: dict, r: dict) -> dict[str, Any]:
-    """Return scoring breakdown + total. total=-1 indicates filtered out."""
+def score_therapist(
+    t: dict,
+    r: dict,
+    *,
+    research_cache: Optional[dict] = None,
+) -> dict[str, Any]:
+    """Return scoring breakdown + total. total=-1 indicates filtered out.
+
+    `research_cache` (when provided) is the therapist's pre-warmed deep-
+    research cache (`therapist.research_cache`). When present and warm
+    (has `themes` extracted), we fold the evidence-depth + approach-
+    alignment bonus directly into the final score so the score the
+    therapist sees in their notification matches the score the patient
+    sees on the results page. No LLM calls happen here — it's pure set
+    arithmetic over the cached themes + the patient's brief.
+    """
+    # ── Hard filters (always-on) ──────────────────────────────────────
     if not _state_pass(t, r):
         return {"total": -1, "filter_failed": "state", "filtered": True}
     if not _client_type_pass(t, r):
         return {"total": -1, "filter_failed": "client_type", "filtered": True}
     if not _age_group_pass(t, r):
         return {"total": -1, "filter_failed": "age_group", "filtered": True}
+    if not _primary_concern_pass(t, r):
+        return {
+            "total": -1,
+            "filter_failed": "primary_concern",
+            "filtered": True,
+        }
+    # ── Patient-toggleable hard filters (soft by default) ─────────────
     if not _payment_pass(t, r):
         return {"total": -1, "filter_failed": "payment", "filtered": True}
     if not _modality_pass(t, r):
         return {"total": -1, "filter_failed": "modality", "filtered": True}
     if not _gender_pass(t, r):
         return {"total": -1, "filter_failed": "gender", "filtered": True}
+    if not _availability_pass(t, r):
+        return {"total": -1, "filter_failed": "availability", "filtered": True}
+    if not _urgency_pass(t, r):
+        return {"total": -1, "filter_failed": "urgency", "filtered": True}
 
     raw = {
         "issues": _score_issues(t, r),
@@ -503,7 +606,36 @@ def score_therapist(t: dict, r: dict) -> dict[str, Any]:
         total = 100.0
     else:
         total = round(raw_total, 2)
-    return {"total": total, "breakdown": breakdown, "filtered": False}
+
+    # ── Research-cache bonus (folded directly into the live score) ────
+    # When the therapist has a warm pre-warm cache, we project it through
+    # the patient's brief now (cheap set arithmetic, no LLM call) so the
+    # final score reflects evidence-graded specialty match + style/modality
+    # alignment. This used to live in a separate background task — moving
+    # it inline means notifications go out with the SAME score the patient
+    # eventually sees, and re-ranking (a deep-cache match jumping from #6
+    # to #2) actually works.
+    research_axes: dict[str, Any] = {}
+    if research_cache:
+        try:
+            from research_enrichment import _score_axes
+            research_axes = _score_axes(research_cache, r)
+            bonus = (
+                float(research_axes.get("evidence_depth") or 0)
+                + float(research_axes.get("approach_alignment") or 0)
+            )
+            if bonus:
+                breakdown["research_bonus"] = round(bonus, 2)
+                total = round(min(120.0, total + bonus), 2)
+        except Exception:
+            # Defensive: a malformed cache should never break scoring.
+            research_axes = {}
+    return {
+        "total": total,
+        "breakdown": breakdown,
+        "filtered": False,
+        "research_axes": research_axes,  # rationale + chips for the patient view
+    }
 
 
 def _tiebreaker(t: dict) -> tuple[float, float, float, float]:
@@ -544,6 +676,9 @@ def rank_therapists(
     threshold: float = 70.0,
     top_n: int = 30,
     min_results: int = 3,
+    *,
+    research_caches: Optional[dict[str, dict]] = None,
+    decline_history: Optional[dict[str, dict]] = None,
 ) -> list[dict]:
     """Score and filter per spec:
        - hard floor: never include therapists below `threshold` (default 70)
@@ -554,16 +689,40 @@ def rank_therapists(
     Identical `match_score` values are tie-broken via `_tiebreaker` so
     the ordering is deterministic AND meaningful — the 70-point therapist
     with 80 verified reviews ranks above the 70-point therapist with 0.
+
+    `research_caches` (optional): {therapist_id: research_cache_dict}.
+    Pre-fetched once by the caller so we make ONE Mongo round-trip
+    instead of N. Therapists missing from the map score without the
+    research-axis bonus.
+
+    `decline_history` (optional): {therapist_id: {decline_count, last_decline_at,
+    has_recent_similar_decline}}. When provided, therapists with a recent
+    decline against a similar request get a small ranking penalty so we
+    don't keep notifying providers who routinely turn down this concern.
     """
+    research_caches = research_caches or {}
+    decline_history = decline_history or {}
     scored = []
     for t in therapists:
-        result = score_therapist(t, request)
+        cache = research_caches.get(t.get("id"))
+        result = score_therapist(t, request, research_cache=cache)
         if result["filtered"]:
             continue
+        # Decline-history penalty (soft). We don't filter — the therapist
+        # may have changed capacity since — but ranking accounts for it.
+        dh = decline_history.get(t.get("id")) or {}
+        if dh.get("has_recent_similar_decline"):
+            # 10-point soft penalty for declining a similar request in the
+            # last 30 days. Uses the AXIS (specialty) overlap from the
+            # decline reason codes, so a "wrong-specialty" decline
+            # specifically penalises future referrals on that specialty.
+            result["total"] = max(0.0, result["total"] - 10.0)
+            result.setdefault("breakdown", {})["decline_penalty"] = -10.0
         scored.append({
             **t,
             "match_score": result["total"],
             "match_breakdown": result["breakdown"],
+            "research_axes": result.get("research_axes") or {},
         })
 
     scored.sort(
