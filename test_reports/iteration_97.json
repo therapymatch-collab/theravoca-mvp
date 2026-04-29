@@ -1,0 +1,34 @@
+{
+  "summary": "Tested the new Matching-Outcome Simulator (admin-only) end-to-end. Backend: 13/13 pytest cases pass — POST /api/admin/simulator/run, GET /runs, GET /runs/{id}, DELETE /runs/{id}, auth (401 unauth), validation (400 for num_requests=5/500), and the production therapist-filter fix produce a non-empty pool (122 active therapists, step1 mean > 0). Frontend: full flow works on desktop AND 375x667 mobile — login → More → Matching simulator → run with seed/num — sim-report renders with histogram, filter-bars, 5 suggestion cards, 20 per-request rows, expandable detail panels, prior-runs list, Load and Delete (with confirm) all functional. No console errors, no horizontal overflow on mobile.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration97_simulator.py",
+    "/app/test_reports/pytest/iter97_results.xml"
+  ],
+  "action_items": [
+    "PRODUCT FINDING (not a bug): Simulator reports 45% zero-pool rate against the 122-therapist seed with 'client type' as the dominant filter exclusion (1294 hits across a 20-request run). This is exactly the kind of issue the simulator is meant to surface — the team may want to recruit more therapists tagged for couples/family/group or relax the client_type HARD filter. Surfaced via simulator's own suggestion cards (CRITICAL severity), so working as designed."
+  ],
+  "critical_code_review_comments": [
+    "simulator.py is ~900 lines — borderline; consider splitting synthetic-request generation, scoring, and audit-analysis helpers into separate modules if it grows further.",
+    "simulator.run_simulation is invoked synchronously from the POST route. A 50-request × 122-therapist run completes in ~0.05s (verified), but the 200-request upper bound could push toward 1s+ on a slower box; consider moving to a background task with a status-polling endpoint if request counts grow.",
+    "simulator_runs.insert_one(dict(report)) stores the full per-request report inline. With 200-request runs and Step-2 application detail this could approach Mongo's 16MB doc cap. Worth monitoring or chunking if larger runs are added."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration97_simulator.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin master password admin123! (from /app/memory/test_credentials.md). Backend curl uses X-Admin-Password header.",
+  "seed_data_creation": "Each test run creates ephemeral simulator_runs + simulator_requests docs; module-scope fixture deletes the primary run on teardown. test_create_then_delete cleans its own run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Simulator endpoints are at /api/admin/simulator/{run|runs|runs/{id}}. Auth via X-Admin-Password: admin123! header (or admin session cookie). UI panel testid='simulator-panel', accessible via top-level 'More' dropdown → 'Matching simulator' (testid='more-tab-simulator'). All sim-* testids documented in the original review request work as advertised. Both desktop (1920x1080) and mobile (375x667) flows verified end-to-end with no console errors and no horizontal overflow.",
+  "rca of the issue": "N/A — no bugs found. The previously-fixed therapist-filter bug (using {status:'active', approved:True, billable:True} instead of the production filter) is verified resolved: simulator now uses {is_active != False, pending_approval != True, subscription_status not in [past_due, canceled, unpaid, incomplete]} and returns a 122-therapist pool (test_therapist_pool_nonzero passes)."
+}

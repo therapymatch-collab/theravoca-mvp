@@ -33,6 +33,7 @@ import {
   Eye,
   Brain,
   MessageSquareWarning,
+  Activity,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
@@ -65,6 +66,7 @@ import RecruitDraftsPanel from "@/pages/admin/panels/RecruitDraftsPanel";
 import PatientsByEmailPanel from "@/pages/admin/panels/PatientsByEmailPanel";
 import FeedbackPanel from "@/pages/admin/panels/FeedbackPanel";
 import ProviderPreviewCard from "@/pages/admin/panels/ProviderPreviewCard";
+import SimulatorPanel from "@/pages/admin/panels/SimulatorPanel";
 import { StatBox } from "@/pages/admin/panels/_panelShared";
 
 // ─── Editor option lists (mirrors TherapistSignup) ───
@@ -1634,6 +1636,8 @@ export default function AdminDashboard() {
 
               {tab === "how_it_works" && <HowItWorksPanel />}
 
+              {tab === "simulator" && <SimulatorPanel client={client} />}
+
               {tab === "email_templates" && (
                 <div className="mt-6 space-y-3" data-testid="email-templates-list">
                   {emailTemplates.length === 0 ? (
@@ -2832,6 +2836,11 @@ function AdminTabsBar({
       id: "how_it_works",
       label: "How it works",
       icon: <Brain size={14} />,
+    },
+    {
+      id: "simulator",
+      label: "Matching simulator",
+      icon: <Activity size={14} />,
     },
   ];
 

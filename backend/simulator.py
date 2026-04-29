@@ -425,8 +425,16 @@ async def run_simulation(
     # Pull the active therapist pool ONCE. Mirrors the filter used
     # by /api/admin/requests/<id>/score-preview so the simulator
     # sees the same pool as the real pipeline.
+    # Mirror the production active-therapist filter from helpers.py so the
+    # simulator sees the exact same pool the real matcher would.
     therapists = await db.therapists.find(
-        {"status": "active", "approved": True, "billable": True},
+        {
+            "is_active": {"$ne": False},
+            "pending_approval": {"$ne": True},
+            "subscription_status": {
+                "$nin": ["past_due", "canceled", "unpaid", "incomplete"],
+            },
+        },
         {"_id": 0},
     ).to_list(length=None)
 
