@@ -138,6 +138,12 @@ export default function MatchedProviderCard({ t }) {
                   const ratio = max && max > 0 ? Math.min(1, pts / max) : 0;
                   const isNeg = pts < 0;
                   const isZero = pts === 0;
+                  // When the actual exceeds the documented max it's
+                  // because a priority-factor boost (or pre-iter-82
+                  // weighting) inflated the axis. Hide the `/max` suffix
+                  // in that case to avoid showing nonsensical "+63/35"
+                  // chips. Show a small "boosted" hint instead.
+                  const isBoosted = max != null && !isNeg && pts > max;
                   return (
                     <div
                       key={axis}
@@ -169,8 +175,16 @@ export default function MatchedProviderCard({ t }) {
                       >
                         {isNeg ? "" : "+"}
                         {Math.round(pts * 10) / 10}
-                        {max != null && !isNeg && (
+                        {max != null && !isNeg && !isBoosted && (
                           <span className="text-[#A4A29E]">/{max}</span>
+                        )}
+                        {isBoosted && (
+                          <span
+                            className="text-[#C87965] ml-1"
+                            title="Priority-boosted axis (the patient asked us to weigh this higher)"
+                          >
+                            ★
+                          </span>
                         )}
                       </span>
                     </div>
@@ -192,8 +206,6 @@ export default function MatchedProviderCard({ t }) {
                     {f}
                   </span>
                 ))}
-                {(t.match_breakdown?.payment_fit !== undefined ||
-                  t.match_breakdown?.research_bonus !== undefined) && null}
               </div>
             </div>
           </div>

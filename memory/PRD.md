@@ -1963,3 +1963,24 @@ User asked for a pre-deploy refactor/code-review sweep. Scope: full lint, mobile
 - One Mongo round-trip for all caches (was N+1)
 - Decline learning: providers stop receiving the same kind of referrals they routinely turn down
 - Apply 3-toggles now have ranking impact (were previously cosmetic flags)
+
+
+## Iter-83 (Apr 29 2026) — "Why does this therapist score X%?" admin explainer
+
+User asked for a per-row clickable breakdown on the admin Match Detail panel showing the 12-axis scoring + filters passed.
+
+### Frontend
+- **`pages/admin/panels/MatchedProviderCard.jsx`** — full rewrite of the expanded view. New "Why does this therapist score X%?" panel at the top of the expansion shows:
+  - Header: `Why does this therapist score 87%?` + right-side `axes total: 110` counter
+  - **All 12 scoring axes** (issues, availability, modality, urgency, prior_therapy, experience, modality_pref, payment_fit, gender, style, reviews, differentiator) — sorted by max value descending so the heaviest axes lead. Each chip renders the human label, a 12px-wide proportional mini bar (green when scored, red-tint when zero), and the points value with `/max` suffix (e.g., `+21/35`). Boosted axes (where actual exceeds documented max — pre-iter-82 historical priority weighting) render the value with a ★ marker instead of `/max`.
+  - **Hard-filter checklist** below the axes — 4 ✓ chips confirming the therapist passes the always-hard filters (state license, primary concern, age group, format).
+  - The existing LLM-rationale orange box and the therapist-attribute grid (Years exp / Cash rate / etc) are preserved BELOW the new panel.
+- AXIS_MAX + AXIS_LABEL constants kept in sync with `matching.py` weights via a comment note.
+
+### Files changed
+- `/app/frontend/src/pages/admin/panels/MatchedProviderCard.jsx` (full rewrite, 257 lines)
+
+### Tests
+- ✅ Iter-37 testing agent — 8/8 frontend acceptance criteria pass on real data (request 66770043 has 5 notified therapists with full 12-axis breakdowns). Header text correct, axes-total counter correct, all 12 chips render with labels + bars + points, 4 hard-filter ✓ chips render, existing rationale + attribute grid still render below. Zero console errors.
+- ✅ 3 code-review notes from testing agent addressed: (1) dead JSX block deleted, (2) `+63/35` boosted-axis cosmetic fixed (now shows ★), (3) drift-prevention comment header in place.
+- ✅ Lint clean
