@@ -514,6 +514,36 @@ export default function AdminDashboard() {
     }
   };
 
+  // Clear the `pending_reapproval` flag once the admin has eyeballed the
+  // therapist's self-edit and is happy to publish it. This is the
+  // counterpart to the orange "⚠ Re-review: …" badge in the row — that
+  // badge tells the admin WHICH fields changed, this action says "yes,
+  // ship those changes to patients". Backend route also stamps
+  // `reapproved_at` so we have an audit trail.
+  const approveReapproval = async (therapistId) => {
+    if (!therapistId) return;
+    try {
+      await client.post(`/admin/therapists/${therapistId}/clear-reapproval`);
+      toast.success("Changes approved — therapist is live again");
+      // Reflect the cleared state in the open modal so the banner disappears
+      // immediately without waiting for the full /admin/therapists refresh.
+      setEditTherapist((cur) =>
+        cur && cur.id === therapistId
+          ? {
+              ...cur,
+              pending_reapproval: false,
+              pending_reapproval_fields: [],
+            }
+          : cur,
+      );
+      refresh();
+    } catch (e) {
+      toast.error(
+        e?.response?.data?.detail || "Failed to approve changes",
+      );
+    }
+  };
+
   const sendTestSms = async () => {
     try {
       const res = await client.post("/admin/test-sms", {});
@@ -1687,6 +1717,12 @@ export default function AdminDashboard() {
           </DialogHeader>
           {editTherapist && (
             <div className="space-y-4 mt-2">
+              {editTherapist.pending_reapproval && (
+                <ReapprovalBanner
+                  therapist={editTherapist}
+                  onApprove={() => approveReapproval(editTherapist.id)}
+                />
+              )}
               <FieldRow label="Profile photo">
                 <div className="flex items-center gap-4">
                   <div className="w-20 h-20 rounded-full bg-[#FDFBF7] border border-[#E8E5DF] overflow-hidden flex items-center justify-center">
@@ -2975,6 +3011,99 @@ function FieldRow({ label, children }) {
   );
 }
 
+// Inline banner shown at the top of the Edit-provider modal whenever the
+// therapist has self-edited a sensitive field (license #, specialties,
+// etc.) via the portal. It explains EXACTLY which fields the therapist
+// just changed, what the new values are, and gives the admin a one-click
+// "approve & publish" action that calls
+// POST /api/admin/therapists/{id}/clear-reapproval.
+//
+// Without this banner, the orange "⚠ Re-review: …" pill on the row was a
+// dead-end — the admin saw something needed attention but had no way to
+// resolve it from the UI (the backend route existed since iter-65 but
+// was never wired up frontend-side).
+function ReapprovalBanner({ therapist, onApprove }) {
+  const fields = therapist.pending_reapproval_fields || [];
+  const FIELD_LABELS = {
+    primary_specialties: "Primary specialties",
+    secondary_specialties: "Secondary specialties",
+    general_treats: "General treatment areas",
+    license_number: "License number",
+    license_expires_at: "License expiration",
+    licensed_states: "Licensed states",
+    years_experience: "Years of experience",
+    credential_type: "Credential type",
+    gender: "Gender",
+    name: "Name",
+  };
+  const fmtValue = (k, v) => {
+    if (v == null || v === "") return "—";
+    if (Array.isArray(v)) {
+      return v.length ? v.map((x) => String(x).replace(/_/g, " ")).join(", ") : "—";
+    }
+    if (typeof v === "string" && k === "license_expires_at") {
+      return v.slice(0, 10);
+    }
+    return String(v);
+  };
+  return (
+    <div
+      className="rounded-xl border border-[#F0DEC8] bg-[#FBF2E8] p-4"
+      data-testid="reapproval-banner"
+    >
+      <div className="flex items-start gap-3">
+        <div className="flex-shrink-0 w-7 h-7 rounded-full bg-[#B8742A] text-white flex items-center justify-center text-sm">
+          !
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-[#8B5A1F]">
+            Therapist self-edited {fields.length || "some"} sensitive{" "}
+            {fields.length === 1 ? "field" : "fields"} — review &amp; approve to
+            publish
+          </p>
+          <p className="text-xs text-[#8B5A1F]/80 mt-1 leading-relaxed">
+            These fields are NOT visible to patients yet. They go live the
+            moment you click <strong>Approve &amp; publish</strong> below.
+          </p>
+          {fields.length > 0 && (
+            <div className="mt-3 space-y-1.5">
+              {fields.map((k) => (
+                <div
+                  key={k}
+                  className="text-xs flex items-baseline gap-2 bg-white/60 border border-[#F0DEC8] rounded-md px-2 py-1.5"
+                  data-testid={`reapproval-field-${k}`}
+                >
+                  <span className="text-[#8B5A1F] font-medium whitespace-nowrap">
+                    {FIELD_LABELS[k] || k.replace(/_/g, " ")}:
+                  </span>
+                  <span className="text-[#2B2A29] break-words">
+                    {fmtValue(k, therapist[k])}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onApprove}
+              className="text-xs font-semibold bg-[#2D4A3E] text-white rounded-full px-4 py-1.5 hover:bg-[#1F362C] transition"
+              data-testid="reapproval-approve-btn"
+            >
+              Approve &amp; publish
+            </button>
+            <span className="text-[11px] text-[#8B5A1F]/70 self-center leading-tight">
+              Or just edit the values below + Save — that also approves them.
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
 function ProviderStatus({ t }) {
   let label = "active";
   let cls = "bg-[#2D4A3E]/10 text-[#2D4A3E]";
@@ -3093,14 +3222,19 @@ const PROVIDER_COLUMNS = [
   {
     key: "status",
     label: "Status",
-    render: (t) => (
+    render: (t, ctx) => (
       <td className="p-4 whitespace-nowrap">
         <ProviderStatus t={t} />
         <SubBadge t={t} />
         {t.pending_reapproval && (
-          <span
-            className="mt-1 inline-flex items-center gap-1 text-[10px] bg-[#FBF2E8] text-[#B8742A] border border-[#F0DEC8] rounded-full px-2 py-0.5 w-fit max-w-[220px]"
-            title={`Therapist edited ${(t.pending_reapproval_fields || []).join(", ") || "sensitive fields"}. Open their profile, review the change, and click "Approve changes" to publish.`}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              ctx?.onEdit && ctx.onEdit(t);
+            }}
+            className="mt-1 inline-flex items-center gap-1 text-[10px] bg-[#FBF2E8] text-[#B8742A] border border-[#F0DEC8] rounded-full px-2 py-0.5 w-fit max-w-[220px] hover:bg-[#F4E3CD] cursor-pointer transition"
+            title={`Therapist edited ${(t.pending_reapproval_fields || []).join(", ") || "sensitive fields"}. Click to review and approve.`}
             data-testid={`pending-reapproval-badge-${t.id}`}
           >
             ⚠ Re-review:{" "}
@@ -3109,7 +3243,7 @@ const PROVIDER_COLUMNS = [
                 f.replace(/_/g, " "),
               ).join(", ")) || "fields"}
             </span>
-          </span>
+          </button>
         )}
       </td>
     ),

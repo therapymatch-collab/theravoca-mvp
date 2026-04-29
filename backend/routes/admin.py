@@ -823,7 +823,22 @@ async def admin_update_therapist(
     if "age_groups" in update and isinstance(update["age_groups"], list):
         update["age_groups"] = update["age_groups"][:3]
     update["updated_at"] = _now_iso()
-    res = await db.therapists.update_one({"id": therapist_id}, {"$set": update})
+    # When the admin saves the profile, treat that as an implicit
+    # re-approval — clear the pending flag so the row stops surfacing
+    # the orange "needs re-review" badge. Mirrors the dedicated
+    # /clear-reapproval route. Logged via `reapproved_at` for audit.
+    unset = {}
+    if (await db.therapists.find_one(
+        {"id": therapist_id, "pending_reapproval": True}, {"_id": 0, "id": 1},
+    )):
+        update["pending_reapproval"] = False
+        update["reapproved_at"] = _now_iso()
+        unset["pending_reapproval_fields"] = ""
+        unset["pending_reapproval_at"] = ""
+    mongo_op: dict[str, Any] = {"$set": update}
+    if unset:
+        mongo_op["$unset"] = unset
+    res = await db.therapists.update_one({"id": therapist_id}, mongo_op)
     if res.matched_count == 0:
         raise HTTPException(404, "Therapist not found")
     t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0})
