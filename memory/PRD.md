@@ -1619,3 +1619,28 @@ User asked for 8 changes; all shipped in one batch.
 - Multi-state rollout (Idaho only)
 - DOPL live API integration when published
 - (deferred) SerpAPI or Google Custom Search if free DDG+Bing coverage proves insufficient
+
+---
+
+## Iter-72 (Apr 28 2026) — Therapist portal layout reorg
+
+### Implemented
+**Information hierarchy fix on `/portal/therapist`** so the page leads with what we want the therapist to act on (referrals), not subscription chrome / colleague-invite tiles.
+
+- **Compact subscription pill** in the top-right header next to "Edit profile"/"Sign out" — replaces the old full-width "Active subscription · next charge X" status bar (which ate an entire row of vertical space). Pill is clickable when a Stripe customer ID exists; opens the customer portal.
+- **Reorder above referrals**: only critical alerts remain above the referrals list — pending-approval banner, availability prompt, payment dunning banner, license/profile-health red-flag callouts. Everything else dropped below.
+- **Reorder below referrals**: Analytics card → Profile completion meter → Set-password prompt → Refer-a-colleague tile (least urgent, last).
+- **Compacted refer-a-colleague tile**: was a 2-line card with separate body + button. Now one row: icon + label + secondary "Copy invite link" link. Footprint cut by ~70%.
+- **Tightened paddings**: `py-12/16` → `py-8/10`, hero `text-4xl/5xl` → `text-3xl/4xl`, analytics card `p-6` → `p-5`, empty state `p-12` → `p-10`. Less wasted whitespace, more content visible in one viewport.
+
+### Files changed
+- `/app/frontend/src/pages/TherapistPortal.jsx` (~80 line diff)
+
+### Tests
+- Smoke-tested via screenshot — verified compact pill in header, profile-health → referrals → stats → refer-tile order, no horizontal overflow on 1280×900.
+
+### Backlog (unchanged)
+- Refactor monolithic React components (deferred — own session)
+- Multi-state rollout (Idaho only)
+- Patient prefs persistence
+- DOPL live API integration when published

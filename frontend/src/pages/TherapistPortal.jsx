@@ -204,24 +204,47 @@ export default function TherapistPortal() {
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
       <Header />
-      <main className="flex-1 px-5 py-12 md:py-16" data-testid="therapist-portal">
+      <main className="flex-1 px-5 py-8 md:py-10" data-testid="therapist-portal">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-[#C87965]">
                 Therapist portal
               </p>
-              <h1 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] mt-2 leading-tight">
+              <h1 className="font-serif-display text-3xl sm:text-4xl text-[#2D4A3E] mt-1.5 leading-tight">
                 {therapist?.name?.split(",")[0] || "Your"} referrals
               </h1>
               {therapist && (
-                <p className="text-sm text-[#6D6A65] mt-2">
+                <p className="text-xs text-[#6D6A65] mt-1.5">
                   Signed in as{" "}
                   <span className="text-[#2D4A3E] font-medium">{therapist.email}</span>
                 </p>
               )}
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap justify-end">
+              {/* Compact subscription pill — replaces the old full-width
+                  status bar. Only shown when sub is healthy (trialing /
+                  active); the dunning banner still appears further down
+                  when payment is required. */}
+              {sub && (sub.subscription_status === "trialing" || sub.subscription_status === "active") && (
+                <button
+                  type="button"
+                  onClick={sub.stripe_customer_id ? openCustomerPortal : undefined}
+                  disabled={!sub.stripe_customer_id}
+                  className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-[#F2F7F1] border border-[#D2E2D0] text-[#3F6F4A] hover:bg-[#E6EFE3] transition disabled:cursor-default"
+                  data-testid="subscription-status-pill"
+                  title={
+                    sub.subscription_status === "trialing" && sub.trial_ends_at
+                      ? `Free trial ends ${new Date(sub.trial_ends_at).toLocaleDateString()}`
+                      : sub.current_period_end
+                      ? `Next charge ${new Date(sub.current_period_end).toLocaleDateString()}`
+                      : "Manage subscription"
+                  }
+                >
+                  <CheckCircle2 size={12} strokeWidth={2.2} />
+                  {sub.subscription_status === "trialing" ? "Trial active" : "Subscription active"}
+                </button>
+              )}
               <Link
                 to="/portal/therapist/edit"
                 className="text-sm text-[#2D4A3E] hover:underline inline-flex items-center gap-1.5"
@@ -240,17 +263,13 @@ export default function TherapistPortal() {
           </div>
 
           {error && (
-            <div className="mt-10 bg-white border border-[#E8E5DF] rounded-2xl p-8 text-center">
+            <div className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl p-6 text-center">
               <p className="text-[#D45D5D]">{error}</p>
             </div>
           )}
 
-          {analytics && !error && (
-            <PortalAnalyticsCard analytics={analytics} />
-          )}
-
           {!error && data === null && (
-            <div className="flex justify-center py-20">
+            <div className="flex justify-center py-16">
               <Loader2 className="animate-spin text-[#2D4A3E]" />
             </div>
           )}
@@ -373,109 +392,24 @@ export default function TherapistPortal() {
             </div>
           )}
 
-          {/* Trial badge + Manage subscription */}
-          {sub && (sub.subscription_status === "trialing" || sub.subscription_status === "active") && (
-            <div
-              className="mt-6 bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl px-5 py-3 text-sm text-[#6D6A65] flex items-center justify-between gap-3 flex-wrap"
-              data-testid="subscription-status-bar"
-            >
-              <div className="flex items-center gap-2 flex-wrap">
-                <CheckCircle2 size={14} className="text-[#2D4A3E]" />
-                {sub.subscription_status === "trialing" && sub.trial_ends_at ? (
-                  <>
-                    Free trial ends{" "}
-                    <span className="text-[#2D4A3E] font-medium">
-                      {new Date(sub.trial_ends_at).toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    Active subscription
-                    {sub.current_period_end && (
-                      <>
-                        {" "}— next charge{" "}
-                        <span className="text-[#2D4A3E] font-medium">
-                          {new Date(sub.current_period_end).toLocaleDateString(undefined, {
-                            month: "short",
-                            day: "numeric",
-                          })}
-                        </span>
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
-              {sub.stripe_customer_id && (
-                <button
-                  onClick={openCustomerPortal}
-                  className="text-xs text-[#2D4A3E] hover:underline inline-flex items-center gap-1.5 font-medium"
-                  data-testid="manage-subscription-btn"
-                >
-                  <Settings size={13} /> Manage subscription
-                </button>
-              )}
-            </div>
-          )}
+          {/* Trial badge + Manage subscription — REMOVED: now shown
+              as a compact pill next to "Edit profile" in the header.
+              The dunning banner above still surfaces when payment is
+              required (past_due / canceled / unpaid / incomplete). */}
 
           {/* Profile health (red-flag callouts) — only for approved therapists */}
           {therapist && !isPending && (
             <ProfileHealthCallouts therapist={therapist} />
           )}
 
-          {/* Go-live profile completion meter — surfaces score + missing fields. */}
-          {therapist && !isPending && (
-            <ProfileCompletionMeter completeness={therapist.completeness} />
-          )}
-
-          {/* Set-a-password prompt — magic-code-only users */}
-          {therapist && !isPending && !therapist.has_password && (
-            <SetPasswordPrompt onDone={loadAll} />
-          )}
-
-          {/* Refer-a-colleague tile (always visible for active therapists) */}
-          {therapist?.referral_code && !isPending && (
-            <div
-              className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl p-5 flex items-start justify-between gap-4 flex-wrap"
-              data-testid="refer-tile"
-            >
-              <div className="flex items-start gap-3 flex-1 min-w-[220px]">
-                <Sparkles size={18} className="text-[#C87965] mt-1 shrink-0" />
-                <div>
-                  <div className="text-sm font-semibold text-[#2B2A29]">
-                    Know a colleague? Send them an invite.
-                  </div>
-                  <p className="text-xs text-[#6D6A65] mt-1 leading-relaxed">
-                    Therapists who join via your link skip the waitlist on referrals
-                    that match their first profile setup.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const url = `${window.location.origin}/therapists/join?ref=${therapist.referral_code}`;
-                  navigator.clipboard.writeText(url).then(() => {
-                    toast.success("Invite link copied!");
-                  }).catch(() => toast.error("Couldn't copy link"));
-                }}
-                className="tv-btn-secondary !py-2 !px-4 text-sm shrink-0"
-                data-testid="refer-copy-btn"
-              >
-                Copy invite link
-              </button>
-            </div>
-          )}
-
-          {/* Empty state for approved therapists */}
+          {/* Empty state for approved therapists — moved up so referrals
+              area is the first thing the eye lands on after critical
+              alerts are handled. */}
           {!isPending && data?.referrals?.length === 0 && (
-            <div className="mt-10 bg-white border border-[#E8E5DF] rounded-3xl p-12 text-center">
-              <Inbox className="mx-auto text-[#C87965] mb-4" size={32} strokeWidth={1.5} />
-              <h2 className="font-serif-display text-2xl text-[#2D4A3E]">No referrals yet</h2>
-              <p className="text-[#6D6A65] mt-2">
+            <div className="mt-6 bg-white border border-[#E8E5DF] rounded-3xl p-10 text-center" data-testid="therapist-referrals-empty">
+              <Inbox className="mx-auto text-[#C87965] mb-3" size={28} strokeWidth={1.5} />
+              <h2 className="font-serif-display text-xl text-[#2D4A3E]">No referrals yet</h2>
+              <p className="text-sm text-[#6D6A65] mt-1.5 max-w-md mx-auto">
                 When a patient request matches your profile (70%+), it will appear here and we'll
                 send you an email.
               </p>
@@ -483,7 +417,7 @@ export default function TherapistPortal() {
           )}
 
           {!isPending && data?.referrals?.length > 0 && (
-            <div className="mt-10">
+            <div className="mt-6">
               {/* Bulk action bar — only shown when ≥1 selected */}
               {selected.size > 0 && (
                 <div
@@ -593,6 +527,62 @@ export default function TherapistPortal() {
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {/* ─── Secondary content (below referrals) ───────────────────
+              Lower priority than the referrals list; collected at the
+              bottom so the page leads with what we want the therapist
+              to act on first. */}
+
+          {/* Analytics — useful but not blocking action; show below
+              referrals so the primary task isn't pushed off-screen. */}
+          {analytics && !error && (
+            <PortalAnalyticsCard analytics={analytics} />
+          )}
+
+          {/* Go-live profile completion meter — surfaces score + missing fields. */}
+          {therapist && !isPending && (
+            <ProfileCompletionMeter completeness={therapist.completeness} />
+          )}
+
+          {/* Set-a-password prompt — magic-code-only users */}
+          {therapist && !isPending && !therapist.has_password && (
+            <SetPasswordPrompt onDone={loadAll} />
+          )}
+
+          {/* Refer-a-colleague tile — least urgent, anchored at the
+              very bottom. Compact one-row layout to avoid the
+              wasted-space feel of the old card. */}
+          {therapist?.referral_code && !isPending && (
+            <div
+              className="mt-6 bg-white border border-[#E8E5DF] rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap"
+              data-testid="refer-tile"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Sparkles size={14} className="text-[#C87965] shrink-0" />
+                <div className="min-w-0">
+                  <span className="text-sm font-medium text-[#2B2A29]">
+                    Refer a colleague
+                  </span>
+                  <span className="text-xs text-[#6D6A65] ml-2">
+                    They skip the waitlist on first matches.
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = `${window.location.origin}/therapists/join?ref=${therapist.referral_code}`;
+                  navigator.clipboard.writeText(url).then(() => {
+                    toast.success("Invite link copied!");
+                  }).catch(() => toast.error("Couldn't copy link"));
+                }}
+                className="text-xs text-[#2D4A3E] hover:underline font-medium inline-flex items-center gap-1.5 shrink-0"
+                data-testid="refer-copy-btn"
+              >
+                Copy invite link
+              </button>
             </div>
           )}
         </div>
@@ -945,11 +935,11 @@ function PortalAnalyticsCard({ analytics }) {
   const topics = Object.entries(a.top_referral_topics || {}).slice(0, 5);
   return (
     <section
-      className="mt-10 bg-white border border-[#E8E5DF] rounded-2xl p-6"
+      className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl p-5"
       data-testid="portal-analytics-card"
     >
-      <div className="flex items-baseline justify-between mb-4 flex-wrap gap-2">
-        <h2 className="font-serif-display text-xl text-[#2D4A3E]">Your stats</h2>
+      <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+        <h2 className="font-serif-display text-lg text-[#2D4A3E]">Your stats</h2>
         <span className="text-xs text-[#6D6A65]">All-time totals</span>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
