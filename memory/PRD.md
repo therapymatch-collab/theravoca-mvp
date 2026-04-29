@@ -1858,3 +1858,53 @@ User asked to refactor monolithic components (P2 tech debt). First pass tackled 
 
 ### Tech-debt note
 `AdminDashboard.jsx` is still 3658 lines. Future passes should extract the AdminTabsBar (~265 lines), the provider-table cluster (`ProviderRow` / `ProviderCell` / `ProviderTableControls` / `ProviderTablePager` / `useProviderColumnPrefs` / `PROVIDER_COLUMNS` ~400 lines), the email-template editor (~300 lines), and the request-detail dialog (~600 lines).
+
+
+## Iter-81 (Apr 29 2026) — Pre-deploy hardening pass (a-d)
+
+User asked for a pre-deploy refactor/code-review sweep. Scope: full lint, mobile regression, holistic code review, console-error sweep on every public page. NO behavior change — all hardening is invisible to end users.
+
+### (a) Lint — auto-fix + manual cleanup
+- Backend (ruff): fixed 3 lint warnings — `E401` multi-import on tests, `F841` unused `far` variable, `F541` superfluous f-string. **Backend now lint-clean.**
+- Frontend (ESLint): already lint-clean before this iteration.
+
+### (b) Mobile regression — Playwright smoke suite
+- Ran `tests/test_mobile_smoke.py` (390x844 viewport) → **6 passed, 1 skipped, 0 errors**. All major routes (/intake, /sign-in, /therapists/join, /, blog, faq, etc.) render cleanly on mobile with no `useSiteCopy` reference errors.
+
+### (c) Holistic code review (troubleshoot_agent → 7 P0, 4 P1, 3 P2)
+**P0 code fixes applied this iteration:**
+- **Background task GC vulnerability** — replaced 8 bare `asyncio.create_task()` calls in `routes/admin.py` (4), `routes/therapists.py` (2), and `routes/portal.py` (1) with `helpers._spawn_bg()` so emails/SMS/research tasks always complete even after the originating request handler returns. The `_spawn_bg` helper keeps a strong reference set + logs uncaught exceptions.
+- **Unbounded MongoDB queries** — capped two `.to_list(length=10_000)` calls (`routes/admin.py` backfill → 2000, `outreach_agent.py` invite dedupe → 5000) so a runaway directory size can't OOM the worker.
+- **MongoDB index hygiene** — added 11 indexes to `server.py` lifespan covering the hottest read paths: `requests.email`, `requests.[email, created_at]`, `requests.created_at`, `therapists.email`, `therapists.[is_active, licensed_states]`, `therapists.pending_approval`, `applications.request_id`, `applications.[therapist_id, created_at]`, `declines.request_id`, `magic_codes.[email, code]`, `site_copy.key (unique)`. Verified post-restart: every collection now reports the new indexes via `list_indexes()`.
+
+**P0 user-action items (require deploy-time secrets, not code edits):**
+- `CORS_ORIGINS` is currently `*` — set to actual prod domain in `backend/.env` before deploy.
+- `JWT_SECRET` is a known dev value — generate fresh: `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`.
+- `ADMIN_PASSWORD="admin123!"` is the documented test credential — generate fresh strong password.
+- `STRIPE_WEBHOOK_SECRET` must be regenerated in Stripe live-mode dashboard once Stripe is switched to live keys.
+
+**P1 deferred (low-blast-radius, not blockers):**
+- Stripe charge idempotency keys (helps under retry, not a correctness bug).
+- Outreach dedupe race condition — acceptable while volume is low; revisit when volume grows.
+- HTTP timeout audit on Resend/Twilio — current SDKs have implicit timeouts; explicit timeouts can be added post-deploy.
+
+### (d) Console-error sweep — 18/18 routes clean
+- Loaded 9 public routes (`/`, `/intake`, `/about`, `/blog`, `/therapists/join`, `/sign-in`, `/contact`, `/privacy`, `/faq`) at desktop (1280x900) and mobile (390x844) viewports.
+- **Zero console.error, zero pageerror, zero navigation failures** across all 18 page-loads.
+
+### Files changed
+- `/app/backend/server.py` — 11 new MongoDB indexes
+- `/app/backend/routes/admin.py` — 4 `_spawn_bg` migrations + cap to_list 10k → 2k
+- `/app/backend/routes/therapists.py` — 2 `_spawn_bg` migrations + import _spawn_bg
+- `/app/backend/routes/portal.py` — 1 `_spawn_bg` migration + import _spawn_bg
+- `/app/backend/outreach_agent.py` — cap to_list 10k → 5k
+- `/app/backend/tests/test_iteration6_geo.py`, `test_iteration67_sms_license_match.py`, `test_iteration71_turnstile_strict.py` — lint cleanups
+
+### Pre-deploy security checklist (for the operator)
+- [ ] Set `CORS_ORIGINS` in production `.env` to actual prod domain (no wildcard)
+- [ ] Generate fresh `JWT_SECRET` (48 bytes urlsafe)
+- [ ] Generate fresh `ADMIN_PASSWORD` (32+ bytes urlsafe; update `/app/memory/test_credentials.md` with the new value when testing)
+- [ ] In Stripe live-mode dashboard, regenerate `whsec_...` and set `STRIPE_WEBHOOK_SECRET`
+- [ ] Confirm `MASTER_QUERY_PASSWORD` and `EMERGENT_LLM_KEY` are present and not test placeholders
+- [ ] Verify `RESEND_API_KEY` / `TWILIO_*` keys are production keys (not the sandbox set)
+- [ ] Confirm Cloudflare Turnstile site/secret keys match the production hostname

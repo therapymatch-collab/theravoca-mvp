@@ -17,7 +17,7 @@ from deps import (
     _create_session_token, require_session, _client_ip,
 )
 from email_service import send_magic_code
-from helpers import _now_iso, _safe_summary_for_therapist
+from helpers import _now_iso, _safe_summary_for_therapist, _spawn_bg
 from models import MagicCodeRequest, MagicCodeVerify
 from profile_completeness import evaluate as _evaluate_profile_inline
 
@@ -158,7 +158,10 @@ async def auth_request_code(payload: MagicCodeRequest):
         "used": False,
         "created_at": _now_iso(),
     })
-    asyncio.create_task(send_magic_code(email, code, payload.role))
+    _spawn_bg(
+        send_magic_code(email, code, payload.role),
+        name=f"magic_code_{email[:8]}",
+    )
     return {"ok": True}
 
 

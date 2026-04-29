@@ -57,16 +57,39 @@ async def lifespan(_app: FastAPI):
         logger.info("Cold start — seeded %d Idaho therapists with v2 schema", len(therapists))
 
     asyncio.create_task(_backfill_therapist_geo())
-    # Best-effort indexes: the rate-limit lookup is the only hot path on
-    # `intake_ip_log`. We also use a TTL index so old IPs auto-expire
-    # after 24h — keeps the collection bounded without needing a cron.
+    # Best-effort indexes on the hottest query paths. The rate-limit
+    # lookup pounds `intake_ip_log` (TTL drops 24h-old rows so the
+    # collection self-bounds). Other indexes back the lookups admins
+    # and patients hit most often. Index creation is idempotent and
+    # cheap when the index already exists, so we re-run on every boot.
     try:
         await db.intake_ip_log.create_index("ip")
         await db.intake_ip_log.create_index(
             "ts_at", expireAfterSeconds=24 * 3600,
         )
+        # Patient/admin lookups by email — used by the patient roster,
+        # the per-email rate limit, and the "patients by email" panel.
+        await db.requests.create_index("email")
+        await db.requests.create_index([("email", 1), ("created_at", -1)])
+        await db.requests.create_index("created_at")
+        # Therapist directory lookups by email + state + active flag.
+        await db.therapists.create_index("email")
+        await db.therapists.create_index(
+            [("is_active", 1), ("licensed_states", 1)],
+        )
+        await db.therapists.create_index("pending_approval")
+        # Apply / decline lookups: scoped by request_id for /results.
+        await db.applications.create_index("request_id")
+        await db.applications.create_index(
+            [("therapist_id", 1), ("created_at", -1)],
+        )
+        await db.declines.create_index("request_id")
+        # Magic-link auth — codes are looked up by (email, code).
+        await db.magic_codes.create_index([("email", 1), ("code", 1)])
+        # Site-copy lookups happen on every page load (public GET).
+        await db.site_copy.create_index("key", unique=True)
     except Exception as _idx_err:  # noqa: BLE001
-        logger.warning("intake_ip_log index setup failed: %s", _idx_err)
+        logger.warning("Index setup encountered an error: %s", _idx_err)
     sweep_interval = int(os.environ.get("SWEEP_INTERVAL_SECONDS", "300"))
     _sweep_task = asyncio.create_task(_sweep_loop(sweep_interval))
     _daily_task = asyncio.create_task(_daily_loop())

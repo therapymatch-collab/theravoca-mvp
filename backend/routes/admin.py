@@ -18,7 +18,7 @@ from deps import (
 )
 from email_service import send_therapist_approved, send_therapist_rejected
 from email_templates import DEFAULTS as EMAIL_TEMPLATE_DEFAULTS, list_templates, upsert_template
-from helpers import _deliver_results, _now_iso, _trigger_matching
+from helpers import _deliver_results, _now_iso, _spawn_bg, _trigger_matching
 from seed_data import generate_seed_therapists
 from sms_service import send_sms
 
@@ -679,7 +679,10 @@ async def admin_approve_therapist(therapist_id: str, _: bool = Depends(require_a
         {"id": therapist_id},
         {"$set": {"pending_approval": False, "is_active": True, "approved_at": _now_iso()}},
     )
-    asyncio.create_task(send_therapist_approved(t["email"], t["name"]))
+    _spawn_bg(
+        send_therapist_approved(t["email"], t["name"]),
+        name=f"approve_email_{therapist_id[:8]}",
+    )
     return {"id": therapist_id, "status": "approved"}
 
 
@@ -693,7 +696,10 @@ async def admin_reject_therapist(therapist_id: str, _: bool = Depends(require_ad
         {"id": therapist_id},
         {"$set": {"pending_approval": False, "is_active": False, "rejected_at": _now_iso()}},
     )
-    asyncio.create_task(send_therapist_rejected(t["email"], t["name"]))
+    _spawn_bg(
+        send_therapist_rejected(t["email"], t["name"]),
+        name=f"reject_email_{therapist_id[:8]}",
+    )
     return {"id": therapist_id, "status": "rejected"}
 
 
@@ -748,7 +754,7 @@ async def admin_auto_decline_duplicates(
                 if i + CHUNK < len(rows):
                     await asyncio.sleep(DELAY_S)
 
-        asyncio.create_task(_chunked_send(targets))
+        _spawn_bg(_chunked_send(targets), name="auto_decline_emails")
 
     return {
         "dry_run": dry_run,
@@ -1006,7 +1012,7 @@ async def admin_list_declines(_: bool = Depends(require_admin)):
 async def admin_backfill_therapists(_: bool = Depends(require_admin)):
     from backfill import backfill_therapist
     cur = db.therapists.find({}, {"_id": 0}).sort("created_at", 1)
-    therapists = await cur.to_list(length=10_000)
+    therapists = await cur.to_list(length=2000)
     updated = 0
     for idx, t in enumerate(therapists, 1):
         set_fields = backfill_therapist(t, idx)
@@ -1099,7 +1105,10 @@ async def admin_bulk_approve_therapists(payload: dict, _: bool = Depends(require
             {"id": tid},
             {"$set": {"pending_approval": False, "is_active": True, "approved_at": _now_iso()}},
         )
-        asyncio.create_task(send_therapist_approved(t["email"], t["name"]))
+        _spawn_bg(
+            send_therapist_approved(t["email"], t["name"]),
+            name=f"bulk_approve_{tid[:8]}",
+        )
         approved.append(tid)
     return {"ok": True, "approved": approved, "count": len(approved)}
 
@@ -1962,8 +1971,7 @@ async def admin_warmup_deep_research(payload: dict) -> dict[str, Any]:
             }},
         )
 
-    import asyncio as _asyncio
-    _asyncio.create_task(_run())
+    _spawn_bg(_run(), name="research_warmup")
     return {
         "started": True,
         "queued": len(targets),

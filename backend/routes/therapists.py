@@ -13,7 +13,7 @@ from deps import db, logger, require_admin, require_session, _create_session_tok
 import stripe_service
 from email_service import send_therapist_signup_received
 from geocoding import geocode_offices
-from helpers import _now_iso
+from helpers import _now_iso, _spawn_bg
 from models import (
     ApplicationOut, BulkApplyIn, TherapistApplyIn, TherapistDeclineIn, TherapistSignup,
 )
@@ -86,7 +86,10 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
         "created_at": _now_iso(),
     }
     await db.therapists.insert_one(doc.copy())
-    asyncio.create_task(send_therapist_signup_received(payload.email, payload.name))
+    _spawn_bg(
+        send_therapist_signup_received(payload.email, payload.name),
+        name=f"signup_email_{tid[:8]}",
+    )
     logger.info(
         "New therapist signup: %s (%s) with %d geocoded offices, recruit_code=%s",
         payload.email, tid, len(office_geos), recruit_code or "—",
@@ -106,7 +109,7 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
             except Exception as e:
                 logger.warning("Auto deep-research for new signup failed: %s", e)
 
-        asyncio.create_task(_bg_deep_research())
+        _spawn_bg(_bg_deep_research(), name=f"deep_research_{tid[:8]}")
     except ImportError:
         pass
     return {"id": tid, "status": "pending_approval"}

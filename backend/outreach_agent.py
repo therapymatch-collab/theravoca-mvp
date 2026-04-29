@@ -459,7 +459,7 @@ async def _filter_existing_contacts(candidates: list[dict]) -> tuple[list[dict],
         invite_query["$or"].append({"candidate.phone": {"$in": phones}})
     invite_rows = await db.outreach_invites.find(
         invite_query, {"_id": 0, "candidate.email": 1, "candidate.phone": 1},
-    ).to_list(length=10_000)
+    ).to_list(length=5000)
     invite_emails = {
         ((r.get("candidate") or {}).get("email") or "").lower() for r in invite_rows
     }
