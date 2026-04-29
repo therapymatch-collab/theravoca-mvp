@@ -57,13 +57,11 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
-### iter-94 — Home page differentiator bullets (Feb 7, 2026)
-- Added 3 new positive proof-point bullets to the Landing page "How we're different" section, displayed below the existing "TheraVoca does the logistical work" callout with matching green-check styling:
-  1. **Structured intake — no vague free-text guesses** — multi-step questions about schedule, payment, identity, and style preferences.
-  2. **Smarter matching across 5 weighted axes** — hard filters, soft preferences, relationship style, way of working, contextual resonance.
-  3. **Anonymous referrals, contact info revealed last** — therapists see needs not identity; contact details only shared with the patient's chosen match.
-- All 6 new strings (3 titles + 3 bodies) registered as editable site-copy keys (`landing.different.bullet{1,2,3}.{title,body}`) under the "Landing — Why TheraVoca" section of the admin Site Copy panel.
-- Verified live on `/#different`.
+### iter-95 — Mobile signup crash fix + patient deep-answers panel + hero bullet move (Feb 7, 2026)
+- **Fixed mobile therapist signup crash** ("Objects are not valid as a React child (found: object with keys {type, loc, msg, input, ctx, url})"): FastAPI 422 responses return `detail` as an array of Pydantic error objects; when `toast.error(err.response.data.detail)` hit that, React threw error #31. Added `_normaliseDetail()` + `_installErrorNormaliser()` interceptor in `/app/frontend/src/lib/api.js` that flattens the array to a human-readable string like `"email: Field required; license_number: Field required"`. Installed on all 3 axios factories (`api`, `sessionClient()`, `adminClient()`) — zero-touch fix covering all 95 existing callsites.
+- **Patient dashboard deep-match panel**: expanded "What you asked for" section on `/results/:id` now renders a dusty-rose `patient-request-deep-section` block with P1 (relationship style), P2 (way of working), P3 (contextual resonance) when `request.deep_match_opt_in=true`. Slugs mapped to human labels via `P1_OPTIONS`/`P2_OPTIONS`; empty P3 shows italic "Skipped — that's okay."
+- **Moved hero differentiator bullets**: the 3 proof-point bullets (Structured intake / Smarter matching / Anonymous referrals) moved from "How we're different" section up into the hero, directly under the "Get smart matched - free!" CTA. Bullets now show title + body. Site-copy keys renamed `landing.different.bullet*` → `landing.hero.bullet*` and registered under "Landing — Hero" section of the admin panel.
+- Verified by testing agent (iteration_94.json): no pageerrors on desktop or mobile (375x667), _normaliseDetail unit test passes with Pydantic v2 input, all 6 new site-copy keys visible in editor, old `landing-different-bullet*` testids absent.
 
 ### iter-93 — Testid standardization + modal extraction + admin "How it works" rewrite (Feb 7, 2026)
 - **Testid rename for consistency**:
