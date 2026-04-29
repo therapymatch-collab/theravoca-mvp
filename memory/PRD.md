@@ -57,6 +57,14 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+### iter-91 — Continued componentization (Feb 7, 2026)
+- Migrated `TherapistEditProfile.jsx`'s local `DeepMatchPickList`/`DeepMatchRadio` to import the now-exported `PillCol`/`RadioCol` from `pages/therapist/TherapistDeepMatchStep.jsx` (removed the only remaining T3/T4 duplication between signup + edit profile).
+- Extracted `Group`/`Field`/`PillRow`/`PillCol`/`CheckRow` shared UI helpers from `IntakeForm.jsx` into `components/intake/IntakeUI.jsx`.
+- Extracted patient deep-match step renderers (P1, P2, P3) from `IntakeForm.jsx` into `components/intake/DeepMatchSteps.jsx` — now `<P1Step/P2Step/P3Step data set toggleArr t />` instead of 120 lines of inline JSX.
+- Extracted `Group`/`Field`/`Req`/`PillRow`/`Tags`/`SummaryRow` shared UI helpers from `TherapistSignup.jsx` into `pages/therapist/TherapistSignupUI.jsx`. The therapist-signup `Group` keeps its own visual style (palette-based accent colors per section) — intentionally separate from the patient-intake `Group`.
+- Net line reduction this round: TherapistSignup.jsx -110 (2246 → 2136), IntakeForm.jsx -168 (2024 → 1856), TherapistEditProfile.jsx -45 (1094 → 1049). Aggregate over iter-90 + iter-91: ~535 lines extracted into 6 reusable shared modules.
+- Verified by testing agent (iteration_41.json): lint clean on all 7 files, 0 JS errors, edit-profile save round-trip PUT 200, both intake flows reach correct step counts (8 vs 11).
+
 ### iter-90 — Draggable T1 + deep-match privacy notice + step refactor (Feb 7, 2026)
 - Replaced arrow-up/down `RankList` with shared `DraggableRankList` powered by `@dnd-kit/core` + `@dnd-kit/sortable` (PointerSensor 8px / TouchSensor 120ms / KeyboardSensor) — used in both `TherapistSignup.jsx` step 8 and `TherapistEditProfile.jsx`.
 - New shared `pages/therapist/TherapistDeepMatchStep.jsx` extracts the entire T1–T5 step JSX (~120 lines) out of `TherapistSignup.jsx`. Removes ~200 lines of duplicate `RankList`/`PillCol`/`RadioCol` helpers.
