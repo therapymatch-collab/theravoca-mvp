@@ -211,7 +211,7 @@ export default function Landing() {
           editable in Site Copy → "Landing — Our promise". */}
       <section
         id="promise"
-        className="py-16 md:py-20"
+        className="py-16 md:py-20 bg-[#F4EFE7] border-y border-[#E8E5DF]"
         data-testid="landing-promise"
       >
         <div className="max-w-5xl mx-auto px-5 sm:px-8">
