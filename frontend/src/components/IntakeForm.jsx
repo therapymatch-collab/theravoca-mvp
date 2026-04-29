@@ -1746,6 +1746,32 @@ function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
           </button>
         </div>
         <div className="p-5 sm:p-6">
+          {/* Final-submit warning. Lives at the very top so the patient
+              sees it before they read through their answers, not after.
+              Submitting locks the request — admins can edit later, but
+              the patient has no self-serve edit flow. */}
+          <div
+            className="mb-4 rounded-xl bg-[#FBF2E8] border border-[#F0DEC8] px-4 py-3 flex items-start gap-3"
+            data-testid="intake-preview-lock-warning"
+          >
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#B8742A] text-white flex items-center justify-center text-xs font-bold">
+              !
+            </span>
+            <div className="text-sm leading-relaxed">
+              <p className="font-semibold text-[#8B5A1F]">
+                {t(
+                  "intake.preview.warning.heading",
+                  "Once you submit, this can't be changed.",
+                )}
+              </p>
+              <p className="text-[#8B5A1F]/85 text-xs mt-1">
+                {t(
+                  "intake.preview.warning.body",
+                  "Please double-check your answers below before submitting. If something needs to change later, just email us and we'll resend a corrected match.",
+                )}
+              </p>
+            </div>
+          </div>
           <p className="text-sm text-[#6D6A65] leading-relaxed">
             Take a quick look — therapists will only see this anonymized
             version (no contact info shared until you reach out).
@@ -1803,6 +1829,68 @@ function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
               </div>
             )}
           </dl>
+          {/* Deep-match answers (P1/P2/P3). Only rendered when the
+              patient opted into the deeper flow. Visually separated from
+              the standard rows so the patient can see at a glance which
+              extra signals will boost their match scoring. */}
+          {data.deep_match_opt_in && (
+            <div
+              className="mt-6 rounded-2xl bg-[#FBE9E5] border border-[#F4C7BE] p-4 sm:p-5"
+              data-testid="intake-preview-deep-section"
+            >
+              <p className="text-[10px] uppercase tracking-[0.2em] text-[#C8412B] font-semibold">
+                ✦ Deep match · 3 extra answers
+              </p>
+              <p className="text-xs text-[#2B2A29]/80 mt-1 mb-4 leading-relaxed">
+                These will boost your matching scores on Communication
+                Style, Theory of Change, and Contextual Resonance.
+              </p>
+              <dl className="space-y-4 text-sm">
+                <div data-testid="intake-preview-row-p1">
+                  <dt className="text-[10px] uppercase tracking-wider text-[#8B3220]">
+                    When therapy works (P1)
+                  </dt>
+                  <dd className="text-[#2B2A29] mt-1 leading-snug">
+                    {(data.p1_communication || []).length
+                      ? (data.p1_communication || [])
+                          .map(
+                            (v) =>
+                              P1_OPTIONS.find((o) => o.v === v)?.l || v,
+                          )
+                          .join(" · ")
+                      : "—"}
+                  </dd>
+                </div>
+                <div data-testid="intake-preview-row-p2">
+                  <dt className="text-[10px] uppercase tracking-wider text-[#8B3220]">
+                    What working looks like (P2)
+                  </dt>
+                  <dd className="text-[#2B2A29] mt-1 leading-snug">
+                    {(data.p2_change || []).length
+                      ? (data.p2_change || [])
+                          .map(
+                            (v) =>
+                              P2_OPTIONS.find((o) => o.v === v)?.l || v,
+                          )
+                          .join(" · ")
+                      : "—"}
+                  </dd>
+                </div>
+                <div data-testid="intake-preview-row-p3">
+                  <dt className="text-[10px] uppercase tracking-wider text-[#8B3220]">
+                    What they should already get (P3)
+                  </dt>
+                  <dd className="text-[#2B2A29] mt-1 leading-relaxed whitespace-pre-wrap">
+                    {(data.p3_resonance || "").trim() || (
+                      <span className="text-[#6D6A65] italic">
+                        Skipped — that's okay.
+                      </span>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          )}
         </div>
         <div className="sticky bottom-0 bg-white border-t border-[#E8E5DF] p-5 flex items-center justify-between gap-3 flex-wrap">
           <button

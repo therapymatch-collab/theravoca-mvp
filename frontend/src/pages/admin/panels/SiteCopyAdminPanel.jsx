@@ -162,6 +162,12 @@ const SEED_KEYS = [
   { section: "Buttons", key: "btn.intake.submit",         label: "Intake · 'Review & submit'", fallback: "Review & submit", previewPath: "/#start" },
   { section: "Buttons", key: "btn.intake.preview_edit",   label: "Intake · 'Edit answers'",    fallback: "← Edit answers", previewPath: "/#start" },
   { section: "Buttons", key: "btn.intake.preview_submit", label: "Intake · 'Confirm & submit'",fallback: "Confirm & find my matches", previewPath: "/#start" },
+
+  // ─── INTAKE — Review-modal lock warning (Iter-89) ────────────────────
+  // Final reminder shown at the top of the Review modal so patients
+  // know this is the last chance to change anything.
+  { section: "Intake — Review modal", key: "intake.preview.warning.heading", label: "Lock-warning heading", fallback: "Once you submit, this can't be changed.", previewPath: "/#start" },
+  { section: "Intake — Review modal", key: "intake.preview.warning.body",    label: "Lock-warning body",    fallback: "Please double-check your answers below before submitting. If something needs to change later, just email us and we'll resend a corrected match.", previewPath: "/#start" },
   { section: "Buttons", key: "btn.signin.send_code",      label: "Sign-in · 'Send me a code'", fallback: "Send me a code", previewPath: "/sign-in" },
   { section: "Buttons", key: "btn.signin.verify",         label: "Sign-in · 'Verify & sign in'", fallback: "Verify & sign in", previewPath: "/sign-in" },
   { section: "Buttons", key: "btn.therapist.cta.headline",label: "Therapist · 'Get more referrals'", fallback: "Get more referrals", previewPath: "/therapists/join" },
