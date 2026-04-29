@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
+import credentialLabel from "@/lib/credentialLabel";
 import { imageToDataUrl } from "@/lib/image";
 import { ADMIN_POLL_INTERVAL_MS, STATUS_UNAUTHORIZED } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
@@ -148,6 +149,9 @@ export default function AdminDashboard() {
   const [openId, setOpenId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [editTherapist, setEditTherapist] = useState(null);
+  // Patient-preview modal: opened from the "Preview" button on each
+  // provider row so admins can see what patients will see.
+  const [previewTherapist, setPreviewTherapist] = useState(null);
   const [savingTherapist, setSavingTherapist] = useState(false);
   const [emailTemplates, setEmailTemplates] = useState([]);
   const [editingTplKey, setEditingTplKey] = useState(null);
@@ -983,6 +987,7 @@ export default function AdminDashboard() {
                   onApprove={approveTherapist}
                   onReject={rejectTherapist}
                   onEdit={(t) => setEditTherapist({ ...t })}
+                  onPreview={(t) => setPreviewTherapist(t)}
                   onReload={refresh}
                 />
               )}
@@ -1006,6 +1011,7 @@ export default function AdminDashboard() {
                   ProviderRow={ProviderRow}
                   ProviderTablePager={ProviderTablePager}
                   onEdit={(t) => setEditTherapist({ ...t })}
+                  onPreview={(t) => setPreviewTherapist(t)}
                   onArchive={archiveTherapist}
                   onRestore={restoreTherapist}
                   onDelete={deleteTherapist}
@@ -2173,6 +2179,44 @@ export default function AdminDashboard() {
               className="tv-btn-secondary !py-2 !px-4 text-sm"
               onClick={() => setPreviewTpl(null)}
               data-testid="tpl-preview-close"
+            >
+              Close
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Patient-eye preview of a single therapist — opened from
+          "Preview" button on a provider row. Renders the therapist's
+          public-facing card so the admin can see what a patient would
+          see in the match results. Uses the SAME components / styling
+          as PatientResults so what you see here is what they see. */}
+      <Dialog
+        open={!!previewTherapist}
+        onOpenChange={(o) => !o && setPreviewTherapist(null)}
+      >
+        <DialogContent
+          className="max-w-2xl max-h-[90vh] overflow-y-auto bg-white border-[#E8E5DF]"
+          data-testid="provider-preview-modal"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-serif-display text-2xl text-[#2D4A3E]">
+              Patient view
+            </DialogTitle>
+            <DialogDescription className="text-sm text-[#6D6A65]">
+              How this therapist appears on a patient's match results
+              page. Public bio + photo + credential + modalities — no
+              email, phone, or address shown.
+            </DialogDescription>
+          </DialogHeader>
+          {previewTherapist && (
+            <ProviderPreviewCard t={previewTherapist} />
+          )}
+          <DialogFooter className="mt-4">
+            <button
+              className="tv-btn-secondary !py-2 !px-4 text-sm"
+              onClick={() => setPreviewTherapist(null)}
+              data-testid="provider-preview-close"
             >
               Close
             </button>
@@ -3716,7 +3760,7 @@ function useProviderColumnPrefs() {
 }
 
 function ProviderRow({
-  t, onEdit, onArchive, onRestore, onDelete, onDeepResearch, visibleCols,
+  t, onEdit, onPreview, onArchive, onRestore, onDelete, onDeepResearch, visibleCols,
 }) {
   const cols = PROVIDER_COLUMNS.filter((c) => visibleCols.includes(c.key));
   const archived = t.is_active === false;
@@ -3753,6 +3797,14 @@ function ProviderRow({
             data-testid={`edit-provider-${t.id}`}
           >
             <Pencil size={12} /> Edit
+          </button>
+          <button
+            className="text-[#C87965] hover:underline text-xs inline-flex items-center gap-1"
+            onClick={() => onPreview && onPreview(t)}
+            data-testid={`preview-provider-${t.id}`}
+            title="Preview the therapist's profile as a patient would see it"
+          >
+            <Eye size={12} /> Preview
           </button>
           {onDeepResearch ? (
             <button
@@ -4321,3 +4373,81 @@ function FeedbackRow({ r, idx }) {
 
 
 
+
+// ─── Patient-eye preview of a single therapist ───────────────────────
+//
+// Mirrors the visual contract of <MatchedProviderCard> in
+// PatientResults.jsx — same photo + name + credential + experience +
+// modalities + bio — minus interactive bits (no contact info, no
+// chips). Lives here as a small inline component so the admin can
+// trust "what I see is what the patient sees" without us needing a
+// dedicated /admin/preview-therapist/:id route.
+function ProviderPreviewCard({ t }) {
+  const photo = t.photo_url || t.photo || "";
+  const credLabel = credentialLabel(t.credential_type);
+  const yrs = t.years_experience;
+  const modalities = (t.modalities || []).slice(0, 3);
+  const bio = t.bio || t.about || "";
+  const issues = (t.primary_specialties || t.issues_treated || []).slice(0, 6);
+  return (
+    <div
+      className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-5"
+      data-testid="provider-preview-card"
+    >
+      <div className="flex items-start gap-4">
+        {photo ? (
+          <img
+            src={photo}
+            alt={t.name}
+            className="w-20 h-20 rounded-2xl object-cover border border-[#E8E5DF]"
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <div className="w-20 h-20 rounded-2xl bg-[#E8E5DF] flex items-center justify-center text-[#6D6A65] text-xl font-serif-display shrink-0">
+            {(t.name || "?").charAt(0)}
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <h3 className="font-serif-display text-2xl text-[#2D4A3E] leading-tight">
+            {t.name || "Unnamed therapist"}
+          </h3>
+          <div className="text-xs text-[#6D6A65] mt-1 break-words">
+            {credLabel && (
+              <span className="text-[#2B2A29] font-medium">{credLabel}</span>
+            )}
+            {credLabel && (yrs != null || modalities.length > 0) && " · "}
+            {yrs != null && (
+              <>
+                {yrs} year{yrs === 1 ? "" : "s"} experience
+                {modalities.length > 0 && " • "}
+              </>
+            )}
+            {modalities.join(" · ")}
+          </div>
+        </div>
+      </div>
+      {issues.length > 0 && (
+        <div className="mt-4">
+          <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-1.5">
+            Specialties
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {issues.map((i) => (
+              <span
+                key={i}
+                className="text-xs bg-white border border-[#E8E5DF] text-[#2B2A29] px-2 py-0.5 rounded-full"
+              >
+                {String(i).replace(/_/g, " ")}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {bio && (
+        <p className="mt-4 text-sm text-[#2B2A29] leading-relaxed whitespace-pre-wrap">
+          {bio}
+        </p>
+      )}
+    </div>
+  );
+}

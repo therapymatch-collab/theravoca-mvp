@@ -1705,3 +1705,32 @@ After iter-73 user reported "design looks the same" — the changes weren't visi
 
 ### Tests
 - Lint clean. Smoke screenshot blocked by Playwright OTP step (unrelated to this change). User instructed to hard-refresh to see new layout.
+
+---
+
+## Iter-76 (Apr 28 2026) — Mobile crash fix + credential normalization + admin Preview button
+
+### Fixes
+1. **🔴 Mobile crash on `/results/{id}` — fixed.** Iter-73 imported `useSiteCopy` but never assigned it to a variable, so `copy(...)` calls at lines 476/493 threw `Can't find variable: copy`. Added `const copy = useSiteCopy();` inside `PatientResults()`.
+
+2. **Credential type now shows the spelled-out title** (`Social Worker`, `Psychologist`, `Professional Counselor`) instead of letters (`LCSW`, `PhD`, `LPC`).
+   - New helper `/app/frontend/src/lib/credentialLabel.js` normalises both bare abbreviations AND `"Licensed Clinical Social Worker (LCSW)"` style strings via a 14-entry abbreviation map + 12 regex title rewrites.
+   - Wired into all 4 profile-card spots: PatientResults, TherapistEditProfile, TherapistSignup preview, TherapistPortal header.
+
+3. **Admin → All providers: new "Preview" button** next to "Edit" on each row.
+   - Opens a `<ProviderPreviewCard />` modal that mirrors the patient match-card visual contract (photo + name + credential + experience + modalities + specialties + bio).
+   - Lets admins see exactly what patients will see WITHOUT a separate route or backend endpoint.
+
+### Files changed
+- `/app/frontend/src/lib/credentialLabel.js` (new)
+- `/app/frontend/src/pages/PatientResults.jsx` (`useSiteCopy` assigned + credentialLabel)
+- `/app/frontend/src/pages/TherapistPortal.jsx` (credentialLabel)
+- `/app/frontend/src/pages/TherapistEditProfile.jsx` (credentialLabel)
+- `/app/frontend/src/pages/TherapistSignup.jsx` (credentialLabel)
+- `/app/frontend/src/pages/AdminDashboard.jsx` (Preview button + modal + ProviderPreviewCard)
+
+### Tests
+- Lint clean (frontend ESLint).
+- Verified credentialLabel mappings via node smoke test (LCSW → Social Worker, PhD → Psychologist, etc.).
+- Verified mobile `/results/{id}` loads without runtime error via Playwright screenshot.
+- Verified subtitle now reads "Social Worker · 12 years experience • CBT" instead of "LCSW · 12 years experience"

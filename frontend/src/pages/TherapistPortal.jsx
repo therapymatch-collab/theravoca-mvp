@@ -24,6 +24,7 @@ import ProfileCompletionMeter from "@/components/ProfileCompletionMeter";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { api, sessionClient, getSession, clearSession } from "@/lib/api";
+import credentialLabel from "@/lib/credentialLabel";
 
 const AVAILABILITY = [
   { v: "weekday_morning", l: "Weekday mornings" },
@@ -222,7 +223,7 @@ export default function TherapistPortal() {
                   {therapist.credential_type && (
                     <>
                       <span className="text-[#2B2A29] font-medium">
-                        {therapist.credential_type}
+                        {credentialLabel(therapist.credential_type)}
                       </span>
                       {(therapist.years_experience != null ||
                         (therapist.modalities || []).length > 0) && " · "}

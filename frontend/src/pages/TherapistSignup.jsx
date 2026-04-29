@@ -6,6 +6,7 @@ import { Header, Footer } from "@/components/SiteShell";
 import useFaqs from "@/lib/useFaqs";
 import useSiteCopy from "@/lib/useSiteCopy";
 import { formatUsPhone } from "@/lib/phone";
+import credentialLabel from "@/lib/credentialLabel";
 import { api } from "@/lib/api";
 import { IDAHO_INSURERS } from "@/lib/insurers";
 import { imageToDataUrl } from "@/lib/image";
@@ -1821,7 +1822,7 @@ function PreviewModal({ data, onClose, onConfirm, submitting }) {
             <div className="text-xs text-[#6D6A65] mt-0.5 break-words">
               {data.credential_type && (
                 <span className="text-[#2B2A29] font-medium">
-                  {data.credential_type}
+                  {credentialLabel(data.credential_type)}
                 </span>
               )}
               {data.credential_type && (data.years_experience != null || (data.modalities || []).length > 0) && " · "}

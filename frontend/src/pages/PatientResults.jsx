@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Loader2, Phone, Mail, Star, Sparkles, CalendarPlus, Send, Inbox, CheckCircle2, Clock, ArrowRight, ArrowLeft, Share2, FileText, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import useSiteCopy from "@/lib/useSiteCopy";
+import credentialLabel from "@/lib/credentialLabel";
 import { api, getSession } from "@/lib/api";
 import { RESULTS_POLL_INTERVAL_MS } from "@/lib/constants";
 
@@ -381,6 +382,9 @@ export default function PatientResults() {
   const [sp] = useSearchParams();
   const viewToken = sp.get("t") || "";
   const session = getSession();
+  // Site-copy resolver. Used to render `results.heading` /
+  // `results.subhead` overrides from the admin editor.
+  const copy = useSiteCopy();
 
   useEffect(() => {
     let active = true;
@@ -569,7 +573,7 @@ export default function PatientResults() {
                         <div className="text-xs text-[#6D6A65] mt-0.5 break-words">
                           {t.credential_type && (
                             <span className="text-[#2B2A29] font-medium">
-                              {t.credential_type}
+                              {credentialLabel(t.credential_type)}
                             </span>
                           )}
                           {t.credential_type && (t.years_experience || (t.modalities || []).length > 0) && " · "}

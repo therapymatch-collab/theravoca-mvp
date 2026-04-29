@@ -24,6 +24,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { sessionClient, getSession } from "@/lib/api";
+import credentialLabel from "@/lib/credentialLabel";
 
 const AGE_GROUP_OPTIONS = [
   { v: "children", l: "Children (<12)" },
@@ -622,7 +623,7 @@ function ProfilePreviewModal({ profile, onClose }) {
                 <div className="text-xs text-[#6D6A65] mt-0.5 break-words">
                   {t.credential_type && (
                     <span className="text-[#2B2A29] font-medium">
-                      {t.credential_type}
+                      {credentialLabel(t.credential_type)}
                     </span>
                   )}
                   {t.credential_type && (t.years_experience || (t.modalities || []).length > 0) && " · "}
