@@ -1361,6 +1361,14 @@ function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
         ? `$${data.budget}/session`
         : "—"
       : "—";
+  // Map enum values back to human labels using the same arrays the
+  // form uses, so the preview never surfaces raw slugs like
+  // "weekday_evening" or "in_person_only" to the patient.
+  const lookup = (arr, v) =>
+    (arr || []).find((x) => x.v === v)?.l || v || "—";
+  const lookupMany = (arr, vs) =>
+    (vs || []).map((v) => lookup(arr, v)).join(", ") || "—";
+
   const referralLine =
     data.referral_source === "Other" && data.referral_source_other
       ? `Other: ${data.referral_source_other}`
@@ -1382,17 +1390,17 @@ function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
     ...(data.urgency_strict ? ["Urgency"] : []),
   ]);
   const rows = [
-    ["Who this referral is for", data.client_type],
-    ["Age group", data.age_group],
+    ["Who this referral is for", lookup(CLIENT_TYPES, data.client_type)],
+    ["Age group", lookup(AGE_GROUPS, data.age_group)],
     ["Location", `${data.location_city || "—"}${data.location_zip ? `, ${data.location_zip}` : ""} (${data.location_state})`],
-    ["Concerns", issues || "—"],
-    ["Session format", data.modality_preference],
+    ["Concerns", lookupMany(ISSUES, data.presenting_issues) || issues || "—"],
+    ["Session format", lookup(MODALITY, data.modality_preference)],
     ["Insurance", insurance],
     ["Cash budget", cash],
-    ["Availability", (data.availability_windows || []).join(", ") || "—"],
-    ["Urgency", data.urgency],
+    ["Availability", lookupMany(AVAILABILITY, data.availability_windows)],
+    ["Urgency", lookup(URGENCY, data.urgency)],
     ["Therapy history", data.previous_therapy ? "Has prior therapy" : "First-time"],
-    ["Preferred gender", data.gender_preference || "Any"],
+    ["Preferred gender", lookup(GENDERS, data.gender_preference) || "Any"],
     ["Preferred therapist age", data.therapist_age_preference || "Any"],
     ["Preferred language", data.preferred_language || "English"],
     ["Style preferences", (data.style_preferences || []).join(", ") || "—"],

@@ -2049,3 +2049,38 @@ Cleared the 4 fields on 3 sample therapists → ran backfill → all 4 populated
 
 ### Pre-deploy strip behavior
 Strip-backfill (Iter-84) will `$unset` all 4 of these fields per audit record. Therapist's portal UI re-renders the initials avatar fallback for `profile_picture`, the license fields go blank, and the secondary_specialties array empties — clean slate for the therapist to fill in real values during their first portal login.
+
+
+## Iter-86 (Apr 29 2026) — Preview-modal HARD highlights + backfill: languages + license doc
+
+User asked for two pre-deploy items: (1) flag fields that act as hard filters in the patient's preview modal so they know before submitting, (2) extend backfill to cover 5 more profile fields.
+
+### Frontend (IntakeForm preview modal)
+- New top-of-modal legend pill (testid: `intake-preview-hard-legend`) explaining "Fields marked HARD are filters — therapists must match them exactly to appear in your results."
+- Per-row HARD badge + orange `bg-[#FBE9E5]` highlight when the row is a hard filter:
+  - **Always-hard**: Who-this-referral-is-for, Age group, Location (state license), Concerns
+  - **Patient-toggleable hard** (only badged when patient ticked the strict toggle): Insurance (`insurance_strict`), Session format (`modality_preference === "in_person_only"`), Availability (`availability_strict`), Urgency (`urgency_strict`)
+- Each row now has a stable testid `intake-preview-row-{slug}` for downstream test pinning.
+- **Polish**: the preview now resolves enum slugs back to human labels (e.g., `weekday_evening` → "Weekday evenings", `in_person_only` → "In-person only") via the new `lookup` / `lookupMany` helper. Preview never surfaces raw slugs to the patient.
+
+### Backend (`backfill.py`)
+- **`languages_spoken`** — convention is "languages BEYOND English". Distribution: 65% empty (English-only), 20% Spanish, 10% Spanish + Korean/Vietnamese/Mandarin/Arabic/ASL, 5% ASL.
+- **`license_picture`** — placeholder placehold.co URL labeled `Sample {credential_type} License Doc` so admins glancing at the doc viewer immediately see it's fake. Strip-backfill removes the field entirely so therapists must upload the real one before going live. Defensive cast handles non-string values gracefully (e.g., when imported as bool/None from XLSX).
+- bio (40+ chars), `free_consult`, `sliding_scale` — already covered by previous backfill code; verified included in the audit `fields_added` list when the sample therapist has them missing.
+
+### Files changed
+- `/app/frontend/src/components/IntakeForm.jsx` — `hardRows` Set, HARD badges, lookup helpers, slug→label mapping
+- `/app/backend/backfill.py` — added `languages_spoken` + `license_picture` backfills
+- `/app/backend/tests/test_iteration86_backfill.py` (new) — 4 regression tests covering the 5-field backfill + audit + strip cycle
+
+### Tests
+- ✅ Iter-38 testing agent — 4/4 backend pytest pass (15s), 8/8 hard rows + 10/10 soft rows verified visually in the preview modal via Playwright walkthrough of the multi-step intake form. Zero console errors.
+- ✅ Self-verified: 5 sample therapists got all 5 fields populated correctly (languages varied per random distribution, license_picture URL contained credential type, bio 250+ chars, free_consult/sliding_scale booleans). Audit captured all 9 backfill fields (the 5 new + the 4 prior from iter-84/85). Strip cycle restores email + unsets all 9 cleanly.
+- ✅ 25/25 combined pytest pass for iter-82 + iter-86 suites
+- ✅ Lint clean
+
+### Two minor polish items addressed from agent's code-review
+- ✅ Enum-vs-label rendering fixed (was showing `weekday_evening` slugs to patient)
+- ✅ Defensive cast on `license_picture` (handles non-string types from imports)
+- 🟡 Skipped: slug-based hardRows refactor (label-based works fine since labels are stable copy)
+- 🟡 Skipped: admin force-unset audit endpoint (out of scope; manual `db.therapists.update_many({}, {$unset: {_backfill_audit: ""}})` works for the operator)

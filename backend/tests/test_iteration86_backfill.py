@@ -144,7 +144,6 @@ def test_backfill_audit_contains_iter86_fields(session):
     # All 9 should be unset / falsy / empty
     for f in ALL_TRACKED:
         v = stripped.get(f)
-        is_empty = v in (None, "", [], {}, False) or (f == "free_consult" and v in (None, False)) or (f == "sliding_scale" and v in (None, False))
         # free_consult/sliding_scale legit can be False — accept None or absent only for cleanliness
         if f in ("free_consult", "sliding_scale"):
             assert v is None or v is False or f not in stripped, f"{f} still present after strip: {v!r}"

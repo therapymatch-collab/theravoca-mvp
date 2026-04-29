@@ -281,7 +281,9 @@ def backfill_therapist(t: dict[str, Any], idx: int) -> dict[str, Any]:
     # as a placeholder — admins glancing at the doc viewer immediately
     # see "this is fake". Strip-backfill removes the field entirely so the
     # therapist must upload the real one before going live.
-    if not (t.get("license_picture") or "").strip():
+    existing_lp = t.get("license_picture")
+    has_lp = isinstance(existing_lp, str) and existing_lp.strip()
+    if not has_lp:
         cred = (
             set_fields.get("credential_type") or t.get("credential_type") or "License"
         ).replace(" ", "+")
