@@ -549,6 +549,191 @@ export default function SettingsPanel({ client }) {
             </div>
           ) : null}
         </div>
+
+        <DeepMatchWeightsCard client={client} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Deep-match weights card (Iter-90) ──────────────────────────────
+// Admins can override the v2-spec default 0.40 / 0.35 / 0.25 weighting
+// for the three deep-match axes. Backend renormalises so any input
+// summing to a positive number works; live preview shows what the
+// values will normalise to before save.
+function DeepMatchWeightsCard({ client }) {
+  const [w, setW] = useState({
+    relationship_style: 0.40,
+    way_of_working: 0.35,
+    contextual_resonance: 0.25,
+  });
+  const [defaults, setDefaults] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await client.get("/admin/deep-match-weights");
+        if (cancelled) return;
+        setW({
+          relationship_style: r.data.relationship_style,
+          way_of_working: r.data.way_of_working,
+          contextual_resonance: r.data.contextual_resonance,
+        });
+        setDefaults(r.data.defaults);
+      } catch (e) {
+        toast.error(
+          e?.response?.data?.detail || "Failed to load deep-match weights",
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [client]);
+  const total = w.relationship_style + w.way_of_working + w.contextual_resonance;
+  const norm = (v) => (total > 0 ? v / total : 0);
+  const allInRange = ["relationship_style", "way_of_working", "contextual_resonance"]
+    .every((k) => w[k] >= 0.05 && w[k] <= 0.60);
+  const save = async () => {
+    if (!allInRange) {
+      toast.error("Each weight must be between 0.05 and 0.60");
+      return;
+    }
+    setSaving(true);
+    try {
+      const r = await client.put("/admin/deep-match-weights", w);
+      setW({
+        relationship_style: r.data.relationship_style,
+        way_of_working: r.data.way_of_working,
+        contextual_resonance: r.data.contextual_resonance,
+      });
+      toast.success("Deep-match weights saved");
+    } catch (e) {
+      toast.error(
+        e?.response?.data?.detail || e.message || "Save failed",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+  const resetDefaults = () => {
+    if (defaults) setW({ ...defaults });
+  };
+  if (loading) {
+    return (
+      <div
+        className="rounded-2xl bg-white border border-[#E8E5DF] p-5 mt-5"
+        data-testid="deep-match-weights-loading"
+      >
+        <p className="text-sm text-[#6D6A65]">Loading deep-match weights…</p>
+      </div>
+    );
+  }
+  const rows = [
+    {
+      key: "relationship_style",
+      label: "Relationship style",
+      hint: "P1 ↔ T1 + T4 (cosine sim of pick vector vs. ranked therapist instincts).",
+    },
+    {
+      key: "way_of_working",
+      label: "Way of working",
+      hint: "P2 ↔ T3 (overlap of 2-of-6 picks ÷ 2).",
+    },
+    {
+      key: "contextual_resonance",
+      label: "Contextual resonance",
+      hint: "P3 ↔ T5 + T2 (text-embedding cosine sim, 70% T5 + 30% T2).",
+    },
+  ];
+  return (
+    <div
+      className="rounded-2xl bg-white border border-[#E8E5DF] p-5 mt-5"
+      data-testid="deep-match-weights-card"
+    >
+      <div className="flex items-baseline justify-between gap-2 mb-3 flex-wrap">
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-[#C8412B] font-semibold">
+            ✦ Deep match
+          </p>
+          <h3 className="font-serif-display text-2xl text-[#2D4A3E] mt-1">
+            Scoring weights
+          </h3>
+          <p className="text-xs text-[#6D6A65] mt-1 max-w-xl leading-relaxed">
+            Three axes that activate when a patient opts into the deeper
+            intake. Each weight must be between 0.05 and 0.60. Backend
+            renormalises so they always sum to 1.0 — see the "after
+            normalisation" column.
+          </p>
+        </div>
+        {defaults && (
+          <button
+            type="button"
+            onClick={resetDefaults}
+            className="text-xs text-[#6D6A65] underline hover:text-[#2D4A3E]"
+            data-testid="deep-match-weights-reset"
+          >
+            Reset to defaults
+          </button>
+        )}
+      </div>
+      <div className="space-y-4">
+        {rows.map((row) => (
+          <div
+            key={row.key}
+            className="grid grid-cols-1 sm:grid-cols-3 items-baseline gap-3 border-b border-[#F4EFE7] pb-3 last:border-b-0"
+          >
+            <div className="sm:col-span-1">
+              <p className="text-sm font-medium text-[#2D4A3E]">{row.label}</p>
+              <p className="text-[11px] text-[#6D6A65] mt-0.5 leading-snug">
+                {row.hint}
+              </p>
+            </div>
+            <div className="sm:col-span-1">
+              <input
+                type="number"
+                step="0.05"
+                min="0.05"
+                max="0.60"
+                value={w[row.key]}
+                onChange={(e) =>
+                  setW((prev) => ({
+                    ...prev,
+                    [row.key]: parseFloat(e.target.value) || 0,
+                  }))
+                }
+                className={`w-full px-3 py-1.5 rounded-md bg-[#FDFBF7] border text-sm ${
+                  w[row.key] >= 0.05 && w[row.key] <= 0.60
+                    ? "border-[#E8E5DF]"
+                    : "border-[#C8412B]"
+                }`}
+                data-testid={`deep-match-weight-${row.key}`}
+              />
+            </div>
+            <div className="sm:col-span-1 text-xs text-[#6D6A65]">
+              <span className="font-mono">
+                {(norm(w[row.key]) * 100).toFixed(1)}%
+              </span>{" "}
+              <span className="text-[10px]">after normalisation</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center justify-between mt-4 flex-wrap gap-3">
+        <p className="text-[11px] text-[#6D6A65]">
+          Sum of inputs: <span className="font-mono">{total.toFixed(2)}</span>
+        </p>
+        <button
+          type="button"
+          onClick={save}
+          disabled={!allInRange || saving}
+          className="bg-[#2D4A3E] text-white text-sm rounded-full px-5 py-2 hover:bg-[#1F362C] disabled:opacity-50 transition"
+          data-testid="deep-match-weights-save"
+        >
+          {saving ? "Saving…" : "Save weights"}
+        </button>
       </div>
     </div>
   );

@@ -1613,6 +1613,67 @@ _DEFAULT_INTAKE_RATE = {
 }
 
 
+# Deep-match scoring weights (Iter-90). Founder's v2 default is
+# 0.40 / 0.35 / 0.25 (sums to 1.0). Admins can edit via the Settings
+# panel; the engine renormalises before applying so any input is safe.
+@router.get("/admin/deep-match-weights", dependencies=[Depends(require_admin)])
+async def admin_get_deep_match_weights() -> dict[str, Any]:
+    from matching import _DEEP_MATCH_DEFAULT_WEIGHTS as _DEFAULTS
+    doc = await db.app_config.find_one(
+        {"key": "deep_match_weights"}, {"_id": 0},
+    )
+    return {
+        "relationship_style": float(
+            (doc or {}).get("relationship_style") or _DEFAULTS["relationship_style"]
+        ),
+        "way_of_working": float(
+            (doc or {}).get("way_of_working") or _DEFAULTS["way_of_working"]
+        ),
+        "contextual_resonance": float(
+            (doc or {}).get("contextual_resonance") or _DEFAULTS["contextual_resonance"]
+        ),
+        "defaults": _DEFAULTS,
+    }
+
+
+@router.put("/admin/deep-match-weights", dependencies=[Depends(require_admin)])
+async def admin_set_deep_match_weights(payload: dict) -> dict[str, Any]:
+    """Validate + persist deep-match weights. Each weight must be in
+    [0.05, 0.6] — same guardrail bounds as the v2 spec's auto-tuning
+    regression. The three weights are renormalised to sum to 1.0
+    before saving so admins don't have to do the math."""
+    try:
+        rel = float(payload.get("relationship_style"))
+        work = float(payload.get("way_of_working"))
+        ctx = float(payload.get("contextual_resonance"))
+    except (TypeError, ValueError) as e:
+        raise HTTPException(400, "All three weights must be numbers") from e
+    for name, val in (
+        ("relationship_style", rel),
+        ("way_of_working", work),
+        ("contextual_resonance", ctx),
+    ):
+        if not (0.05 <= val <= 0.60):
+            raise HTTPException(
+                400, f"{name} must be between 0.05 and 0.60 (got {val})",
+            )
+    s = rel + work + ctx
+    if s <= 0:
+        raise HTTPException(400, "Weights cannot all be zero")
+    new = {
+        "relationship_style": round(rel / s, 4),
+        "way_of_working": round(work / s, 4),
+        "contextual_resonance": round(ctx / s, 4),
+    }
+    await db.app_config.update_one(
+        {"key": "deep_match_weights"},
+        {"$set": {"key": "deep_match_weights", **new}},
+        upsert=True,
+    )
+    return {"saved": True, **new}
+
+
+
 @router.get("/admin/intake-rate-limit", dependencies=[Depends(require_admin)])
 async def admin_get_intake_rate_limit() -> dict[str, Any]:
     doc = await db.app_config.find_one(

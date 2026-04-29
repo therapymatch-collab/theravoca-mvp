@@ -11,6 +11,12 @@ import { api } from "@/lib/api";
 import { IDAHO_INSURERS } from "@/lib/insurers";
 import { ADDITIONAL_LANGUAGES } from "@/lib/languages";
 import { imageToDataUrl } from "@/lib/image";
+import {
+  T1_OPTIONS,
+  T3_OPTIONS,
+  T4_OPTIONS,
+  DEFAULT_T1_ORDER,
+} from "@/pages/therapist/deepMatchOptions";
 import { Input } from "@/components/ui/input";
 import {
   Accordion,
@@ -96,32 +102,9 @@ const GENDERS = [
   { v: "nonbinary", l: "Nonbinary" },
 ];
 
-// ── Deep-match T1/T3/T4 options (v2 spec, Iter-89) ───────────────────
-// Slugs map 1:1 to the patient P1/P2 questions and the matching engine
-// (matching.py). Wording is therapist-facing.
-const T1_OPTIONS = [
-  { v: "leads_structured", l: "I lead with structure and a clear plan" },
-  { v: "follows_lead", l: "I follow the client's lead" },
-  { v: "challenges", l: "I challenge patterns, even when it creates tension" },
-  { v: "warm_first", l: "I prioritize warmth and safety first" },
-  { v: "direct_honest", l: "I'm direct — I name what I see" },
-  { v: "guides_questions", l: "I guide through questions, letting them arrive at insight" },
-];
-const T3_OPTIONS = [
-  { v: "deep_emotional", l: "Deep emotional processing — the client lets themselves feel" },
-  { v: "practical_tools", l: "Practical skill-building — the client applies tools between sessions" },
-  { v: "explore_past", l: "Exploring the past — understanding the origin of patterns" },
-  { v: "focus_forward", l: "Present and future-focused — what's happening now and next" },
-  { v: "build_insight", l: "Building insight — the client finally sees their patterns" },
-  { v: "shift_relationships", l: "Relational shift — the client's key relationships change" },
-];
-const T4_OPTIONS = [
-  { v: "direct", l: "Head-on — I name it directly and trust the alliance" },
-  { v: "incremental", l: "Incrementally — I build toward it across sessions" },
-  { v: "questions", l: "Through questions — I let them bump into it themselves" },
-  { v: "emotional", l: "Through emotion — I use what's alive in the room" },
-  { v: "wait", l: "I wait for the right moment, then gently name it" },
-];
+// Deep-match T1/T3/T4 options live in
+// `@/pages/therapist/deepMatchOptions` so this file + the portal-edit
+// page share one source of truth.
 
 // Therapist-side FAQ — short, plain answers to the questions clinicians
 // ask before signing up. Kept generic and platform-focused so the copy

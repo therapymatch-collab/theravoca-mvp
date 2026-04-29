@@ -5,6 +5,10 @@ import { toast } from "sonner";
 import { ArrowRight, Check } from "lucide-react";
 import { api } from "@/lib/api";
 import useSiteCopy from "@/lib/useSiteCopy";
+import {
+  P1_OPTIONS,
+  P2_OPTIONS,
+} from "@/components/intake/deepMatchOptions";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -41,26 +45,10 @@ const DEEP_MATCH_STEPS = [
   "What they should already get",
 ];
 
-// P1 — "What kind of relationship do you want with your therapist?"
-// Pick 2 of 6. Slugs are 1:1 with therapist T1 ranking.
-const P1_OPTIONS = [
-  { v: "leads_structured", l: "Someone who leads with structure and direction" },
-  { v: "follows_lead", l: "Someone who follows my lead and lets me set the pace" },
-  { v: "challenges", l: "Someone who challenges me, even when it's uncomfortable" },
-  { v: "warm_first", l: "Someone who's warm and encouraging above all" },
-  { v: "direct_honest", l: "Someone who's direct and tells it like it is" },
-  { v: "guides_questions", l: "Someone who asks the right questions so I get there myself" },
-];
-// P2 — "How do you want therapy to work?" Pick 2 of 6. Slugs map 1:1
-// to therapist T3 picks; matching score = overlap ÷ 2.
-const P2_OPTIONS = [
-  { v: "deep_emotional", l: "Go deep into emotions — feel what I've been avoiding" },
-  { v: "practical_tools", l: "Stay practical — give me tools I can use this week" },
-  { v: "explore_past", l: "Look back — understand where my patterns started" },
-  { v: "focus_forward", l: "Look forward — focus on who I'm becoming" },
-  { v: "build_insight", l: "Help me understand myself and why I do what I do" },
-  { v: "shift_relationships", l: "Help me change how I show up in my relationships" },
-];
+// P1 + P2 deep-match option lists live in
+// `@/components/intake/deepMatchOptions` so the Review modal, the
+// step renderers, and any future analytics code share one source of
+// truth.
 
 const PRIORITY_FACTORS = [
   // Soft axes only — the "always hard" ones (state, type of therapy, main

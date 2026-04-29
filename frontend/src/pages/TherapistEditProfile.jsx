@@ -99,6 +99,17 @@ export default function TherapistEditProfile() {
           // Re-approval fields (editable, but flag change)
           primary_specialties: [...(r.data.primary_specialties || [])],
           secondary_specialties: [...(r.data.secondary_specialties || [])],
+          // Deep-match T1–T5 (Iter-89 v2). Default T1 to canonical
+          // order so existing therapists don't see an empty list.
+          t1_stuck_ranked:
+            (r.data.t1_stuck_ranked || []).length === 6
+              ? [...r.data.t1_stuck_ranked]
+              : ["leads_structured", "follows_lead", "challenges",
+                 "warm_first", "direct_honest", "guides_questions"],
+          t2_progress_story: r.data.t2_progress_story || "",
+          t3_breakthrough: [...(r.data.t3_breakthrough || [])],
+          t4_hard_truth: r.data.t4_hard_truth || "",
+          t5_lived_experience: r.data.t5_lived_experience || "",
         });
       })
       .catch((e) => {
@@ -456,6 +467,83 @@ export default function TherapistEditProfile() {
           </div>
         </Section>
 
+        {/* Deep-match style fit (v2 spec). The #deep-match anchor is
+            the back-fill banner's deep-link target so therapists land
+            here directly. */}
+        <section
+          id="deep-match"
+          className="mt-10 bg-[#FBE9E5] border-2 border-[#F4C7BE] rounded-2xl p-6 scroll-mt-24"
+          data-testid="deep-match-section"
+        >
+          <p className="text-xs uppercase tracking-[0.2em] text-[#C8412B] font-semibold mb-1">
+            ✦ Style fit · how you actually work
+          </p>
+          <h2 className="font-serif-display text-2xl text-[#2D4A3E]">
+            Deep-match questions
+          </h2>
+          <p className="text-sm text-[#2B2A29]/85 mt-1.5 leading-relaxed">
+            Patients who opt into our deeper intake get scored against
+            your answers here. Until all 5 are filled, those patients
+            won't see you in deep-match results.
+          </p>
+
+          <div className="mt-6 space-y-6">
+            <Field label="T1 — How do you typically show up in session? (drag to reorder, most instinctive at top)">
+              <DeepMatchRankList
+                items={EDIT_T1_OPTIONS}
+                order={draft.t1_stuck_ranked}
+                onChange={(o) => set("t1_stuck_ranked", o)}
+                testid="edit-t1"
+              />
+            </Field>
+            <Field label="T2 — Describe a client who made real progress with you (≥50 chars)">
+              <Textarea
+                rows={4}
+                value={draft.t2_progress_story}
+                onChange={(e) => set("t2_progress_story", e.target.value)}
+                className="bg-white border-[#E8E5DF] rounded-xl"
+                data-testid="edit-t2"
+                placeholder="What were they like when they walked in? How did they change?"
+              />
+              <p className="text-[11px] text-[#6D6A65] mt-1">
+                {(draft.t2_progress_story || "").length}/2000
+              </p>
+            </Field>
+            <Field label="T3 — How does your best work typically unfold? (pick exactly 2)">
+              <DeepMatchPickList
+                items={EDIT_T3_OPTIONS}
+                selected={draft.t3_breakthrough}
+                onSelect={(v) => toggleList("t3_breakthrough", v, 2)}
+                testid="edit-t3"
+              />
+              <p className="text-[11px] text-[#6D6A65] mt-2">
+                {(draft.t3_breakthrough || []).length}/2 selected
+              </p>
+            </Field>
+            <Field label="T4 — When you need to push a client past their comfort zone, how do you do it? (pick 1)">
+              <DeepMatchRadio
+                items={EDIT_T4_OPTIONS}
+                value={draft.t4_hard_truth}
+                onChange={(v) => set("t4_hard_truth", v)}
+                testid="edit-t4"
+              />
+            </Field>
+            <Field label="T5 — What life experiences or communities do you understand from the inside, not from a textbook? (≥30 chars)">
+              <Textarea
+                rows={4}
+                value={draft.t5_lived_experience}
+                onChange={(e) => set("t5_lived_experience", e.target.value)}
+                className="bg-white border-[#E8E5DF] rounded-xl"
+                data-testid="edit-t5"
+                placeholder="e.g. first-gen college, immigrant family, queer + Christian, military spouse, navigating chronic illness, sober parent…"
+              />
+              <p className="text-[11px] text-[#6D6A65] mt-1">
+                {(draft.t5_lived_experience || "").length}/2000
+              </p>
+            </Field>
+          </div>
+        </section>
+
         <div className="sticky bottom-4 mt-10 bg-white border border-[#E8E5DF] rounded-2xl px-5 py-4 flex items-center justify-between gap-3 flex-wrap shadow-sm">
           <div className="text-xs text-[#6D6A65] flex-1 min-w-[180px]">
             Saved changes are visible to patients instantly (except
@@ -489,6 +577,129 @@ export default function TherapistEditProfile() {
         )}
       </main>
       <Footer />
+    </div>
+  );
+}
+
+// Deep-match T1/T3/T4 options for the portal-edit form. Slugs are
+// 1:1 with the matching engine + therapist signup; copy is identical
+// to TherapistSignup.jsx.
+const EDIT_T1_OPTIONS = [
+  { v: "leads_structured", l: "I lead with structure and a clear plan" },
+  { v: "follows_lead", l: "I follow the client's lead" },
+  { v: "challenges", l: "I challenge patterns, even when it creates tension" },
+  { v: "warm_first", l: "I prioritize warmth and safety first" },
+  { v: "direct_honest", l: "I'm direct — I name what I see" },
+  { v: "guides_questions", l: "I guide through questions, letting them arrive at insight" },
+];
+const EDIT_T3_OPTIONS = [
+  { v: "deep_emotional", l: "Deep emotional processing — the client lets themselves feel" },
+  { v: "practical_tools", l: "Practical skill-building — the client applies tools between sessions" },
+  { v: "explore_past", l: "Exploring the past — understanding the origin of patterns" },
+  { v: "focus_forward", l: "Present and future-focused — what's happening now and next" },
+  { v: "build_insight", l: "Building insight — the client finally sees their patterns" },
+  { v: "shift_relationships", l: "Relational shift — the client's key relationships change" },
+];
+const EDIT_T4_OPTIONS = [
+  { v: "direct", l: "Head-on — I name it directly and trust the alliance" },
+  { v: "incremental", l: "Incrementally — I build toward it across sessions" },
+  { v: "questions", l: "Through questions — I let them bump into it themselves" },
+  { v: "emotional", l: "Through emotion — I use what's alive in the room" },
+  { v: "wait", l: "I wait for the right moment, then gently name it" },
+];
+
+function DeepMatchRankList({ items, order, onChange, testid }) {
+  const labelFor = (slug) => items.find((i) => i.v === slug)?.l || slug;
+  const swap = (idx, dir) => {
+    const next = [...order];
+    const tgt = idx + dir;
+    if (tgt < 0 || tgt >= next.length) return;
+    [next[idx], next[tgt]] = [next[tgt], next[idx]];
+    onChange(next);
+  };
+  return (
+    <ol className="flex flex-col gap-2" data-testid={testid}>
+      {(order || []).map((slug, idx) => (
+        <li
+          key={slug}
+          className="flex items-center gap-3 bg-white border border-[#E8E5DF] rounded-xl px-3 py-2"
+        >
+          <span className="font-mono text-xs text-[#6D6A65] w-5 text-center">{idx + 1}</span>
+          <span className="flex-1 text-sm text-[#2B2A29]">{labelFor(slug)}</span>
+          <div className="flex flex-col gap-0.5">
+            <button
+              type="button"
+              onClick={() => swap(idx, -1)}
+              disabled={idx === 0}
+              className="w-6 h-6 rounded border border-[#E8E5DF] text-xs text-[#6D6A65] hover:bg-[#2D4A3E] hover:text-white hover:border-[#2D4A3E] disabled:opacity-30 transition"
+              data-testid={`${testid}-up-${slug}`}
+              aria-label="Move up"
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              onClick={() => swap(idx, +1)}
+              disabled={idx === (order || []).length - 1}
+              className="w-6 h-6 rounded border border-[#E8E5DF] text-xs text-[#6D6A65] hover:bg-[#2D4A3E] hover:text-white hover:border-[#2D4A3E] disabled:opacity-30 transition"
+              data-testid={`${testid}-down-${slug}`}
+              aria-label="Move down"
+            >
+              ↓
+            </button>
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function DeepMatchPickList({ items, selected, onSelect, testid }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {items.map((it) => {
+        const active = (selected || []).includes(it.v);
+        return (
+          <button
+            type="button"
+            key={it.v}
+            onClick={() => onSelect(it.v)}
+            data-testid={`${testid}-${it.v}`}
+            className={`text-sm text-left px-4 py-2.5 rounded-xl border transition ${
+              active
+                ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
+                : "bg-white text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+            }`}
+          >
+            {it.l}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function DeepMatchRadio({ items, value, onChange, testid }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {items.map((it) => {
+        const active = value === it.v;
+        return (
+          <button
+            type="button"
+            key={it.v}
+            onClick={() => onChange(it.v)}
+            data-testid={`${testid}-${it.v}`}
+            className={`text-sm text-left px-4 py-2.5 rounded-xl border transition ${
+              active
+                ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
+                : "bg-white text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+            }`}
+          >
+            {it.l}
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -40,6 +40,77 @@ const URGENCY = [
   { v: "full", l: "Currently full" },
 ];
 
+// ─── Deep-match back-fill banner (Iter-90) ─────────────────────────
+// Shown at the top of the portal when an existing therapist hasn't
+// answered the v2 T1–T5 style-fit questions yet. Soft, dismissible
+// per-session. No backend changes — we just check for empty fields
+// on the therapist doc the portal already loads.
+function DeepMatchBackfillBanner({ therapist }) {
+  const [dismissed, setDismissed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return !!window.sessionStorage.getItem("tv_deep_backfill_dismissed");
+  });
+  if (!therapist || dismissed) return null;
+  const missing = [];
+  if (!therapist.t1_stuck_ranked || therapist.t1_stuck_ranked.length !== 6)
+    missing.push("how you show up in session");
+  if ((therapist.t2_progress_story || "").trim().length < 50)
+    missing.push("a story of a client who made progress");
+  if (!therapist.t3_breakthrough || therapist.t3_breakthrough.length !== 2)
+    missing.push("how your best work unfolds");
+  if (!therapist.t4_hard_truth)
+    missing.push("how you push past comfort zones");
+  if ((therapist.t5_lived_experience || "").trim().length < 30)
+    missing.push("life experience you understand from the inside");
+  if (missing.length === 0) return null;
+  return (
+    <div
+      className="mt-6 bg-[#FBE9E5] border border-[#F4C7BE] rounded-2xl p-5"
+      data-testid="deep-match-backfill-banner"
+    >
+      <div className="flex items-start gap-3">
+        <Sparkles size={20} className="text-[#C8412B] mt-0.5 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-[#2D4A3E]">
+            5 quick questions unlock our deep-match scoring for you
+          </p>
+          <p className="text-xs text-[#2B2A29]/85 mt-1.5 leading-relaxed">
+            Patients who opt into our deeper intake are matched on
+            relationship style, way of working, and lived experience —
+            not just specialty + insurance. Until you answer these,
+            those patients won't see you in the deep-match results.
+          </p>
+          <p className="text-[11px] text-[#8B3220] mt-2">
+            You're missing: {missing.join(", ")}.
+          </p>
+          <div className="flex gap-3 mt-4 flex-wrap">
+            <Link
+              to="/therapists/profile/edit#deep-match"
+              className="tv-btn-primary text-sm"
+              data-testid="deep-match-backfill-cta"
+            >
+              Fill these now (~3 min)
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                window.sessionStorage.setItem(
+                  "tv_deep_backfill_dismissed", "1",
+                );
+                setDismissed(true);
+              }}
+              className="text-sm text-[#6D6A65] underline hover:text-[#2D4A3E] self-center"
+              data-testid="deep-match-backfill-dismiss"
+            >
+              Remind me later
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function TherapistPortal() {
   const navigate = useNavigate();
   const session = getSession();
@@ -298,6 +369,15 @@ export default function TherapistPortal() {
               <Loader2 className="animate-spin text-[#2D4A3E]" />
             </div>
           )}
+
+          {/* Deep-match T-field back-fill banner. Shown when any of
+              the 5 therapist style-fit fields (T1–T5) is missing or
+              under the v2-spec minimum. Existing therapists who
+              signed up before iter-89 land here on next portal login;
+              clicking the CTA jumps to /therapists/profile/edit
+              where they can fill the answers. Soft prompt — they can
+              dismiss per-session via sessionStorage. */}
+          <DeepMatchBackfillBanner therapist={therapist} />
 
           {/* Pending approval — show the submitted profile preview */}
           {isPending && (

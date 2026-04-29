@@ -258,6 +258,29 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
     # decline it.
     decline_history = await _build_decline_history(req, therapist_ids)
 
+    # Stamp the active deep-match weights onto the request so
+    # `score_therapist` picks them up. Falls back to defaults when the
+    # admin hasn't customised them yet. We do a single Mongo lookup
+    # rather than threading through rank_therapists' signature.
+    if req.get("deep_match_opt_in"):
+        from deps import db as _db
+        wcfg = await _db.app_config.find_one(
+            {"key": "deep_match_weights"}, {"_id": 0},
+        )
+        if wcfg:
+            from matching import _DEEP_MATCH_DEFAULT_WEIGHTS as _D
+            req["_deep_weights"] = {
+                "relationship_style": float(
+                    wcfg.get("relationship_style") or _D["relationship_style"]
+                ),
+                "way_of_working": float(
+                    wcfg.get("way_of_working") or _D["way_of_working"]
+                ),
+                "contextual_resonance": float(
+                    wcfg.get("contextual_resonance") or _D["contextual_resonance"]
+                ),
+            }
+
     matches = rank_therapists(
         therapists,
         req,
