@@ -1,0 +1,28 @@
+{
+  "summary": "Iter-83 frontend verification. New per-axis explainer panel on MatchedProviderCard renders correctly. Admin login (master password admin123!) → Requests tab → request 66770043 → expanded first matched provider (Aspen Benson, 100%). All 12 axes from spec present with correct labels, /max suffix, mini bars, and 4 hard-filter ✓ chips. Header text and axes-total counter match. Existing rationale + therapist-attribute grid still render below. Zero console errors throughout.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "MatchedProviderCard › Why-this-score panel", "issues": ["Axis 'issues' rendered as '+63/35' (value exceeds max). The mini bar is clamped to 100% so visually fine, but the +63/35 chip can be confusing — consider clamping displayed value to max, or rethink whether issues should be allowed to exceed its declared 35-point ceiling. Likely a backend scoring concern, not a UI bug."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Optional) Decide on policy for axes whose actual points exceed AXIS_MAX (e.g., issues=63 vs max=35). Either lift the AXIS_MAX cap or clamp the rendered numerator. Cosmetic only."
+  ],
+  "critical_code_review_comments": [
+    "MatchedProviderCard.jsx:195-197 — dead/no-op JSX expression `{(t.match_breakdown?.payment_fit !== undefined || t.match_breakdown?.research_bonus !== undefined) && null}`. Always evaluates to null and renders nothing. Safe to delete to keep the component lean.",
+    "AXIS_MAX defines `research_bonus: 15` and `decline_penalty: -10`, but neither was present in the live notified_breakdowns for the verified request. Code paths for negative (red) axes and the research_bonus chip therefore could not be exercised against real data this iteration — recommend a synthetic seed/QA case that includes a decline_penalty entry to lock in red-color rendering before shipping.",
+    "AXIS_MAX duplication risk: the same constants live in backend matching.py. Worth a comment header and maybe a tiny shared JSON or an /api/admin/score-axes endpoint to eliminate drift."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "test_credentials": "admin / admin123! via Master password tab",
+  "seed_data_creation": "None — used existing request 66770043-a17e-45c1-886b-53b5efdb8369",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 8 acceptance criteria from iter-83 review request are passing. Verified provider 746c55ee-3cbf-4fb3-9aa2-0558f6b384fd (Aspen Benson, 100%): matched-why-{tid} panel renders with header 'Why does this therapist score 100%?', right-side 'axes total: 110' counter, 12 matched-axis-{tid}-{axis} chips covering issues/availability/modality/urgency/prior_therapy/experience/reviews/modality_pref/gender/payment_fit/style/differentiator each with label + mini bar + +pts/max chip; 4 ✓ hard-filter chips present (Licensed in state, Treats primary concern, Serves age group, Offers therapy format). Existing rationale (orange) and attribute grid (Years exp / Cash rate / etc) preserved below. 0 console errors. Negative-axis red rendering and research_bonus chip not exercised because the live data didn't include those axes — code path looks correct on inspection but uncovered by data.",
+  "rca of the issue": "n/a — no bugs found"
+}
