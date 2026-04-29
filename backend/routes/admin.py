@@ -2892,5 +2892,75 @@ async def admin_seed_reset(_: bool = Depends(require_admin)):
     return {"ok": True, "cleared": cleared, "seeded": len(therapists)}
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Matching-Outcome Simulator (admin-only)
+# ──────────────────────────────────────────────────────────────────────
+# Routes delegate to `backend/simulator.py` — this keeps admin.py from
+# growing further while giving ops a single surface to kick off a run,
+# list prior runs, fetch a specific report, and clean up synthetic
+# data. See simulator.py for the algorithmic detail + rationale.
+
+
+@router.post("/admin/simulator/run")
+async def simulator_run(
+    payload: dict,
+    _: None = Depends(require_admin),
+):
+    """Kick off a simulator run synchronously. A 50-request run
+    against a ~120-therapist pool completes in ~1-2 seconds because
+    all scoring is pure Python (no network / LLM calls)."""
+    import simulator
+    num_requests = int(payload.get("num_requests") or 50)
+    notify_top_n = int(payload.get("notify_top_n") or 30)
+    min_applications = int(payload.get("min_applications") or 5)
+    max_applications = int(payload.get("max_applications") or 12)
+    random_seed = payload.get("random_seed")
+    if not (10 <= num_requests <= 200):
+        raise HTTPException(400, "num_requests must be between 10 and 200.")
+    report = await simulator.run_simulation(
+        db,
+        num_requests=num_requests,
+        notify_top_n=notify_top_n,
+        min_applications=min_applications,
+        max_applications=max_applications,
+        random_seed=random_seed,
+    )
+    return report
+
+
+@router.get("/admin/simulator/runs")
+async def simulator_list_runs(
+    _: None = Depends(require_admin),
+    limit: int = 30,
+):
+    """List recent simulator runs — lightweight summary only."""
+    import simulator
+    return {"items": await simulator.list_runs(db, limit=limit)}
+
+
+@router.get("/admin/simulator/runs/{run_id}")
+async def simulator_get_run(
+    run_id: str,
+    _: None = Depends(require_admin),
+):
+    """Fetch the full report (with per-request detail) for one run."""
+    import simulator
+    doc = await simulator.load_run(db, run_id)
+    if not doc:
+        raise HTTPException(404, "Run not found")
+    return doc
+
+
+@router.delete("/admin/simulator/runs/{run_id}")
+async def simulator_delete_run(
+    run_id: str,
+    _: None = Depends(require_admin),
+):
+    """Delete one run + all its synthetic requests."""
+    import simulator
+    deleted = await simulator.delete_run(db, run_id)
+    return {"ok": True, "deleted": deleted}
+
+
 # Suppress unused-import warnings on logger (kept for future logging)
 void = logger
