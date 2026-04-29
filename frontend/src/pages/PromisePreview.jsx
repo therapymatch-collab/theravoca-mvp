@@ -1,16 +1,20 @@
 /* eslint-disable react/no-unescaped-entities */
-import { Header, Footer } from "@/components/SiteShell";
-import { Link } from "react-router-dom";
-import { Sparkles, Check, X, Heart, ArrowRight, MessageCircle } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  Check,
+  X as XIcon,
+  Sparkles,
+  Heart,
+  ArrowRight,
+  Star,
+  Phone,
+  Mail,
+  ChevronDown,
+  Leaf,
+} from "lucide-react";
 
-// Public preview page for the founder to compare 10 promise-statement
-// designs + 4 deep-intake banner designs (start) + 3 (end) before
-// committing to which goes live in production.
-//
-// Lives at /preview/promise — no auth required, internal-only by
-// virtue of the hidden URL.
-
+// ─── PROMISE COPY ───────────────────────────────────────────────────────
 const PROMISE_LONG =
   "A successful match means the patient and therapist work together long enough for the patient to report feeling better about their presenting issue — and to view the relationship and time together as ultimately beneficial in their life.";
 const PROMISE_MEDIUM =
@@ -24,48 +28,143 @@ const PROMISE_RESULTS_BANNER =
 const PROMISE_NORTHSTAR =
   "Our north star: matches that help you feel better — not ones that fill slots.";
 
-const Spacer = ({ children }) => (
-  <div className="max-w-5xl mx-auto px-5 sm:px-8 py-12 border-t border-dashed border-[#E8E5DF]">
-    {children}
-  </div>
-);
-
-const Tag = ({ n, where }) => (
-  <div className="flex items-baseline gap-3 mb-4">
-    <span className="inline-flex items-center justify-center bg-[#2D4A3E] text-white font-mono text-sm rounded-md px-2.5 py-1">
-      Option {n}
-    </span>
-    <span className="text-xs uppercase tracking-wider text-[#6D6A65]">
-      Lives on: <span className="text-[#2B2A29]">{where}</span>
-    </span>
-  </div>
-);
-
-// ── Trust / Promise design variants ──────────────────────────────────────
-
-function Option1Hero() {
+// ─── REUSABLE BROWSER FRAME ─────────────────────────────────────────────
+function MockFrame({ children, label, url }) {
   return (
-    <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-10">
-      <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] mb-5">
-        <Sparkles size={14} className="inline mr-1.5 -mt-0.5" strokeWidth={1.8} />
-        Pilot live in Idaho
-      </p>
-      <h1 className="font-serif-display text-5xl sm:text-6xl text-[#2D4A3E] leading-[1.05] tracking-tight">
-        Let therapists <em className="not-italic text-[#C87965]">come to you</em>.
-      </h1>
-      <div className="mt-7 max-w-xl border-l-2 border-[#C87965] pl-5 py-1">
-        <p className="font-serif-display italic text-xl text-[#2D4A3E] leading-relaxed">
-          “{PROMISE_SHORT_PATIENT}”
-        </p>
-        <p className="text-[10px] uppercase tracking-wider text-[#C87965] mt-2 font-semibold">
-          — our promise
-        </p>
+    <div className="bg-white border border-[#E8E5DF] rounded-2xl shadow-sm overflow-hidden">
+      {/* Browser chrome */}
+      <div className="flex items-center gap-2 px-4 py-2.5 bg-[#F4EFE7] border-b border-[#E8E5DF]">
+        <span className="w-3 h-3 rounded-full bg-[#FF5F57]" />
+        <span className="w-3 h-3 rounded-full bg-[#FEBC2E]" />
+        <span className="w-3 h-3 rounded-full bg-[#28C840]" />
+        <div className="ml-3 flex-1 max-w-md bg-white border border-[#E8E5DF] rounded-md text-xs text-[#6D6A65] px-3 py-1 truncate">
+          {url}
+        </div>
+        <span className="text-[10px] uppercase tracking-wider text-[#6D6A65] hidden sm:block">
+          {label}
+        </span>
+      </div>
+      <div className="bg-[#FDFBF7]">{children}</div>
+    </div>
+  );
+}
+
+function MockHeader() {
+  return (
+    <div className="bg-white border-b border-[#E8E5DF] px-6 py-3 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <div className="w-7 h-7 rounded-full bg-[#2D4A3E] flex items-center justify-center">
+          <Leaf size={14} className="text-white" />
+        </div>
+        <span className="font-serif-display text-lg text-[#2D4A3E]">
+          TheraVoca
+        </span>
+      </div>
+      <div className="hidden md:flex items-center gap-5 text-xs text-[#6D6A65]">
+        <span>How it works</span>
+        <span>Testimonials</span>
+        <span>Why TheraVoca</span>
+        <span>FAQs</span>
+        <span>For therapists</span>
+        <span>Sign in</span>
+        <span className="bg-[#2D4A3E] text-white rounded-full px-3 py-1.5 font-medium">
+          Get matched
+        </span>
       </div>
     </div>
   );
 }
 
-function Option2Typewriter() {
+function MockFooter({ withWatermark = false }) {
+  return (
+    <div className="border-t border-[#E8E5DF] bg-white px-6 py-8 mt-12">
+      <div className="grid grid-cols-3 gap-6 text-xs text-[#6D6A65]">
+        <div>
+          <p className="font-serif-display text-base text-[#2D4A3E] mb-1">
+            TheraVoca
+          </p>
+          <p>Let therapists come to you.</p>
+        </div>
+        <div>
+          <p className="font-semibold text-[#2D4A3E] mb-1">Crisis support</p>
+          <p>Call 911 or 988 if in crisis.</p>
+        </div>
+        <div>
+          <p className="font-semibold text-[#2D4A3E] mb-1">Privacy</p>
+          <p>We never share your info.</p>
+        </div>
+      </div>
+      {withWatermark && (
+        <p className="mt-6 italic font-serif-display text-[#2D4A3E]/70 text-sm border-t border-[#E8E5DF] pt-4">
+          “{PROMISE_MEDIUM}” — our promise
+        </p>
+      )}
+      <p className="text-[10px] text-[#6D6A65] mt-3">
+        © 2026 TheraVoca · Terms · Privacy · Blog
+      </p>
+    </div>
+  );
+}
+
+function MockHero({ children }) {
+  return (
+    <div className="px-6 py-10 grid sm:grid-cols-2 gap-8 items-center">
+      <div>
+        <p className="text-[10px] uppercase tracking-[0.25em] text-[#C87965] mb-3">
+          ✦ Pilot live in Idaho
+        </p>
+        <h1 className="font-serif-display text-3xl sm:text-4xl text-[#2D4A3E] leading-[1.05]">
+          Let therapists{" "}
+          <em className="not-italic text-[#C87965]">come to you</em>.
+        </h1>
+        <p className="mt-3 text-lg text-[#2D4A3E] font-serif-display">
+          <span className="font-semibold">3+ matched therapists in 24 hours</span>
+          <span className="text-[#C87965]">, guaranteed.</span>
+        </p>
+        <p className="mt-3 text-sm text-[#2B2A29]/80 max-w-md">
+          No more searching, cold-calls, or waiting to hear back. Pick what
+          matters, and we'll route your request to therapists who actually
+          want to work with you.
+        </p>
+        {children}
+      </div>
+      <div className="bg-[#C87965]/15 rounded-2xl h-48 sm:h-64 flex items-center justify-center text-[#6D6A65] text-sm">
+        [hero photo]
+      </div>
+    </div>
+  );
+}
+
+// ─── 10 PROMISE MOCKUPS ─────────────────────────────────────────────────
+
+function Mock1() {
+  return (
+    <MockFrame label="Landing — Option 1" url="theravoca.com/">
+      <MockHeader />
+      <MockHero>
+        <div className="mt-5 max-w-md border-l-2 border-[#C87965] pl-4 py-1">
+          <p className="font-serif-display italic text-base text-[#2D4A3E] leading-relaxed">
+            “{PROMISE_SHORT_PATIENT}”
+          </p>
+          <p className="text-[9px] uppercase tracking-wider text-[#C87965] mt-1.5 font-semibold">
+            — our promise
+          </p>
+        </div>
+        <div className="mt-5 flex gap-3">
+          <span className="bg-[#2D4A3E] text-white text-xs rounded-full px-3 py-1.5 font-medium">
+            Get matched — free
+          </span>
+          <span className="text-xs text-[#2D4A3E] underline self-center">
+            How it works →
+          </span>
+        </div>
+      </MockHero>
+      <MockFooter />
+    </MockFrame>
+  );
+}
+
+function Mock2() {
   const [shown, setShown] = useState("");
   useEffect(() => {
     let i = 0;
@@ -73,627 +172,814 @@ function Option2Typewriter() {
       i += 1;
       setShown(PROMISE_MEDIUM.slice(0, i));
       if (i >= PROMISE_MEDIUM.length) clearInterval(id);
-    }, 32);
+    }, 28);
     return () => clearInterval(id);
   }, []);
   return (
-    <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-10 text-center">
-      <a className="tv-btn-primary inline-block mb-8">Get matched — free</a>
-      <p className="font-serif-display text-2xl text-[#2D4A3E] leading-relaxed min-h-[5rem] max-w-2xl mx-auto">
-        {shown}
-        <span className="inline-block w-[3px] h-7 bg-[#C87965] ml-1 align-middle animate-pulse" />
-      </p>
-    </div>
-  );
-}
-
-function Option3PullQuote() {
-  return (
-    <div className="bg-[#2D4A3E] rounded-2xl p-12 text-white">
-      <p className="text-xs uppercase tracking-[0.25em] text-[#FBE9E5] mb-6">
-        Why TheraVoca
-      </p>
-      <h3 className="font-serif-display text-3xl leading-snug max-w-3xl">
-        We don't sell referrals.
-      </h3>
-      <p className="font-serif-display italic text-2xl text-[#FBE9E5] leading-relaxed max-w-3xl mt-5">
-        “{PROMISE_LONG}”
-      </p>
-      <p className="text-xs uppercase tracking-wider text-white/60 mt-5">
-        — TheraVoca's definition of success
-      </p>
-    </div>
-  );
-}
-
-function Option4Manifesto() {
-  return (
-    <div className="bg-[#FBE9E5] border-2 border-[#C87965] rounded-3xl p-10 relative overflow-hidden">
-      {/* Two interlocking circles sketch — the "match organism" */}
-      <svg
-        viewBox="0 0 80 50"
-        className="absolute right-6 top-6 w-24 h-16 text-[#C87965]/40"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      >
-        <circle cx="28" cy="25" r="20" />
-        <circle cx="52" cy="25" r="20" />
-      </svg>
-      <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] font-semibold mb-4">
-        the match — our manifesto
-      </p>
-      <h3 className="font-serif-display text-3xl text-[#2D4A3E] leading-snug max-w-2xl">
-        We exist for one outcome.
-      </h3>
-      <p className="text-lg text-[#2B2A29]/85 mt-4 max-w-2xl leading-relaxed">
-        {PROMISE_LONG}
-      </p>
-      <p className="text-sm text-[#6D6A65] mt-6 max-w-2xl">
-        Patient + therapist + time = a third thing — a relationship that
-        helps. Everything we build serves that.
-      </p>
-    </div>
-  );
-}
-
-function Option5StickyRibbon() {
-  return (
-    <div>
-      <div className="bg-white border border-[#E8E5DF] rounded-xl p-6 text-[#6D6A65] text-sm">
-        ↑ Imagine the rest of the page above. ↑
-      </div>
-      <div className="fixed-stub bg-[#2D4A3E] text-white text-sm py-2.5 px-5 rounded-full shadow-md flex items-center gap-3 mt-3 mx-auto w-fit">
-        <Heart size={14} className="text-[#FBE9E5]" />
-        <span>{PROMISE_NORTHSTAR}</span>
-        <button className="text-white/60 hover:text-white text-xs">
-          ✕ dismiss
-        </button>
-      </div>
-      <p className="text-[11px] text-[#6D6A65] text-center mt-2 italic">
-        (in production: pinned to bottom of viewport on every page,
-        dismissible per-session)
-      </p>
-    </div>
-  );
-}
-
-function Option6DedicatedPage() {
-  return (
-    <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-10">
-      <div className="text-xs text-[#6D6A65] mb-4">
-        URL: <code className="bg-[#FBE9E5] px-2 py-0.5 rounded">/our-promise</code>
-      </div>
-      <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] mb-5">
-        our promise
-      </p>
-      <h1 className="font-serif-display text-5xl text-[#2D4A3E] leading-[1.1] mb-8">
-        We work for one outcome.
-      </h1>
-      <p className="text-2xl text-[#2D4A3E] font-serif-display italic leading-relaxed border-l-4 border-[#C87965] pl-6 mb-8">
-        {PROMISE_LONG}
-      </p>
-      <div className="grid sm:grid-cols-3 gap-6 mt-10">
-        {[
-          ["The patient", "explicit needs + open-text + lived experience"],
-          ["The therapist", "training + style + lived experience"],
-          ["The match", "a living relationship — measured at 90 days"],
-        ].map(([h, b]) => (
-          <div
-            key={h}
-            className="border border-[#E8E5DF] rounded-xl p-5 bg-white"
-          >
-            <p className="text-xs uppercase tracking-wider text-[#C87965] font-semibold">
-              {h}
-            </p>
-            <p className="text-sm text-[#2B2A29]/85 mt-2 leading-relaxed">
-              {b}
-            </p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function Option7ResultsBanner() {
-  return (
-    <div>
-      <div className="bg-[#2D4A3E]/5 border-l-4 border-[#C87965] rounded-r-xl px-5 py-4 flex items-start gap-3 mb-5">
-        <Heart size={18} className="text-[#C87965] mt-0.5 flex-shrink-0" />
-        <div>
-          <p className="text-sm font-semibold text-[#2D4A3E]">
-            How TheraVoca measures success
-          </p>
-          <p className="text-sm text-[#2B2A29]/80 mt-1 leading-relaxed">
-            {PROMISE_RESULTS_BANNER} If any of these therapists isn't a fit
-            after 2 sessions, just tell us — we'll re-match for free.
-          </p>
+    <MockFrame label="Landing — Option 2" url="theravoca.com/">
+      <MockHeader />
+      <MockHero>
+        <div className="mt-5 flex gap-3">
+          <span className="bg-[#2D4A3E] text-white text-xs rounded-full px-3 py-1.5 font-medium">
+            Get matched — free
+          </span>
         </div>
-      </div>
-      {/* Mock results card */}
-      <div className="space-y-3">
-        {["Dr. Ana M., LCSW", "James K., LMFT", "Priya S., PsyD"].map((n) => (
-          <div
-            key={n}
-            className="border border-[#E8E5DF] rounded-xl p-4 bg-white flex items-center gap-3"
-          >
-            <div className="w-12 h-12 rounded-full bg-[#FBE9E5]" />
-            <div>
-              <p className="font-semibold text-[#2D4A3E]">{n}</p>
-              <p className="text-xs text-[#6D6A65]">
-                Anxiety · Trauma · 8 yrs · Boise
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function Option8TherapistTrust() {
-  return (
-    <div>
-      <div className="bg-[#FBF2E8] border border-[#F0DEC8] rounded-xl px-6 py-5 flex items-start gap-4 mb-5">
-        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-[#B8742A] text-white flex items-center justify-center">
-          ✱
-        </div>
-        <div>
-          <p className="text-sm font-semibold text-[#8B5A1F]">
-            Why we don't pay for clicks
-          </p>
-          <p className="text-sm text-[#2B2A29]/85 mt-1 leading-relaxed">
-            {PROMISE_SHORT_THERAPIST} If your patients aren't reporting they
-            feel better at 90 days, we tune the matching engine — not your
-            ad spend.
-          </p>
-        </div>
-      </div>
-      <div className="bg-white border border-[#E8E5DF] rounded-2xl p-8">
-        <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] mb-4">
-          For therapists
+        <p className="mt-5 font-serif-display text-sm text-[#2D4A3E]/85 leading-relaxed max-w-md min-h-[3rem]">
+          {shown}
+          <span className="inline-block w-[2px] h-4 bg-[#C87965] ml-1 align-middle animate-pulse" />
         </p>
-        <h2 className="font-serif-display text-4xl text-[#2D4A3E]">
-          Get matched with patients who actually want to work with you.
+      </MockHero>
+      <MockFooter />
+    </MockFrame>
+  );
+}
+
+function Mock3() {
+  return (
+    <MockFrame
+      label="Landing — Option 3 (replaces 'How we're different')"
+      url="theravoca.com/"
+    >
+      <MockHeader />
+      <div className="px-6 py-3 text-xs text-[#6D6A65] italic">
+        … hero, How it works, Testimonials …
+      </div>
+      <div className="bg-[#2D4A3E] text-white px-6 py-12">
+        <p className="text-[10px] uppercase tracking-[0.25em] text-[#FBE9E5] mb-4">
+          What we mean by "match"
+        </p>
+        <h2 className="font-serif-display text-3xl leading-snug">
+          We don't sell referrals.
+        </h2>
+        <p className="font-serif-display italic text-lg text-[#FBE9E5] leading-relaxed mt-4 max-w-2xl">
+          “{PROMISE_LONG}”
+        </p>
+        <p className="text-[10px] uppercase tracking-wider text-white/60 mt-4">
+          — TheraVoca's definition of success
+        </p>
+      </div>
+      <div className="px-6 py-3 text-xs text-[#6D6A65] italic">
+        … intake form, FAQs …
+      </div>
+      <MockFooter />
+    </MockFrame>
+  );
+}
+
+function Mock4() {
+  return (
+    <MockFrame
+      label="Landing — Option 4 (manifesto card above FAQs)"
+      url="theravoca.com/#faq"
+    >
+      <MockHeader />
+      <div className="px-6 py-3 text-xs text-[#6D6A65] italic">
+        … hero, How it works, intake form …
+      </div>
+      <div className="px-6 py-8">
+        <div className="bg-[#FBE9E5] border-2 border-[#C87965] rounded-3xl p-6 sm:p-8 relative overflow-hidden">
+          <svg
+            viewBox="0 0 80 50"
+            className="absolute right-4 top-4 w-16 h-12 text-[#C87965]/40"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          >
+            <circle cx="28" cy="25" r="20" />
+            <circle cx="52" cy="25" r="20" />
+          </svg>
+          <p className="text-[10px] uppercase tracking-[0.25em] text-[#C87965] font-semibold mb-3">
+            the match — our manifesto
+          </p>
+          <h3 className="font-serif-display text-2xl text-[#2D4A3E]">
+            We exist for one outcome.
+          </h3>
+          <p className="text-sm text-[#2B2A29]/85 mt-3 leading-relaxed max-w-lg">
+            {PROMISE_LONG}
+          </p>
+          <p className="text-xs text-[#6D6A65] mt-4 max-w-lg">
+            Patient + therapist + time = a third thing — a relationship that
+            helps. Everything we build serves that.
+          </p>
+        </div>
+        <p className="text-[10px] uppercase tracking-[0.25em] text-[#C87965] mt-8 text-center">
+          FAQs
+        </p>
+        <h2 className="font-serif-display text-2xl text-[#2D4A3E] text-center">
+          Things people ask
         </h2>
       </div>
-    </div>
+      <MockFooter />
+    </MockFrame>
   );
 }
 
-function Option9FooterWatermark() {
+function Mock5() {
   return (
-    <div className="bg-white border border-[#E8E5DF] rounded-xl p-6 text-[#6D6A65] text-sm">
-      <p className="mb-4">↑ The rest of every page above. ↑</p>
-      <div className="border-t border-[#E8E5DF] pt-5 grid sm:grid-cols-3 gap-6 text-xs text-[#6D6A65]">
-        <div>
-          <p className="font-serif-display text-[#2D4A3E] text-lg mb-1.5">
-            TheraVoca
-          </p>
-          <p>Let therapists come to you.</p>
-        </div>
-        <div>
-          <p className="font-semibold text-[#2D4A3E] mb-1.5">Crisis support</p>
-          <p>If in crisis, call 911 or 988.</p>
-        </div>
-        <div>
-          <p className="font-semibold text-[#2D4A3E] mb-1.5">Privacy</p>
-          <p>We never share your info without consent.</p>
-        </div>
-      </div>
-      <p className="mt-6 italic font-serif-display text-[#2D4A3E]/70 text-sm border-t border-[#E8E5DF] pt-4">
-        “{PROMISE_MEDIUM}” — our promise
-      </p>
-      <p className="text-[10px] text-[#6D6A65]/70 mt-2">
-        © 2026 TheraVoca · Terms · Privacy
-      </p>
-    </div>
-  );
-}
-
-function Option10MultiTouch() {
-  return (
-    <div className="space-y-6">
-      <div className="bg-[#FBE9E5] border border-[#F4C7BE] rounded-xl p-5">
-        <p className="text-sm font-semibold text-[#C8412B] mb-2">
-          ✦ Recommended — combines 4 touch-points
-        </p>
-        <ol className="text-sm text-[#2B2A29]/85 space-y-1.5 list-decimal pl-5">
-          <li>Italic serif quote under the Landing hero (Option 1)</li>
-          <li>Manifesto card above Landing FAQs (Option 4)</li>
-          <li>
-            Dedicated <code className="bg-white px-1.5 rounded text-xs">/our-promise</code> page (Option 6)
-          </li>
-          <li>Patient Results banner (Option 7) + Therapist trust banner (Option 8)</li>
-        </ol>
-      </div>
-      <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl p-6">
-        <p className="text-xs text-[#6D6A65] mb-3">Preview, hero only:</p>
-        <Option1Hero />
-      </div>
-    </div>
-  );
-}
-
-// ── Deep-intake design variants ──────────────────────────────────────────
-
-function StartA() {
-  return (
-    <div className="bg-gradient-to-br from-[#FBE9E5] to-[#FDFBF7] border border-[#F4C7BE] rounded-2xl p-6 max-w-2xl mx-auto">
-      <p className="text-xs uppercase tracking-[0.2em] text-[#C8412B] font-semibold mb-3">
-        ✦ Optional · ~90 seconds extra
-      </p>
-      <h3 className="font-serif-display text-2xl text-[#2D4A3E] mb-2 leading-snug">
-        Want a deeper match?
-      </h3>
-      <p className="text-sm text-[#2B2A29]/85 leading-relaxed">
-        Answer 3 extra questions and we'll match you with a therapist who
-        really understands how you think — not just one who treats your
-        diagnosis.
-      </p>
-      <div className="flex flex-wrap gap-3 mt-5">
-        <button className="tv-btn-primary text-sm" type="button">
-          Yes — go deeper
-        </button>
-        <button className="text-sm text-[#6D6A65] underline" type="button">
-          Skip — standard match is fine
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function StartB() {
-  return (
-    <div className="border border-dashed border-[#2D4A3E] rounded-2xl p-6 bg-white max-w-2xl mx-auto">
-      <div className="flex items-start gap-4">
-        <div className="w-12 h-12 rounded-full bg-[#2D4A3E] text-white flex items-center justify-center flex-shrink-0">
-          <Sparkles size={20} />
-        </div>
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-[#2D4A3E]">
-            Standard match (8 questions, ~2 min) ↓
-          </p>
-          <p className="text-xs text-[#6D6A65] mt-0.5">
-            Or unlock <strong>deep match</strong> — 3 nuanced questions about
-            how you want a therapist to <em>be</em> with you.
-          </p>
-          <label className="flex items-center gap-2 mt-3 cursor-pointer">
-            <input
-              type="checkbox"
-              className="accent-[#2D4A3E]"
-              defaultChecked
-            />
-            <span className="text-sm text-[#2B2A29]">
-              Use the deep match (recommended)
-            </span>
-          </label>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StartC() {
-  return (
-    <div className="bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden max-w-2xl mx-auto">
-      <div className="grid sm:grid-cols-2">
-        <div className="p-6 border-r border-[#E8E5DF]">
-          <p className="text-xs uppercase tracking-wider text-[#6D6A65] mb-2">
-            Standard match
-          </p>
-          <p className="font-serif-display text-2xl text-[#2D4A3E] mb-2">
-            ~2 min
-          </p>
-          <ul className="text-xs text-[#2B2A29]/80 space-y-1 mt-3">
-            <li>✓ 8 short questions</li>
-            <li>✓ Hard filters (insurance, format)</li>
-            <li>✓ Soft preferences</li>
-          </ul>
-          <button
-            className="mt-5 w-full text-sm border border-[#2D4A3E] text-[#2D4A3E] rounded-full py-2 hover:bg-[#2D4A3E]/5"
-            type="button"
-          >
-            Standard
-          </button>
-        </div>
-        <div className="p-6 bg-[#FBE9E5]">
-          <p className="text-xs uppercase tracking-wider text-[#C8412B] font-semibold mb-2">
-            ✦ Deep match
-          </p>
-          <p className="font-serif-display text-2xl text-[#2D4A3E] mb-2">
-            ~3.5 min
-          </p>
-          <ul className="text-xs text-[#2B2A29]/85 space-y-1 mt-3">
-            <li>✓ Everything in standard</li>
-            <li>✓ + 3 questions on style fit</li>
-            <li>✓ + therapist lived-experience match</li>
-          </ul>
-          <button className="mt-5 w-full tv-btn-primary text-sm" type="button">
-            Go deep →
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StartD() {
-  return (
-    <div className="max-w-2xl mx-auto">
-      <p className="text-sm text-[#6D6A65] mb-2 italic">
-        (after the user picks "Adult" + their state — appears as a single
-        toggle pill above step 1)
-      </p>
-      <div className="inline-flex items-center gap-3 bg-[#FBF2E8] border border-[#F0DEC8] rounded-full px-4 py-2 text-sm">
-        <Sparkles size={14} className="text-[#B8742A]" />
-        <span className="text-[#8B5A1F]">
-          Add 3 nuance questions for a deeper match?
+    <MockFrame
+      label="Any page — Option 5 (sticky pill ribbon, dismissible)"
+      url="theravoca.com/"
+    >
+      <MockHeader />
+      <MockHero>
+        <span className="bg-[#2D4A3E] text-white text-xs rounded-full px-3 py-1.5 font-medium mt-5 inline-block">
+          Get matched — free
         </span>
-        <button
-          type="button"
-          className="text-xs font-semibold bg-[#2D4A3E] text-white rounded-full px-3 py-0.5 hover:bg-[#1F362C]"
-        >
-          Yes
-        </button>
-        <button type="button" className="text-xs text-[#6D6A65] underline">
-          Maybe later
-        </button>
+      </MockHero>
+      <div className="px-6 py-3 text-xs text-[#6D6A65] italic">
+        … rest of page …
       </div>
-    </div>
+      <div className="relative">
+        <MockFooter />
+        {/* Pinned ribbon */}
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-[#2D4A3E] text-white text-xs py-2 px-4 rounded-full shadow-lg flex items-center gap-2 max-w-[90%]">
+          <Heart size={11} className="text-[#FBE9E5]" />
+          <span className="truncate">{PROMISE_NORTHSTAR}</span>
+          <XIcon size={11} className="text-white/60" />
+        </div>
+      </div>
+    </MockFrame>
   );
 }
 
-function EndA() {
+function Mock6() {
   return (
-    <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-6 max-w-2xl mx-auto">
-      <p className="text-sm text-[#6D6A65] mb-4">
-        ↓ End of the existing 8-step intake; right above Review &amp; submit ↓
-      </p>
-      <div className="bg-gradient-to-br from-[#FBE9E5] to-white border border-[#F4C7BE] rounded-xl p-5">
-        <div className="flex items-start gap-3">
-          <Sparkles size={20} className="text-[#C8412B] mt-0.5 flex-shrink-0" />
-          <div>
-            <p className="font-semibold text-[#2D4A3E]">
-              One more thing — want a deeper match?
-            </p>
-            <p className="text-xs text-[#6D6A65] mt-1.5 leading-relaxed">
-              You're 90 seconds away from a much better match. 3 extra
-              questions and we tune the engine to your style.
-            </p>
-            <div className="flex gap-3 mt-4 flex-wrap">
-              <button className="tv-btn-primary text-sm" type="button">
-                Add the 3 questions
-              </button>
-              <button
-                className="text-sm text-[#6D6A65] underline self-center"
-                type="button"
-              >
-                No thanks, just submit
-              </button>
+    <MockFrame label="New page — Option 6 (/our-promise)" url="theravoca.com/our-promise">
+      <MockHeader />
+      <div className="px-6 py-10">
+        <p className="text-[10px] uppercase tracking-[0.25em] text-[#C87965] mb-3">
+          ✦ Our promise
+        </p>
+        <h1 className="font-serif-display text-3xl sm:text-4xl text-[#2D4A3E] leading-[1.05]">
+          We work for one outcome.
+        </h1>
+        <blockquote className="mt-6 border-l-4 border-[#C87965] pl-5 py-1">
+          <p className="font-serif-display italic text-lg text-[#2D4A3E] leading-relaxed">
+            “{PROMISE_LONG}”
+          </p>
+          <p className="text-[10px] uppercase tracking-wider text-[#C87965] mt-2 font-semibold">
+            — TheraVoca's definition of a successful match
+          </p>
+        </blockquote>
+        <div className="grid grid-cols-3 gap-4 mt-8">
+          {[
+            ["The patient", "explicit needs + lived experience"],
+            ["The therapist", "training + style + lived experience"],
+            ["The match", "a relationship over time — measured at 90 days"],
+          ].map(([h, b]) => (
+            <div
+              key={h}
+              className="border border-[#E8E5DF] rounded-xl p-4 bg-white"
+            >
+              <p className="text-[10px] uppercase tracking-wider text-[#C87965] font-semibold">
+                {h}
+              </p>
+              <p className="text-xs text-[#2B2A29]/85 mt-1.5 leading-relaxed">
+                {b}
+              </p>
             </div>
+          ))}
+        </div>
+        <div className="mt-8 bg-[#2D4A3E] rounded-2xl p-6 text-white">
+          <p className="text-[10px] uppercase tracking-[0.25em] text-[#FBE9E5] mb-2">
+            For therapists
+          </p>
+          <h2 className="font-serif-display text-xl">
+            We grade ourselves on your patients' outcomes — not on how many
+            therapists we sign up.
+          </h2>
+        </div>
+        <p className="text-[10px] text-[#6D6A65] mt-6 italic">
+          (preview only — production page not built yet)
+        </p>
+      </div>
+      <MockFooter />
+    </MockFrame>
+  );
+}
+
+function Mock7() {
+  return (
+    <MockFrame
+      label="Patient Results — Option 7"
+      url="theravoca.com/results/abc123"
+    >
+      <MockHeader />
+      <div className="px-6 py-8">
+        <p className="text-[10px] uppercase tracking-wider text-[#C87965]">
+          Your matches
+        </p>
+        <h1 className="font-serif-display text-2xl text-[#2D4A3E] mt-1">
+          Therapists who want to work with you
+        </h1>
+        <div className="mt-6 bg-[#2D4A3E]/5 border-l-4 border-[#C87965] rounded-r-xl px-4 py-3 flex items-start gap-2.5">
+          <Heart size={16} className="text-[#C87965] mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-xs font-semibold text-[#2D4A3E]">
+              How TheraVoca measures success
+            </p>
+            <p className="text-xs text-[#2B2A29]/80 mt-1 leading-relaxed">
+              {PROMISE_RESULTS_BANNER} If a therapist isn't a fit after 2
+              sessions, just tell us — we'll re-match for free.
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 space-y-3">
+          {[
+            ["Dr. Ana M.", "LCSW · Anxiety + Trauma · 8 yrs"],
+            ["James K.", "LMFT · Couples · 12 yrs"],
+            ["Priya S.", "PsyD · Burnout · 6 yrs"],
+          ].map(([n, m]) => (
+            <div
+              key={n}
+              className="border border-[#E8E5DF] rounded-xl p-3 bg-white flex items-center gap-3"
+            >
+              <div className="w-10 h-10 rounded-full bg-[#FBE9E5]" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-[#2D4A3E]">{n}</p>
+                <p className="text-xs text-[#6D6A65]">{m}</p>
+              </div>
+              <div className="flex items-center gap-1 text-xs text-[#6D6A65]">
+                <Star size={10} className="text-[#C87965]" />
+                4.9
+              </div>
+              <Phone size={14} className="text-[#6D6A65]" />
+              <Mail size={14} className="text-[#6D6A65]" />
+            </div>
+          ))}
+        </div>
+      </div>
+      <MockFooter />
+    </MockFrame>
+  );
+}
+
+function Mock8() {
+  return (
+    <MockFrame
+      label="Therapist Signup — Option 8"
+      url="theravoca.com/therapists/join"
+    >
+      <MockHeader />
+      <div className="px-6 py-6">
+        <div className="bg-[#FBF2E8] border border-[#F0DEC8] rounded-xl px-4 py-4 flex items-start gap-3">
+          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#B8742A] text-white flex items-center justify-center">
+            <Sparkles size={14} />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-[#8B5A1F]">
+              Why we don't pay for clicks
+            </p>
+            <p className="text-xs text-[#2B2A29]/85 mt-1 leading-relaxed">
+              {PROMISE_SHORT_THERAPIST} If your patients aren't reporting
+              they feel better at 90 days, we tune the matching engine —
+              not your ad spend.
+            </p>
           </div>
         </div>
       </div>
+      <div className="px-6 py-6 grid sm:grid-cols-2 gap-6 items-center">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.25em] text-[#C87965] mb-2">
+            For licensed therapists
+          </p>
+          <h1 className="font-serif-display text-2xl text-[#2D4A3E] leading-tight">
+            You focus on{" "}
+            <em className="not-italic text-[#C87965]">care</em> — we provide
+            the referrals.
+          </h1>
+          <p className="mt-3 text-xs text-[#2B2A29]/80">
+            Marketing yourself can feel frustrating. We send pre-screened
+            referrals straight to your inbox.
+          </p>
+          <span className="bg-[#2D4A3E] text-white text-xs rounded-full px-3 py-1.5 font-medium mt-4 inline-block">
+            Sign up — start free trial →
+          </span>
+        </div>
+        <div className="bg-[#C87965]/15 rounded-xl h-32" />
+      </div>
+      <MockFooter />
+    </MockFrame>
+  );
+}
+
+function Mock9() {
+  return (
+    <MockFrame
+      label="Every page — Option 9 (footer watermark)"
+      url="theravoca.com/"
+    >
+      <MockHeader />
+      <div className="px-6 py-10 text-xs text-[#6D6A65] italic">
+        … any page content …
+      </div>
+      <MockFooter withWatermark />
+    </MockFrame>
+  );
+}
+
+function Mock10() {
+  return (
+    <div className="space-y-3">
+      <div className="bg-[#FBE9E5] border border-[#F4C7BE] rounded-xl p-4">
+        <p className="text-sm font-semibold text-[#C8412B] mb-1">
+          ✦ Recommended — combines 4 touch-points
+        </p>
+        <ol className="text-xs text-[#2B2A29]/85 space-y-0.5 list-decimal pl-5">
+          <li>Hero italic quote (Option 1)</li>
+          <li>Manifesto card above FAQs (Option 4)</li>
+          <li>
+            Dedicated <code className="bg-white px-1 rounded">/our-promise</code> page (Option 6)
+          </li>
+          <li>Patient Results banner (Option 7) + Therapist banner (Option 8)</li>
+        </ol>
+      </div>
+      <Mock1 />
     </div>
   );
 }
 
-function EndB() {
+// ─── INTAKE FORM MOCKUPS ────────────────────────────────────────────────
+
+function MockIntakeShell({ children, title = "Step 1 of 8: Who is this for?" }) {
   return (
-    <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-6 max-w-2xl mx-auto">
-      <p className="text-sm text-[#6D6A65] mb-4">
-        ↓ Inside the Review &amp; Submit modal ↓
-      </p>
-      <div className="bg-white border border-[#E8E5DF] rounded-xl p-5">
-        <div className="flex items-center justify-between mb-3">
-          <p className="font-semibold text-[#2D4A3E]">Review your referral</p>
-          <span className="text-xs text-[#6D6A65]">8 questions answered</span>
+    <MockFrame label="Landing — intake form section" url="theravoca.com/#start">
+      <MockHeader />
+      <div className="px-6 py-8 bg-[#FDFBF7]">
+        <div className="text-center mb-6">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-[#C87965] mb-2">
+            ✦ Get started
+          </p>
+          <h2 className="font-serif-display text-2xl text-[#2D4A3E]">
+            Get your personalized list of <em>pre-qualified</em> therapists
+          </h2>
+          <p className="mt-2 text-xs text-[#6D6A65]">
+            Free during pilot · Under 2 minutes
+          </p>
         </div>
-        <div className="border-t border-[#E8E5DF] pt-4 bg-[#FBE9E5]/40 -mx-5 -mb-5 px-5 pb-5 rounded-b-xl">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-[#2D4A3E] flex items-center gap-1.5">
-                <Sparkles size={14} className="text-[#C8412B]" />
-                Want a deeper match?
-              </p>
-              <p className="text-xs text-[#6D6A65] mt-0.5">
-                Adds 3 nuance questions · ~90 sec
-              </p>
+        {children}
+        <div className="mt-5 bg-white border border-[#E8E5DF] rounded-2xl p-5">
+          <div className="flex items-center justify-between text-[10px] text-[#6D6A65]">
+            <span>{title}</span>
+            <span>13%</span>
+          </div>
+          <div className="mt-2 h-1 bg-[#E8E5DF] rounded-full overflow-hidden">
+            <div className="h-full w-[13%] bg-[#C87965]" />
+          </div>
+          <div className="mt-5">
+            <p className="text-xs font-semibold text-[#2B2A29] mb-2">
+              What type of therapy is needed?
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {["Individual", "Couples", "Family", "Group"].map((c) => (
+                <span
+                  key={c}
+                  className="text-xs px-3 py-1.5 rounded-full border border-[#E8E5DF] bg-[#FDFBF7]"
+                >
+                  {c}
+                </span>
+              ))}
             </div>
-            <label className="relative inline-flex cursor-pointer">
-              <input type="checkbox" className="sr-only peer" />
-              <div className="w-11 h-6 bg-[#E8E5DF] rounded-full peer-checked:bg-[#2D4A3E] transition" />
-              <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full peer-checked:translate-x-5 transition" />
+          </div>
+          <div className="mt-5 flex justify-end">
+            <span className="bg-[#2D4A3E] text-white text-xs rounded-full px-3 py-1.5 inline-flex items-center gap-1">
+              Continue <ArrowRight size={11} />
+            </span>
+          </div>
+        </div>
+      </div>
+      <MockFooter />
+    </MockFrame>
+  );
+}
+
+function MockStartA() {
+  return (
+    <MockIntakeShell>
+      <div className="bg-gradient-to-br from-[#FBE9E5] to-[#FDFBF7] border border-[#F4C7BE] rounded-2xl p-5">
+        <p className="text-[10px] uppercase tracking-[0.2em] text-[#C8412B] font-semibold mb-2">
+          ✦ Optional · ~90 seconds extra
+        </p>
+        <h3 className="font-serif-display text-xl text-[#2D4A3E] mb-1">
+          Want a deeper match?
+        </h3>
+        <p className="text-xs text-[#2B2A29]/85 leading-relaxed">
+          Answer 3 extra questions and we'll match you with a therapist
+          who really understands how you think — not just one who treats
+          your diagnosis.
+        </p>
+        <div className="flex flex-wrap gap-3 mt-4">
+          <span className="bg-[#2D4A3E] text-white text-xs rounded-full px-3 py-1.5 font-medium">
+            Yes — go deeper
+          </span>
+          <span className="text-xs text-[#6D6A65] underline self-center">
+            Skip — standard match is fine
+          </span>
+        </div>
+      </div>
+    </MockIntakeShell>
+  );
+}
+
+function MockStartB() {
+  return (
+    <MockIntakeShell>
+      <div className="border border-dashed border-[#2D4A3E] rounded-2xl p-5 bg-white">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-full bg-[#2D4A3E] text-white flex items-center justify-center flex-shrink-0">
+            <Sparkles size={14} />
+          </div>
+          <div className="flex-1">
+            <p className="text-xs font-semibold text-[#2D4A3E]">
+              Standard match (8 questions, ~2 min) ↓
+            </p>
+            <p className="text-[11px] text-[#6D6A65] mt-0.5">
+              Or unlock <strong>deep match</strong> — 3 nuanced questions
+              about how you want a therapist to <em>be</em> with you.
+            </p>
+            <label className="flex items-center gap-2 mt-3">
+              <span className="w-3 h-3 rounded-sm border border-[#2D4A3E] bg-[#2D4A3E] flex items-center justify-center">
+                <Check size={9} strokeWidth={3} className="text-white" />
+              </span>
+              <span className="text-xs text-[#2B2A29]">
+                Use the deep match (recommended)
+              </span>
             </label>
           </div>
         </div>
       </div>
-    </div>
+    </MockIntakeShell>
   );
 }
 
-function EndC() {
+function MockStartC() {
   return (
-    <div className="max-w-2xl mx-auto">
-      <p className="text-sm text-[#6D6A65] mb-3">
-        ↓ Right after submit, before "we're matching you" page ↓
-      </p>
-      <div className="bg-white border border-[#E8E5DF] rounded-2xl p-7 text-center">
-        <Heart size={28} className="text-[#C87965] mx-auto" />
-        <h3 className="font-serif-display text-2xl text-[#2D4A3E] mt-3">
-          Got it — matching now.
-        </h3>
-        <p className="text-sm text-[#6D6A65] mt-2 max-w-md mx-auto">
-          You'll get 3+ matches in 24 hours.
-        </p>
-        <div className="mt-6 bg-[#FBE9E5] border border-[#F4C7BE] rounded-xl p-5 text-left">
-          <p className="text-sm font-semibold text-[#2D4A3E]">
-            While we're matching — want to go deeper?
-          </p>
-          <p className="text-xs text-[#6D6A65] mt-1.5 leading-relaxed">
-            3 more questions about <em>how</em> a therapist should be with
-            you can move you up in our ranking. Takes ~90 sec.
-          </p>
-          <div className="flex gap-3 mt-4 flex-wrap">
-            <button className="tv-btn-primary text-sm" type="button">
-              Yes — go deeper
-            </button>
-            <button
-              className="text-sm text-[#6D6A65] underline self-center"
-              type="button"
-            >
-              I'll wait for matches
-            </button>
+    <MockIntakeShell>
+      <div className="bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
+        <div className="grid grid-cols-2">
+          <div className="p-5 border-r border-[#E8E5DF]">
+            <p className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-1">
+              Standard match
+            </p>
+            <p className="font-serif-display text-xl text-[#2D4A3E]">~2 min</p>
+            <ul className="text-[10px] text-[#2B2A29]/80 space-y-0.5 mt-2">
+              <li>✓ 8 short questions</li>
+              <li>✓ Hard filters</li>
+              <li>✓ Soft preferences</li>
+            </ul>
+            <span className="mt-4 block text-xs border border-[#2D4A3E] text-[#2D4A3E] rounded-full py-1 text-center">
+              Standard
+            </span>
+          </div>
+          <div className="p-5 bg-[#FBE9E5]">
+            <p className="text-[10px] uppercase tracking-wider text-[#C8412B] font-semibold mb-1">
+              ✦ Deep match
+            </p>
+            <p className="font-serif-display text-xl text-[#2D4A3E]">
+              ~3.5 min
+            </p>
+            <ul className="text-[10px] text-[#2B2A29]/85 space-y-0.5 mt-2">
+              <li>✓ Everything in standard</li>
+              <li>✓ + style fit</li>
+              <li>✓ + lived-experience match</li>
+            </ul>
+            <span className="mt-4 block text-xs bg-[#2D4A3E] text-white rounded-full py-1 text-center">
+              Go deep →
+            </span>
           </div>
         </div>
       </div>
-    </div>
+    </MockIntakeShell>
+  );
+}
+
+function MockStartD() {
+  return (
+    <MockIntakeShell>
+      <div className="inline-flex items-center gap-2 bg-[#FBF2E8] border border-[#F0DEC8] rounded-full px-3 py-1.5 text-xs">
+        <Sparkles size={11} className="text-[#B8742A]" />
+        <span className="text-[#8B5A1F]">
+          Add 3 nuance questions for a deeper match?
+        </span>
+        <span className="text-[10px] font-semibold bg-[#2D4A3E] text-white rounded-full px-2 py-0.5">
+          Yes
+        </span>
+        <span className="text-[10px] text-[#6D6A65] underline">Maybe later</span>
+      </div>
+    </MockIntakeShell>
+  );
+}
+
+function MockEndA() {
+  return (
+    <MockFrame label="Intake — final step (Option End-A)" url="theravoca.com/#start">
+      <MockHeader />
+      <div className="px-6 py-8 bg-[#FDFBF7]">
+        <div className="bg-white border border-[#E8E5DF] rounded-2xl p-5">
+          <div className="flex items-center justify-between text-[10px] text-[#6D6A65]">
+            <span>Step 8 of 8: Where to reach you</span>
+            <span>100%</span>
+          </div>
+          <div className="mt-2 h-1 bg-[#E8E5DF] rounded-full overflow-hidden">
+            <div className="h-full w-full bg-[#C87965]" />
+          </div>
+          <div className="mt-5 space-y-3">
+            <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-md p-2.5 text-xs text-[#6D6A65]">
+              you@example.com
+            </div>
+            <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-md p-2.5 text-xs text-[#6D6A65]">
+              208-555-0123
+            </div>
+            <div className="text-[10px] text-[#2B2A29]/70 flex gap-2">
+              ✓ I agree to terms · ✓ 18+ · ✓ not an emergency
+            </div>
+          </div>
+          <div className="mt-5 bg-gradient-to-br from-[#FBE9E5] to-white border border-[#F4C7BE] rounded-xl p-4">
+            <div className="flex items-start gap-2.5">
+              <Sparkles
+                size={16}
+                className="text-[#C8412B] mt-0.5 flex-shrink-0"
+              />
+              <div>
+                <p className="text-xs font-semibold text-[#2D4A3E]">
+                  One more thing — want a deeper match?
+                </p>
+                <p className="text-[11px] text-[#6D6A65] mt-1 leading-relaxed">
+                  You're 90 seconds away from a much better match. 3 extra
+                  questions and we tune the engine to your style.
+                </p>
+                <div className="flex gap-2 mt-3 flex-wrap">
+                  <span className="bg-[#2D4A3E] text-white text-[10px] rounded-full px-3 py-1 font-medium">
+                    Add the 3 questions
+                  </span>
+                  <span className="text-[10px] text-[#6D6A65] underline self-center">
+                    No thanks
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="mt-5 flex justify-between items-center">
+            <span className="text-xs text-[#6D6A65]">← Back</span>
+            <span className="bg-[#2D4A3E] text-white text-xs rounded-full px-3 py-1.5 inline-flex items-center gap-1">
+              Review & submit <ArrowRight size={11} />
+            </span>
+          </div>
+        </div>
+      </div>
+      <MockFooter />
+    </MockFrame>
+  );
+}
+
+function MockEndB() {
+  return (
+    <MockFrame label="Intake — Review modal (Option End-B)" url="theravoca.com/#start">
+      <MockHeader />
+      <div className="px-6 py-8 bg-[#FDFBF7] relative">
+        <div className="bg-white border border-[#E8E5DF] rounded-2xl p-5 opacity-50">
+          <p className="text-xs text-[#6D6A65]">… intake form behind modal …</p>
+        </div>
+        <div className="absolute inset-0 flex items-center justify-center px-6 py-8">
+          <div className="bg-white border border-[#E8E5DF] rounded-2xl shadow-xl w-full max-w-md p-5">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-[#2D4A3E]">
+                Review your referral
+              </p>
+              <span className="text-[10px] text-[#6D6A65]">
+                8 questions answered
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[10px]">
+              {[
+                ["Concerns", "Anxiety, Trauma"],
+                ["Format", "Telehealth"],
+                ["Insurance", "Aetna"],
+                ["Urgency", "Within 2 weeks"],
+              ].map(([k, v]) => (
+                <div key={k}>
+                  <p className="text-[#6D6A65] uppercase tracking-wider">
+                    {k}
+                  </p>
+                  <p className="text-[#2B2A29] font-medium">{v}</p>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-[#E8E5DF] pt-3 -mx-5 -mb-5 px-5 pb-5 mt-4 bg-[#FBE9E5]/60 rounded-b-xl">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-[#2D4A3E] flex items-center gap-1.5">
+                    <Sparkles size={11} className="text-[#C8412B]" />
+                    Want a deeper match?
+                  </p>
+                  <p className="text-[10px] text-[#6D6A65] mt-0.5">
+                    +3 nuance questions · ~90 sec
+                  </p>
+                </div>
+                <div className="relative w-9 h-5 bg-[#2D4A3E] rounded-full">
+                  <div className="absolute right-0.5 top-0.5 w-4 h-4 bg-white rounded-full" />
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-between mt-3 pt-3">
+              <span className="text-xs text-[#6D6A65]">← Edit</span>
+              <span className="bg-[#2D4A3E] text-white text-xs rounded-full px-3 py-1.5">
+                Confirm & find my matches
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <MockFooter />
+    </MockFrame>
+  );
+}
+
+function MockEndC() {
+  return (
+    <MockFrame
+      label="Post-submit interstitial (Option End-C)"
+      url="theravoca.com/results/abc123"
+    >
+      <MockHeader />
+      <div className="px-6 py-12 bg-[#FDFBF7]">
+        <div className="bg-white border border-[#E8E5DF] rounded-2xl p-7 text-center max-w-md mx-auto">
+          <Heart size={24} className="text-[#C87965] mx-auto" />
+          <h3 className="font-serif-display text-xl text-[#2D4A3E] mt-2">
+            Got it — matching now.
+          </h3>
+          <p className="text-xs text-[#6D6A65] mt-1">
+            You'll get 3+ matches in 24 hours.
+          </p>
+          <div className="mt-5 bg-[#FBE9E5] border border-[#F4C7BE] rounded-xl p-4 text-left">
+            <p className="text-xs font-semibold text-[#2D4A3E]">
+              While we're matching — want to go deeper?
+            </p>
+            <p className="text-[11px] text-[#6D6A65] mt-1 leading-relaxed">
+              3 more questions about <em>how</em> a therapist should be
+              with you can move you up in our ranking. ~90 sec.
+            </p>
+            <div className="flex gap-2 mt-3 flex-wrap">
+              <span className="bg-[#2D4A3E] text-white text-[10px] rounded-full px-3 py-1 font-medium">
+                Yes — go deeper
+              </span>
+              <span className="text-[10px] text-[#6D6A65] underline self-center">
+                I'll wait
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <MockFooter />
+    </MockFrame>
+  );
+}
+
+// ─── PAGE ───────────────────────────────────────────────────────────────
+
+function Section({ tag, where, children }) {
+  return (
+    <section className="mt-12">
+      <div className="flex items-baseline gap-3 mb-3">
+        <span className="bg-[#2D4A3E] text-white font-mono text-xs rounded-md px-2.5 py-1">
+          {tag}
+        </span>
+        <span className="text-[11px] uppercase tracking-wider text-[#6D6A65]">
+          Lives on: <span className="text-[#2B2A29]">{where}</span>
+        </span>
+      </div>
+      {children}
+    </section>
   );
 }
 
 export default function PromisePreview() {
   return (
-    <div className="min-h-screen bg-[#FDFBF7]">
-      <Header />
-      <section className="max-w-5xl mx-auto px-5 sm:px-8 pt-12 pb-6">
-        <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] mb-4">
-          internal preview · pick & ship
-        </p>
-        <h1 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] leading-tight">
-          Promise statement & deep-intake — design comparison
-        </h1>
-        <p className="text-base text-[#2B2A29]/80 mt-4 leading-relaxed max-w-3xl">
-          10 promise-statement designs (#1–10) plus 4 "at start" + 3 "at end"
-          deep-intake banner designs. Reply with the option numbers you like
-          (e.g. <em>"#4 + #7 + Start-C + End-A"</em>) and I'll wire them
-          into production. Stand-ins for components like <code className="bg-[#FBE9E5] px-1.5 rounded text-xs">tv-btn-primary</code>{" "}
-          are real button styles — what you see is what ships.
-        </p>
-        <p className="text-sm text-[#6D6A65] mt-3">
-          Promise text used:{" "}
-          <em>"{PROMISE_LONG}"</em>
-        </p>
-        <div className="mt-6">
+    <div className="min-h-screen bg-[#F4EFE7]">
+      <header className="bg-white border-b border-[#E8E5DF] py-3 px-5 sm:px-8 sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-3">
           <Link
             to="/"
-            className="text-sm text-[#2D4A3E] underline hover:text-[#3A5E50]"
+            className="text-xs text-[#2D4A3E] underline hover:text-[#3A5E50]"
           >
             ← back home
           </Link>
+          <p className="text-[10px] uppercase tracking-[0.25em] text-[#C87965]">
+            internal mockups · pick & ship
+          </p>
         </div>
-      </section>
-
-      {/* Section: 10 promise-statement designs */}
-      <Spacer>
-        <h2 className="font-serif-display text-3xl text-[#2D4A3E] mb-2">
-          Promise statement — 10 designs
-        </h2>
-        <p className="text-sm text-[#6D6A65]">
-          Each option lives on a different page and uses a different visual
-          treatment. Mix and match.
+      </header>
+      <main className="max-w-5xl mx-auto px-5 sm:px-8 py-10 pb-32">
+        <h1 className="font-serif-display text-3xl sm:text-4xl text-[#2D4A3E] leading-tight">
+          Promise statement & deep-intake — full-page mockups
+        </h1>
+        <p className="text-sm text-[#2B2A29]/80 mt-3 leading-relaxed max-w-3xl">
+          Each frame below is a static mockup of the actual production page
+          with that variant baked in — header, footer, and surrounding
+          content rendered for context. Reply with your picks
+          (e.g. <em>"#4 + #6 + #7 + Start-C + End-A"</em>) and I'll wire
+          them into production.
         </p>
-      </Spacer>
+        <p className="text-xs text-[#6D6A65] mt-4 italic">
+          Promise text used: "{PROMISE_LONG}"
+        </p>
 
-      <Spacer>
-        <Tag n={1} where="Landing hero (left column, under headline)" />
-        <Option1Hero />
-      </Spacer>
-      <Spacer>
-        <Tag n={2} where="Landing hero (centered, beneath the CTA)" />
-        <Option2Typewriter />
-      </Spacer>
-      <Spacer>
-        <Tag n={3} where="Landing — replaces the existing &quot;Why TheraVoca&quot; section" />
-        <Option3PullQuote />
-      </Spacer>
-      <Spacer>
-        <Tag n={4} where="Landing — full-width card directly above the FAQs" />
-        <Option4Manifesto />
-      </Spacer>
-      <Spacer>
-        <Tag n={5} where="Every page — sticky pill bar at the bottom of the viewport, dismissible" />
-        <Option5StickyRibbon />
-      </Spacer>
-      <Spacer>
-        <Tag n={6} where="Dedicated /our-promise page (linked from nav + footer + outreach emails)" />
-        <Option6DedicatedPage />
-      </Spacer>
-      <Spacer>
-        <Tag n={7} where="Patient Results page — directly above the matched therapist cards" />
-        <Option7ResultsBanner />
-      </Spacer>
-      <Spacer>
-        <Tag n={8} where="Therapist signup page + therapist portal dashboard top" />
-        <Option8TherapistTrust />
-      </Spacer>
-      <Spacer>
-        <Tag n={9} where="Footer of every page — quiet italic line above the copyright" />
-        <Option9FooterWatermark />
-      </Spacer>
-      <Spacer>
-        <Tag n={10} where="Multi-touch combination: 1 + 4 + 6 + 7 + 8" />
-        <Option10MultiTouch />
-      </Spacer>
+        <h2 className="font-serif-display text-2xl text-[#2D4A3E] mt-12 border-t border-dashed border-[#E8E5DF] pt-12">
+          Promise statement — 10 mockups
+        </h2>
 
-      {/* Section: deep-intake — start */}
-      <Spacer>
-        <h2 className="font-serif-display text-3xl text-[#2D4A3E] mb-2">
+        <Section tag="Option 1" where="Landing hero (under headline)">
+          <Mock1 />
+        </Section>
+        <Section tag="Option 2" where="Landing hero (typewriter under CTA)">
+          <Mock2 />
+        </Section>
+        <Section tag="Option 3" where="Landing — replaces 'How we're different' block">
+          <Mock3 />
+        </Section>
+        <Section tag="Option 4" where="Landing — manifesto card directly above FAQs">
+          <Mock4 />
+        </Section>
+        <Section tag="Option 5" where="Every page — sticky pill ribbon (dismissible)">
+          <Mock5 />
+        </Section>
+        <Section tag="Option 6" where="New page at /our-promise (live now)">
+          <Mock6 />
+        </Section>
+        <Section tag="Option 7" where="Patient Results — banner above match cards">
+          <Mock7 />
+        </Section>
+        <Section tag="Option 8" where="Therapist Signup — top banner">
+          <Mock8 />
+        </Section>
+        <Section tag="Option 9" where="Footer of every page (italic watermark)">
+          <Mock9 />
+        </Section>
+        <Section tag="Option 10" where="Multi-touch (1 + 4 + 6 + 7 + 8) — recommended">
+          <Mock10 />
+        </Section>
+
+        <h2 className="font-serif-display text-2xl text-[#2D4A3E] mt-16 border-t border-dashed border-[#E8E5DF] pt-12">
           Deep intake prompt — at the START
         </h2>
-        <p className="text-sm text-[#6D6A65]">
-          Shown before the existing 8-step intake form, so the patient
-          chooses standard vs. deep up front.
+        <p className="text-sm text-[#6D6A65] mt-2">
+          Shown on the Landing page above the existing 8-step intake form.
         </p>
-      </Spacer>
-      <Spacer>
-        <Tag n="Start-A" where="Soft coral card — emphasizes &quot;optional&quot;" />
-        <StartA />
-      </Spacer>
-      <Spacer>
-        <Tag n="Start-B" where="Two-line callout with checkbox above the form (default ON)" />
-        <StartB />
-      </Spacer>
-      <Spacer>
-        <Tag n="Start-C" where="Side-by-side 'Standard vs Deep' picker — hardest commitment, clearest framing" />
-        <StartC />
-      </Spacer>
-      <Spacer>
-        <Tag n="Start-D" where="Tiny pill chip — minimal visual weight, easy to ignore" />
-        <StartD />
-      </Spacer>
+        <Section
+          tag="Start-A"
+          where="Soft coral card — emphasises 'optional'"
+        >
+          <MockStartA />
+        </Section>
+        <Section
+          tag="Start-B"
+          where="Two-line callout with checkbox (default ON)"
+        >
+          <MockStartB />
+        </Section>
+        <Section
+          tag="Start-C"
+          where="Side-by-side picker — clearest framing, hardest commitment"
+        >
+          <MockStartC />
+        </Section>
+        <Section
+          tag="Start-D"
+          where="Tiny pill chip — minimal weight, easy to ignore"
+        >
+          <MockStartD />
+        </Section>
 
-      {/* Section: deep-intake — end */}
-      <Spacer>
-        <h2 className="font-serif-display text-3xl text-[#2D4A3E] mb-2">
+        <h2 className="font-serif-display text-2xl text-[#2D4A3E] mt-16 border-t border-dashed border-[#E8E5DF] pt-12">
           Deep intake prompt — at the END
         </h2>
-        <p className="text-sm text-[#6D6A65]">
-          Shown after the regular 8 steps as a last upsell. Less efficient
-          (already invested time → resistant to "more questions") but lets
-          you A/B test friction.
+        <p className="text-sm text-[#6D6A65] mt-2">
+          After the 8 standard steps. Less efficient (already invested) but
+          lower-friction for the user.
         </p>
-      </Spacer>
-      <Spacer>
-        <Tag n="End-A" where="Coral card pinned above the &quot;Review &amp; submit&quot; button" />
-        <EndA />
-      </Spacer>
-      <Spacer>
-        <Tag n="End-B" where="Toggle inside the existing Review &amp; Submit preview modal" />
-        <EndB />
-      </Spacer>
-      <Spacer>
-        <Tag n="End-C" where="Post-submit interstitial — &quot;while we're matching you...&quot; upsell" />
-        <EndC />
-      </Spacer>
+        <Section
+          tag="End-A"
+          where="Coral card on the final step, above 'Review & submit'"
+        >
+          <MockEndA />
+        </Section>
+        <Section
+          tag="End-B"
+          where="Toggle inside the existing Review preview modal"
+        >
+          <MockEndB />
+        </Section>
+        <Section
+          tag="End-C"
+          where="Post-submit interstitial — 'while we're matching you...'"
+        >
+          <MockEndC />
+        </Section>
 
-      <div className="max-w-5xl mx-auto px-5 sm:px-8 py-16 text-center">
-        <p className="text-sm text-[#6D6A65]">
-          Reply with your picks (e.g. <em>"#1 + #4 + #6 + Start-C + End-A"</em>) and I'll wire them into production.
+        <p className="text-sm text-[#6D6A65] text-center mt-16">
+          Reply with your picks and I'll wire them into production.
         </p>
-      </div>
-      <Footer />
+      </main>
     </div>
   );
 }
