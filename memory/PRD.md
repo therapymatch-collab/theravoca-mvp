@@ -1676,3 +1676,32 @@ User asked for 8 changes; all shipped in one batch.
 - DOPL live API integration when published
 - Reply-quality badge in admin Applications table
 - "X new since last visit" counter chip on referrals heading (proposed iter-72)
+
+---
+
+## Iter-74 (Apr 28 2026) — Therapist portal Option-C: real visual change
+
+### Why
+After iter-73 user reported "design looks the same" — the changes weren't visible enough because the giant yellow "Recommended improvements" card was still dominating the top of the page, pushing referrals + KPIs below the fold. Iter-74 fixes that.
+
+### Changes
+1. **`ProfileHealthCallouts` moved BELOW the referrals list** (was at top, now between Insights card and Profile completion meter). Visual real estate shifts from "fix your profile!" (a nag) to "here are your referrals" (the action).
+2. **`ProfileHealthCallouts` is now a collapsed accordion** (`ProfileHealthAccordion` sub-component). Single-row toggle by default; expands to show the per-flag list. Auto-expands ONLY when there's a critical-severity flag (license expired, etc.). Bulk-shrinks the panel from ~280px tall to ~52px tall in the common case.
+3. **`KpiStrip` is now the FIRST thing the therapist sees after the page header** — was previously after profile-health.
+
+### Layout now (top → bottom)
+1. Header (name + subscription pill + Edit profile + Sign out)
+2. Critical alerts only: pending banner / availability prompt / payment dunning
+3. **KPI strip** (Match avg · Apply rate · New · Trial days)
+4. **Referrals list** (or empty state)
+5. Insights card (top concerns + reviews, hides when empty)
+6. **Profile health accordion** (collapsed by default)
+7. Profile completion meter
+8. Set-password prompt
+9. Refer-a-colleague (single row, anchored bottom)
+
+### Files
+- `/app/frontend/src/pages/TherapistPortal.jsx` (~50 line diff: reorder + accordion refactor)
+
+### Tests
+- Lint clean. Smoke screenshot blocked by Playwright OTP step (unrelated to this change). User instructed to hard-refresh to see new layout.

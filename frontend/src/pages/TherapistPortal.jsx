@@ -400,15 +400,11 @@ export default function TherapistPortal() {
               The dunning banner above still surfaces when payment is
               required (past_due / canceled / unpaid / incomplete). */}
 
-          {/* Profile health (red-flag callouts) — only for approved therapists */}
-          {therapist && !isPending && (
-            <ProfileHealthCallouts therapist={therapist} />
-          )}
-
           {/* KPI strip — Option C: 4 most important numbers at the top
               so the therapist sees their performance at a glance before
               triaging the list. Empty/loading-state safe (analytics may
-              not be loaded yet). */}
+              not be loaded yet). Lives BEFORE profile-health on purpose
+              so the page leads with stats, not nags. */}
           {therapist && !isPending && (
             <KpiStrip
               analytics={analytics}
@@ -554,6 +550,13 @@ export default function TherapistPortal() {
               referrals so the primary task isn't pushed off-screen. */}
           {analytics && !error && (
             <PortalAnalyticsCard analytics={analytics} />
+          )}
+
+          {/* Profile health (red-flag callouts) — moved BELOW referrals
+              per iter-74 design. They're nags, not the primary action;
+              putting them at the top dominated screen real estate. */}
+          {therapist && !isPending && (
+            <ProfileHealthCallouts therapist={therapist} />
           )}
 
           {/* Go-live profile completion meter — surfaces score + missing fields. */}
@@ -889,58 +892,77 @@ function ProfileHealthCallouts({ therapist }) {
   const headerHue = hasCritical
     ? { bg: "bg-[#FDEDEB]", border: "border-[#F2C7BD]", text: "text-[#D45D5D]", label: "Action required" }
     : hasWarning
-    ? { bg: "bg-[#FDF7EC]", border: "border-[#E8DCC1]", text: "text-[#C87965]", label: "Recommended improvements" }
+    ? { bg: "bg-[#FDF7EC]", border: "border-[#E8DCC1]", text: "text-[#C87965]", label: "Profile improvements" }
     : { bg: "bg-[#F2F4F0]", border: "border-[#D9DDD2]", text: "text-[#2D4A3E]", label: "Just FYI" };
 
+  // Collapsed by default unless there are critical issues — these
+  // callouts are nags, not the primary action. They sit BELOW the
+  // referrals list now (per iter-74) so the page leads with the
+  // therapist's actual workload.
+  return <ProfileHealthAccordion flags={flags} headerHue={headerHue} hasCritical={hasCritical} />;
+}
+
+function ProfileHealthAccordion({ flags, headerHue, hasCritical }) {
+  const [open, setOpen] = useState(hasCritical);
   return (
     <section
-      className={`mt-6 ${headerHue.bg} border ${headerHue.border} rounded-2xl p-5 sm:p-6`}
+      className={`mt-6 ${headerHue.bg} border ${headerHue.border} rounded-2xl overflow-hidden`}
       data-testid="profile-health-callouts"
     >
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-3 p-4 hover:bg-black/[0.02] transition text-left"
+        data-testid="profile-health-toggle"
+      >
         <div className="flex items-center gap-2">
-          <AlertTriangle size={16} className={headerHue.text} />
+          <AlertTriangle size={14} className={headerHue.text} />
           <div className={`text-xs uppercase tracking-wider font-semibold ${headerHue.text}`}>
             {headerHue.label}
           </div>
+          <span className="text-xs text-[#6D6A65]">
+            · {flags.length} item{flags.length === 1 ? "" : "s"}
+          </span>
         </div>
-        <div className="text-xs text-[#6D6A65]">
-          {flags.length} item{flags.length === 1 ? "" : "s"}
-        </div>
-      </div>
-
-      <ul className="mt-4 space-y-3">
-        {flags.map((f) => {
-          const sev =
-            f.severity === "critical"
-              ? { dot: "bg-[#D45D5D]", title: "text-[#D45D5D]" }
-              : f.severity === "warning"
-              ? { dot: "bg-[#C87965]", title: "text-[#2B2A29]" }
-              : { dot: "bg-[#2D4A3E]", title: "text-[#2B2A29]" };
-          return (
-            <li
-              key={f.key}
-              className="bg-white/70 backdrop-blur-sm border border-white rounded-xl p-4 flex items-start gap-3"
-              data-testid={`flag-${f.key}`}
-            >
-              <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${sev.dot}`} aria-hidden />
-              <div className="flex-1 min-w-0">
-                <div className={`text-sm font-semibold ${sev.title}`}>{f.title}</div>
-                <p className="text-sm text-[#6D6A65] mt-1 leading-relaxed">{f.body}</p>
-              </div>
-              {f.cta && (
-                <Link
-                  to={f.cta.to}
-                  className="tv-btn-secondary !py-1.5 !px-3 text-xs shrink-0 self-center"
-                  data-testid={f.cta.testid}
-                >
-                  {f.cta.label}
-                </Link>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+        <ChevronRight
+          size={14}
+          className={`text-[#6D6A65] transition-transform ${open ? "rotate-90" : ""}`}
+        />
+      </button>
+      {open && (
+        <ul className="px-4 pb-4 space-y-2">
+          {flags.map((f) => {
+            const sev =
+              f.severity === "critical"
+                ? { dot: "bg-[#D45D5D]", title: "text-[#D45D5D]" }
+                : f.severity === "warning"
+                ? { dot: "bg-[#C87965]", title: "text-[#2B2A29]" }
+                : { dot: "bg-[#2D4A3E]", title: "text-[#2B2A29]" };
+            return (
+              <li
+                key={f.key}
+                className="bg-white/70 backdrop-blur-sm border border-white rounded-xl p-3 flex items-start gap-3"
+                data-testid={`flag-${f.key}`}
+              >
+                <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${sev.dot}`} aria-hidden />
+                <div className="flex-1 min-w-0">
+                  <div className={`text-sm font-semibold ${sev.title}`}>{f.title}</div>
+                  <p className="text-xs text-[#6D6A65] mt-0.5 leading-relaxed">{f.body}</p>
+                </div>
+                {f.cta && (
+                  <Link
+                    to={f.cta.to}
+                    className="tv-btn-secondary !py-1 !px-2.5 text-[11px] shrink-0 self-center"
+                    data-testid={f.cta.testid}
+                  >
+                    {f.cta.label}
+                  </Link>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </section>
   );
 }
