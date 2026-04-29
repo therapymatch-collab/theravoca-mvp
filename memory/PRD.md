@@ -57,6 +57,16 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+### iter-90 — Draggable T1 + deep-match privacy notice + step refactor (Feb 7, 2026)
+- Replaced arrow-up/down `RankList` with shared `DraggableRankList` powered by `@dnd-kit/core` + `@dnd-kit/sortable` (PointerSensor 8px / TouchSensor 120ms / KeyboardSensor) — used in both `TherapistSignup.jsx` step 8 and `TherapistEditProfile.jsx`.
+- New shared `pages/therapist/TherapistDeepMatchStep.jsx` extracts the entire T1–T5 step JSX (~120 lines) out of `TherapistSignup.jsx`. Removes ~200 lines of duplicate `RankList`/`PillCol`/`RadioCol` helpers.
+- `TherapistEditProfile.jsx` now imports `T1_OPTIONS`/`T3_OPTIONS`/`T4_OPTIONS` from the shared `pages/therapist/deepMatchOptions.js` (was duplicated locally as `EDIT_T1_OPTIONS` etc.). Drift between the two forms and the matching engine is now impossible.
+- New privacy callout on both signup step 8 and the edit-profile deep-match section: *"Private to the matching engine. Patients never see your answers — they're only used to score fit."* (testids `signup-deep-privacy` / `edit-deep-privacy`).
+- Signup `PreviewModal` gained a `signup-preview-deep-match` block summarising T1–T5 answers (with human-readable labels via `T1_OPTIONS`/`T3_OPTIONS`/`T4_OPTIONS` `labelFor` lookups) plus a "You can edit later in your portal" reassurance pill, so therapists double-check before submitting.
+- New deps: `@dnd-kit/core@6.3.1`, `@dnd-kit/sortable@10.0.0`, `@dnd-kit/utilities@3.2.2`.
+- Net line reduction: TherapistSignup.jsx 2371 → 2240 (-131); TherapistEditProfile.jsx 1149 → 1094 (-55).
+- Verified by testing agent (iteration_40.json): live drag (mouse + keyboard), privacy banner, Save → PUT 200.
+
 ### iter-28 — Header navigation polish (Apr 27, 2026)
 - **Logo click → home top**: `useScrollTopNavigate("/")` forces `window.scrollTo(0,0)` whether the user is already on `/` (where React Router suppresses navigation) or coming from another route.
 - **"For therapists" click → form section**: New `useNavigateToSignupForm()` lands users directly on the `#signup-form` section of `/therapists/join` so the "Get more targeted patient referrals" header + wizard are immediately visible (skips the scrolling-past-hero step). Verified scrollY=913 with signup-form bbox.top=95px — exactly where the user wanted.

@@ -11,7 +11,7 @@ import { api } from "@/lib/api";
 import { IDAHO_INSURERS } from "@/lib/insurers";
 import { ADDITIONAL_LANGUAGES } from "@/lib/languages";
 import { imageToDataUrl } from "@/lib/image";
-import { DEFAULT_T1_ORDER } from "@/pages/therapist/deepMatchOptions";
+import { DEFAULT_T1_ORDER, T1_OPTIONS, T3_OPTIONS, T4_OPTIONS } from "@/pages/therapist/deepMatchOptions";
 import TherapistDeepMatchStep from "@/pages/therapist/TherapistDeepMatchStep";
 import { Input } from "@/components/ui/input";
 import {
@@ -1882,6 +1882,13 @@ function PreviewModal({ data, onClose, onConfirm, submitting }) {
     in_person: "In-person only",
     both: "Telehealth + in-person",
   };
+  // Slug → human-readable label lookups so the deep-match summary
+  // shows exactly what the therapist selected (not snake_case slugs).
+  const labelFromList = (list, slug) =>
+    list.find((o) => o.v === slug)?.l || slug;
+  const t1Label = (slug) => labelFromList(T1_OPTIONS, slug);
+  const t3Label = (slug) => labelFromList(T3_OPTIONS, slug);
+  const t4Label = (slug) => labelFromList(T4_OPTIONS, slug);
   const tier = (issue) => {
     if (data.primary_specialties.includes(issue)) return "Primary";
     if (data.secondary_specialties.includes(issue)) return "Secondary";
@@ -2046,20 +2053,20 @@ function PreviewModal({ data, onClose, onConfirm, submitting }) {
             <SummaryRow
               label="T1 — Show up in session (rank order)"
               value={(data.t1_stuck_ranked || [])
-                .map((s, i) => `${i + 1}. ${s.replace(/_/g, " ")}`)
+                .map((s, i) => `${i + 1}. ${t1Label(s)}`)
                 .join("  ·  ") || "—"}
               span={2}
             />
             <SummaryRow
               label="T3 — Best work unfolds via"
               value={(data.t3_breakthrough || [])
-                .map((s) => s.replace(/_/g, " "))
-                .join(", ") || "—"}
+                .map((s) => t3Label(s))
+                .join("  ·  ") || "—"}
               span={2}
             />
             <SummaryRow
               label="T4 — Pushing past comfort zone"
-              value={(data.t4_hard_truth || "").replace(/_/g, " ") || "—"}
+              value={data.t4_hard_truth ? t4Label(data.t4_hard_truth) : "—"}
               span={2}
             />
             <SummaryRow
