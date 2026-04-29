@@ -316,6 +316,52 @@ export default function Landing() {
                   </p>
                 </div>
               </div>
+              {/* Three additional positive differentiators — short
+                  proof-points that pair with the headline above. All
+                  three (title + body) are editable from the Site Copy
+                  admin under the "Landing — Why TheraVoca" section so
+                  marketing can iterate without a deploy. */}
+              {[
+                {
+                  titleKey: "landing.different.bullet1.title",
+                  titleFallback: "Structured intake — no vague free-text guesses",
+                  bodyKey: "landing.different.bullet1.body",
+                  bodyFallback:
+                    "Multi-step questions about schedule, payment, identity, and your style preferences — so therapists see a real picture, not a paragraph they have to parse.",
+                },
+                {
+                  titleKey: "landing.different.bullet2.title",
+                  titleFallback: "Smarter matching across 5 weighted axes",
+                  bodyKey: "landing.different.bullet2.body",
+                  bodyFallback:
+                    "We score each therapist on hard filters, soft preferences, relationship style, way of working, and contextual resonance — not a single keyword search.",
+                },
+                {
+                  titleKey: "landing.different.bullet3.title",
+                  titleFallback: "Anonymous referrals, contact info revealed last",
+                  bodyKey: "landing.different.bullet3.body",
+                  bodyFallback:
+                    "Therapists see your needs, not your identity. You only share contact details with the one you choose, after they've opted in.",
+                },
+              ].map((b) => (
+                <div
+                  key={b.titleKey}
+                  className="flex items-start gap-3"
+                  data-testid={`landing-different-${b.titleKey.split(".").slice(-2)[0]}`}
+                >
+                  <span className="mt-1 inline-flex h-6 w-6 rounded-full bg-[#2D4A3E] text-white items-center justify-center">
+                    <Check size={14} strokeWidth={2.4} />
+                  </span>
+                  <div>
+                    <div className="font-semibold text-[#2D4A3E]">
+                      {t(b.titleKey, b.titleFallback)}
+                    </div>
+                    <p className="text-sm text-[#6D6A65] leading-relaxed">
+                      {t(b.bodyKey, b.bodyFallback)}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
           <GetMatchedCTA id="different-cta" />

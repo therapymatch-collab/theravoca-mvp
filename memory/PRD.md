@@ -57,6 +57,14 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+### iter-94 — Home page differentiator bullets (Feb 7, 2026)
+- Added 3 new positive proof-point bullets to the Landing page "How we're different" section, displayed below the existing "TheraVoca does the logistical work" callout with matching green-check styling:
+  1. **Structured intake — no vague free-text guesses** — multi-step questions about schedule, payment, identity, and style preferences.
+  2. **Smarter matching across 5 weighted axes** — hard filters, soft preferences, relationship style, way of working, contextual resonance.
+  3. **Anonymous referrals, contact info revealed last** — therapists see needs not identity; contact details only shared with the patient's chosen match.
+- All 6 new strings (3 titles + 3 bodies) registered as editable site-copy keys (`landing.different.bullet{1,2,3}.{title,body}`) under the "Landing — Why TheraVoca" section of the admin Site Copy panel.
+- Verified live on `/#different`.
+
 ### iter-93 — Testid standardization + modal extraction + admin "How it works" rewrite (Feb 7, 2026)
 - **Testid rename for consistency**:
   - Patient intake: `back-btn` → `intake-back-btn`, `next-btn` → `intake-next-btn`, `submit-btn` → `intake-submit-btn`
