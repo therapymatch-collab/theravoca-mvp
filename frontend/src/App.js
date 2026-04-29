@@ -24,6 +24,7 @@ import FeedbackWidget from "@/components/FeedbackWidget";
 import PreviewBanner from "@/components/PreviewBanner";
 import ScrollManager from "@/components/ScrollManager";
 import NotFound from "@/pages/NotFound";
+import PromisePreview from "@/pages/PromisePreview";
 
 function App() {
   useEffect(() => {
@@ -66,6 +67,7 @@ function App() {
           <Route path="/privacy" element={<PrivacyNotice />} />
           <Route path="/blog" element={<BlogList />} />
           <Route path="/blog/:slug" element={<BlogPost />} />
+          <Route path="/preview/promise" element={<PromisePreview />} />
           <Route
             path="/feedback/patient/:requestId"
             element={<FeedbackForm kind="patient" />}
