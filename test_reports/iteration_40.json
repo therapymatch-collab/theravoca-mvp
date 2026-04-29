@@ -1,0 +1,28 @@
+{
+  "summary": "Iter-89 (T1 draggable refactor + deep-match privacy copy) verified end-to-end on the in-portal therapist edit profile. The shared DraggableRankList + TherapistDeepMatchStep + deepMatchOptions modules render correctly: edit-deep-privacy banner present with the new copy 'Private to the matching engine. Patients never see your answers — they're only used to score fit.', 6 grip handles (edit-t1-handle-leads_structured / follows_lead / challenges / warm_first / direct_honest / guides_questions) and 6 rows (edit-t1-row-*) render in deepMatchOptions slug order, 6 T3 buttons, 5 T4 buttons, edit-t2 / edit-t5 textareas all present. Mouse drag (PointerSensor with 8px activation) successfully reordered the topmost T1 item below the second item — order array updated and rank numbers re-rendered. Keyboard accessibility verified: Tab → Space → ArrowDown → Space on the first handle reorders the list (dnd-kit KeyboardSensor wiring works). Save flow hit PUT /api/portal/therapist/profile and returned 200 with `{ok:true, profile:{...}}` and the 'Profile saved' toast appeared. Signup form step 8 + signup-preview-deep-match was verified at the source level only — the same shared TherapistDeepMatchStep component (testidPrefix='signup') drives step 8 and the new signup-preview-deep-match block in PreviewModal renders T1-T5 plus the 'You can edit later in your portal' reassurance pill. Signup full UI walk-through across all 9 steps was not exercised live in this iteration due to multi-step form validation cost, but all signup-* selectors are wired identically to the verified edit-* selectors and lint clean.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Optional) Exercise the full signup flow steps 1-9 with a fresh email and click through Submit to visually verify the signup-preview-deep-match block in the PreviewModal end-to-end. Code review confirms the block is wired (TherapistSignup.jsx:2028-2076) but it was not rendered on a live browser run in this iteration.",
+    "(Optional) /app/memory/test_credentials.md says portaltest@example.com exists — it does NOT exist in the current preview MongoDB (queried directly: returns None). For convenience the testing agent used therapymatch+t101@gmail.com (Ann Omodt, LPC) instead, with a JWT generated via deps._create_session_token. Main agent may want to re-seed portaltest@example.com or update the credentials note."
+  ],
+  "critical_code_review_comments": [
+    "DraggableRankList.jsx is well-built: 8px PointerSensor + 120ms TouchSensor + KeyboardSensor with sortableKeyboardCoordinates is the canonical dnd-kit recipe and gives clean a11y. aria-label on the handle includes current rank, which is great for screen-reader users.",
+    "TherapistDeepMatchStep.jsx now correctly de-dupes ~200 lines of T1-T5 markup between signup and edit profile. Both surfaces import T1/T3/T4 options from a single source-of-truth (deepMatchOptions.js) — slug drift between forms and matching engine is no longer possible.",
+    "TherapistEditProfile.jsx still defines its own DeepMatchPickList and DeepMatchRadio for T3/T4 (lines 526/537) instead of routing through TherapistDeepMatchStep. That's fine for now (visual-style isolation), but the 'shared step' component is currently only used by signup. Consider migrating edit profile to use TherapistDeepMatchStep with FieldComponent={Field} in a follow-up to remove the remaining T3/T4 duplication.",
+    "Signup PreviewModal's signup-preview-deep-match block renders raw slugs with `s.replace(/_/g, ' ')` for T1/T3/T4 (TherapistSignup.jsx:2049/2056/2062). This shows therapists strings like 'leads structured' / 'deep emotional' instead of the human-readable labels from T1_OPTIONS/T3_OPTIONS/T4_OPTIONS. That's a minor UX nit — preview should ideally pass the slug through a labelFor() lookup so the therapist sees exactly what they selected. Not blocking; flagged for polish."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only request)", "frontend": "100% on tested surfaces (portal edit: privacy banner, drag, keyboard reorder, save→PUT 200). Signup step 8 + preview modal verified at source level only."},
+  "test_credentials": "Therapist JWT via deps._create_session_token('therapymatch+t101@gmail.com','therapist'). portaltest@example.com from credentials file does NOT exist in this preview env's therapists collection.",
+  "seed_data_creation": "None — used existing seeded therapist therapymatch+t101@gmail.com (Ann Omodt, LPC).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Refactor verified live: drag (mouse + keyboard), edit-deep-privacy banner, save persists. Signup form step 8 was not exercised live (would require driving 8 steps of form validation). If you do exercise signup full path, expect signup-deep-privacy + signup-t1-handle-* + signup-preview-deep-match selectors to mirror the edit-* ones since TherapistDeepMatchStep is shared. Watch for the 'leads structured' vs 'I lead with structure and a clear plan' label-vs-slug nit in the preview modal called out in critical_code_review_comments.",
+  "rca of the issue": "n/a — feature works as specified."
+}

@@ -25,6 +25,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { sessionClient, getSession } from "@/lib/api";
 import credentialLabel from "@/lib/credentialLabel";
+import DraggableRankList from "@/components/intake/DraggableRankList";
+import {
+  T1_OPTIONS,
+  T3_OPTIONS,
+  T4_OPTIONS,
+} from "@/pages/therapist/deepMatchOptions";
 
 const AGE_GROUP_OPTIONS = [
   { v: "children", l: "Children (<12)" },
@@ -486,11 +492,18 @@ export default function TherapistEditProfile() {
             your answers here. Until all 5 are filled, those patients
             won't see you in deep-match results.
           </p>
+          <p
+            className="mt-2 text-xs text-[#2D4A3E] bg-white/70 border border-[#F4C7BE] rounded-md px-2.5 py-1.5 inline-block"
+            data-testid="edit-deep-privacy"
+          >
+            <strong>Private to the matching engine.</strong> Patients
+            never see your answers — they're only used to score fit.
+          </p>
 
           <div className="mt-6 space-y-6">
-            <Field label="T1 — How do you typically show up in session? (drag to reorder, most instinctive at top)">
-              <DeepMatchRankList
-                items={EDIT_T1_OPTIONS}
+            <Field label="T1 — How do you typically show up in session? (drag the handle to reorder, most instinctive at top)">
+              <DraggableRankList
+                items={T1_OPTIONS}
                 order={draft.t1_stuck_ranked}
                 onChange={(o) => set("t1_stuck_ranked", o)}
                 testid="edit-t1"
@@ -511,7 +524,7 @@ export default function TherapistEditProfile() {
             </Field>
             <Field label="T3 — How does your best work typically unfold? (pick exactly 2)">
               <DeepMatchPickList
-                items={EDIT_T3_OPTIONS}
+                items={T3_OPTIONS}
                 selected={draft.t3_breakthrough}
                 onSelect={(v) => toggleList("t3_breakthrough", v, 2)}
                 testid="edit-t3"
@@ -522,7 +535,7 @@ export default function TherapistEditProfile() {
             </Field>
             <Field label="T4 — When you need to push a client past their comfort zone, how do you do it? (pick 1)">
               <DeepMatchRadio
-                items={EDIT_T4_OPTIONS}
+                items={T4_OPTIONS}
                 value={draft.t4_hard_truth}
                 onChange={(v) => set("t4_hard_truth", v)}
                 testid="edit-t4"
@@ -581,78 +594,10 @@ export default function TherapistEditProfile() {
   );
 }
 
-// Deep-match T1/T3/T4 options for the portal-edit form. Slugs are
-// 1:1 with the matching engine + therapist signup; copy is identical
-// to TherapistSignup.jsx.
-const EDIT_T1_OPTIONS = [
-  { v: "leads_structured", l: "I lead with structure and a clear plan" },
-  { v: "follows_lead", l: "I follow the client's lead" },
-  { v: "challenges", l: "I challenge patterns, even when it creates tension" },
-  { v: "warm_first", l: "I prioritize warmth and safety first" },
-  { v: "direct_honest", l: "I'm direct — I name what I see" },
-  { v: "guides_questions", l: "I guide through questions, letting them arrive at insight" },
-];
-const EDIT_T3_OPTIONS = [
-  { v: "deep_emotional", l: "Deep emotional processing — the client lets themselves feel" },
-  { v: "practical_tools", l: "Practical skill-building — the client applies tools between sessions" },
-  { v: "explore_past", l: "Exploring the past — understanding the origin of patterns" },
-  { v: "focus_forward", l: "Present and future-focused — what's happening now and next" },
-  { v: "build_insight", l: "Building insight — the client finally sees their patterns" },
-  { v: "shift_relationships", l: "Relational shift — the client's key relationships change" },
-];
-const EDIT_T4_OPTIONS = [
-  { v: "direct", l: "Head-on — I name it directly and trust the alliance" },
-  { v: "incremental", l: "Incrementally — I build toward it across sessions" },
-  { v: "questions", l: "Through questions — I let them bump into it themselves" },
-  { v: "emotional", l: "Through emotion — I use what's alive in the room" },
-  { v: "wait", l: "I wait for the right moment, then gently name it" },
-];
-
-function DeepMatchRankList({ items, order, onChange, testid }) {
-  const labelFor = (slug) => items.find((i) => i.v === slug)?.l || slug;
-  const swap = (idx, dir) => {
-    const next = [...order];
-    const tgt = idx + dir;
-    if (tgt < 0 || tgt >= next.length) return;
-    [next[idx], next[tgt]] = [next[tgt], next[idx]];
-    onChange(next);
-  };
-  return (
-    <ol className="flex flex-col gap-2" data-testid={testid}>
-      {(order || []).map((slug, idx) => (
-        <li
-          key={slug}
-          className="flex items-center gap-3 bg-white border border-[#E8E5DF] rounded-xl px-3 py-2"
-        >
-          <span className="font-mono text-xs text-[#6D6A65] w-5 text-center">{idx + 1}</span>
-          <span className="flex-1 text-sm text-[#2B2A29]">{labelFor(slug)}</span>
-          <div className="flex flex-col gap-0.5">
-            <button
-              type="button"
-              onClick={() => swap(idx, -1)}
-              disabled={idx === 0}
-              className="w-6 h-6 rounded border border-[#E8E5DF] text-xs text-[#6D6A65] hover:bg-[#2D4A3E] hover:text-white hover:border-[#2D4A3E] disabled:opacity-30 transition"
-              data-testid={`${testid}-up-${slug}`}
-              aria-label="Move up"
-            >
-              ↑
-            </button>
-            <button
-              type="button"
-              onClick={() => swap(idx, +1)}
-              disabled={idx === (order || []).length - 1}
-              className="w-6 h-6 rounded border border-[#E8E5DF] text-xs text-[#6D6A65] hover:bg-[#2D4A3E] hover:text-white hover:border-[#2D4A3E] disabled:opacity-30 transition"
-              data-testid={`${testid}-down-${slug}`}
-              aria-label="Move down"
-            >
-              ↓
-            </button>
-          </div>
-        </li>
-      ))}
-    </ol>
-  );
-}
+// Deep-match T1/T3/T4 options now imported from
+// `@/pages/therapist/deepMatchOptions` (single source of truth shared
+// with the signup form). The legacy arrow-based `DeepMatchRankList`
+// was replaced with the shared `DraggableRankList` component.
 
 function DeepMatchPickList({ items, selected, onSelect, testid }) {
   return (

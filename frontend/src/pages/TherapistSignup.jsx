@@ -11,12 +11,8 @@ import { api } from "@/lib/api";
 import { IDAHO_INSURERS } from "@/lib/insurers";
 import { ADDITIONAL_LANGUAGES } from "@/lib/languages";
 import { imageToDataUrl } from "@/lib/image";
-import {
-  T1_OPTIONS,
-  T3_OPTIONS,
-  T4_OPTIONS,
-  DEFAULT_T1_ORDER,
-} from "@/pages/therapist/deepMatchOptions";
+import { DEFAULT_T1_ORDER } from "@/pages/therapist/deepMatchOptions";
+import TherapistDeepMatchStep from "@/pages/therapist/TherapistDeepMatchStep";
 import { Input } from "@/components/ui/input";
 import {
   Accordion,
@@ -195,10 +191,7 @@ export default function TherapistSignup() {
     // of clinical style. T1 is a drag-orderable list (we store as an
     // array of slugs in rank order). T3 picks 2 of 6, T4 picks 1 of 5.
     // T2 + T5 are open text used for embedding-based context scoring.
-    t1_stuck_ranked: [
-      "leads_structured", "follows_lead", "challenges",
-      "warm_first", "direct_honest", "guides_questions",
-    ],
+    t1_stuck_ranked: [...DEFAULT_T1_ORDER],
     t2_progress_story: "",
     t3_breakthrough: [],
     t4_hard_truth: "",
@@ -1743,97 +1736,19 @@ export default function TherapistSignup() {
                 </Group>
                 </>)}
 
-                {/* ── Deep-match T1–T5 (v2 spec, Iter-89) ──────────── */}
-                {step === 8 && (<>
-                <div className="bg-[#FBE9E5] border border-[#F4C7BE] rounded-xl px-4 py-3 mb-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#C8412B] font-semibold mb-1">
-                    ✦ Style fit · how you actually work
-                  </p>
-                  <p className="text-sm text-[#2B2A29]/85 leading-relaxed">
-                    These five questions power our deep-match scoring.
-                    Patients who opt into the deeper intake get matched to
-                    therapists whose style genuinely fits theirs — not
-                    just whoever takes their insurance.
-                  </p>
-                </div>
-
-                <Group
-                  title="T1 — How do you typically show up in session?"
-                  hint="Drag to reorder. Most instinctive at top."
-                >
-                  <RankList
-                    items={T1_OPTIONS}
-                    order={data.t1_stuck_ranked}
-                    onChange={(o) => set("t1_stuck_ranked", o)}
-                    testid="signup-t1"
+                {/* ── Deep-match T1–T5 (v2 spec, Iter-89) ────────────
+                    All step content lives in `TherapistDeepMatchStep`
+                    so the in-portal edit form and signup form stay
+                    in sync. */}
+                {step === 8 && (
+                  <TherapistDeepMatchStep
+                    data={data}
+                    set={set}
+                    toggleArr={toggleArr}
+                    testidPrefix="signup"
+                    GroupComponent={Group}
                   />
-                </Group>
-
-                <Group
-                  title="T2 — Describe a client who made real progress with you"
-                  hint="What were they like when they walked in? Open text — at least 50 characters."
-                >
-                  <Textarea
-                    rows={4}
-                    minLength={50}
-                    maxLength={2000}
-                    value={data.t2_progress_story}
-                    onChange={(e) => set("t2_progress_story", e.target.value)}
-                    placeholder="A 35-year-old new mom came in feeling like she'd lost herself. She was articulate but kept apologising for taking up space. Six months in, she'd named the pattern, set boundaries with her own mom, and was painting again."
-                    className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                    data-testid="signup-t2"
-                  />
-                  <p className="text-[11px] text-[#6D6A65] mt-1">
-                    {(data.t2_progress_story || "").length}/2000 characters
-                  </p>
-                </Group>
-
-                <Group
-                  title="T3 — How does your best work typically unfold?"
-                  hint="Pick exactly 2."
-                >
-                  <PillCol
-                    items={T3_OPTIONS}
-                    selected={data.t3_breakthrough}
-                    onSelect={(v) => toggleArr("t3_breakthrough", v, 2)}
-                    testid="signup-t3"
-                  />
-                  <p className="text-[11px] text-[#6D6A65] mt-2">
-                    {data.t3_breakthrough.length}/2 selected
-                  </p>
-                </Group>
-
-                <Group
-                  title="T4 — When you need to push a client past their comfort zone, how do you do it?"
-                  hint="Pick 1."
-                >
-                  <RadioCol
-                    items={T4_OPTIONS}
-                    value={data.t4_hard_truth}
-                    onChange={(v) => set("t4_hard_truth", v)}
-                    testid="signup-t4"
-                  />
-                </Group>
-
-                <Group
-                  title="T5 — What life experiences or communities do you understand from the inside — not from a textbook?"
-                  hint="Open text — at least 30 characters. This is the strongest signal for matching patients with similar lived experience."
-                >
-                  <Textarea
-                    rows={4}
-                    minLength={30}
-                    maxLength={2000}
-                    value={data.t5_lived_experience}
-                    onChange={(e) => set("t5_lived_experience", e.target.value)}
-                    placeholder="e.g. first-gen college, immigrant family, queer + Christian, military spouse, navigating chronic illness, sober parent, eldest of 5, recovered from anorexia…"
-                    className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                    data-testid="signup-t5"
-                  />
-                  <p className="text-[11px] text-[#6D6A65] mt-1">
-                    {(data.t5_lived_experience || "").length}/2000 characters
-                  </p>
-                </Group>
-                </>)}
+                )}
 
                 {step === 9 && (<>
                 <Group title="Notifications">
@@ -1993,7 +1908,9 @@ function PreviewModal({ data, onClose, onConfirm, submitting }) {
               How patients will see you
             </h3>
             <p className="text-sm text-[#6D6A65] mt-1.5 max-w-md">
-              Verify everything looks right before submitting. You can still edit afterwards.
+              Verify everything looks right before submitting. You can edit
+              your profile (including the deep-match answers) any time
+              from your portal.
             </p>
           </div>
           <button
@@ -2103,6 +2020,59 @@ function PreviewModal({ data, onClose, onConfirm, submitting }) {
             span={2}
           />
           {data.bio && <SummaryRow label="Bio" value={data.bio} span={2} />}
+        </div>
+
+        {/* Deep-match answers preview — shown below the patient-facing
+            summary so therapists can sanity-check the T1–T5 answers
+            that drive the matching engine. Patients never see these. */}
+        <div
+          className="mt-6 bg-[#FBF5F2] border border-[#EBD5CB] rounded-2xl p-5"
+          data-testid="signup-preview-deep-match"
+        >
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-[#A8553F] font-semibold">
+                ✦ Deep-match answers
+              </p>
+              <h4 className="font-serif-display text-lg text-[#2D4A3E] mt-0.5">
+                Style fit (private — patients never see these)
+              </h4>
+            </div>
+            <span className="text-[10px] uppercase tracking-wider bg-white border border-[#EBD5CB] text-[#A8553F] rounded-full px-2 py-0.5">
+              You can edit later in your portal
+            </span>
+          </div>
+          <div className="mt-3 grid sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <SummaryRow
+              label="T1 — Show up in session (rank order)"
+              value={(data.t1_stuck_ranked || [])
+                .map((s, i) => `${i + 1}. ${s.replace(/_/g, " ")}`)
+                .join("  ·  ") || "—"}
+              span={2}
+            />
+            <SummaryRow
+              label="T3 — Best work unfolds via"
+              value={(data.t3_breakthrough || [])
+                .map((s) => s.replace(/_/g, " "))
+                .join(", ") || "—"}
+              span={2}
+            />
+            <SummaryRow
+              label="T4 — Pushing past comfort zone"
+              value={(data.t4_hard_truth || "").replace(/_/g, " ") || "—"}
+              span={2}
+            />
+            <SummaryRow
+              label="T2 — Client progress story"
+              value={data.t2_progress_story || "—"}
+              span={2}
+            />
+            <SummaryRow
+              label="T5 — Lived experience / community knowledge"
+              value={data.t5_lived_experience || "—"}
+              span={2}
+            />
+          </div>
         </div>
 
         {data.license_picture && (
@@ -2262,109 +2232,8 @@ function Tags({ items, onRemove }) {
   );
 }
 
-// Vertical pick-list used for T3 (pick 2 of 6) — same UX as PillRow but
-// laid out as full-width rows so the 6 long labels stay readable.
-function PillCol({ items, selected, onSelect, testid }) {
-  return (
-    <div className="flex flex-col gap-2">
-      {items.map((it) => {
-        const active = selected.includes(it.v);
-        return (
-          <button
-            type="button"
-            key={it.v}
-            onClick={() => onSelect(it.v)}
-            data-testid={`${testid}-${it.v}`}
-            className={`text-sm text-left px-4 py-2.5 rounded-xl border transition ${
-              active
-                ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
-                : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
-            }`}
-          >
-            {it.l}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-// Vertical radio list used for T4 (pick 1 of 5).
-function RadioCol({ items, value, onChange, testid }) {
-  return (
-    <div className="flex flex-col gap-2">
-      {items.map((it) => {
-        const active = value === it.v;
-        return (
-          <button
-            type="button"
-            key={it.v}
-            onClick={() => onChange(it.v)}
-            data-testid={`${testid}-${it.v}`}
-            className={`text-sm text-left px-4 py-2.5 rounded-xl border transition ${
-              active
-                ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
-                : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
-            }`}
-          >
-            {it.l}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-// Drag-free rank list used for T1. We avoid HTML5 drag-and-drop because
-// it's flaky on mobile and breaks accessibility. Each row has up/down
-// buttons that move it within the order. The `order` array is the
-// canonical source of truth — index 0 = rank-1 (most instinctive).
-function RankList({ items, order, onChange, testid }) {
-  const labelFor = (slug) =>
-    items.find((i) => i.v === slug)?.l || slug;
-  const swap = (idx, dir) => {
-    const next = [...order];
-    const tgt = idx + dir;
-    if (tgt < 0 || tgt >= next.length) return;
-    [next[idx], next[tgt]] = [next[tgt], next[idx]];
-    onChange(next);
-  };
-  return (
-    <ol className="flex flex-col gap-2" data-testid={testid}>
-      {order.map((slug, idx) => (
-        <li
-          key={slug}
-          className="flex items-center gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2"
-        >
-          <span className="font-mono text-xs text-[#6D6A65] w-5 text-center">
-            {idx + 1}
-          </span>
-          <span className="flex-1 text-sm text-[#2B2A29]">{labelFor(slug)}</span>
-          <div className="flex flex-col gap-0.5">
-            <button
-              type="button"
-              onClick={() => swap(idx, -1)}
-              disabled={idx === 0}
-              className="w-6 h-6 rounded border border-[#E8E5DF] text-xs text-[#6D6A65] hover:bg-[#2D4A3E] hover:text-white hover:border-[#2D4A3E] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#6D6A65] transition"
-              data-testid={`${testid}-up-${slug}`}
-              aria-label={`Move ${labelFor(slug)} up`}
-            >
-              ↑
-            </button>
-            <button
-              type="button"
-              onClick={() => swap(idx, +1)}
-              disabled={idx === order.length - 1}
-              className="w-6 h-6 rounded border border-[#E8E5DF] text-xs text-[#6D6A65] hover:bg-[#2D4A3E] hover:text-white hover:border-[#2D4A3E] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#6D6A65] transition"
-              data-testid={`${testid}-down-${slug}`}
-              aria-label={`Move ${labelFor(slug)} down`}
-            >
-              ↓
-            </button>
-          </div>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
+// Note: PillCol, RadioCol, and the legacy arrow-based RankList used
+// to live here for the T1/T3/T4 deep-match step. They were extracted
+// to `pages/therapist/TherapistDeepMatchStep.jsx` (PillCol/RadioCol)
+// and replaced by the drag-and-drop `components/intake/DraggableRankList.jsx`
+// (T1) so the signup form and in-portal edit form share one source.
