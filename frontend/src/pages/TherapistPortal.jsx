@@ -13,6 +13,9 @@ import {
   Settings,
   Clock,
   Sparkles,
+  TrendingUp,
+  Calendar,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header, Footer } from "@/components/SiteShell";
@@ -402,6 +405,18 @@ export default function TherapistPortal() {
             <ProfileHealthCallouts therapist={therapist} />
           )}
 
+          {/* KPI strip — Option C: 4 most important numbers at the top
+              so the therapist sees their performance at a glance before
+              triaging the list. Empty/loading-state safe (analytics may
+              not be loaded yet). */}
+          {therapist && !isPending && (
+            <KpiStrip
+              analytics={analytics}
+              referrals={data?.referrals || []}
+              sub={sub}
+            />
+          )}
+
           {/* Empty state for approved therapists — moved up so referrals
               area is the first thing the eye lands on after critical
               alerts are handled. */}
@@ -499,11 +514,11 @@ export default function TherapistPortal() {
                             {r.presenting_issues_preview}
                             {r.presenting_issues_preview?.length === 140 && "…"}
                           </p>
-                          <div className="text-xs text-[#6D6A65] mt-2 flex flex-wrap gap-x-4 gap-y-1">
-                            <span>{r.summary["Age group"]}</span>
-                            <span>{r.summary.State}</span>
-                            <span>{r.summary["Session format"]}</span>
-                            <span>{r.summary.Payment}</span>
+                          <div className="flex flex-wrap gap-1.5 mt-3" data-testid={`referral-tags-${r.request_id}`}>
+                            {r.summary["Age group"] && <ReferralTag>{r.summary["Age group"]}</ReferralTag>}
+                            {r.summary.State && <ReferralTag>{r.summary.State}</ReferralTag>}
+                            {r.summary["Session format"] && <ReferralTag>{r.summary["Session format"]}</ReferralTag>}
+                            {r.summary.Payment && <ReferralTag>{r.summary.Payment}</ReferralTag>}
                           </div>
                           {r.gaps && r.gaps.length > 0 && r.referral_status === "pending" && (
                             <div className="mt-3 text-xs text-[#6D6A65]">
@@ -933,59 +948,59 @@ function ProfileHealthCallouts({ therapist }) {
 function PortalAnalyticsCard({ analytics }) {
   const a = analytics;
   const topics = Object.entries(a.top_referral_topics || {}).slice(0, 5);
+  // The 4 headline KPIs (Match avg, Apply rate, Total received, etc.)
+  // now live in the top-of-page <KpiStrip />. This card is repurposed
+  // as a smaller "Insights" block — only the qualitative bits worth a
+  // second look (top topics, public reviews, refer-code redemptions).
+  // If there's nothing qualitative to show, render nothing so we don't
+  // waste a row of vertical space.
+  const hasInsights = topics.length > 0 || (a.review_count || 0) > 0;
+  if (!hasInsights) return null;
   return (
     <section
       className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl p-5"
       data-testid="portal-analytics-card"
     >
       <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
-        <h2 className="font-serif-display text-lg text-[#2D4A3E]">Your stats</h2>
-        <span className="text-xs text-[#6D6A65]">All-time totals</span>
+        <h2 className="font-serif-display text-lg text-[#2D4A3E]">Insights</h2>
+        <span className="text-xs text-[#6D6A65]">All-time</span>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Stat label="Referrals received" value={a.invited_count} />
-        <Stat label="Applied" value={a.applied_count} hue="#2D4A3E" />
-        <Stat label="Apply rate" value={`${a.apply_rate}%`} />
-        <Stat label="Avg match score" value={`${a.avg_match_score}%`} hue="#C87965" />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {topics.length > 0 && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-2">
+              Top patient concerns you've matched on
+            </div>
+            <ul className="space-y-1">
+              {topics.map(([t, n]) => (
+                <li key={t} className="flex items-center justify-between text-sm">
+                  <span className="text-[#2B2A29] capitalize">{t.replace(/_/g, " ")}</span>
+                  <span className="text-[#6D6A65] tabular-nums">{n}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {a.review_count > 0 && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-2">
+              Public reviews on your profile
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="font-serif-display text-3xl text-[#C87965]">
+                {a.review_avg.toFixed(1)}★
+              </span>
+              <span className="text-sm text-[#6D6A65]">
+                from {a.review_count} review{a.review_count === 1 ? "" : "s"}
+              </span>
+            </div>
+            <p className="text-xs text-[#6D6A65] mt-1">
+              Source: {a.review_source === "google_places" ? "Google Business Profile" : "—"}.
+              Higher review counts boost your match ranking by up to +5 pts.
+            </p>
+          </div>
+        )}
       </div>
-      {(topics.length > 0 || a.review_count > 0) && (
-        <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-          {topics.length > 0 && (
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-2">
-                Top patient concerns you've matched on
-              </div>
-              <ul className="space-y-1">
-                {topics.map(([t, n]) => (
-                  <li key={t} className="flex items-center justify-between text-sm">
-                    <span className="text-[#2B2A29] capitalize">{t.replace(/_/g, " ")}</span>
-                    <span className="text-[#6D6A65] tabular-nums">{n}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {a.review_count > 0 && (
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-2">
-                Public reviews on your profile
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="font-serif-display text-3xl text-[#C87965]">
-                  {a.review_avg.toFixed(1)}★
-                </span>
-                <span className="text-sm text-[#6D6A65]">
-                  from {a.review_count} review{a.review_count === 1 ? "" : "s"}
-                </span>
-              </div>
-              <p className="text-xs text-[#6D6A65] mt-1">
-                Source: {a.review_source === "google_places" ? "Google Business Profile" : "—"}.
-                Higher review counts boost your match ranking by up to +5 pts.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
       {a.referral_code && (
         <div className="mt-5 border-t border-[#E8E5DF] pt-4 text-xs text-[#6D6A65]">
           Refer-a-colleague code:{" "}
@@ -1013,5 +1028,81 @@ function Stat({ label, value, hue }) {
         {value ?? "—"}
       </div>
     </div>
+  );
+}
+
+
+// ─── Option C — top-of-page KPI strip ────────────────────────────────
+//
+// 4 most-important numbers laid out in equal-width chips above the
+// referrals list. Compact (<60px tall) so it doesn't push the
+// referrals off-screen. Each chip is empty-state safe — falls back to
+// "—" when analytics hasn't loaded yet.
+function KpiStrip({ analytics, referrals, sub }) {
+  const a = analytics || {};
+  // Days remaining in trial (rounded down). 0 when not in a trial or
+  // when current_period_end / trial_ends_at are absent.
+  const trialDaysLeft = (() => {
+    const end = sub?.trial_ends_at;
+    if (!end || sub?.subscription_status !== "trialing") return null;
+    const ms = new Date(end).getTime() - Date.now();
+    if (Number.isNaN(ms) || ms <= 0) return 0;
+    return Math.ceil(ms / (1000 * 60 * 60 * 24));
+  })();
+  const newCount = (referrals || []).filter(
+    (r) => r.referral_status === "pending",
+  ).length;
+  return (
+    <div
+      className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2"
+      data-testid="kpi-strip"
+    >
+      <KpiChip
+        icon={<Star size={11} />}
+        label="Match avg"
+        value={a.avg_match_score != null ? `${a.avg_match_score}%` : "—"}
+      />
+      <KpiChip
+        icon={<TrendingUp size={11} />}
+        label="Apply rate"
+        value={a.apply_rate != null ? `${a.apply_rate}%` : "—"}
+      />
+      <KpiChip
+        icon={<Inbox size={11} />}
+        label={newCount === 1 ? "New referral" : "New referrals"}
+        value={newCount}
+        hue={newCount > 0 ? "#C87965" : "#2D4A3E"}
+      />
+      <KpiChip
+        icon={<Calendar size={11} />}
+        label="Trial days left"
+        value={trialDaysLeft != null ? trialDaysLeft : "—"}
+      />
+    </div>
+  );
+}
+
+function KpiChip({ icon, label, value, hue }) {
+  return (
+    <div className="bg-white border border-[#E8E5DF] rounded-xl px-3 py-2.5">
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-[#6D6A65]">
+        {icon}
+        <span className="truncate">{label}</span>
+      </div>
+      <div
+        className="font-serif-display text-xl mt-0.5 tabular-nums"
+        style={{ color: hue || "#2D4A3E" }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function ReferralTag({ children }) {
+  return (
+    <span className="text-[11px] bg-[#FDFBF7] border border-[#E8E5DF] text-[#2B2A29] px-2 py-0.5 rounded-full">
+      {children}
+    </span>
   );
 }

@@ -566,12 +566,18 @@ export default function PatientResults() {
                             {Math.round(app.match_score)}%
                           </div>
                         </div>
-                        <div className="text-xs text-[#6D6A65] mt-0.5">
+                        <div className="text-xs text-[#6D6A65] mt-0.5 break-words">
+                          {t.credential_type && (
+                            <span className="text-[#2B2A29] font-medium">
+                              {t.credential_type}
+                            </span>
+                          )}
+                          {t.credential_type && (t.years_experience || (t.modalities || []).length > 0) && " · "}
                           {t.years_experience
                             ? `${t.years_experience} year${t.years_experience === 1 ? "" : "s"} experience`
-                            : "Experience: —"}{" "}
-                          •{" "}
-                          {(t.modalities || []).slice(0, 3).join(" · ") || "—"}
+                            : !t.credential_type && "Experience: —"}{" "}
+                          {(t.years_experience || t.credential_type) && (t.modalities || []).length > 0 && "• "}
+                          {(t.modalities || []).slice(0, 3).join(" · ")}
                           {t.review_count >= 10 && t.review_avg >= 4.0 && (
                             <span
                               className="ml-2 inline-flex items-center gap-1 text-[10px] text-[#C87965] bg-[#FDFBF7] border border-[#E8E5DF] rounded-full px-1.5 py-0.5 align-middle"

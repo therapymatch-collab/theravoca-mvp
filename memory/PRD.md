@@ -1644,3 +1644,35 @@ User asked for 8 changes; all shipped in one batch.
 - Multi-state rollout (Idaho only)
 - Patient prefs persistence
 - DOPL live API integration when published
+
+---
+
+## Iter-73 (Apr 28 2026) — Therapist portal Option-C layout + credential on patient match cards
+
+### Implemented
+1. **Option C (KPI chips + cards) shipped to `/portal/therapist`.**
+   - New `<KpiStrip />` at the top of the referrals area with 4 chips: Match avg · Apply rate · New referrals · Trial days left.
+   - Match-row tags converted from inline text (`Adult · ID · Hybrid · Cash`) to proper rounded pill `<ReferralTag />`s.
+   - Old `<PortalAnalyticsCard />` slimmed: 4 stat cards removed (now in the KPI strip). What remains is a small "Insights" card with top patient concerns + reviews. Card auto-hides when there's nothing qualitative to show.
+   - Throwaway `/demo/therapist-portal` route + `TherapistPortalDemo.jsx` deleted now that the choice is made.
+
+2. **Credential type added to patient match-card subtitle** on `/results/{id}`.
+   - Subtitle now reads e.g. `Psychologist · 20 years experience • CBT · ACT · EMDR` (credential prefix + years + first 3 modalities).
+   - Backed by `t.credential_type` already projected by `routes/portal.py` line 524.
+
+### Files changed
+- `/app/frontend/src/pages/TherapistPortal.jsx` (KpiStrip + ReferralTag + slim analytics)
+- `/app/frontend/src/pages/PatientResults.jsx` (credential prefix in subtitle)
+- `/app/frontend/src/App.js` (deleted demo route)
+- removed `/app/frontend/src/pages/TherapistPortalDemo.jsx`
+
+### Tests
+- Smoke-tested via screenshot with real therapist account `therapymatch+t101@gmail.com`. KPI strip + tag pills confirmed. `[data-testid="kpi-strip"]` present.
+
+### Backlog (unchanged)
+- Refactor monolithic React components (own session)
+- Multi-state rollout (Idaho only)
+- Patient prefs persistence
+- DOPL live API integration when published
+- Reply-quality badge in admin Applications table
+- "X new since last visit" counter chip on referrals heading (proposed iter-72)
