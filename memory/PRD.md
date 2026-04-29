@@ -2189,3 +2189,73 @@ User picked manifesto card (Option 4) on Landing and Start-A for the patient int
 - Contextual Resonance (P3 ↔ T5+T2) 0.25 with OpenAI embeddings via Emergent LLM key
 - Promise statement on therapist signup + portal
 
+
+
+## Iter-89 (Apr 29 2026) — v2 deep-match: T1–T5 + scoring engine + email receipt + embeddings
+
+Founder shipped a v2 spec mid-iter — different P1/P2/T1/T3/T4 question sets, different slugs, and a different scoring formula. Adopted v2 fully (no production data was using v1 yet).
+
+### Patient intake (v2 questions)
+- **P1** "What kind of relationship do you want with your therapist?" — 6 options, pick 2 (slugs: `leads_structured`, `follows_lead`, `challenges`, `warm_first`, `direct_honest`, `guides_questions`).
+- **P2** "How do you want therapy to work?" — 6 options, pick 2 (slugs: `deep_emotional`, `practical_tools`, `explore_past`, `focus_forward`, `build_insight`, `shift_relationships`).
+- **P3** open text with prompt-starter placeholder; min 20 chars enforced softly.
+- Step labels updated → "Relationship style (pick 2)" / "Way of working (pick 2)" / "What they should already get".
+
+### Therapist signup (NEW required step 8 of 9 — "Style fit")
+- T1 ranking via up/down arrow `RankList` (drag-free for mobile + a11y).
+- T2 open text (≥50 chars) — "client who made real progress" narrative.
+- T3 6-option pick-2 — same slugs as P2.
+- T4 5-option pick-1 — challenge-delivery style.
+- T5 open text (≥30 chars) — lived-experience.
+- All gated by `canAdvance(8)` so signup can't proceed without all five.
+
+### OpenAI embeddings (Contextual Resonance)
+- `OPENAI_API_KEY` added to `backend/.env` (real OpenAI key, separate from Emergent LLM key — Emergent proxy doesn't expose embedding endpoints).
+- New `backend/embeddings.py`: `embed_text` / `embed_texts` (batched) / `cosine_similarity`. Uses `text-embedding-3-small` (1536 dims, ~$0.02/M tokens).
+- Therapist T2/T5 embeddings pre-computed in background on signup AND on portal-edit (when T2 or T5 actually changed). Stored on therapist doc as `t2_embedding`, `t5_embedding`.
+- Patient P3 embedding pre-computed in background after intake submit. Stored on request doc as `p3_embedding`.
+- Best-effort: failures store `None` and the matching engine treats missing embeddings as "no signal" (returns 0.0 — neither boost nor penalty).
+
+### Matching engine (matching.py)
+Three new deterministic functions implementing the v2 spec exactly:
+- `_score_relationship_style(p1, t1_ranks, t4)` → cosine sim of P1_vec vs blend(T1_rank_vec + T4_BOOST_MAP). Weight 0.40.
+- `_score_way_of_working(p2, t3)` → overlap(p2,t3) / 2. Weight 0.35.
+- `_score_contextual_resonance(p3_emb, t5_emb, t2_emb)` → 0.7·sim(P3,T5) + 0.3·sim(P3,T2). Weight 0.25.
+- Combined `_deep_match_bonus(r, t, weights=...)` returns the breakdown + a bonus capped at `_DEEP_MATCH_SCALE = 30.0`.
+- `score_therapist` adds `breakdown["deep_match"]` and `total += bonus` only when `r["deep_match_opt_in"]` is True.
+
+### Email receipt (Iter-89)
+- New `email_receipt: bool` field on `RequestCreate`.
+- New checkbox at the bottom of the Review modal: "📧 Send me a copy of my answers".
+- New `send_intake_receipt` in `email_service.py` with a styled HTML table of all answers (deep-match rows included only when the patient opted in).
+- `_build_receipt_rows` helper in `routes/patients.py` maps slugs → human labels for P1/P2.
+
+### Backend models
+- `RequestCreate` + `deep_match_opt_in`, `p1_communication`, `p2_change`, `p3_resonance`, `email_receipt`.
+- `TherapistSignup` + `t1_stuck_ranked`, `t2_progress_story`, `t3_breakthrough`, `t4_hard_truth`, `t5_lived_experience`.
+- `routes/portal.py:_SELF_EDITABLE_FIELDS` extended so therapists can update T1–T5 from the portal without admin re-approval.
+
+### Tests
+- `test_iteration88_deep_match_intake.py` — 3 model-level tests, all green.
+- `test_iteration89_deep_match_scoring.py` — 16 unit tests covering all three axes + boost map sanity + axis-name verification, all green.
+- Live Playwright walkthrough on the patient flow: 11-step deep intake → Review modal → warning banner + deep section + receipt checkbox visible. Therapist signup confirmed showing "Step 1 of 9".
+
+### Files changed
+- `/app/backend/embeddings.py` (new)
+- `/app/backend/models.py` — T1–T5 + email_receipt
+- `/app/backend/matching.py` — 3 new scoring fns + bonus integration
+- `/app/backend/routes/therapists.py` — `_embed_therapist_signals` helper + signup wiring
+- `/app/backend/routes/portal.py` — self-edit allow-list + embedding refresh on T2/T5 change
+- `/app/backend/routes/patients.py` — `_build_receipt_rows`, P3 embedding bg task, receipt dispatch
+- `/app/backend/email_service.py` — `send_intake_receipt`
+- `/app/backend/tests/test_iteration88_deep_match_intake.py` (new) + `test_iteration89_deep_match_scoring.py` (new)
+- `/app/frontend/src/components/IntakeForm.jsx` — v2 P1/P2 options, label updates, receipt checkbox, deep section in preview
+- `/app/frontend/src/pages/TherapistSignup.jsx` — totalSteps 8→9, new step 8 with T1–T5, RankList/RadioCol/PillCol helpers, T1/T3/T4 option arrays
+
+### Still upcoming
+- 🟡 Existing-therapist back-fill banner: at next portal login, if any T-field is empty, show a coral inline prompt asking the therapist to fill T1–T5.
+- 🟡 Admin weight-tuning UI (override `app_config.deep_match_weights`).
+- 🟡 Tech-debt refactors of `TherapistSignup.jsx` (now ~2400 lines) and `IntakeForm.jsx` (~2000 lines).
+- 🔮 Promise statement on therapist-side touchpoints.
+- 📊 Match doc schema for retention regression (when ≥500 matches accumulate).
+

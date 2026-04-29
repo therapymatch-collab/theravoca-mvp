@@ -71,6 +71,36 @@ class TherapistSignup(BaseModel):
     recruit_code: Optional[str] = None  # captured from gap-recruit invite link
     notify_email: bool = True
     notify_sms: bool = True
+    # ─── Deep-match therapist signal fields (T1–T5 — Iter-89) ────────
+    # All five are required at signup so the matching engine has a
+    # complete picture of clinical style. Existing therapists who
+    # signed up before this iteration are prompted to fill them on
+    # next portal login (back-fill banner), and the matching engine
+    # falls back to neutral 0 scores until they do.
+    #
+    # T1 — "When a client is stuck, what do you instinctively do
+    # first?" Therapists rank ALL 5 in order from most to least
+    # likely. The list of slugs is the same set as P1
+    # ({truth, questions, tools, listen, patterns}); position in
+    # the list = rank. Empty list ⇒ not yet answered.
+    t1_stuck_ranked: list[str] = Field(default_factory=list, max_length=5)
+    # T2 — "Describe a client who made real progress with you." Open
+    # text. Used for embedding-based Contextual Resonance scoring as a
+    # weaker secondary signal next to T5.
+    t2_progress_story: Optional[str] = Field(default="", max_length=2000)
+    # T3 — "What does a breakthrough moment look like in your work?"
+    # Pick 2 of 5; same option set as P2
+    # ({self_understanding, daily_life, feelings, relationships,
+    #   self_regulation}).
+    t3_breakthrough: list[str] = Field(default_factory=list, max_length=2)
+    # T4 — "When you need to tell a client something they won't want
+    # to hear, how do you get there?" Pick 1 of 5 slugs:
+    # {direct, gradual, questions, emotion, almost_there}.
+    t4_hard_truth: Optional[str] = ""
+    # T5 — "What life experiences or communities do you understand
+    # from the inside, not from a textbook?" Open text. Primary signal
+    # for Contextual Resonance scoring.
+    t5_lived_experience: Optional[str] = Field(default="", max_length=2000)
     # Cloudflare Turnstile token (optional). Backend fail-softs when not
     # configured; verified at the route layer.
     turnstile_token: Optional[str] = Field(default=None, max_length=2200)
@@ -151,6 +181,11 @@ class RequestCreate(BaseModel):
     # P3 — "What should your therapist already get about you without
     # you having to explain it?" Open text, optional.
     p3_resonance: Optional[str] = Field(default="", max_length=2000)
+    # If True, send the patient an email receipt with a read-only copy
+    # of their answers right after submit. They can't self-edit, so the
+    # receipt doubles as their paper trail for any post-submit
+    # corrections (forward + email support).
+    email_receipt: bool = False
     # ─── Bot defenses (rejected at the route layer; never persisted) ───
     # Honeypot input — a hidden field bots auto-fill. Real users leave it
     # blank because they never see it.

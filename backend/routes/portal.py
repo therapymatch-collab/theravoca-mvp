@@ -303,6 +303,11 @@ _SELF_EDITABLE_FIELDS = {
     "availability", "availability_notes",
     "profile_picture",
     "notify_by_email", "notify_by_sms",
+    # Deep-match T1–T5 (Iter-89). Therapists fill or update these
+    # without admin re-approval — they're style answers, not licensure
+    # claims. T2/T5 changes also trigger an embedding refresh.
+    "t1_stuck_ranked", "t2_progress_story", "t3_breakthrough",
+    "t4_hard_truth", "t5_lived_experience",
 }
 
 # Fields that force a re-approval flag when edited (e.g., license or
@@ -370,6 +375,18 @@ async def portal_therapist_update_profile(
         {"id": current["id"]},
         {"$set": update_doc, "$unset": unset_doc},
     )
+    # Re-embed T5/T2 in the background if either changed. We schedule
+    # rather than await so the portal-save UX stays snappy.
+    t5_changed = "t5_lived_experience" in clean and current.get("t5_lived_experience") != clean.get("t5_lived_experience")
+    t2_changed = "t2_progress_story" in clean and current.get("t2_progress_story") != clean.get("t2_progress_story")
+    if t5_changed or t2_changed:
+        from routes.therapists import _embed_therapist_signals
+        new_t5 = clean.get("t5_lived_experience") if "t5_lived_experience" in clean else current.get("t5_lived_experience", "")
+        new_t2 = clean.get("t2_progress_story") if "t2_progress_story" in clean else current.get("t2_progress_story", "")
+        _spawn_bg(
+            _embed_therapist_signals(current["id"], new_t5 or "", new_t2 or ""),
+            name=f"embed_portal_{current['id'][:8]}",
+        )
     updated = await db.therapists.find_one({"id": current["id"]}, {"_id": 0})
     return {
         "ok": True,

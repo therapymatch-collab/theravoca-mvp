@@ -96,6 +96,33 @@ const GENDERS = [
   { v: "nonbinary", l: "Nonbinary" },
 ];
 
+// ── Deep-match T1/T3/T4 options (v2 spec, Iter-89) ───────────────────
+// Slugs map 1:1 to the patient P1/P2 questions and the matching engine
+// (matching.py). Wording is therapist-facing.
+const T1_OPTIONS = [
+  { v: "leads_structured", l: "I lead with structure and a clear plan" },
+  { v: "follows_lead", l: "I follow the client's lead" },
+  { v: "challenges", l: "I challenge patterns, even when it creates tension" },
+  { v: "warm_first", l: "I prioritize warmth and safety first" },
+  { v: "direct_honest", l: "I'm direct — I name what I see" },
+  { v: "guides_questions", l: "I guide through questions, letting them arrive at insight" },
+];
+const T3_OPTIONS = [
+  { v: "deep_emotional", l: "Deep emotional processing — the client lets themselves feel" },
+  { v: "practical_tools", l: "Practical skill-building — the client applies tools between sessions" },
+  { v: "explore_past", l: "Exploring the past — understanding the origin of patterns" },
+  { v: "focus_forward", l: "Present and future-focused — what's happening now and next" },
+  { v: "build_insight", l: "Building insight — the client finally sees their patterns" },
+  { v: "shift_relationships", l: "Relational shift — the client's key relationships change" },
+];
+const T4_OPTIONS = [
+  { v: "direct", l: "Head-on — I name it directly and trust the alliance" },
+  { v: "incremental", l: "Incrementally — I build toward it across sessions" },
+  { v: "questions", l: "Through questions — I let them bump into it themselves" },
+  { v: "emotional", l: "Through emotion — I use what's alive in the room" },
+  { v: "wait", l: "I wait for the right moment, then gently name it" },
+];
+
 // Therapist-side FAQ — short, plain answers to the questions clinicians
 // ask before signing up. Kept generic and platform-focused so the copy
 // holds up across markets.
@@ -180,6 +207,19 @@ export default function TherapistSignup() {
     credential_type: "",
     notify_email: true,
     notify_sms: true,
+    // ── Deep-match T1–T5 (v2 spec, Iter-89) ──────────────────────────
+    // Required at signup so the matching engine has a complete picture
+    // of clinical style. T1 is a drag-orderable list (we store as an
+    // array of slugs in rank order). T3 picks 2 of 6, T4 picks 1 of 5.
+    // T2 + T5 are open text used for embedding-based context scoring.
+    t1_stuck_ranked: [
+      "leads_structured", "follows_lead", "challenges",
+      "warm_first", "direct_honest", "guides_questions",
+    ],
+    t2_progress_story: "",
+    t3_breakthrough: [],
+    t4_hard_truth: "",
+    t5_lived_experience: "",
   });
   const [office, setOffice] = useState("");
   const [officeAddress, setOfficeAddress] = useState("");
@@ -191,7 +231,7 @@ export default function TherapistSignup() {
   const [stepError, setStepError] = useState("");
   const [showPreview, setShowPreview] = useState(false);
   const [step, setStep] = useState(1);
-  const totalSteps = 8;
+  const totalSteps = 9;
   const formCardRef = useRef(null);
   // Cloudflare Turnstile (fail-soft) — see comments in IntakeForm.jsx
   const [turnstileToken, setTurnstileToken] = useState("");
@@ -368,13 +408,24 @@ export default function TherapistSignup() {
       );
     if (s === 6) return data.cash_rate > 0 && data.years_experience >= 0;
     if (s === 7) return data.style_tags.length >= 1;
-    if (s === 8) return true; // notifications optional
+    // Deep-match required answers (Iter-89 v2). T1 has a default rank
+    // order on mount, so we just gate on T2/T3/T4/T5 actually being
+    // filled. Open-text minimums match the v2 spec.
+    if (s === 8) {
+      return (
+        (data.t2_progress_story || "").trim().length >= 50 &&
+        data.t3_breakthrough.length === 2 &&
+        !!data.t4_hard_truth &&
+        (data.t5_lived_experience || "").trim().length >= 30
+      );
+    }
+    if (s === 9) return true; // notifications optional
     return true;
   };
 
   // Aggregate validity across all steps (used by the Preview button on the
   // final step + the Submit button inside the modal).
-  const valid = [1, 2, 3, 4, 5, 6, 7, 8].every(canAdvance);
+  const valid = [1, 2, 3, 4, 5, 6, 7, 8, 9].every(canAdvance);
 
   // Human-readable reason why the current step's Next is disabled — surfaced
   // under the Next button so therapists aren't left guessing.
@@ -432,6 +483,17 @@ export default function TherapistSignup() {
     }
     if (s === 7 && data.style_tags.length === 0)
       return "Pick at least one style tag.";
+    if (s === 8) {
+      if ((data.t2_progress_story || "").trim().length < 50)
+        return "Tell us about a real client's progress (at least 50 characters).";
+      if (data.t3_breakthrough.length !== 2)
+        return "Pick exactly 2 ways your best work unfolds.";
+      if (!data.t4_hard_truth)
+        return "Pick how you push a client past their comfort zone.";
+      if ((data.t5_lived_experience || "").trim().length < 30)
+        return "Share at least 30 characters of lived experience or community knowledge.";
+      return "";
+    }
     return "";
   };
 
@@ -1005,6 +1067,7 @@ export default function TherapistSignup() {
                       "Format & locations",
                       "Insurance & rates",
                       "Style & bio",
+                      "Style fit (deep match)",
                       "Notifications",
                     ][step - 1]}
                   </span>
@@ -1697,7 +1760,99 @@ export default function TherapistSignup() {
                 </Group>
                 </>)}
 
+                {/* ── Deep-match T1–T5 (v2 spec, Iter-89) ──────────── */}
                 {step === 8 && (<>
+                <div className="bg-[#FBE9E5] border border-[#F4C7BE] rounded-xl px-4 py-3 mb-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#C8412B] font-semibold mb-1">
+                    ✦ Style fit · how you actually work
+                  </p>
+                  <p className="text-sm text-[#2B2A29]/85 leading-relaxed">
+                    These five questions power our deep-match scoring.
+                    Patients who opt into the deeper intake get matched to
+                    therapists whose style genuinely fits theirs — not
+                    just whoever takes their insurance.
+                  </p>
+                </div>
+
+                <Group
+                  title="T1 — How do you typically show up in session?"
+                  hint="Drag to reorder. Most instinctive at top."
+                >
+                  <RankList
+                    items={T1_OPTIONS}
+                    order={data.t1_stuck_ranked}
+                    onChange={(o) => set("t1_stuck_ranked", o)}
+                    testid="signup-t1"
+                  />
+                </Group>
+
+                <Group
+                  title="T2 — Describe a client who made real progress with you"
+                  hint="What were they like when they walked in? Open text — at least 50 characters."
+                >
+                  <Textarea
+                    rows={4}
+                    minLength={50}
+                    maxLength={2000}
+                    value={data.t2_progress_story}
+                    onChange={(e) => set("t2_progress_story", e.target.value)}
+                    placeholder="A 35-year-old new mom came in feeling like she'd lost herself. She was articulate but kept apologising for taking up space. Six months in, she'd named the pattern, set boundaries with her own mom, and was painting again."
+                    className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                    data-testid="signup-t2"
+                  />
+                  <p className="text-[11px] text-[#6D6A65] mt-1">
+                    {(data.t2_progress_story || "").length}/2000 characters
+                  </p>
+                </Group>
+
+                <Group
+                  title="T3 — How does your best work typically unfold?"
+                  hint="Pick exactly 2."
+                >
+                  <PillCol
+                    items={T3_OPTIONS}
+                    selected={data.t3_breakthrough}
+                    onSelect={(v) => toggleArr("t3_breakthrough", v, 2)}
+                    testid="signup-t3"
+                  />
+                  <p className="text-[11px] text-[#6D6A65] mt-2">
+                    {data.t3_breakthrough.length}/2 selected
+                  </p>
+                </Group>
+
+                <Group
+                  title="T4 — When you need to push a client past their comfort zone, how do you do it?"
+                  hint="Pick 1."
+                >
+                  <RadioCol
+                    items={T4_OPTIONS}
+                    value={data.t4_hard_truth}
+                    onChange={(v) => set("t4_hard_truth", v)}
+                    testid="signup-t4"
+                  />
+                </Group>
+
+                <Group
+                  title="T5 — What life experiences or communities do you understand from the inside — not from a textbook?"
+                  hint="Open text — at least 30 characters. This is the strongest signal for matching patients with similar lived experience."
+                >
+                  <Textarea
+                    rows={4}
+                    minLength={30}
+                    maxLength={2000}
+                    value={data.t5_lived_experience}
+                    onChange={(e) => set("t5_lived_experience", e.target.value)}
+                    placeholder="e.g. first-gen college, immigrant family, queer + Christian, military spouse, navigating chronic illness, sober parent, eldest of 5, recovered from anorexia…"
+                    className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                    data-testid="signup-t5"
+                  />
+                  <p className="text-[11px] text-[#6D6A65] mt-1">
+                    {(data.t5_lived_experience || "").length}/2000 characters
+                  </p>
+                </Group>
+                </>)}
+
+                {step === 9 && (<>
                 <Group title="Notifications">
                   <p className="text-xs text-[#6D6A65] -mt-1 mb-2">
                     Choose how you'd like to be alerted when a new referral matches you.
@@ -2123,3 +2278,110 @@ function Tags({ items, onRemove }) {
     </div>
   );
 }
+
+// Vertical pick-list used for T3 (pick 2 of 6) — same UX as PillRow but
+// laid out as full-width rows so the 6 long labels stay readable.
+function PillCol({ items, selected, onSelect, testid }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {items.map((it) => {
+        const active = selected.includes(it.v);
+        return (
+          <button
+            type="button"
+            key={it.v}
+            onClick={() => onSelect(it.v)}
+            data-testid={`${testid}-${it.v}`}
+            className={`text-sm text-left px-4 py-2.5 rounded-xl border transition ${
+              active
+                ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
+                : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+            }`}
+          >
+            {it.l}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Vertical radio list used for T4 (pick 1 of 5).
+function RadioCol({ items, value, onChange, testid }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {items.map((it) => {
+        const active = value === it.v;
+        return (
+          <button
+            type="button"
+            key={it.v}
+            onClick={() => onChange(it.v)}
+            data-testid={`${testid}-${it.v}`}
+            className={`text-sm text-left px-4 py-2.5 rounded-xl border transition ${
+              active
+                ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
+                : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+            }`}
+          >
+            {it.l}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Drag-free rank list used for T1. We avoid HTML5 drag-and-drop because
+// it's flaky on mobile and breaks accessibility. Each row has up/down
+// buttons that move it within the order. The `order` array is the
+// canonical source of truth — index 0 = rank-1 (most instinctive).
+function RankList({ items, order, onChange, testid }) {
+  const labelFor = (slug) =>
+    items.find((i) => i.v === slug)?.l || slug;
+  const swap = (idx, dir) => {
+    const next = [...order];
+    const tgt = idx + dir;
+    if (tgt < 0 || tgt >= next.length) return;
+    [next[idx], next[tgt]] = [next[tgt], next[idx]];
+    onChange(next);
+  };
+  return (
+    <ol className="flex flex-col gap-2" data-testid={testid}>
+      {order.map((slug, idx) => (
+        <li
+          key={slug}
+          className="flex items-center gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2"
+        >
+          <span className="font-mono text-xs text-[#6D6A65] w-5 text-center">
+            {idx + 1}
+          </span>
+          <span className="flex-1 text-sm text-[#2B2A29]">{labelFor(slug)}</span>
+          <div className="flex flex-col gap-0.5">
+            <button
+              type="button"
+              onClick={() => swap(idx, -1)}
+              disabled={idx === 0}
+              className="w-6 h-6 rounded border border-[#E8E5DF] text-xs text-[#6D6A65] hover:bg-[#2D4A3E] hover:text-white hover:border-[#2D4A3E] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#6D6A65] transition"
+              data-testid={`${testid}-up-${slug}`}
+              aria-label={`Move ${labelFor(slug)} up`}
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              onClick={() => swap(idx, +1)}
+              disabled={idx === order.length - 1}
+              className="w-6 h-6 rounded border border-[#E8E5DF] text-xs text-[#6D6A65] hover:bg-[#2D4A3E] hover:text-white hover:border-[#2D4A3E] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#6D6A65] transition"
+              data-testid={`${testid}-down-${slug}`}
+              aria-label={`Move ${labelFor(slug)} down`}
+            >
+              ↓
+            </button>
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+

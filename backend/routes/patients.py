@@ -10,10 +10,10 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
-from deps import db, DEFAULT_THRESHOLD, _decode_session_from_authorization, require_admin
+from deps import db, DEFAULT_THRESHOLD, _decode_session_from_authorization, require_admin, logger
 from email_service import send_verification_email
 from geocoding import geocode_city, geocode_zip
-from helpers import _now_iso, _parse_iso, _trigger_matching
+from helpers import _now_iso, _parse_iso, _trigger_matching, _spawn_bg
 from models import FollowupResponse, RequestCreate
 from sms_service import send_patient_intake_receipt_sms
 from validation import (
@@ -22,6 +22,69 @@ from validation import (
 )
 
 router = APIRouter()
+
+
+# Patient-facing display labels for the deep-match P1/P2 picks (v2).
+# Mirrors the slugs in the frontend IntakeForm. Used by
+# `_build_receipt_rows` so the email shows readable text instead of
+# raw slugs.
+_P1_LABELS = {
+    "leads_structured": "Someone who leads with structure and direction",
+    "follows_lead": "Someone who follows my lead and lets me set the pace",
+    "challenges": "Someone who challenges me, even when it's uncomfortable",
+    "warm_first": "Someone who's warm and encouraging above all",
+    "direct_honest": "Someone who's direct and tells it like it is",
+    "guides_questions": "Someone who asks the right questions so I get there myself",
+}
+_P2_LABELS = {
+    "deep_emotional": "Go deep into emotions — feel what I've been avoiding",
+    "practical_tools": "Stay practical — give me tools I can use this week",
+    "explore_past": "Look back — understand where my patterns started",
+    "focus_forward": "Look forward — focus on who I'm becoming",
+    "build_insight": "Help me understand myself and why I do what I do",
+    "shift_relationships": "Help me change how I show up in my relationships",
+}
+
+
+def _build_receipt_rows(payload, doc: dict) -> list[tuple[str, str]]:
+    """Render the patient's intake answers as (label, value) tuples for
+    the receipt email. Empty rows are filtered. Deep-match rows only
+    appear when the patient opted in."""
+    rows: list[tuple[str, str]] = [
+        ("Who this referral is for", payload.client_type or "—"),
+        ("Age group", payload.age_group or "—"),
+        ("State", payload.location_state or "—"),
+        ("Concerns", ", ".join(payload.presenting_issues or []) or "—"),
+        ("Session format", payload.modality_preference or "—"),
+    ]
+    if payload.payment_type in ("insurance", "either"):
+        ins = payload.insurance_name or "—"
+        if ins == "Other / not listed" and (payload.insurance_name_other or "").strip():
+            ins = f"Other: {payload.insurance_name_other.strip()}"
+        rows.append(("Insurance", ins))
+    if payload.payment_type in ("cash", "either") and payload.budget:
+        rows.append(("Cash budget", f"${payload.budget}/session"))
+    rows.append(("Availability", ", ".join(payload.availability_windows or []) or "—"))
+    rows.append(("Urgency", payload.urgency or "—"))
+    if payload.gender_preference and payload.gender_preference != "no_pref":
+        rows.append(("Preferred gender", payload.gender_preference))
+    if payload.preferred_language and payload.preferred_language != "English":
+        rows.append(("Preferred language", payload.preferred_language))
+    if payload.deep_match_opt_in:
+        rows.append((
+            "Deep match — Relationship style (P1)",
+            " · ".join(_P1_LABELS.get(s, s) for s in (payload.p1_communication or [])) or "—",
+        ))
+        rows.append((
+            "Deep match — Way of working (P2)",
+            " · ".join(_P2_LABELS.get(s, s) for s in (payload.p2_change or [])) or "—",
+        ))
+        if (payload.p3_resonance or "").strip():
+            rows.append((
+                "Deep match — What they should already get (P3)",
+                payload.p3_resonance.strip(),
+            ))
+    return rows
 
 
 @router.get("/")
@@ -267,6 +330,38 @@ async def create_request(payload: RequestCreate, request: Request):
     doc.pop("form_started_at_ms", None)
     doc.pop("turnstile_token", None)
     await db.requests.insert_one(doc.copy())
+    # If the patient ticked "Send me a copy" in the Review modal, fire
+    # off a read-only receipt email with the same fields they just
+    # confirmed. Best-effort — failures don't block the request.
+    if payload.email_receipt:
+        async def _bg_intake_receipt() -> None:
+            try:
+                from email_service import send_intake_receipt
+                rows = _build_receipt_rows(payload, doc)
+                await send_intake_receipt(payload.email, rid, rows)
+            except Exception as e:
+                logger.warning("intake receipt email failed for %s: %s", rid, e)
+        _spawn_bg(_bg_intake_receipt(), name=f"receipt_{rid[:8]}")
+    # Pre-compute P3 embedding for Contextual Resonance scoring when
+    # the patient opted into deep match AND wrote anything in P3.
+    # Stored on the request doc so all downstream match scoring is a
+    # pure numpy cosine. Best-effort — failures degrade gracefully.
+    if payload.deep_match_opt_in and (payload.p3_resonance or "").strip():
+        async def _bg_embed_p3() -> None:
+            try:
+                from embeddings import embed_text
+                vec = await embed_text(payload.p3_resonance or "")
+                if vec:
+                    await db.requests.update_one(
+                        {"id": rid},
+                        {"$set": {
+                            "p3_embedding": vec,
+                            "p3_embedding_text": (payload.p3_resonance or "").strip()[:6000],
+                        }},
+                    )
+            except Exception as e:
+                logger.warning("p3 embed failed for %s: %s", rid, e)
+        _spawn_bg(_bg_embed_p3(), name=f"embed_p3_{rid[:8]}")
     # Log the IP for the rate-limit window. We only keep these for ~24h
     # via a TTL index on `ts_at` (BSON Date) — see server.py startup.
     if client_ip:

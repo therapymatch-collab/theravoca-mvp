@@ -358,6 +358,50 @@ async def send_therapist_signup_received(to: str, name: str) -> None:
     await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner))
 
 
+async def send_intake_receipt(to: str, request_id: str, summary_rows: list[tuple[str, str]]) -> None:
+    """Send the patient a read-only receipt of the answers they just
+    submitted. Patients can't self-edit a request through the UI, so this
+    receipt doubles as their paper trail — they can forward it back to
+    support with corrections and we ship a follow-up corrected match.
+
+    `summary_rows` is a list of (label, value) tuples already rendered
+    to human-friendly strings by the caller (so the email service stays
+    decoupled from intake-form constants). The route layer is
+    responsible for ordering + filtering empty rows.
+    """
+    rows_html = "".join(
+        f"""
+        <tr>
+          <td style="padding:8px 14px 8px 0;color:{BRAND['muted']};font-size:11px;text-transform:uppercase;letter-spacing:0.05em;vertical-align:top;width:36%;">{label}</td>
+          <td style="padding:8px 0;color:{BRAND['text']};font-size:14px;line-height:1.55;vertical-align:top;">{value or '—'}</td>
+        </tr>
+        """
+        for label, value in summary_rows
+    )
+    inner = f"""
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      Here's a copy of the referral request you just submitted. We'll start
+      matching you with therapists right away — you should hear from us
+      within 24 hours.
+    </p>
+    <p style="font-size:14px;line-height:1.6;color:{BRAND['muted']};">
+      Need to correct something? Just reply to this email — once we match,
+      we can resend with the right info.
+    </p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:24px;border-top:1px solid #E8E5DF;width:100%;">
+      {rows_html}
+    </table>
+    <p style="color:{BRAND['muted']};font-size:12px;line-height:1.6;margin-top:28px;">
+      Reference: {request_id[:8]} · We'll never share these answers with anyone but the therapists you choose to contact.
+    </p>
+    """
+    await _send(
+        to,
+        "Your TheraVoca referral — a copy for your records",
+        _wrap("Your referral on file", inner),
+    )
+
+
 async def send_therapist_approved(to: str, name: str) -> None:
     tpl = await get_template(_db(), "therapist_approved")
     first_name = _first_name(name)

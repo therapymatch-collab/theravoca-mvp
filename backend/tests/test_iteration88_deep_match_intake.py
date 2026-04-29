@@ -18,14 +18,14 @@ def test_request_create_accepts_deep_match_fields():
         "age_group": "adult",
         "presenting_issues": ["anxiety"],
         "deep_match_opt_in": True,
-        "p1_communication": ["truth", "listen"],
-        "p2_change": ["self_understanding", "relationships"],
+        "p1_communication": ["challenges", "direct_honest"],
+        "p2_change": ["deep_emotional", "build_insight"],
         "p3_resonance": "Eldest immigrant child — always holding it together.",
     }
     req = RequestCreate(**payload)
     assert req.deep_match_opt_in is True
-    assert req.p1_communication == ["truth", "listen"]
-    assert req.p2_change == ["self_understanding", "relationships"]
+    assert req.p1_communication == ["challenges", "direct_honest"]
+    assert req.p2_change == ["deep_emotional", "build_insight"]
     assert "Eldest" in req.p3_resonance
 
 

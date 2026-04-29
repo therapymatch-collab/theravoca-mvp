@@ -33,32 +33,33 @@ const STEPS_DEFAULTS = [
 
 // Extra steps inserted into the flow when the patient taps "Yes — go
 // deeper" on the Start-A banner. Each maps to one of the P1/P2/P3
-// questions from the scoring map. Inserted BEFORE the contact step so
-// the patient finishes on the familiar "where to reach you" finale.
+// questions from the v2 scoring map. Inserted BEFORE the contact step
+// so the patient finishes on the familiar "where to reach you" finale.
 const DEEP_MATCH_STEPS = [
-  "When therapy works (pick 2)",
-  "What working looks like (pick 2)",
+  "Relationship style (pick 2)",
+  "Way of working (pick 2)",
   "What they should already get",
 ];
 
-// P1 — "When your therapist is really helping, what are they doing?"
-// Maps 1:1 to therapist T1 ranking on the same five behaviors.
+// P1 — "What kind of relationship do you want with your therapist?"
+// Pick 2 of 6. Slugs are 1:1 with therapist T1 ranking.
 const P1_OPTIONS = [
-  { v: "truth", l: "Telling me the truth, even when it's uncomfortable" },
-  { v: "questions", l: "Asking questions that help me see things differently" },
-  { v: "tools", l: "Giving me specific tools and strategies" },
-  { v: "listen", l: "Listening deeply and letting me feel what I need to feel" },
-  { v: "patterns", l: "Sharing observations about patterns they notice in me" },
+  { v: "leads_structured", l: "Someone who leads with structure and direction" },
+  { v: "follows_lead", l: "Someone who follows my lead and lets me set the pace" },
+  { v: "challenges", l: "Someone who challenges me, even when it's uncomfortable" },
+  { v: "warm_first", l: "Someone who's warm and encouraging above all" },
+  { v: "direct_honest", l: "Someone who's direct and tells it like it is" },
+  { v: "guides_questions", l: "Someone who asks the right questions so I get there myself" },
 ];
-// P2 — "What would make you feel like therapy is actually working?"
-// Mirrors therapist T3 — same five concepts reworded; matching score
-// is overlap of picks ÷ 2.
+// P2 — "How do you want therapy to work?" Pick 2 of 6. Slugs map 1:1
+// to therapist T3 picks; matching score = overlap ÷ 2.
 const P2_OPTIONS = [
-  { v: "self_understanding", l: "I understand myself and my patterns better" },
-  { v: "daily_life", l: "I'm handling daily life noticeably better" },
-  { v: "feelings", l: "I'm feeling emotions I've been avoiding" },
-  { v: "relationships", l: "My relationships are improving" },
-  { v: "self_regulation", l: "I have a clear plan for when I'm struggling" },
+  { v: "deep_emotional", l: "Go deep into emotions — feel what I've been avoiding" },
+  { v: "practical_tools", l: "Stay practical — give me tools I can use this week" },
+  { v: "explore_past", l: "Look back — understand where my patterns started" },
+  { v: "focus_forward", l: "Look forward — focus on who I'm becoming" },
+  { v: "build_insight", l: "Help me understand myself and why I do what I do" },
+  { v: "shift_relationships", l: "Help me change how I show up in my relationships" },
 ];
 
 const PRIORITY_FACTORS = [
@@ -295,6 +296,7 @@ export default function IntakeForm() {
     p1_communication: [],   // pick 2 from P1_OPTIONS
     p2_change: [],          // pick 2 from P2_OPTIONS
     p3_resonance: "",       // open text — what should the therapist 'get' about you
+    email_receipt: false,   // patient ticked "send me a copy" in Review modal
   });
   const set = (k, v) => setData((d) => ({ ...d, [k]: v }));
   const toggleArr = (k, v, max) =>
@@ -1272,7 +1274,7 @@ export default function IntakeForm() {
                 <Group
                   label={t(
                     "intake.deep.p1.label",
-                    "When your therapist is really helping, what are they doing?",
+                    "What kind of relationship do you want with your therapist?",
                   )}
                   hint={t(
                     "intake.deep.p1.hint",
@@ -1304,7 +1306,7 @@ export default function IntakeForm() {
                 <Group
                   label={t(
                     "intake.deep.p2.label",
-                    "What would make you feel like therapy is actually working?",
+                    "How do you want therapy to work?",
                   )}
                   hint={t("intake.deep.p2.hint", "Pick exactly 2.")}
                 >
@@ -1340,12 +1342,13 @@ export default function IntakeForm() {
                 >
                   <Textarea
                     rows={5}
-                    maxLength={800}
+                    maxLength={2000}
+                    minLength={20}
                     value={data.p3_resonance}
                     onChange={(e) => set("p3_resonance", e.target.value)}
                     placeholder={t(
                       "intake.deep.p3.placeholder",
-                      "e.g. growing up in an immigrant household, the weight of being the 'responsible one,' how exhausting it is to mask all day…",
+                      "Try one of these starters:\n• My background or culture…\n• My work or life situation…\n• What didn't work with a past therapist…\n• The thing most people don't understand about me…",
                     )}
                     className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                     data-testid="p3-input"
@@ -1353,7 +1356,7 @@ export default function IntakeForm() {
                   <p className="text-[11px] text-[#6D6A65] mt-2 leading-snug">
                     {t(
                       "intake.deep.p3.helper",
-                      "Optional, but the more you share, the better we match for lived-experience fit. Therapists never see this verbatim — we use it to rank for resonance.",
+                      "20+ characters helps the matching engine score for lived-experience fit. Therapists never see this verbatim — we use it to rank for resonance.",
                     )}
                   </p>
                 </Field>
@@ -1625,6 +1628,7 @@ export default function IntakeForm() {
           data={data}
           submitting={submitting}
           onClose={() => setShowPreview(false)}
+          onToggleReceipt={(v) => set("email_receipt", v)}
           onConfirm={async () => {
             await submit();
           }}
@@ -1637,7 +1641,7 @@ export default function IntakeForm() {
 // Pre-submit review modal — shows the full request the patient is about to
 // send so they can scan it once before committing. Edit goes back to the
 // form (just closes the modal); Submit triggers the actual POST.
-function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
+function ReviewPreviewModal({ data, submitting, onClose, onConfirm, onToggleReceipt }) {
   const t = useSiteCopy();
   const issues = (data.presenting_issues || []).join(", ");
   const insurance =
@@ -1842,13 +1846,13 @@ function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
                 ✦ Deep match · 3 extra answers
               </p>
               <p className="text-xs text-[#2B2A29]/80 mt-1 mb-4 leading-relaxed">
-                These will boost your matching scores on Communication
-                Style, Theory of Change, and Contextual Resonance.
+                These will boost your matching scores on Relationship Style,
+                Way of Working, and Contextual Resonance.
               </p>
               <dl className="space-y-4 text-sm">
                 <div data-testid="intake-preview-row-p1">
                   <dt className="text-[10px] uppercase tracking-wider text-[#8B3220]">
-                    When therapy works (P1)
+                    Relationship style (P1)
                   </dt>
                   <dd className="text-[#2B2A29] mt-1 leading-snug">
                     {(data.p1_communication || []).length
@@ -1863,7 +1867,7 @@ function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
                 </div>
                 <div data-testid="intake-preview-row-p2">
                   <dt className="text-[10px] uppercase tracking-wider text-[#8B3220]">
-                    What working looks like (P2)
+                    Way of working (P2)
                   </dt>
                   <dd className="text-[#2B2A29] mt-1 leading-snug">
                     {(data.p2_change || []).length
@@ -1892,7 +1896,30 @@ function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
             </div>
           )}
         </div>
-        <div className="sticky bottom-0 bg-white border-t border-[#E8E5DF] p-5 flex items-center justify-between gap-3 flex-wrap">
+        <div className="sticky bottom-0 bg-white border-t border-[#E8E5DF] p-5">
+          {/* Email-receipt opt-in. Patients can't self-edit a request
+              once submitted, so this checkbox lets them keep a paper
+              trail with all the same fields they're about to confirm. */}
+          <label
+            className="flex items-start gap-2.5 mb-3 text-sm cursor-pointer"
+            data-testid="intake-preview-receipt-toggle"
+          >
+            <input
+              type="checkbox"
+              checked={!!data.email_receipt}
+              onChange={(e) => onToggleReceipt && onToggleReceipt(e.target.checked)}
+              className="mt-0.5 accent-[#2D4A3E]"
+              data-testid="intake-preview-receipt-checkbox"
+            />
+            <span className="text-[#2B2A29] leading-snug">
+              <span className="font-medium">📧 Send me a copy of my answers</span>
+              <span className="block text-xs text-[#6D6A65] mt-0.5">
+                Useful as a record — you can forward it back to us if you
+                spot something to correct after submitting.
+              </span>
+            </span>
+          </label>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
           <button
             type="button"
             onClick={onClose}
@@ -1912,6 +1939,7 @@ function ReviewPreviewModal({ data, submitting, onClose, onConfirm }) {
               ? "Submitting..."
               : t("btn.intake.preview_submit", "Confirm & find my matches")}
           </button>
+          </div>
         </div>
       </div>
     </div>

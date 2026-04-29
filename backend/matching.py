@@ -496,6 +496,175 @@ def _patient_expressed_axis(r: dict, axis: str) -> bool:
     return False
 
 
+# ─── Deep-match scoring (Iter-89 v2) ───────────────────────────────────
+# Three axes activated only when the patient opted into the deep flow
+# (request.deep_match_opt_in is True) AND the therapist has answered
+# the corresponding T-fields. Each axis returns a 0–1 sub-score; the
+# bonus added to the total is `weight * sub_score * DEEP_MATCH_SCALE`.
+#
+# Default weights match the founder's v2 spec:
+#   relationship_style 0.40 / way_of_working 0.35 / contextual_resonance 0.25
+# Admins can override these in `app_config.deep_match_weights`. The
+# scale factor pegs the maximum total deep bonus to 30 score points
+# (≈ a 30% lift over baseline) — large enough that deep answers can
+# meaningfully reorder results, small enough that they can't swamp
+# hard-requirement axes like specialty and licensure.
+_DEEP_MATCH_DEFAULT_WEIGHTS = {
+    "relationship_style": 0.40,
+    "way_of_working": 0.35,
+    "contextual_resonance": 0.25,
+}
+_DEEP_MATCH_SCALE = 30.0  # max bonus per axis ≈ weight * 30
+
+# Canonical option order for P1/T1 vectors. Indices here drive the
+# 6-slot binary/rank vectors used by `_score_relationship_style`.
+_P1_T1_KEYS = (
+    "leads_structured",   # 0
+    "follows_lead",       # 1
+    "challenges",         # 2
+    "warm_first",         # 3
+    "direct_honest",      # 4
+    "guides_questions",   # 5
+)
+
+# T4 → adjustments to the therapist's T1 rank vector. Each T4 slug
+# emphasises certain positions on the directiveness/warmth axis. These
+# values come straight from the v2 spec.
+_T4_BOOST_MAP: dict[str, dict[int, float]] = {
+    "direct":      {2: 0.15, 4: 0.15},
+    "incremental": {3: 0.10},
+    "questions":   {5: 0.15},
+    "emotional":   {3: 0.10},
+    "wait":        {3: 0.10, 1: 0.05},
+}
+
+
+def _p1_to_vector(picks: list[str]) -> list[float]:
+    """Binary 6-vector for the patient's P1 selections."""
+    return [1.0 if k in picks else 0.0 for k in _P1_T1_KEYS]
+
+
+def _t1_rank_to_vector(rank_order: list[str]) -> list[float]:
+    """Therapist's T1 ranking → normalised 6-vector. The slug at index 0
+    of `rank_order` is rank-1 (most instinctive) → 1.0; index 5 is
+    rank-6 → 0.0. Slugs missing from the input default to 0.0 so a
+    therapist who hasn't answered T1 yet scores neutrally rather than
+    being penalised."""
+    pos: dict[str, int] = {slug: i for i, slug in enumerate(rank_order or [])}
+    out = [0.0] * 6
+    for i, key in enumerate(_P1_T1_KEYS):
+        if key in pos:
+            out[i] = (5 - pos[key]) / 5.0
+    return out
+
+
+def _apply_t4_boost(t_vec: list[float], t4: str | None) -> list[float]:
+    """Add T4-driven boosts to the therapist rank vector and clamp at
+    1.0. Pure function — caller passes a copy if it doesn't want
+    mutation."""
+    if not t4 or t4 not in _T4_BOOST_MAP:
+        return t_vec
+    out = list(t_vec)
+    for idx, boost in _T4_BOOST_MAP[t4].items():
+        out[idx] = min(1.0, out[idx] + boost)
+    return out
+
+
+def _cosine6(a: list[float], b: list[float]) -> float:
+    """Cosine similarity for fixed 6-vectors. Returns 0 when either is
+    all-zero so an unanswered side never penalises."""
+    import math
+    num = sum(x * y for x, y in zip(a, b))
+    da = math.sqrt(sum(x * x for x in a))
+    db = math.sqrt(sum(x * x for x in b))
+    if da == 0 or db == 0:
+        return 0.0
+    return num / (da * db)
+
+
+def _score_relationship_style(
+    p1_picks: list[str], t1_ranks: list[str], t4: str | None
+) -> float:
+    """Dimension 1 — Relationship Style (weight 0.40 in v2 spec).
+
+    score = cosine_sim(P1_vec, blend(T1_rank_vec, T4))
+
+    P1_vec is a 6-element binary vector indicating the 2 picks. T1
+    ranking is normalised so rank-1 → 1.0, rank-6 → 0.0. T4 boosts
+    specific positions per `_T4_BOOST_MAP` (e.g., a "direct" T4 lifts
+    `challenges` and `direct_honest` slots by 0.15 each)."""
+    if not p1_picks or not t1_ranks:
+        return 0.0
+    p_vec = _p1_to_vector(p1_picks)
+    t_vec = _t1_rank_to_vector(t1_ranks)
+    t_vec = _apply_t4_boost(t_vec, t4)
+    return round(_cosine6(p_vec, t_vec), 4)
+
+
+def _score_way_of_working(p2_picks: list[str], t3_picks: list[str]) -> float:
+    """Dimension 2 — Way of Working (weight 0.35 in v2 spec). Both pick
+    exactly 2 from the same set of 6 slugs; score = (overlapping picks) / 2.
+    So: 0 shared → 0.0, 1 shared → 0.5, 2 shared → 1.0.
+    """
+    if not p2_picks or not t3_picks:
+        return 0.0
+    overlap = len(set(p2_picks) & set(t3_picks))
+    return overlap / 2.0
+
+
+def _score_contextual_resonance(
+    p3_embedding: list[float] | None,
+    t5_embedding: list[float] | None,
+    t2_embedding: list[float] | None,
+) -> float:
+    """Dimension 3 — Contextual Resonance (weight 0.25 in v2 spec).
+    score = 0.7 * sim(P3, T5) + 0.3 * sim(P3, T2). Cosine sim is
+    clamped to [0,1] so weakly opposite vectors don't subtract from
+    the bonus.
+    """
+    from embeddings import cosine_similarity
+    sim_t5 = max(0.0, cosine_similarity(p3_embedding, t5_embedding))
+    sim_t2 = max(0.0, cosine_similarity(p3_embedding, t2_embedding))
+    return round(0.7 * sim_t5 + 0.3 * sim_t2, 4)
+
+
+def _deep_match_bonus(
+    r: dict, t: dict, *, weights: dict[str, float] | None = None
+) -> dict[str, Any]:
+    """Compute the three v2 sub-scores + the total bonus. Returns the
+    breakdown so the admin debug view can show patients WHY a therapist
+    scored higher (e.g., "your style picks aligned with their top-2 instincts").
+    """
+    weights = weights or _DEEP_MATCH_DEFAULT_WEIGHTS
+    rel = _score_relationship_style(
+        r.get("p1_communication") or [],
+        t.get("t1_stuck_ranked") or [],
+        t.get("t4_hard_truth"),
+    )
+    work = _score_way_of_working(
+        r.get("p2_change") or [],
+        t.get("t3_breakthrough") or [],
+    )
+    ctx = _score_contextual_resonance(
+        r.get("p3_embedding"),
+        t.get("t5_embedding"),
+        t.get("t2_embedding"),
+    )
+    bonus = (
+        weights["relationship_style"] * rel
+        + weights["way_of_working"] * work
+        + weights["contextual_resonance"] * ctx
+    ) * _DEEP_MATCH_SCALE
+    return {
+        "relationship_style": round(rel, 4),
+        "way_of_working": round(work, 4),
+        "contextual_resonance": round(ctx, 4),
+        "weights": weights,
+        "bonus": round(bonus, 2),
+    }
+
+
+
 def score_therapist(
     t: dict,
     r: dict,
@@ -664,11 +833,27 @@ def score_therapist(
         except Exception:
             # Defensive: a malformed cache should never break scoring.
             research_axes = {}
+    # ── Deep-match bonus (Iter-89) ────────────────────────────────────
+    # Three additional axes activated when the patient opted in. Each
+    # sub-score is in [0,1]; we multiply by configurable weights and
+    # _DEEP_MATCH_SCALE before adding to the total. Always recorded in
+    # the return payload so the admin debug view can display the
+    # breakdown even when the patient skipped deep mode (sub-scores
+    # will be 0.0, bonus 0.0).
+    deep = None
+    if r.get("deep_match_opt_in"):
+        weights = (r.get("_deep_weights")  # set by caller to override
+                   or _DEEP_MATCH_DEFAULT_WEIGHTS)
+        deep = _deep_match_bonus(r, t, weights=weights)
+        if deep["bonus"]:
+            breakdown["deep_match"] = deep["bonus"]
+            total = round(min(150.0, total + deep["bonus"]), 2)
     return {
         "total": total,
         "breakdown": breakdown,
         "filtered": False,
         "research_axes": research_axes,  # rationale + chips for the patient view
+        "deep_match": deep,
     }
 
 
