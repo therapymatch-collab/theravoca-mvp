@@ -148,12 +148,35 @@ def backfill_therapist(t: dict[str, Any], idx: int) -> dict[str, Any]:
     if not t.get("gender"):
         set_fields["gender"] = _name_to_gender(first_name)
 
-    # Specialties — required for matching, ensure non-empty
-    if not t.get("primary_specialties"):
+    # Specialties — required for matching, ensure non-empty.
+    # primary_specialties is the priority axis; secondary_specialties is
+    # the "also treats" tier the matcher uses for soft scoring; general_treats
+    # is the everything-else bucket. Backfilling each independently means
+    # a therapist who has primary set (via signup) still gets sensible
+    # secondary/general entries instead of leaving those empty and
+    # under-scoring them.
+    primary = t.get("primary_specialties") or set_fields.get("primary_specialties")
+    if not primary:
         avail = random.sample(ALL_ISSUES, k=random.randint(5, 9))
         set_fields["primary_specialties"] = avail[:random.randint(1, 2)]
-        set_fields["secondary_specialties"] = avail[2:2 + random.randint(1, 3)]
-        set_fields["general_treats"] = avail[5:5 + random.randint(1, 4)]
+        primary = set_fields["primary_specialties"]
+    if not (t.get("secondary_specialties") or set_fields.get("secondary_specialties")):
+        # Pick from issues that AREN'T already in primary.
+        remaining = [i for i in ALL_ISSUES if i not in primary]
+        if remaining:
+            set_fields["secondary_specialties"] = random.sample(
+                remaining, k=min(len(remaining), random.randint(2, 4)),
+            )
+    if not (t.get("general_treats") or set_fields.get("general_treats")):
+        already = set(primary) | set(
+            t.get("secondary_specialties")
+            or set_fields.get("secondary_specialties") or [],
+        )
+        remaining = [i for i in ALL_ISSUES if i not in already]
+        if remaining:
+            set_fields["general_treats"] = random.sample(
+                remaining, k=min(len(remaining), random.randint(3, 5)),
+            )
 
     if not t.get("modalities"):
         set_fields["modalities"] = random.sample(ALL_MODALITIES, random.randint(2, 4))
@@ -250,9 +273,54 @@ def backfill_therapist(t: dict[str, Any], idx: int) -> dict[str, Any]:
         set_fields.setdefault("stripe_customer_id", None)
         set_fields.setdefault("stripe_subscription_id", None)
 
-    # Profile picture left null — frontend renders initials fallback
-    if "profile_picture" not in t:
-        set_fields["profile_picture"] = DEFAULT_PROFILE_PICTURE
+    # License number — synthesise a state-prefixed pseudo-license so the
+    # admin's "license verified" UX has something to render. Format mirrors
+    # what Idaho DOPL actually issues (LCS-XXXXXX style). Pre-launch strip
+    # nukes this — therapists must re-enter their real number on first
+    # login if it wasn't set during signup.
+    if not (t.get("license_number") or "").strip():
+        cred = set_fields.get("credential_type") or t.get("credential_type") or "LCSW"
+        prefix = {
+            "Psychologist": "PSY",
+            "LCSW": "LCS",
+            "LCPC": "LCP",
+            "LMFT": "LMT",
+            "LPC": "LPC",
+        }.get(cred, "LIC")
+        set_fields["license_number"] = (
+            f"{prefix}-{random.randint(100000, 999999)}"
+        )
+
+    # License expiration — random date 12 to 36 months from now (Idaho
+    # license cycles are 2 years; this gives realistic spread). Stored
+    # as ISO-8601 date so the frontend can render "Expires Jul 2027".
+    if not t.get("license_expires_at"):
+        from datetime import datetime, timedelta, timezone
+        days_out = random.randint(365, 1095)
+        exp = (datetime.now(timezone.utc) + timedelta(days=days_out)).date()
+        set_fields["license_expires_at"] = exp.isoformat()
+
+    # Profile picture — deterministic, gender-aware avatar via
+    # randomuser.me's portrait CDN. Hashing the therapist's id keeps
+    # the same therapist on the same photo across backfill re-runs (so
+    # admins don't see faces shuffle every time). When stripped, the
+    # frontend falls back to the initials avatar.
+    if not (t.get("profile_picture") or "").strip():
+        gender = (
+            set_fields.get("gender") or t.get("gender") or "non_binary"
+        ).lower()
+        # randomuser.me only has men/women buckets; non_binary alternates
+        # by parity of the hash so we don't bias.
+        seed = abs(hash(t.get("id") or t.get("email") or "")) % 100
+        if gender == "male":
+            bucket = "men"
+        elif gender == "female":
+            bucket = "women"
+        else:
+            bucket = "men" if seed % 2 else "women"
+        set_fields["profile_picture"] = (
+            f"https://randomuser.me/api/portraits/{bucket}/{seed}.jpg"
+        )
 
     return set_fields
 

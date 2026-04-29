@@ -2025,3 +2025,27 @@ User asked for three pre-deploy items:
 4. Re-run "Backfill profiles" — audit records merge; original_email is locked to the FIRST captured value (so step 3's edits persist)
 5. Click "Strip backfilled data" → confirms count → restores every real email + removes faked fields
 6. Therapist sees their real email + their own user-edited fields in their portal. Zero fake data exposed.
+
+
+## Iter-85 (Apr 29 2026) — Backfill: license expiration, profile photo, secondary specialties
+
+User asked to extend backfill to fill three previously-skipped fields for ALL therapists (where missing).
+
+### Backend (`backfill.py`)
+- **`license_number`** — synthesises a state-prefixed pseudo-license matching Idaho DOPL's actual format (e.g., `LCS-308496`, `LPC-719176`, `PSY-491203`). Prefix derived from `credential_type` (LCSW→LCS, LCPC→LCP, LMFT→LMT, Psychologist→PSY). Skipped when therapist already has one set.
+- **`license_expires_at`** — random ISO-8601 date 12 to 36 months out (Idaho license cycles are 2 years; this gives realistic spread). Frontend renders as "Expires Jul 2027".
+- **`profile_picture`** — deterministic, gender-aware avatar via randomuser.me's portrait CDN. URL is `https://randomuser.me/api/portraits/{men|women}/{0-99}.jpg` keyed off a hash of the therapist's id, so the same therapist gets the same photo across re-runs (admins don't see faces shuffle every backfill). Verified URL returns HTTP 200.
+- **`secondary_specialties`** + **`general_treats`** — were previously only populated when `primary_specialties` was empty. Now backfilled INDEPENDENTLY of primary, so a therapist who set primary at signup still gets sensible secondary/general entries instead of leaving those empty and losing soft-score points.
+- All 4 new fields are captured in the `_backfill_audit.fields_added` list, so the existing strip-backfill flow (Iter-84) cleanly removes them when going live.
+
+### Files changed
+- `/app/backend/backfill.py`
+
+### Self-verified end-to-end
+Cleared the 4 fields on 3 sample therapists → ran backfill → all 4 populated correctly with realistic values + audit captured all 4 in `fields_added`:
+- Ann Omodt, LPC: `LPC-719176`, expires 2028-07-04, photo women/87.jpg, secondary `['substance_use', 'ocd']`
+- Anna Seno, LCSW: `LCS-308496`, expires 2029-02-22, photo women/79.jpg, secondary `['ocd', 'adhd']`
+- Anne Harger, LCSW: `LCS-391369`, expires 2027-10-05, photo women/2.jpg, secondary `['school_academic_stress', 'substance_use']`
+
+### Pre-deploy strip behavior
+Strip-backfill (Iter-84) will `$unset` all 4 of these fields per audit record. Therapist's portal UI re-renders the initials avatar fallback for `profile_picture`, the license fields go blank, and the secondary_specialties array empties — clean slate for the therapist to fill in real values during their first portal login.
