@@ -1818,9 +1818,18 @@ function PreviewModal({ data, onClose, onConfirm, submitting }) {
             <h4 className="font-serif-display text-xl text-[#2D4A3E] truncate">
               {data.name || "—"}
             </h4>
-            <div className="text-xs text-[#6D6A65] mt-0.5">
-              {data.years_experience || "—"} yrs •{" "}
-              {(data.modalities || []).slice(0, 3).join(" · ") || "—"}
+            <div className="text-xs text-[#6D6A65] mt-0.5 break-words">
+              {data.credential_type && (
+                <span className="text-[#2B2A29] font-medium">
+                  {data.credential_type}
+                </span>
+              )}
+              {data.credential_type && (data.years_experience != null || (data.modalities || []).length > 0) && " · "}
+              {data.years_experience != null
+                ? `${data.years_experience} year${data.years_experience === 1 ? "" : "s"} experience`
+                : !data.credential_type && "Experience: —"}{" "}
+              {(data.years_experience != null || data.credential_type) && (data.modalities || []).length > 0 && "• "}
+              {(data.modalities || []).slice(0, 3).join(" · ")}
             </div>
           </div>
         </div>

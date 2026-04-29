@@ -619,11 +619,18 @@ function ProfilePreviewModal({ profile, onClose }) {
                     <Eye size={10} /> 87%
                   </div>
                 </div>
-                <div className="text-xs text-[#6D6A65] mt-0.5">
+                <div className="text-xs text-[#6D6A65] mt-0.5 break-words">
+                  {t.credential_type && (
+                    <span className="text-[#2B2A29] font-medium">
+                      {t.credential_type}
+                    </span>
+                  )}
+                  {t.credential_type && (t.years_experience || (t.modalities || []).length > 0) && " · "}
                   {t.years_experience
                     ? `${t.years_experience} year${t.years_experience === 1 ? "" : "s"} experience`
-                    : "Experience: —"}{" "}
-                  • {(t.modalities || []).slice(0, 3).join(" · ") || "—"}
+                    : !t.credential_type && "Experience: —"}{" "}
+                  {(t.years_experience || t.credential_type) && (t.modalities || []).length > 0 && "• "}
+                  {(t.modalities || []).slice(0, 3).join(" · ")}
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 mt-3 text-xs">
                   <PreviewKV label="Format" value={formatStr} />

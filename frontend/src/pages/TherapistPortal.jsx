@@ -218,7 +218,28 @@ export default function TherapistPortal() {
                 {therapist?.name?.split(",")[0] || "Your"} referrals
               </h1>
               {therapist && (
-                <p className="text-xs text-[#6D6A65] mt-1.5">
+                <p className="text-xs text-[#6D6A65] mt-1.5 break-words">
+                  {therapist.credential_type && (
+                    <>
+                      <span className="text-[#2B2A29] font-medium">
+                        {therapist.credential_type}
+                      </span>
+                      {(therapist.years_experience != null ||
+                        (therapist.modalities || []).length > 0) && " · "}
+                    </>
+                  )}
+                  {therapist.years_experience != null && (
+                    <>
+                      {therapist.years_experience} year
+                      {therapist.years_experience === 1 ? "" : "s"} experience
+                      {(therapist.modalities || []).length > 0 && " • "}
+                    </>
+                  )}
+                  {(therapist.modalities || []).slice(0, 3).join(" · ")}
+                </p>
+              )}
+              {therapist && (
+                <p className="text-xs text-[#6D6A65] mt-1">
                   Signed in as{" "}
                   <span className="text-[#2D4A3E] font-medium">{therapist.email}</span>
                 </p>
