@@ -413,8 +413,11 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
         axes.append(_axis(f"Therapists licensed in {state}", in_state, target))
 
     # ── Format ─────────────────────────────────────────────────────
+    # Patient enum values are `telehealth_only`, `in_person_only`,
+    # `hybrid`, `prefer_inperson`, `prefer_telehealth`. We only treat
+    # the two `*_only` variants as HARD (the others are soft prefs).
     fmt = (req.get("modality_preference") or "").lower()
-    if fmt == "in_person":
+    if fmt == "in_person_only":
         cnt = await db.therapists.count_documents({
             **base_match,
             "$or": [
@@ -423,7 +426,7 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
             ],
         })
         axes.append(_axis("Offer in-person sessions", cnt, target))
-    elif fmt == "telehealth":
+    elif fmt == "telehealth_only":
         cnt = await db.therapists.count_documents({
             **base_match,
             "$or": [
@@ -463,13 +466,21 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
         axes.append(_axis(f"Practice {mod}", cnt, max(8, target // 4)))
 
     # ── Insurance ──────────────────────────────────────────────────
-    if req.get("payment_type") in ("insurance", "either") and req.get("insurance_name"):
+    # Only surface this axis as a HARD filter when the patient
+    # explicitly ticked "Hard requirement: only show therapists who
+    # accept this insurance". Otherwise it's a soft preference that
+    # shouldn't be blamed when the pool is small.
+    if (
+        req.get("payment_type") in ("insurance", "either")
+        and req.get("insurance_name")
+    ):
         ins = req["insurance_name"]
         cnt = await db.therapists.count_documents({
             **base_match,
             "insurance_accepted": ins,
         })
-        axes.append(_axis(f"Accept {ins}", cnt, max(8, target // 3)))
+        hard_suffix = " (HARD)" if req.get("insurance_strict") else ""
+        axes.append(_axis(f"Accept {ins}{hard_suffix}", cnt, max(8, target // 3)))
 
     # ── Cash budget ────────────────────────────────────────────────
     if req.get("payment_type") in ("cash", "either") and req.get("budget"):
@@ -486,13 +497,59 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
             cnt, max(15, target // 2),
         ))
 
-    # ── Gender preference (only if patient required it) ────────────
+    # ── Gender preference (only when patient required it) ──────────
     if req.get("gender_required") and req.get("gender_preference"):
         gp = req["gender_preference"]
         cnt = await db.therapists.count_documents({
             **base_match, "gender": gp,
         })
-        axes.append(_axis(f"Identify as {gp}", cnt, max(8, target // 4)))
+        axes.append(_axis(f"Identify as {gp} (HARD)", cnt, max(8, target // 4)))
+
+    # ── Preferred language (only when patient required it) ─────────
+    # This was the missing axis that made the Mandarin-HARD request look
+    # unexplained in the admin "why 0 matches" dialog. When the pool
+    # collapses because nobody speaks the requested language, the admin
+    # needs to see that explicitly so they can recruit or advise the
+    # patient to drop the HARD flag.
+    lang = req.get("preferred_language")
+    if req.get("language_strict") and lang and lang != "English":
+        cnt = await db.therapists.count_documents({
+            **base_match,
+            "languages_spoken": lang,
+        })
+        axes.append(_axis(f"Speak {lang} (HARD)", cnt, max(5, target // 6)))
+
+    # ── Availability windows (only when patient required it) ───────
+    avail = req.get("availability_windows") or []
+    if req.get("availability_strict") and avail and "flexible" not in avail:
+        cnt = await db.therapists.count_documents({
+            **base_match,
+            "availability_windows": {"$in": avail},
+        })
+        pretty = ", ".join(w.replace("_", " ") for w in avail[:3])
+        axes.append(_axis(f"Available {pretty} (HARD)", cnt, max(8, target // 4)))
+
+    # ── Urgency window (only when patient required it) ─────────────
+    urg = req.get("urgency")
+    if req.get("urgency_strict") and urg and urg != "flexible":
+        # Therapists signal capacity via `urgency_capacity`. For
+        # stricter urgencies we need the therapist to be MORE ready
+        # (asap requires asap; within_2_3_weeks accepts asap OR
+        # within_2_3_weeks; etc.). Caseload-full therapists never
+        # qualify under a HARD urgency filter.
+        urgency_matches = {
+            "asap": ["asap"],
+            "within_2_3_weeks": ["asap", "within_2_3_weeks"],
+            "within_month": ["asap", "within_2_3_weeks", "within_month"],
+        }.get(urg, [urg])
+        cnt = await db.therapists.count_documents({
+            **base_match,
+            "urgency_capacity": {"$in": urgency_matches},
+        })
+        axes.append(_axis(
+            f"Start within {urg.replace('_', ' ')} (HARD)",
+            cnt, max(10, target // 3),
+        ))
 
     summary = (
         f"Only {notified_count} therapist(s) were notified — target was "

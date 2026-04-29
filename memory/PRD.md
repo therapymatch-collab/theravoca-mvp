@@ -57,6 +57,15 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+### iter-98 — Admin match-gap panel surfaces every HARD filter (Feb 7, 2026)
+- The admin "Why we couldn't fill 30 matches" funnel in request detail was missing three critical hard filters that the patient sets as HARD:
+  - **Preferred language (HARD)** — when `language_strict=true` & `preferred_language≠English`. This was the user's specific complaint on the Mandarin-HARD request (only 3 therapists in the pool speak Mandarin).
+  - **Availability windows (HARD)** — when `availability_strict=true`. Counts therapists whose `availability_windows` overlap the requested slots.
+  - **Urgency window (HARD)** — when `urgency_strict=true` & `urgency≠flexible`. Uses a capacity-matching ladder so "asap" requires `urgency_capacity in ['asap']` while "within_month" accepts "asap | within_2_3_weeks | within_month".
+- **Format filter slug bug**: the funnel compared `modality_preference == "in_person"` / `"telehealth"` but the actual patient enum values are `in_person_only` / `telehealth_only`. Fixed — now the Format axis is HARD only for the two `_only` variants.
+- **Insurance axis** gets a `(HARD)` suffix in its label when `insurance_strict=true` to match the patient-side HARD badge.
+- Verified live via `curl /api/admin/requests/<mandarin-request-id>` against the user's actual problematic request: the three new axes now surface correctly; the "Start within asap (HARD)" axis returns `count=0 severity=critical`, which explains exactly why the pool collapsed.
+
 ### iter-97 — Landing "How it works" copy fix + Directory-source scrub (Feb 7, 2026)
 - **Root-cause fix for Landing "How it works" copy drift**: admin editor showed one set of "How it works" fallback strings (e.g. "Tell us what you need") while live site rendered different hardcoded fallbacks in `Landing.jsx` (e.g. "Tap what fits"). Aligned all 5 `landing.how.*` fallback strings in `Landing.jsx` to match the `SiteCopyAdminPanel.jsx` registered seed values verbatim — admins now see the same copy live that they see in the editor.
 - **Scrubbed directory-source attribution from all USER-FACING text** (so Psychology Today / PT / state-board / Yelp / Healthgrades / LinkedIn aren't named as recruiting channels we pull from):
