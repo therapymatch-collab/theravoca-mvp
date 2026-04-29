@@ -1774,3 +1774,40 @@ User reported request `therapymatch+232323@gmail.com` (id `721c39e7…`) had:
 - ✅ 7/7 mobile smoke tests pass
 - ✅ Verified score variation on user's exact request (100, 97, 96, 95, 91, 90, …)
 - ✅ Backend lint green
+
+
+## Iter-78 (Apr 29 2026) — Admin-tunable IP rate limit + PatientResults field-name fix + wider admin search + Site Copy hide/delete
+
+User-reported issues from preview screenshots (referrals from `therapymatch+232323@gmail.com`):
+1. **"Too many submissions from this network in the last hour"** blocking re-test → make per-IP cap admin-configurable (default raised 3 → 8/hr).
+2. **PatientResults page "What you asked for" panel showed all "—"** for AGE / ZIP / FORMAT / INSURANCE / CASH-BUDGET despite data being present in DB → frontend was reading wrong field names.
+3. **Admin search box too narrow** — "psychologist" should surface every PsyD/PhD provider, not just exact-string matches.
+4. **Site copy editor** had no way to hide a section (e.g., FAQ subhead) or delete a custom key once added.
+
+### Backend
+- `routes/admin.py` — `/admin/intake-rate-limit` GET/PUT now accept and persist `max_per_ip_per_hour` (1..10000, default 8) alongside the existing per-email window. Backwards compatible: clients that don't send the new field get the default applied.
+- `routes/patients.py` — `POST /api/requests` now reads `app_config.intake_rate_limit.max_per_ip_per_hour` instead of the hard-coded `3`. Falls back to 8 when no config doc exists.
+- `tests/test_iteration69_priorities_botdef.py` — updated `test_ip_rate_limit_*` to expect 9th submission = 429 (was 4th) to match the new default.
+
+### Frontend
+- `pages/admin/panels/SettingsPanel.jsx` — added "Max submissions per IP per hour" input next to the per-email window. Helper copy explains the network-level cap and how to tune for clinic / family wifi.
+- `pages/PatientResults.jsx::YourReferralPanel` — wired to the actual DB field names with backwards-compat fallbacks: `location_zip` (was `zip_code`), `modality_preference` (was `session_format`), `payment_type==insurance` ⇒ `insurance_name` (was `insurance_plans` array), `budget` (was `budget_per_session`), `prior_therapy` (string) (was `previous_therapy` boolean), `client_age || age_group` for the Age display.
+- `pages/AdminDashboard.jsx` — `filteredAllTherapists` and `filteredPendingTherapists` widened to search across **every** text-bearing field on a therapist record: name, email, phone, bio, credential_type **+ humanized credentialLabel** (so "psychologist" matches "PsyD"/"PhD"), license, modalities, primary/secondary specialties, general_treats, style_tags, research_summary, languages, insurance, office addresses, source, website, telehealth/in-person flags, sliding scale, free consult, cash rate, years experience.
+- `pages/admin/panels/SiteCopyAdminPanel.jsx` — added per-row "Hide on site" button that saves an empty-string override (distinct from "Reset" which deletes back to default). Surfaces a new "Custom keys" section listing every override whose key isn't in `SEED_KEYS`, each with a Delete button.
+- `lib/useSiteCopy.js` — resolver now honors empty-string overrides ("Hide on site" actually hides the public text). `Object.prototype.hasOwnProperty.call(map, key)` short-circuits the fallback when an explicit empty value is saved.
+
+### Files changed
+- `/app/backend/routes/admin.py`
+- `/app/backend/routes/patients.py`
+- `/app/backend/tests/test_iteration69_priorities_botdef.py`
+- `/app/frontend/src/pages/admin/panels/SettingsPanel.jsx`
+- `/app/frontend/src/pages/admin/panels/SiteCopyAdminPanel.jsx`
+- `/app/frontend/src/pages/PatientResults.jsx`
+- `/app/frontend/src/pages/AdminDashboard.jsx`
+- `/app/frontend/src/lib/useSiteCopy.js`
+
+### Tests
+- ✅ Iter-33 testing agent suite — 7/7 backend pass, 4/4 frontend feature areas verified e2e
+- ✅ Self-verified PatientResults: API now returns `Age teen · ID · telehealth_only · concerns: anxiety` for the `+232323@gmail.com` referral (was previously just "ID"), Insurance resolves to "Aetna", Therapy history to "First-time"
+- ✅ Admin search "psychologist" narrows 125 → 47 (credential humanization match), "aetna" narrows similarly, "Boise" / "telehealth" also narrow correctly
+- ⚠️ Pre-existing: `tests/test_iteration69_priorities_botdef.py::test_ip_rate_limit_9th_is_429` is blocked by strict Turnstile (iter-71); /api/requests POST can't be reached server-side without a valid token. Code path verified by review + Iter-33 admin-config tests.
