@@ -2894,7 +2894,13 @@ function AdminTabsBar({
               className="fixed inset-0 z-10 cursor-default"
             />
             <div
-              className="absolute right-0 z-20 mt-1 w-64 bg-white border border-[#E8E5DF] rounded-xl shadow-lg py-1"
+              // On mobile (up to sm), anchor the menu to the LEFT edge
+              // of the trigger so the 256-px panel doesn't clip off the
+              // left edge of a 375-px viewport. From sm+ we keep the
+              // historical right-aligned position. The width also
+              // clamps to the viewport so very narrow screens still
+              // show every menu item.
+              className="absolute left-0 sm:left-auto sm:right-0 z-20 mt-1 w-[min(16rem,calc(100vw-1.5rem))] sm:w-64 bg-white border border-[#E8E5DF] rounded-xl shadow-lg py-1"
               data-testid="tab-more-menu"
             >
               {SECONDARY.map((entry) => (

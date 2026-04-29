@@ -57,6 +57,17 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+### iter-96 — HARD badges in patient panel + mobile Turnstile hardening + admin dropdown clip fix (Feb 7, 2026)
+- **Patient "What you asked for" expanded panel now shows HARD badges**: `RefDetail` accepts a `hard` prop that renders a dusty-rose container + `HARD` chip + a legend row at the top. Always-hard (Age, State, Concerns) plus patient-toggleable hards (Format=in_person_only, Insurance when insurance_strict, Urgency when urgency_strict, Availability when availability_strict, Preferred gender when gender_required+picked, Preferred language when language_strict+not-English) all flagged. Deep-match P1/P2/P3 section still renders below when deep_match_opt_in.
+- **Mobile Turnstile crash fix** ("security error" on submit): 3 bundled changes:
+  - `refresh-expired: 'auto'` + `retry: 'auto'` + `timeout-callback` on both IntakeForm and TherapistSignup widgets so mobile tokens auto-refresh during long form fills.
+  - Backend `turnstile_service.verify_token` stopped forwarding `remoteip` to Cloudflare siteverify — avoids false-negatives when the observed IP drifts between issue and siteverify (mobile wifi↔cellular / CGNAT rotation).
+  - Preflight check before POST: if token missing, show a "scroll down and complete the security check" toast + auto-scroll to widget (no wasted backend round-trip).
+  - Catch-400 pattern: when backend returns "Security check failed", reset the widget in place so the user can retry without reloading / losing form state.
+  - Applied symmetrically to both `IntakeForm.jsx` and `TherapistSignup.jsx` via `resetTurnstile()` helpers.
+- **Admin "More" dropdown clip fix** (discovered during iter-95 testing): on 375px mobile, the `absolute right-0` dropdown was rendering at x=-150 (150px off-screen left). Swapped to `absolute left-0 sm:left-auto sm:right-0` + `w-[min(16rem,calc(100vw-1.5rem))]` so it anchors to the left of the trigger on mobile and keeps the desktop right-alignment. Verified live at 375px: menu bbox now x=20 → x=276, fully on-screen.
+- Verified: full mobile pass via testing agent (iteration_95.json, 9/10 initially, now 10/10 after dropdown fix); 4/4 new pytest tests pass in `test_iteration95_hard_chips_turnstile.py`; React error #31 regression test passes (axios interceptor still flattens Pydantic arrays).
+
 ### iter-95 — Mobile signup crash fix + patient deep-answers panel + hero bullet move (Feb 7, 2026)
 - **Fixed mobile therapist signup crash** ("Objects are not valid as a React child (found: object with keys {type, loc, msg, input, ctx, url})"): FastAPI 422 responses return `detail` as an array of Pydantic error objects; when `toast.error(err.response.data.detail)` hit that, React threw error #31. Added `_normaliseDetail()` + `_installErrorNormaliser()` interceptor in `/app/frontend/src/lib/api.js` that flattens the array to a human-readable string like `"email: Field required; license_number: Field required"`. Installed on all 3 axios factories (`api`, `sessionClient()`, `adminClient()`) — zero-touch fix covering all 95 existing callsites.
 - **Patient dashboard deep-match panel**: expanded "What you asked for" section on `/results/:id` now renders a dusty-rose `patient-request-deep-section` block with P1 (relationship style), P2 (way of working), P3 (contextual resonance) when `request.deep_match_opt_in=true`. Slugs mapped to human labels via `P1_OPTIONS`/`P2_OPTIONS`; empty P3 shows italic "Skipped — that's okay."
