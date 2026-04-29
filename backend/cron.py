@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import os
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import stripe_service
 from deps import (
@@ -383,6 +384,24 @@ async def _run_stale_profile_nag() -> dict[str, int]:
     return {"sent": count}
 
 
+async def _run_auto_recruit_weekly() -> dict[str, Any]:
+    """Weekly self-healing recruiter cycle — runs simulator, builds plan,
+    calls gap recruiter, stamps drafts for admin approval. Skipped if
+    disabled in config or if the target zero-pool rate is already met."""
+    try:
+        import auto_recruit
+        doc = await auto_recruit.run_cycle(db, manual_trigger=False)
+        return {
+            "status": doc.get("status"),
+            "cycle_id": doc.get("id"),
+            "zero_pool_rate_pct_before": doc.get("zero_pool_rate_pct_before"),
+            "drafts_created": doc.get("drafts_created", 0),
+        }
+    except Exception as e:
+        logger.warning("Weekly auto-recruit cycle failed: %s", e)
+        return {"error": str(e)}
+
+
 async def _daily_loop() -> None:
     while True:
         try:
@@ -405,6 +424,14 @@ async def _daily_loop() -> None:
                     t_follow = await _run_therapist_2w_followups()
                     stale = await _run_stale_profile_nag()
                     recruit = await _run_gap_recruitment()
+                    # Weekly self-healing auto-recruit cycle (Mondays).
+                    # _run_auto_recruit_weekly() is itself a no-op on non-
+                    # Monday days so we can just invoke it unconditionally
+                    # and let it self-gate. Internally it also early-exits
+                    # when zero-pool rate is already <= target.
+                    auto_rec = None
+                    if local.weekday() == 0:  # Monday
+                        auto_rec = await _run_auto_recruit_weekly()
                     await db.cron_runs.update_one(
                         {"name": "daily_tasks", "date": today_iso},
                         {"$set": {
@@ -414,6 +441,7 @@ async def _daily_loop() -> None:
                             "therapist_followups": t_follow,
                             "stale_profile_nag": stale,
                             "gap_recruit": recruit,
+                            "auto_recruit_weekly": auto_rec,
                         }},
                     )
         except Exception as e:

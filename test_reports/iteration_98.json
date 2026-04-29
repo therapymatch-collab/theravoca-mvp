@@ -1,0 +1,35 @@
+{
+  "summary": "Auto-recruit closed-loop (Simulator + Coverage Gaps + Gap Recruiter + Admin Approval) tested end-to-end. Backend: 12/12 pytest cases pass — status seeds defaults, config merge-patch whitelists keys, plan preview returns sim_run_id+pool_size+plan with valid rows, full cycle persists with status='ok' + drafts_created=10 + sim_run_id, history endpoint lists the cycle, approve-by-cycle_id flips needs_approval and 400s when neither cycle_id nor draft_ids supplied, paused_target_reached fires when target=100, status='skipped' with reason='disabled' when enabled=false, cron.py imports _run_auto_recruit_weekly and _daily_loop gates it on weekday()==0. Frontend desktop (1920x1080): auto-recruit-section renders at top of Matching simulator panel with all 4 status pills (Loop=Enabled, Mode=Dry-run, Last cycle=Apr29 11:32 'Paused — target reached', Drafts awaiting=10), Preview plan returns 6 ranked rows (HIGH Client type 68.4%, HIGH Age group/child need+8, HIGH Clinical specialty/school_academic_stress need+3, etc.), Policy & safety rails expand and target_zero_pool_pct persists across edits (5→7→5) with PUT firing on each change, enabled toggle works (true→false→true), approval bar renders '10 drafts awaiting your approval' with both Review drafts and Approve all 10 buttons. Mobile (375x667): section stacks cleanly with NO horizontal overflow (scrollWidth==viewport==375). The base SimulatorPanel + 'Recent cycles (4)' history + lower 'Matching Outcome Simulator' all still render (regression OK).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration98_auto_recruit.py",
+    "/app/test_reports/pytest/iter98_results.xml"
+  ],
+  "action_items": [
+    "(MINOR) Several non-auto-recruit admin endpoints log 403 in console after Master-password login (the API client may not be passing X-Admin-Password on every refetch). Not an auto-recruit bug — flagging because it shows up across the More tab navigation. Likely pre-existing; please verify session cookie is being honored consistently.",
+    "(NIT) Plan preview's 'sim 0% of exclusions' rows for medium-priority items (e.g. Geography/Pocatello, Geography/Coeur d'Alene) display correctly but might benefit from suppressing the 'sim 0%' label when sim_pct is 0 — purely cosmetic, optional."
+  ],
+  "critical_code_review_comments": [
+    "auto_recruit.run_cycle() identifies 'new drafts' by `created_at >= started_at - 1s AND no auto_recruit_cycle_id`. If gap_recruiter ever batches drafts created BEFORE started_at (or runs concurrently), some drafts could escape stamping. Current behavior is fine for sequential weekly runs but consider using a draft-id list returned from gap_recruiter for stronger correlation.",
+    "compute_plan_preview / run_cycle each kick off a fresh 200-request simulator. Two back-to-back POSTs (Preview then Run) re-do all the work. Acceptable today (~1s), but a short-TTL cache of the latest sim report by config-hash would halve the perceived latency once the pool grows.",
+    "auto_recruit_config singleton uses upsert on every update_config call; that's safe, but get_config inserts DEFAULT_CONFIG on first read without `upsert=True`, so a race between two first-readers could double-insert. Low risk in practice (singleton _id collision will surface as duplicate-key error)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration98_auto_recruit.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin Master password admin123! (from /app/memory/test_credentials.md). Backend pytest uses X-Admin-Password header. Test fixture restores config to {target=5, enabled=true, dry_run=true, require_approval=true, max_drafts=10} on teardown.",
+  "seed_data_creation": "test_run_cycle_returns_doc creates a real auto_recruit_cycles doc with 10 stamped recruit_drafts. test_paused_when_target_reached and test_skipped_when_disabled also persist cycle docs (status=paused/skipped). test_approve_by_cycle_id flips needs_approval on those drafts. No teardown of cycle docs is performed (intentional — admin cycle history should remain).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Auto-recruit endpoints live at /api/admin/auto-recruit/{status|config|plan|run|cycles|approve}. UI panel mounts at top of SimulatorPanel (More → Matching simulator → testid='auto-recruit-section'). All testids from the review request are wired correctly (auto-recruit-status-enabled, auto-recruit-status-pending, auto-recruit-preview-btn, auto-recruit-run-btn, auto-recruit-policy-toggle, auto-recruit-policy-{enabled,target,drafts,send-cap-email,approval}, auto-recruit-approval-bar, auto-recruit-review-btn, auto-recruit-approve-btn, auto-recruit-plan-preview, auto-recruit-plan-row-{i}, auto-recruit-cycles-history). Coverage gap panel testid is 'coverage-gap-panel' (verified). Gap recruiter produces full 10 drafts in this env (Claude + Google Places integrations are healthy as of this run).",
+  "rca of the issue": "N/A — no bugs found. Live cycle ran end-to-end: zero_pool_rate_pct_before=29.5% > target=5%, plan built with 6 prioritized rows, gap_recruiter produced 10 drafts, all 10 stamped with auto_recruit_cycle_id + needs_approval=True + auto_generated=True, cycle persisted with status='ok'. Subsequent run with target=100 correctly returned status='paused_target_reached' with drafts_created=0; with enabled=false returned status='skipped' reason mentioning 'disabled'. Cron integration confirmed via inspect.getsource: _daily_loop calls _run_auto_recruit_weekly() only when local.weekday()==0 (Monday)."
+}

@@ -13,6 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { StatBox } from "./_panelShared";
+import AutoRecruitSection from "./AutoRecruitSection";
 
 // ─── Matching Outcome Simulator ─────────────────────────────────────────────
 // Admin-only audit tool. Generates synthetic patient requests, runs them
@@ -520,6 +521,9 @@ export default function SimulatorPanel({ client, setTab }) {
 
   return (
     <div className="mt-6 space-y-6" data-testid="simulator-panel">
+      {/* ── Auto-recruit closed-loop section ─────────────────── */}
+      <AutoRecruitSection client={client} setTab={setTab} />
+
       {/* ── Header + controls ───────────────────────────── */}
       <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-5">
         <div className="flex items-start gap-3 flex-wrap">

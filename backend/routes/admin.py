@@ -2962,5 +2962,87 @@ async def simulator_delete_run(
     return {"ok": True, "deleted": deleted}
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Auto-recruit — closed-loop recruiter (Simulator + Coverage Gaps +
+# Gap Recruiter). Pre-launch: dry-run + admin-approval-gated. See
+# backend/auto_recruit.py for the orchestration logic.
+# ──────────────────────────────────────────────────────────────────────
+
+
+@router.get("/admin/auto-recruit/status")
+async def auto_recruit_status(_: None = Depends(require_admin)):
+    """Returns current policy, last cycle, and pending-approval count.
+    Used by the admin panel header to render the live status card."""
+    import auto_recruit
+    cfg = await auto_recruit.get_config(db)
+    last_id = cfg.get("last_cycle_id")
+    last_cycle = None
+    if last_id:
+        last_cycle = await db.auto_recruit_cycles.find_one(
+            {"id": last_id}, {"_id": 0},
+        )
+    pending = await auto_recruit.count_pending_approval(db)
+    return {
+        "config": cfg,
+        "last_cycle": last_cycle,
+        "pending_approval_count": pending,
+    }
+
+
+@router.put("/admin/auto-recruit/config")
+async def auto_recruit_update_config(
+    payload: dict, _: None = Depends(require_admin),
+):
+    """Merge-patch the singleton config. Only known keys are accepted."""
+    import auto_recruit
+    cfg = await auto_recruit.update_config(db, payload)
+    return {"ok": True, "config": cfg}
+
+
+@router.post("/admin/auto-recruit/plan")
+async def auto_recruit_plan(_: None = Depends(require_admin)):
+    """Preview the plan WITHOUT creating drafts — runs a fresh simulator
+    + coverage-gap analysis and returns the would-be recruit targets."""
+    import auto_recruit
+    return await auto_recruit.compute_plan_preview(db)
+
+
+@router.post("/admin/auto-recruit/run")
+async def auto_recruit_run(_: None = Depends(require_admin)):
+    """Execute one full cycle — runs sim, builds plan, calls gap
+    recruiter, stamps new drafts with cycle id + needs_approval=True.
+    Never sends real email (dry_run enforced by config)."""
+    import auto_recruit
+    cycle = await auto_recruit.run_cycle(db, manual_trigger=True)
+    return cycle
+
+
+@router.get("/admin/auto-recruit/cycles")
+async def auto_recruit_list_cycles(
+    _: None = Depends(require_admin), limit: int = 30,
+):
+    """Recent cycles history (lightweight — omits per-draft detail)."""
+    import auto_recruit
+    return {"items": await auto_recruit.list_cycles(db, limit=limit)}
+
+
+@router.post("/admin/auto-recruit/approve")
+async def auto_recruit_approve(
+    payload: dict, _: None = Depends(require_admin),
+):
+    """Clear `needs_approval` on a batch of drafts. Accepts either
+    `{cycle_id}` to approve an entire cycle's drafts, or `{draft_ids: [...]}`
+    for a targeted approval. Returns count approved."""
+    import auto_recruit
+    cycle_id = payload.get("cycle_id")
+    draft_ids = payload.get("draft_ids") or None
+    if not cycle_id and not draft_ids:
+        raise HTTPException(400, "cycle_id or draft_ids required")
+    approved = await auto_recruit.approve_batch(
+        db, cycle_id=cycle_id, draft_ids=draft_ids,
+    )
+    return {"ok": True, "approved": approved}
+
+
 # Suppress unused-import warnings on logger (kept for future logging)
 void = logger
