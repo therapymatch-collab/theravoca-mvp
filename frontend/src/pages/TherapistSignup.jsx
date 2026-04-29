@@ -1,111 +1,36 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { CheckCircle2, ArrowRight, X, Plus, Camera, Sparkles } from "lucide-react";
+import { CheckCircle2, ArrowRight, X, Sparkles } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import useFaqs from "@/lib/useFaqs";
 import useSiteCopy from "@/lib/useSiteCopy";
-import { formatUsPhone } from "@/lib/phone";
 import credentialLabel from "@/lib/credentialLabel";
 import { api } from "@/lib/api";
-import { IDAHO_INSURERS } from "@/lib/insurers";
-import { ADDITIONAL_LANGUAGES } from "@/lib/languages";
-import { imageToDataUrl } from "@/lib/image";
 import { DEFAULT_T1_ORDER, T1_OPTIONS, T3_OPTIONS, T4_OPTIONS } from "@/pages/therapist/deepMatchOptions";
 import TherapistDeepMatchStep from "@/pages/therapist/TherapistDeepMatchStep";
-import {
-  Group,
-  Field,
-  Req,
-  PillRow,
-  Tags,
-  SummaryRow,
-} from "@/pages/therapist/TherapistSignupUI";
-import { Input } from "@/components/ui/input";
+import { SummaryRow } from "@/pages/therapist/TherapistSignupUI";
+import Step1Basics from "@/pages/therapist/steps/Step1Basics";
+import Step2License from "@/pages/therapist/steps/Step2License";
+import Step3WhoYouSee from "@/pages/therapist/steps/Step3WhoYouSee";
+import Step4Specialties from "@/pages/therapist/steps/Step4Specialties";
+import Step5Format from "@/pages/therapist/steps/Step5Format";
+import Step6Insurance from "@/pages/therapist/steps/Step6Insurance";
+import Step7Style from "@/pages/therapist/steps/Step7Style";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 
-const CLIENT_TYPES = [
-  { v: "individual", l: "Individual" },
-  { v: "couples", l: "Couples" },
-  { v: "family", l: "Family" },
-  { v: "group", l: "Group" },
-];
-const AGE_GROUPS = [
-  { v: "child", l: "Child (under 13)" },
-  { v: "teen", l: "Teen (13–17)" },
-  { v: "young_adult", l: "Young adult (18–25)" },
-  { v: "adult", l: "Adult (26–64)" },
-  { v: "older_adult", l: "Older adult (65+)" },
-];
-const ISSUES = [
-  { v: "anxiety", l: "Anxiety" },
-  { v: "depression", l: "Depression" },
-  { v: "ocd", l: "OCD" },
-  { v: "adhd", l: "ADHD" },
-  { v: "trauma_ptsd", l: "Trauma / PTSD" },
-  { v: "relationship_issues", l: "Relationship issues" },
-  { v: "life_transitions", l: "Life transitions" },
-  { v: "parenting_family", l: "Parenting / family conflict" },
-  { v: "substance_use", l: "Substance use" },
-  { v: "eating_concerns", l: "Eating concerns" },
-  { v: "autism_neurodivergence", l: "Autism / neurodivergence" },
-  { v: "school_academic_stress", l: "School / academic stress" },
-];
-const MODALITIES = [
-  "CBT", "DBT", "EMDR", "Mindfulness-Based", "Psychodynamic", "ACT",
-  "Solution-Focused", "Gottman", "IFS", "Somatic Experiencing", "Person-Centered",
-];
-const CREDENTIAL_TYPES = [
-  { v: "psychologist", l: "Psychologist (PhD / PsyD)" },
-  { v: "lcsw", l: "Licensed Clinical Social Worker (LCSW)" },
-  { v: "lpc", l: "Licensed Professional Counselor (LPC / LCPC / LPCC)" },
-  { v: "lmft", l: "Licensed Marriage & Family Therapist (LMFT)" },
-  { v: "lmhc", l: "Licensed Mental Health Counselor (LMHC)" },
-  { v: "psychiatrist", l: "Psychiatrist (MD)" },
-  { v: "other", l: "Other" },
-];
-const AVAILABILITY = [
-  { v: "weekday_morning", l: "Weekday mornings" },
-  { v: "weekday_afternoon", l: "Weekday afternoons" },
-  { v: "weekday_evening", l: "Weekday evenings" },
-  { v: "weekend_morning", l: "Weekend mornings" },
-  { v: "weekend_afternoon", l: "Weekend afternoons" },
-];
-const URGENCY_CAPACITIES = [
-  { v: "asap", l: "ASAP — I can take new clients this week" },
-  { v: "within_2_3_weeks", l: "Within 2–3 weeks" },
-  { v: "within_month", l: "Within a month" },
-  { v: "full", l: "Currently full" },
-];
-const STYLE_TAGS = [
-  { v: "structured", l: "Structured / skills-based" },
-  { v: "warm_supportive", l: "Warm & supportive" },
-  { v: "direct_practical", l: "Direct & practical" },
-  { v: "trauma_informed", l: "Trauma-informed" },
-  { v: "insight_oriented", l: "Insight-oriented" },
-  { v: "faith_informed", l: "Faith-informed" },
-  { v: "culturally_responsive", l: "Culturally responsive" },
-  { v: "lgbtq_affirming", l: "LGBTQ+ affirming" },
-];
-const MODALITY_OFFERINGS = [
-  { v: "telehealth", l: "Telehealth only" },
-  { v: "in_person", l: "In-person only" },
-  { v: "both", l: "Both telehealth and in-person" },
-];
-const GENDERS = [
-  { v: "female", l: "Female" },
-  { v: "male", l: "Male" },
-  { v: "nonbinary", l: "Nonbinary" },
-];
-
+// Note: CLIENT_TYPES / AGE_GROUPS / ISSUES / MODALITIES / CREDENTIAL_TYPES
+// / AVAILABILITY / URGENCY_CAPACITIES / STYLE_TAGS / MODALITY_OFFERINGS
+// / GENDERS option arrays now live in
+// `@/pages/therapist/steps/signupOptions.js` — imported by the Step{1..7}
+// components rather than this orchestration file.
+//
 // Deep-match T1/T3/T4 options live in
 // `@/pages/therapist/deepMatchOptions` so this file + the portal-edit
 // page share one source of truth.
@@ -1066,683 +991,57 @@ export default function TherapistSignup() {
               </div>
 
               <div className="mt-8 space-y-7">
-                {step === 1 && (<>
-                <Group title="Basics">
-                  <Field label="Profile photo (optional)">                    <div className="flex items-center gap-4">
-                      <div className="relative w-20 h-20 rounded-full bg-[#FDFBF7] border border-[#E8E5DF] overflow-hidden flex items-center justify-center">
-                        {data.profile_picture ? (
-                          <img
-                            src={data.profile_picture}
-                            alt="Profile preview"
-                            className="w-full h-full object-cover"
-                            data-testid="signup-photo-preview"
-                          />
-                        ) : (
-                          <Camera size={22} className="text-[#6D6A65]" />
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <label
-                          className="tv-btn-secondary !py-2 !px-4 text-sm cursor-pointer inline-flex"
-                          data-testid="signup-photo-label"
-                        >
-                          {data.profile_picture ? "Replace" : "Upload"}
-                          <input
-                            type="file"
-                            accept="image/png,image/jpeg,image/webp"
-                            className="hidden"
-                            data-testid="signup-photo-input"
-                            onChange={async (e) => {
-                              const f = e.target.files?.[0];
-                              if (!f) return;
-                              try {
-                                const url = await imageToDataUrl(f);
-                                set("profile_picture", url);
-                              } catch (err) {
-                                toast.error(err.message || "Couldn't process image");
-                              }
-                              e.target.value = "";
-                            }}
-                          />
-                        </label>
-                        {data.profile_picture && (
-                          <button
-                            type="button"
-                            className="ml-3 text-sm text-[#D45D5D] hover:underline"
-                            onClick={() => set("profile_picture", null)}
-                            data-testid="signup-photo-remove"
-                          >
-                            Remove
-                          </button>
-                        )}
-                        <p className="text-xs text-[#6D6A65] mt-1.5">
-                          A square headshot works best. Resized to 256×256, &lt;500KB.
-                        </p>
-                      </div>
-                    </div>
-                  </Field>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Field
-                      label={<>Full name + degree <Req /></>}
-                      hint="e.g. Sarah Lin, LCSW"
-                    >
-                      <Input
-                        value={data.name}
-                        onChange={(e) => set("name", e.target.value)}
-                        placeholder="Sarah Lin, LCSW"
-                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                        data-testid="signup-name"
-                      />
-                    </Field>
-                    <Field label={<>Credential type <Req /></>}>
-                      <select
-                        value={data.credential_type}
-                        onChange={(e) => set("credential_type", e.target.value)}
-                        className="w-full bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5 text-sm"
-                        data-testid="signup-credential-type"
-                      >
-                        <option value="">Select credential type…</option>
-                        {CREDENTIAL_TYPES.map((c) => (
-                          <option key={c.v} value={c.v}>{c.l}</option>
-                        ))}
-                      </select>
-                    </Field>
-                    <Field label={<>Email <Req /></>}>
-                      <Input
-                        type="email"
-                        value={data.email}
-                        onChange={(e) => set("email", e.target.value)}
-                        placeholder="you@practice.com"
-                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                        data-testid="signup-email"
-                      />
-                    </Field>
-                    <Field
-                      label="Website (public)"
-                      hint="We'll auto-prefix https:// and check the link works."
-                    >
-                      <Input
-                        type="url"
-                        value={data.website}
-                        onChange={(e) => {
-                          set("website", e.target.value);
-                          setWebsiteError("");
-                        }}
-                        onBlur={() => {
-                          if (data.website && !websiteIsValid(data.website)) {
-                            setWebsiteError(
-                              "That doesn't look like a valid URL — try e.g. yourpractice.com",
-                            );
-                          }
-                        }}
-                        placeholder="yourpractice.com"
-                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                        data-testid="signup-website"
-                      />
-                      {websiteError && (
-                        <p
-                          className="mt-1.5 text-xs text-[#D45D5D]"
-                          data-testid="signup-website-error"
-                        >
-                          {websiteError}
-                        </p>
-                      )}
-                    </Field>
-                    <Field
-                      label={<>Phone (private, alerts)</>}
-                      hint="Optional — for SMS alerts when new referrals match. Never shown to patients."
-                    >
-                      <Input
-                        type="tel"
-                        inputMode="tel"
-                        maxLength={12}
-                        value={data.phone_alert || data.phone}
-                        onChange={(e) =>
-                          set("phone_alert", formatUsPhone(e.target.value))
-                        }
-                        placeholder="208-555-0123"
-                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                        data-testid="signup-phone-alert"
-                      />
-                    </Field>
-                    <Field
-                      label={<>Office phone (public) <Req /></>}
-                      hint="Patients see this on your profile."
-                    >
-                      <Input
-                        type="tel"
-                        inputMode="tel"
-                        maxLength={12}
-                        value={data.office_phone}
-                        onChange={(e) =>
-                          set("office_phone", formatUsPhone(e.target.value))
-                        }
-                        placeholder="208-555-0150"
-                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                        data-testid="signup-office-phone"
-                      />
-                    </Field>
-                  </div>
-                  <Field label={<>Gender <Req /></>} hint="Used only when patients have a stated preference.">
-                    <PillRow
-                      items={GENDERS}
-                      selected={[data.gender]}
-                      onSelect={(v) => set("gender", v)}
-                      testid="signup-gender"
-                    />
-                  </Field>
-                </Group>
-                </>)}
-
-                {step === 2 && (<>
-                <Group
-                  title="License & verification"
-                  hint="We verify every therapist's license before they go live."
-                >
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field
-                      label={<>License state <Req /></>}
-                      hint="We're currently live in Idaho only — multi-state coming soon."
-                    >
-                      <select
-                        value={(data.licensed_states && data.licensed_states[0]) || "ID"}
-                        onChange={(e) => set("licensed_states", [e.target.value])}
-                        className="w-full bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5 text-sm"
-                        data-testid="signup-license-state"
-                      >
-                        <option value="ID">Idaho (ID)</option>
-                      </select>
-                    </Field>                    <Field label={<>License number <Req /></>}>
-                      <Input
-                        value={data.license_number}
-                        onChange={(e) => set("license_number", e.target.value)}
-                        placeholder="e.g. LCSW-12345"
-                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                        data-testid="signup-license-number"
-                      />
-                    </Field>
-                  </div>
-                  <Field label={<>License expiration date <Req /></>}>
-                    <Input
-                      type="date"
-                      value={data.license_expires_at || ""}
-                      onChange={(e) => set("license_expires_at", e.target.value)}
-                      className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                      data-testid="signup-license-expires"
-                    />
-                  </Field>
-                  <Field
-                    label={<>Upload a photo of your license <Req /></>}
-                    hint="Required so we can manually verify your credentials match. PNG, JPG or PDF. Patients never see this."
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-24 h-16 rounded-lg bg-[#FDFBF7] border border-dashed border-[#E8E5DF] overflow-hidden flex items-center justify-center">
-                        {data.license_picture ? (
-                          <img
-                            src={data.license_picture}
-                            alt="License preview"
-                            className="w-full h-full object-cover"
-                            data-testid="signup-license-preview"
-                          />
-                        ) : (
-                          <Camera size={20} className="text-[#6D6A65]" />
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <label
-                          className="tv-btn-secondary !py-2 !px-4 text-sm cursor-pointer inline-flex"
-                          data-testid="signup-license-label"
-                        >
-                          {data.license_picture ? "Replace" : "Upload"}
-                          <input
-                            type="file"
-                            accept="image/png,image/jpeg,image/webp,application/pdf"
-                            className="hidden"
-                            data-testid="signup-license-input"
-                            onChange={async (e) => {
-                              const f = e.target.files?.[0];
-                              if (!f) return;
-                              try {
-                                const url = await imageToDataUrl(f);
-                                set("license_picture", url);
-                              } catch (err) {
-                                toast.error(err.message || "Couldn't process file");
-                              }
-                              e.target.value = "";
-                            }}
-                          />
-                        </label>
-                        {data.license_picture && (
-                          <button
-                            type="button"
-                            className="ml-3 text-sm text-[#D45D5D] hover:underline"
-                            onClick={() => set("license_picture", null)}
-                            data-testid="signup-license-remove"
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </Field>
-                </Group>
-                </>)}
-
-                {step === 3 && (<>
-                <Group
-                  title="Who do you see?"
-                  hint="Required — patients are pre-filtered by these"
-                >
-                  <Field label={<>Client types <Req /></>}>
-                    <PillRow
-                      items={CLIENT_TYPES}
-                      selected={data.client_types}
-                      onSelect={(v) => toggleArr("client_types", v)}
-                      testid="signup-client-type"
-                    />
-                  </Field>
-                  <Field label={<>Age groups <span className="text-xs text-[#6D6A65] font-normal">(pick up to 3)</span> <Req /></>}>
-                    <PillRow
-                      items={AGE_GROUPS}
-                      selected={data.age_groups}
-                      onSelect={(v) => toggleArr("age_groups", v, 3)}
-                      testid="signup-age-group"
-                    />
-                  </Field>
-                </Group>
-                </>)}
-
-                {step === 4 && (<>
-                <Group
-                  title="Specialties"
-                  hint="Tap an issue, then choose its tier. Higher tier = stronger match score. (At least 1 Primary required.)"
-                >
-                  <div className="space-y-2.5">
-                    {ISSUES.map((iss) => {
-                      const tier = issueTier(iss.v);
-                      const tiersAvail = {
-                        primary: data.primary_specialties.length < 2 || tier === "primary",
-                        secondary:
-                          data.secondary_specialties.length < 3 || tier === "secondary",
-                        general:
-                          data.general_treats.length < 5 || tier === "general",
-                      };
-                      return (
-                        <div
-                          key={iss.v}
-                          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5"
-                          data-testid={`signup-issue-${iss.v}`}
-                        >
-                          <span className="text-sm text-[#2B2A29] sm:flex-1">
-                            {iss.l}
-                          </span>
-                          <div className="flex flex-wrap gap-1">
-                            {[
-                              ["primary", "Primary", "#2D4A3E"],
-                              ["secondary", "Secondary", "#3A5E50"],
-                              ["general", "General", "#6D6A65"],
-                              [null, "—", "#E8E5DF"],
-                            ].map(([t, lbl, color]) => {
-                              const active = tier === t;
-                              const disabled = t && !tiersAvail[t];
-                              return (
-                                <button
-                                  key={lbl}
-                                  type="button"
-                                  disabled={disabled}
-                                  onClick={() => setIssueTier(iss.v, t)}
-                                  data-testid={`signup-issue-${iss.v}-${t || "none"}`}
-                                  className={`text-xs px-2.5 py-1 rounded-md border transition ${
-                                    active
-                                      ? "text-white border-transparent"
-                                      : disabled
-                                        ? "text-[#6D6A65]/40 border-[#E8E5DF] cursor-not-allowed"
-                                        : "text-[#6D6A65] border-[#E8E5DF] hover:border-[#2D4A3E]"
-                                  }`}
-                                  style={active ? { background: color } : {}}
-                                >
-                                  {lbl}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <p className="text-xs text-[#6D6A65] mt-3">
-                    Primary: {data.primary_specialties.length}/2 · Secondary:{" "}
-                    {data.secondary_specialties.length}/3 · General:{" "}
-                    {data.general_treats.length}/5
-                  </p>
-                </Group>
-                </>)}
-
-                {step === 5 && (<>
-                <Group title={<>Modalities you practice (pick 1–6) <Req /></>}>
-                  <div className="flex flex-wrap gap-2">
-                    {MODALITIES.map((m) => {
-                      const active = data.modalities.includes(m);
-                      return (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => toggleArr("modalities", m, 6)}
-                          data-testid={`signup-modality-${m}`}
-                          className={`text-sm px-3.5 py-1.5 rounded-full border transition ${
-                            active
-                              ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
-                              : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
-                          }`}
-                        >
-                          {m}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </Group>
-
-                <Group title="Practice format & availability">
-                  <Field label={<>Where do you see clients? <Req /></>}>
-                    <PillRow
-                      items={MODALITY_OFFERINGS}
-                      selected={[data.modality_offering]}
-                      onSelect={(v) => set("modality_offering", v)}
-                      testid="signup-modality-offering"
-                    />
-                  </Field>
-                  {data.modality_offering !== "telehealth" && (
-                    <Field
-                      label={<>Office addresses (Idaho) <Req /></>}
-                      hint="Patients see these on your profile. We use them to match you within ~30 miles of patient cities/ZIPs."
-                    >
-                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                        <Input
-                          value={officeAddress}
-                          onChange={(e) => setOfficeAddress(e.target.value)}
-                          placeholder="Street address (e.g. 123 W Main St, Suite 200)"
-                          className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl sm:col-span-7"
-                          data-testid="signup-office-street"
-                        />
-                        <Input
-                          value={officeCity}
-                          onChange={(e) => setOfficeCity(e.target.value)}
-                          placeholder="City"
-                          className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl sm:col-span-3"
-                          data-testid="signup-office-city"
-                        />
-                        <Input
-                          value={officeZip}
-                          onChange={(e) => setOfficeZip(e.target.value.replace(/\D/g, "").slice(0, 5))}
-                          placeholder="ZIP"
-                          className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl sm:col-span-2"
-                          data-testid="signup-office-zip"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        className="tv-btn-secondary !py-2 !px-4 text-sm mt-2"
-                        onClick={() => {
-                          const street = officeAddress.trim();
-                          const city = officeCity.trim();
-                          const zip = officeZip.trim();
-                          if (!street || !city || !zip) {
-                            toast.error("Street, city, and ZIP are all required.");
-                            return;
-                          }
-                          const full = `${street}, ${city}, ID ${zip}`;
-                          set("office_addresses", [...data.office_addresses, full]);
-                          // Keep cities in sync for back-compat geocoder
-                          set("office_locations", [...data.office_locations, city]);
-                          setOfficeAddress("");
-                          setOfficeCity("");
-                          setOfficeZip("");
-                        }}
-                        data-testid="signup-office-add"
-                      >
-                        <Plus size={14} className="inline mr-1" /> Add office
-                      </button>
-                      <Tags
-                        items={data.office_addresses}
-                        onRemove={(addr) => {
-                          set(
-                            "office_addresses",
-                            data.office_addresses.filter((x) => x !== addr),
-                          );
-                          // Drop the matching city from office_locations too
-                          const cityFromAddr = addr.split(",")[1]?.trim();
-                          if (cityFromAddr) {
-                            set(
-                              "office_locations",
-                              data.office_locations.filter((c) => c !== cityFromAddr),
-                            );
-                          }
-                        }}
-                      />
-                    </Field>
-                  )}
-                  <Field label={<>Sessions you can offer <Req /></>}>
-                    <PillRow
-                      items={AVAILABILITY}
-                      selected={data.availability_windows}
-                      onSelect={(v) => toggleArr("availability_windows", v)}
-                      testid="signup-availability"
-                    />
-                  </Field>
-                  <Field label="Current caseload">
-                    <PillRow
-                      items={URGENCY_CAPACITIES}
-                      selected={[data.urgency_capacity]}
-                      onSelect={(v) => set("urgency_capacity", v)}
-                      testid="signup-urgency"
-                    />
-                  </Field>
-                </Group>
-                </>)}
-
-                {step === 6 && (<>
-                <Group
-                  title="Insurance accepted (optional)"
-                  hint="Tap any plans you're in-network with — this helps patients on insurance see you. If your plan isn't listed, add it under 'Other'."
-                >
-                  <div className="flex flex-wrap gap-2">
-                    {IDAHO_INSURERS.map((i) => {
-                      const active = data.insurance_accepted.includes(i);
-                      return (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => toggleArr("insurance_accepted", i)}
-                          data-testid={`signup-insurance-${i}`}
-                          className={`text-sm px-3.5 py-1.5 rounded-full border transition ${
-                            active
-                              ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
-                              : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
-                          }`}
-                        >
-                          {i}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-3 flex gap-2 items-end">
-                    <Field label="Other (specify) — added to your accepted list" hint="Comma-separated for multiple plans.">
-                      <Input
-                        value={insuranceOther}
-                        onChange={(e) => setInsuranceOther(e.target.value)}
-                        placeholder="e.g. SelectHealth, IEHP"
-                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                        data-testid="signup-insurance-other"
-                      />
-                    </Field>
-                    <button
-                      type="button"
-                      className="tv-btn-secondary !py-2 !px-4 text-sm shrink-0 mb-px"
-                      onClick={() => {
-                        const parts = insuranceOther
-                          .split(",")
-                          .map((p) => p.trim())
-                          .filter(Boolean);
-                        if (parts.length === 0) return;
-                        const merged = Array.from(
-                          new Set([...data.insurance_accepted, ...parts]),
-                        );
-                        set("insurance_accepted", merged);
-                        setInsuranceOther("");
-                      }}
-                      data-testid="signup-insurance-other-add"
-                    >
-                      <Plus size={14} className="inline mr-1" /> Add
-                    </button>
-                  </div>
-                </Group>
-
-                <Group
-                  title="Languages spoken (beyond English)"
-                  hint="Tap any additional languages you can conduct sessions in. English is implicit — leave everything off if you only see clients in English. Patients searching for non-English-speaking therapists will be matched to you here."
-                >
-                  <div className="flex flex-wrap gap-2">
-                    {ADDITIONAL_LANGUAGES.filter((l) => l !== "Other").map(
-                      (lang) => {
-                        const active = data.languages_spoken.includes(lang);
-                        return (
-                          <button
-                            key={lang}
-                            type="button"
-                            onClick={() => toggleArr("languages_spoken", lang)}
-                            data-testid={`signup-language-${lang.toLowerCase()}`}
-                            className={`text-sm px-3.5 py-1.5 rounded-full border transition ${
-                              active
-                                ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
-                                : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
-                            }`}
-                          >
-                            {lang}
-                          </button>
-                        );
-                      },
-                    )}
-                  </div>
-                  <div className="mt-3 flex gap-2 items-end">
-                    <Field
-                      label="Other (specify)"
-                      hint="Comma-separated. We'll add each entry to your spoken-languages list."
-                    >
-                      <Input
-                        value={data.languages_spoken_other}
-                        onChange={(e) =>
-                          set("languages_spoken_other", e.target.value)
-                        }
-                        placeholder="e.g. French, Hindi, Portuguese"
-                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                        data-testid="signup-language-other"
-                      />
-                    </Field>
-                    <button
-                      type="button"
-                      className="tv-btn-secondary !py-2 !px-4 text-sm shrink-0 mb-px"
-                      onClick={() => {
-                        const parts = (data.languages_spoken_other || "")
-                          .split(",")
-                          .map((p) => p.trim())
-                          .filter(Boolean);
-                        if (parts.length === 0) return;
-                        const merged = Array.from(
-                          new Set([...data.languages_spoken, ...parts]),
-                        );
-                        set("languages_spoken", merged);
-                        set("languages_spoken_other", "");
-                      }}
-                      data-testid="signup-language-other-add"
-                    >
-                      <Plus size={14} className="inline mr-1" /> Add
-                    </button>
-                  </div>
-                </Group>
-
-                <Group title="Rates & experience">
-                  <div className="grid grid-cols-2 gap-4">
-                    <Field label={<>Cash rate per session ($) <Req /></>}>
-                      <Input
-                        type="number"
-                        value={data.cash_rate}
-                        onChange={(e) =>
-                          set("cash_rate", parseInt(e.target.value, 10) || 0)
-                        }
-                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                        data-testid="signup-cash-rate"
-                      />
-                    </Field>
-                    <Field label={<>Years of experience <Req /></>}>
-                      <Input
-                        type="number"
-                        value={data.years_experience}
-                        onChange={(e) =>
-                          set("years_experience", parseInt(e.target.value, 10) || 0)
-                        }
-                        className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                        data-testid="signup-years"
-                      />
-                    </Field>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <label className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-3 cursor-pointer hover:border-[#2D4A3E] transition">
-                      <Checkbox
-                        checked={data.free_consult}
-                        onCheckedChange={(v) => set("free_consult", v)}
-                        className="mt-0.5 border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
-                        data-testid="signup-free-consult"
-                      />
-                      <div>
-                        <div className="text-sm font-medium text-[#2B2A29]">
-                          Free initial consult
-                        </div>
-                        <div className="text-xs text-[#6D6A65]">
-                          Increases match-rate notably
-                        </div>
-                      </div>
-                    </label>
-                    <label className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-3 cursor-pointer hover:border-[#2D4A3E] transition">
-                      <Checkbox
-                        checked={data.sliding_scale}
-                        onCheckedChange={(v) => set("sliding_scale", v)}
-                        className="mt-0.5 border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
-                        data-testid="signup-sliding-scale"
-                      />
-                      <div>
-                        <div className="text-sm font-medium text-[#2B2A29]">
-                          Sliding-scale rates available
-                        </div>
-                        <div className="text-xs text-[#6D6A65]">
-                          Patients with budget constraints will see you
-                        </div>
-                      </div>
-                    </label>
-                  </div>
-                </Group>
-                </>)}
-
-                {step === 7 && (<>
-                <Group title={<>How would you describe your style? <Req /></>}>
-                  <PillRow
-                    items={STYLE_TAGS}
-                    selected={data.style_tags}
-                    onSelect={(v) => toggleArr("style_tags", v)}
-                    testid="signup-style"
+                {step === 1 && (
+                  <Step1Basics
+                    data={data}
+                    set={set}
+                    websiteIsValid={websiteIsValid}
+                    websiteError={websiteError}
+                    setWebsiteError={setWebsiteError}
                   />
-                </Group>
+                )}
 
-                <Group title="Short bio (optional)" hint="2–3 sentences. Patients see this on their results page.">
-                  <Textarea
-                    rows={4}
-                    value={data.bio}
-                    onChange={(e) => set("bio", e.target.value)}
-                    placeholder="I'm a Boise-based LCSW with 10+ years..."
-                    className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-                    data-testid="signup-bio"
+                {step === 2 && <Step2License data={data} set={set} />}
+
+                {step === 3 && (
+                  <Step3WhoYouSee data={data} toggleArr={toggleArr} />
+                )}
+
+                {step === 4 && (
+                  <Step4Specialties
+                    data={data}
+                    issueTier={issueTier}
+                    setIssueTier={setIssueTier}
                   />
-                </Group>
-                </>)}
+                )}
+
+                {step === 5 && (
+                  <Step5Format
+                    data={data}
+                    set={set}
+                    toggleArr={toggleArr}
+                    officeAddress={officeAddress}
+                    setOfficeAddress={setOfficeAddress}
+                    officeCity={officeCity}
+                    setOfficeCity={setOfficeCity}
+                    officeZip={officeZip}
+                    setOfficeZip={setOfficeZip}
+                  />
+                )}
+
+                {step === 6 && (
+                  <Step6Insurance
+                    data={data}
+                    set={set}
+                    toggleArr={toggleArr}
+                    insuranceOther={insuranceOther}
+                    setInsuranceOther={setInsuranceOther}
+                  />
+                )}
+
+                {step === 7 && (
+                  <Step7Style data={data} set={set} toggleArr={toggleArr} />
+                )}
 
                 {/* ── Deep-match T1–T5 (v2 spec, Iter-89) ────────────
                     All step content lives in `TherapistDeepMatchStep`
