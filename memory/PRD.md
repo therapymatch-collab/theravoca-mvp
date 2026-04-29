@@ -57,6 +57,31 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+### iter-93 — Testid standardization + modal extraction + admin "How it works" rewrite (Feb 7, 2026)
+- **Testid rename for consistency**:
+  - Patient intake: `back-btn` → `intake-back-btn`, `next-btn` → `intake-next-btn`, `submit-btn` → `intake-submit-btn`
+  - Therapist signup: `signup-back` → `signup-back-btn`, `signup-next` → `signup-next-btn`
+  - Both flows now follow `<flow>-<action>-btn` naming. No legacy stragglers (verified via grep across `/app/frontend` + `/app/backend`).
+- **Modal extraction**:
+  - `ReviewPreviewModal` extracted from `IntakeForm.jsx` → `components/intake/ReviewPreviewModal.jsx` (346 lines)
+  - `PreviewModal` extracted from `TherapistSignup.jsx` → `pages/therapist/SignupPreviewModal.jsx` (315 lines)
+  - **IntakeForm.jsx 1061 → 740 (-321), TherapistSignup.jsx 1435 → 1192 (-243)**. Both orchestration components now under 1200 lines.
+- **Admin "How it works" panel rewritten** with the new 12-step end-to-end business loop:
+  1. Generate leads (paid + organic) — *open: campaign automation, auto-generated landing pages*
+  2. Convert visitors → submitted requests — *open: therapist lead-estimator widget, patient matching education*
+  3. Analyze the request (explicit + implicit variables)
+  4. Score against registered therapists (Step-1 score, deep research + LLM enrichment)
+  5. Invite high-fit therapists to apply (70%+ Step-1)
+  6. Network gap-fill — recruit non-registered therapists when <30 strong matches
+  7. Therapist application → Step-2 ranking score (blurb + 3 availability toggles)
+  8. Send patient ranked shortlist after 24h window
+  9. Automated 48h / 2wk / 8wk follow-ups
+  10. Feed success → matching algorithm
+  11. Feed success → marketing engine (look-alike paid ads)
+  12. Pricing: therapist $0 first month / $45/mo, patient $0/request
+  - New "self-improving loop in one line" callout summarizes the system at a glance.
+- Verified by testing agent (iteration_93.json): all 12 step cards render, 2 open-question callouts present, loop card visible, lint clean on all 5 modified files, no stale testids anywhere.
+
 ### iter-92 — Per-step extraction complete (Feb 7, 2026)
 - **IntakeForm.jsx**: extracted ALL 8 inline step renderers into individual files under `components/intake/steps/`:
   - `WhoIssuesSteps.jsx` exports `WhoStep` + `IssuesStep`
