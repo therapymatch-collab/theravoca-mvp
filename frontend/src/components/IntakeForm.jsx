@@ -114,9 +114,20 @@ export default function IntakeForm() {
             sitekey: turnstileSiteKey,
             theme: "light",
             size: "flexible",
+            // Let Cloudflare auto-refresh tokens that expire while the
+            // user is still filling the form (common on mobile where
+            // forms take >5 min). Without this, the widget silently
+            // loses its token and submit fails with "Security check
+            // failed." even though the widget still looks green.
+            "refresh-expired": "auto",
+            // Also auto-retry on transient errors (CF recommends this
+            // specifically for patchy mobile networks).
+            retry: "auto",
+            "retry-interval": 4000,
             callback: (tok) => setTurnstileToken(tok || ""),
             "error-callback": () => setTurnstileToken(""),
             "expired-callback": () => setTurnstileToken(""),
+            "timeout-callback": () => setTurnstileToken(""),
           },
         );
       } catch (_) {
@@ -311,7 +322,46 @@ export default function IntakeForm() {
     return false;
   };
 
+  /**
+   * Reset the Turnstile widget and clear the staged token. Used when
+   * the backend returns "Security check failed" — the cached token is
+   * almost certainly expired or bound to an IP the user no longer has
+   * (common on mobile when switching between wifi and cellular mid-
+   * form). Forcing a fresh challenge lets the user retry without
+   * reloading the whole page.
+   */
+  const resetTurnstile = () => {
+    setTurnstileToken("");
+    try {
+      if (window.turnstile && turnstileWidgetIdRef.current != null) {
+        window.turnstile.reset(turnstileWidgetIdRef.current);
+      }
+    } catch (_) {
+      /* safe to ignore — widget may already be re-rendering */
+    }
+  };
+
   const submit = async () => {
+    // Preflight: if Turnstile is enabled but we don't have a token yet,
+    // don't even hit the backend — show a clear, mobile-friendly
+    // message and scroll the widget into view so the user knows where
+    // to look. Otherwise they'd see the backend's generic "Security
+    // check failed" message with no obvious next step.
+    if (turnstileSiteKey && !turnstileToken) {
+      toast.error(
+        "Hold on a second — the security check hasn't finished. Please scroll down to complete it, then tap Submit again.",
+        { duration: 7000 },
+      );
+      try {
+        turnstileRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      } catch (_) {
+        /* old iOS Safari lacks smooth scroll — ignore */
+      }
+      return;
+    }
     setSubmitting(true);
     try {
       const refSrc =
@@ -350,7 +400,37 @@ export default function IntakeForm() {
     } catch (e) {
       const status = e?.response?.status;
       const detail = e?.response?.data?.detail || "Something went wrong.";
-      if (status === 429) {
+      // A 400 whose message mentions "security" or "verification" means
+      // Turnstile rejected our token — typically because the token
+      // expired mid-form or the user's IP changed (wifi → cellular).
+      // Reset the widget so the user can solve a fresh challenge in
+      // place, without reloading the page and losing their answers.
+      const looksLikeTurnstile =
+        status === 400 &&
+        typeof detail === "string" &&
+        /security|verif/i.test(detail);
+      if (looksLikeTurnstile) {
+        resetTurnstile();
+        toast.error(
+          "Security check expired. We've refreshed it — please complete it again and tap Submit.",
+          {
+            duration: 8000,
+            action: {
+              label: "Show me",
+              onClick: () => {
+                try {
+                  turnstileRef.current?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center",
+                  });
+                } catch (_) {
+                  /* ignore */
+                }
+              },
+            },
+          },
+        );
+      } else if (status === 429) {
         // Rate-limited — likely a duplicate referral within the window.
         // Offer a deep-link to the patient portal so they can check the
         // status of the request they already submitted instead of just

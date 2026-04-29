@@ -145,6 +145,7 @@ export default function TherapistSignup() {
   // Cloudflare Turnstile (fail-soft) — see comments in IntakeForm.jsx
   const [turnstileToken, setTurnstileToken] = useState("");
   const turnstileRef = useRef(null);
+  const turnstileWidgetIdRef = useRef(null);
   const turnstileSiteKey = process.env.REACT_APP_TURNSTILE_SITE_KEY || "";
   useEffect(() => {
     if (!turnstileSiteKey) return;
@@ -169,18 +170,38 @@ export default function TherapistSignup() {
     ensureScript().then(() => {
       if (cancelled || !turnstileRef.current || !window.turnstile) return;
       try {
-        window.turnstile.render(turnstileRef.current, {
+        turnstileWidgetIdRef.current = window.turnstile.render(turnstileRef.current, {
           sitekey: turnstileSiteKey,
           theme: "light",
           size: "flexible",
+          // Mobile-stability options — match IntakeForm. Without these
+          // therapists hitting Submit after spending >5 min on the form
+          // see a silent "Security check failed." because the widget's
+          // token quietly expired.
+          "refresh-expired": "auto",
+          retry: "auto",
+          "retry-interval": 4000,
           callback: (tok) => setTurnstileToken(tok || ""),
           "error-callback": () => setTurnstileToken(""),
           "expired-callback": () => setTurnstileToken(""),
+          "timeout-callback": () => setTurnstileToken(""),
         });
       } catch (_) { /* ignore double-render */ }
     });
     return () => { cancelled = true; };
   }, [turnstileSiteKey]);
+  /**
+   * Reset the widget when the backend reports a security failure so
+   * the therapist can try again without losing their form state.
+   */
+  const resetTurnstile = () => {
+    setTurnstileToken("");
+    try {
+      if (window.turnstile && turnstileWidgetIdRef.current != null) {
+        window.turnstile.reset(turnstileWidgetIdRef.current);
+      }
+    } catch (_) { /* ignore */ }
+  };
   const set = (k, v) => setData((d) => ({ ...d, [k]: v }));
   const toggleArr = (k, v, max) =>
     setData((d) => {
@@ -482,6 +503,23 @@ export default function TherapistSignup() {
   }, []);
 
   const submit = async () => {
+    // Preflight: don't hit the backend if Turnstile hasn't issued a
+    // token yet. Without this, mobile users who tap Submit before the
+    // widget finishes loading get a generic "Security check failed"
+    // 400 from the backend.
+    if (turnstileSiteKey && !turnstileToken) {
+      toast.error(
+        "Hold on a second — the security check hasn't finished. Please scroll down to complete it, then tap Submit again.",
+        { duration: 7000 },
+      );
+      try {
+        turnstileRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      } catch (_) { /* old iOS Safari — ignore */ }
+      return;
+    }
     setSubmitting(true);
     try {
       const payload = {
@@ -519,7 +557,24 @@ export default function TherapistSignup() {
       toast.success("Profile received — please add a payment method to start your free trial.");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Submission failed");
+      const status = e?.response?.status;
+      const detail = e?.response?.data?.detail || "Submission failed";
+      // Turnstile expired / IP drifted — reset the widget so the
+      // therapist can solve a fresh challenge in place. Same pattern
+      // as the patient intake flow.
+      const looksLikeTurnstile =
+        status === 400 &&
+        typeof detail === "string" &&
+        /security|verif/i.test(detail);
+      if (looksLikeTurnstile) {
+        resetTurnstile();
+        toast.error(
+          "Security check expired. We've refreshed it — please complete it again and tap Submit.",
+          { duration: 8000 },
+        );
+      } else {
+        toast.error(detail);
+      }
     } finally {
       setSubmitting(false);
     }

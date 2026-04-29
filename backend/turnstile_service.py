@@ -55,8 +55,15 @@ async def verify_token(
     if len(token) > 2048:
         return False, "Invalid security verification token."
     payload = {"secret": secret, "response": token}
-    if remote_ip:
-        payload["remoteip"] = remote_ip
+    # Note: we intentionally do NOT forward `remoteip`. Cloudflare binds
+    # the token to the issuing client IP at challenge time, and on
+    # mobile the observed `X-Forwarded-For` can drift (wifi → cellular,
+    # CGNAT rotation, carrier proxy) between issue and siteverify. When
+    # the observed IP disagrees with the bound IP, CF returns
+    # `invalid-input-remoteip` and our users see a "security check
+    # failed" they can't explain. Omitting `remoteip` lets CF's own
+    # IP-binding logic run without an unnecessary cross-check.
+    _ = remote_ip  # accepted for backwards-compat but intentionally unused
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT_SEC) as client:
             r = await client.post(SITEVERIFY_URL, data=payload)

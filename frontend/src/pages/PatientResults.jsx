@@ -374,17 +374,84 @@ function YourReferralPanel({ request }) {
 
       {open && (
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
-          <RefDetail label="Age" value={ageDisplay} />
-          <RefDetail label="State" value={request.location_state} />
-          <RefDetail label="ZIP" value={zip} />
-          <RefDetail label="Format" value={sessionFormat} />
-          <RefDetail label="Insurance" value={insurances || "—"} />
-          <RefDetail label="Cash-budget / session" value={cashBudget ? `$${cashBudget}` : "—"} />
-          <RefDetail label="Therapy history" value={therapyHistory} />
-          <RefDetail label="Urgency" value={request.urgency} />
-          <RefDetail label="Preferred gender" value={request.gender_preference || "Any"} />
-          <RefDetail label="Preferred language" value={request.preferred_language || "English"} />
-          <RefDetail label="Concerns" value={issues || "—"} span={2} />
+          {/* Hard-filter legend — matches the chip-styling used on
+              individual rows below so the patient immediately
+              understands what HARD means. */}
+          <div
+            className="sm:col-span-2 flex items-center gap-2 text-xs text-[#2B2A29] bg-[#FBE9E5] border border-[#F4C7BE] rounded-lg px-3 py-2 mb-1"
+            data-testid="patient-request-hard-legend"
+          >
+            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold text-[#C8412B] bg-white border border-[#F4C7BE] rounded-full px-2 py-0.5">
+              HARD
+            </span>
+            <span className="leading-snug">
+              Fields marked HARD are filters — therapists must match them
+              exactly to appear in your matches.
+            </span>
+          </div>
+          {(() => {
+            // Compute which of the patient-toggleable hard filters are
+            // active on THIS request. The 4 always-hard fields (state,
+            // age group, concerns, format-when-in-person-only) are set
+            // below with `hard` prop.
+            const isInPersonHard = request.modality_preference === "in_person_only";
+            const isGenderHard =
+              !!request.gender_required &&
+              request.gender_preference &&
+              request.gender_preference !== "no_pref";
+            const isLanguageHard =
+              !!request.language_strict &&
+              request.preferred_language &&
+              request.preferred_language !== "English";
+            return (
+              <>
+                <RefDetail label="Age" value={ageDisplay} hard />
+                <RefDetail label="State" value={request.location_state} hard />
+                <RefDetail label="ZIP" value={zip} />
+                <RefDetail
+                  label="Format"
+                  value={sessionFormat}
+                  hard={isInPersonHard}
+                />
+                <RefDetail
+                  label="Insurance"
+                  value={insurances || "—"}
+                  hard={!!request.insurance_strict}
+                />
+                <RefDetail
+                  label="Cash-budget / session"
+                  value={cashBudget ? `$${cashBudget}` : "—"}
+                />
+                <RefDetail label="Therapy history" value={therapyHistory} />
+                <RefDetail
+                  label="Urgency"
+                  value={request.urgency}
+                  hard={!!request.urgency_strict}
+                />
+                <RefDetail
+                  label="Preferred gender"
+                  value={request.gender_preference || "Any"}
+                  hard={isGenderHard}
+                />
+                <RefDetail
+                  label="Preferred language"
+                  value={request.preferred_language || "English"}
+                  hard={isLanguageHard}
+                />
+                <RefDetail
+                  label="Availability"
+                  value={
+                    (request.availability_windows || [])
+                      .map((w) => w.replace(/_/g, " "))
+                      .join(", ") || "—"
+                  }
+                  hard={!!request.availability_strict}
+                  span={2}
+                />
+                <RefDetail label="Concerns" value={issues || "—"} hard span={2} />
+              </>
+            );
+          })()}
           {(request.preferred_modalities || request.modality_preferences || []).length > 0 && (
             <RefDetail
               label="Preferred therapy approaches"
@@ -465,13 +532,33 @@ function YourReferralPanel({ request }) {
   );
 }
 
-function RefDetail({ label, value, span = 1 }) {
+function RefDetail({ label, value, span = 1, hard = false }) {
+  const wrap = [
+    span === 2 ? "sm:col-span-2" : "",
+    hard ? "rounded-lg bg-[#FBE9E5] border border-[#F4C7BE] px-3 py-2 -mx-1" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   return (
-    <div className={span === 2 ? "sm:col-span-2" : ""}>
-      <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">
+    <div
+      className={wrap}
+      data-testid={`patient-request-row-${label
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")}`}
+    >
+      <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] flex items-center gap-1.5">
         {label}
+        {hard && (
+          <span
+            className="inline-flex text-[9px] font-semibold tracking-wider text-[#C8412B] bg-white border border-[#F4C7BE] rounded-full px-1.5 py-[1px]"
+            title="This is a hard filter — therapists must match exactly"
+          >
+            HARD
+          </span>
+        )}
       </div>
-      <div className="text-[#2B2A29] font-medium leading-snug break-words">
+      <div className="text-[#2B2A29] font-medium leading-snug break-words mt-1">
         {value || "—"}
       </div>
     </div>

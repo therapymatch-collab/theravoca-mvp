@@ -1,0 +1,55 @@
+{
+  "summary": "iter-95 verification on mobile (375x667). Verified: (1) backend Turnstile gate now correctly rejects missing token + bogus token with the user-facing 400 detail message; (2) turnstile_service.verify_token still accepts but no longer forwards remoteip to Cloudflare siteverify; (3) seeded a request with all *_strict + modality_preference='in_person_only' + deep-match payload directly into Mongo; GET /api/requests/{id}/public returns every flag the frontend needs and excludes _id + verification_token; (4) /results/<id>?t=<token> on 375px mobile renders the new patient-request-hard-legend pill PLUS HARD chips on Age, State, Format, Insurance, Urgency, Preferred gender, Preferred language, Availability, Concerns (all 9 expected); ZIP, Cash-budget, Therapy history correctly rendered without HARD; the deep-match section (patient-request-deep-section) renders below with p1/p2/p3 rows; (5) /#start intake form mounts on mobile with intake-next-btn + intake-honeypot + deep-match-yes; no horizontal overflow; (6) /therapists/join#signup-form mounts on mobile with signup-next-btn; no horizontal overflow; (7) Landing hero-proof-bullets + 3 hero-bullet-bullet{1,2,3} render on mobile with no horizontal overflow; (8) Turnstile 400 simulation via page.route → axios POST returns 400 string detail and NO React #31 page error fires (no pageerrors observed during the entire mobile test sweep). NEW MOBILE BUG FOUND: admin 'More' dropdown items render off-screen at x=-150 on a 375px viewport (e.g. 'How it works' link is unreachable via tap because the dropdown menu width 254px is anchored to the right of a button at x=20).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Admin /admin nav 'More' dropdown",
+        "issue": "On 375px mobile viewport, the More dropdown items render with bounding box x=-150 (250px+ wide menu opening to the left of a left-anchored trigger button at x=20), so the entire dropdown is clipped off the left edge of the screen. Users on mobile cannot tap 'How it works', 'Site copy', or other tabs hidden behind More. Detected via Playwright bounding_box on the menuitem after clicking the More button.",
+        "selector": "button:has-text('More') -> [role='menuitem']",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_executed": [
+    "pytest /app/backend/tests/test_iteration95_hard_chips_turnstile.py — 4/4 passed (TurnstileGate missing/invalid token, TurnstileService remoteip-arg signature, HardChipDataSurface public view).",
+    "Mobile (375x667) /results/<seeded_id>?t=<token> — patient-request-hard-legend visible; expanded panel shows 15 rows total; 9 rows correctly carry the HARD chip (age, state, format, insurance, urgency, preferred-gender, preferred-language, availability, concerns); ZIP, cash-budget, therapy-history correctly NOT hard; deep-section visible with p1/p2/p3 rows.",
+    "Mobile /#start — intake-next-btn + intake-honeypot + deep-match-yes present; horizontal overflow = 0px.",
+    "Mobile /therapists/join#signup-form — signup-next-btn present; horizontal overflow = 0px.",
+    "Mobile / (landing) — hero-proof-bullets + hero-bullet-bullet{1,2,3} present; horizontal overflow = 0px.",
+    "Mobile /admin — master-password login works; admin dashboard loads without horizontal overflow on the main content; FAILURE: More dropdown items render off-screen.",
+    "page.route mock of POST /api/requests returning 400 with 'Security check failed...' detail — no pageerror fires (React #31 regression PASSED, axios interceptor flattens the string detail correctly)."
+  ],
+  "tests_not_executed": [
+    "Did not walk all 8 patient-intake steps to completion + open the Review modal + tap intake-submit-btn live, due to long form length within tool-token budget. Verified the Turnstile-failure code path via page.route mock instead, which is the cleanest deterministic way to assert the React-#31 regression and the catch-400-reset toast wiring.",
+    "Did not walk all 9 therapist-signup steps; verified Step 1 mounts cleanly on mobile and confirmed the resetTurnstile + preflight + catch-400-reset code paths in TherapistSignup.jsx mirror IntakeForm.jsx (both have refresh-expired:auto, retry:auto, the 'Hold on a second…' preflight toast, and the 'Security check expired. We've refreshed it' catch-400 toast).",
+    "Did not perform a real-touch drag on the Step 8 deep-match T1 component (touch drag in headless Playwright requires the dispatchEvent path, deferring to manual QA).",
+    "Did not test the therapist portal /portal/therapist or TherapistEditProfile live (requires the magic-code email path; backend tests in iter-49 already cover the PUT /portal/therapist/profile round-trip)."
+  ],
+  "critical_code_review_comments": [
+    "PatientResults.jsx RefDetail HARD-chip wiring is correct: always-hard (Age/State/Concerns) + format-when-in_person_only + 5 toggleable hards (insurance_strict, urgency_strict, availability_strict, gender_required+gender_preference!=='no_pref', language_strict+preferred_language!=='English'). The gender/language guards prevent showing HARD when the patient ticked the strict flag but left the value as 'no preference' — good defensive design.",
+    "turnstile_service.verify_token now accepts remote_ip kwarg for backwards compat but explicitly does NOT forward it (variable assigned to `_`). Comment block explains the CGNAT/wifi-cellular drift rationale clearly. Solid fix.",
+    "IntakeForm.jsx + TherapistSignup.jsx both wire refresh-expired:'auto' + retry:'auto' on the Turnstile widget AND have a resetTurnstile() helper called from the catch-400 branch. The preflight token-missing check fires BEFORE the POST, so users on slow connections don't waste an HTTP round-trip. Clean.",
+    "MOBILE UX BUG (NEW): admin SiteShell / AdminDashboard 'More' dropdown menu uses an absolute-positioned right-aligned popover that goes off-screen when the More trigger sits in the leftmost column on a 375px viewport. Likely needs a max-width:calc(100vw-32px) + transform-origin:left or a 'mobile sheet' fallback. Affects ALL More-dropdown items on mobile (Site copy, How it works, etc.).",
+    "Backend POST /api/requests intake test — confirmed our test data (form_started_at_ms set 10s in the past + honeypot empty) would clear the timing+honeypot guards, so the 400 in test_intake_invalid_turnstile_token_rejected is genuinely the Turnstile gate firing (not an upstream defense)."
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iteration95_hard_chips_turnstile.py",
+    "/app/test_reports/pytest/iter95_results.xml"
+  ],
+  "action_items": [
+    "Fix admin 'More' dropdown overflow on mobile: clamp the menu to the viewport (e.g. mx-auto + max-w-[calc(100vw-1rem)] OR use a mobile bottom-sheet variant). Reproducible at 375x667 by logging into /admin → tapping 'More' — items render at x=-150."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration95_hard_chips_turnstile.py (new)"
+  ],
+  "success_rate": {"backend": "100% (4/4 pytest)", "frontend": "9/10 — all HARD chips + Turnstile-400 regression + mobile load checks pass; admin 'More' dropdown clipped off-screen on 375px is the only failure."},
+  "test_credentials": "Admin master password admin123! works (Master password tab, NOT Team email).",
+  "seed_data_creation": "Seeded a single Mongo `requests` doc id=TEST_hardui_26fa995e (deleted after the UI test). Pytest fixture-scoped seed in test_iteration95_hard_chips_turnstile.py auto-cleans on teardown.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter-95 backend tests live in test_iteration95_hard_chips_turnstile.py — the Mongo-seed fixture pattern there is the cleanest way to test any *_strict / modality flag UI on PatientResults without going through the Turnstile gate. The single open frontend bug is the admin More-dropdown clipping on mobile. The Turnstile 400 path was tested via page.route mock; if a future iter wants a real-CF test, it'll need the dummy site key (1x00000000000000000000AA) which always issues a passing token — currently the env uses a real CF key.",
+  "rca of the issue": "The admin 'More' dropdown bug is a positioning regression: the dropdown menu is right-aligned to its trigger button via Tailwind/popover defaults, but on a 375px viewport the trigger sits at x=20 and the menu width is 254px → the menu extends from x=-150 to x=104, with 150px clipped off the left edge. Fix: anchor the menu to left:0 of the trigger on mobile (or use a Sheet/Drawer for mobile breakpoints)."
+}
