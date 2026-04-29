@@ -3174,7 +3174,7 @@ function SubBadge({ t }) {
   };
   return (
     <div
-      className={`inline-flex text-[10px] px-2 py-0.5 rounded-full mt-1 ${palette[status] || palette.incomplete}`}
+      className={`inline-flex text-[10px] px-2 py-0.5 rounded-full ${palette[status] || palette.incomplete}`}
       data-testid={`sub-badge-${t.id}`}
     >
       {status.replace("_", " ")}
@@ -3192,12 +3192,12 @@ const PROVIDER_COLUMNS = [
     required: true,
     headClass: "",
     render: (t, ctx) => (
-      <td className="p-4 max-w-[320px]">
+      <td className="p-4 max-w-[260px] align-top">
         {ctx?.onEdit ? (
           <button
             type="button"
             onClick={ctx.onEdit}
-            className="font-medium text-[#2D4A3E] hover:text-[#3A5E50] hover:underline truncate text-left max-w-full"
+            className="font-medium text-[#2D4A3E] hover:text-[#3A5E50] hover:underline truncate text-left max-w-full block"
             title={`Edit ${t.name}'s profile`}
             data-testid={`provider-name-link-${t.id}`}
           >
@@ -3208,14 +3208,26 @@ const PROVIDER_COLUMNS = [
             {t.name}
           </div>
         )}
-        <div className="text-xs text-[#6D6A65] mt-0.5 truncate" title={t.email}>
-          {t.credential_type ? `${t.credential_type} · ` : ""}
-          {t.years_experience != null && `${t.years_experience} yrs · `}
-          {t.email}
+        {/* Each sub-detail on its own line so the column can stay narrow
+            and we have horizontal room for additional columns. Credential
+            uses the patient-friendly title (e.g., "Professional
+            Counselor") instead of the bare letters. */}
+        <div className="mt-1 space-y-0.5 text-[11px] text-[#6D6A65] leading-tight">
+          {t.credential_type && (
+            <div className="truncate" title={t.credential_type}>
+              {credentialLabel(t.credential_type) || t.credential_type}
+            </div>
+          )}
+          {t.years_experience != null && (
+            <div>{t.years_experience} yrs experience</div>
+          )}
+          {t.email && (
+            <div className="truncate" title={t.email}>
+              {t.email}
+            </div>
+          )}
+          {t.phone && <div>{t.phone}</div>}
         </div>
-        {t.phone && (
-          <div className="text-[11px] text-[#6D6A65] mt-0.5">{t.phone}</div>
-        )}
       </td>
     ),
   },
@@ -3223,28 +3235,33 @@ const PROVIDER_COLUMNS = [
     key: "status",
     label: "Status",
     render: (t, ctx) => (
-      <td className="p-4 whitespace-nowrap">
-        <ProviderStatus t={t} />
-        <SubBadge t={t} />
-        {t.pending_reapproval && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              ctx?.onEdit && ctx.onEdit(t);
-            }}
-            className="mt-1 inline-flex items-center gap-1 text-[10px] bg-[#FBF2E8] text-[#B8742A] border border-[#F0DEC8] rounded-full px-2 py-0.5 w-fit max-w-[220px] hover:bg-[#F4E3CD] cursor-pointer transition"
-            title={`Therapist edited ${(t.pending_reapproval_fields || []).join(", ") || "sensitive fields"}. Click to review and approve.`}
-            data-testid={`pending-reapproval-badge-${t.id}`}
-          >
-            ⚠ Re-review:{" "}
-            <span className="font-medium truncate">
-              {((t.pending_reapproval_fields || []).map((f) =>
-                f.replace(/_/g, " "),
-              ).join(", ")) || "fields"}
-            </span>
-          </button>
-        )}
+      <td className="p-4 align-top">
+        {/* Vertical stack so each badge gets its own row — leaves more
+            horizontal room in the table for added columns. Each child is
+            wrapped in `w-fit` via flex so the badges don't stretch. */}
+        <div className="flex flex-col items-start gap-1">
+          <ProviderStatus t={t} />
+          <SubBadge t={t} />
+          {t.pending_reapproval && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                ctx?.onEdit && ctx.onEdit(t);
+              }}
+              className="inline-flex items-center gap-1 text-[10px] bg-[#FBF2E8] text-[#B8742A] border border-[#F0DEC8] rounded-full px-2 py-0.5 max-w-[200px] hover:bg-[#F4E3CD] cursor-pointer transition"
+              title={`Therapist edited ${(t.pending_reapproval_fields || []).join(", ") || "sensitive fields"}. Click to review and approve.`}
+              data-testid={`pending-reapproval-badge-${t.id}`}
+            >
+              ⚠ Re-review:{" "}
+              <span className="font-medium truncate">
+                {((t.pending_reapproval_fields || []).map((f) =>
+                  f.replace(/_/g, " "),
+                ).join(", ")) || "fields"}
+              </span>
+            </button>
+          )}
+        </div>
       </td>
     ),
   },
