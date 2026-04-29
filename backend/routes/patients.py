@@ -101,7 +101,23 @@ async def create_request(payload: RequestCreate, request: Request):
     client_ip = (fwd.split(",")[0].strip() if fwd else None) or (
         getattr(request.client, "host", None) or ""
     )
-    if client_ip:
+    # Test-mode short-circuit: when an admin has toggled test mode on,
+    # bypass BOTH rate-limit axes for the configured window so the same
+    # admin can run end-to-end intake tests without tripping their own
+    # anti-spam guards. Honeypot / timing / Turnstile remain enforced.
+    rate_cfg_doc = await db.app_config.find_one(
+        {"key": "intake_rate_limit"}, {"_id": 0},
+    )
+    test_mode_active = False
+    test_until = (rate_cfg_doc or {}).get("test_mode_until")
+    if test_until:
+        try:
+            until_dt = _parse_iso(test_until)
+            if until_dt and until_dt > datetime.now(timezone.utc):
+                test_mode_active = True
+        except Exception:
+            pass
+    if client_ip and not test_mode_active:
         ip_cutoff_iso = (
             datetime.now(timezone.utc) - timedelta(hours=1)
         ).isoformat()
@@ -111,11 +127,8 @@ async def create_request(payload: RequestCreate, request: Request):
         # Admin-tunable IP cap. Stored alongside the per-email rate limit
         # in `app_config.intake_rate_limit.max_per_ip_per_hour`. Default
         # 8 — enough for clinic / family wifi but tight against scripts.
-        ip_cap_doc = await db.app_config.find_one(
-            {"key": "intake_rate_limit"}, {"_id": 0},
-        )
         ip_cap = int(
-            (ip_cap_doc or {}).get("max_per_ip_per_hour") or 8
+            (rate_cfg_doc or {}).get("max_per_ip_per_hour") or 8
         )
         if ip_cap > 0 and ip_recent >= ip_cap:
             raise HTTPException(
@@ -162,14 +175,14 @@ async def create_request(payload: RequestCreate, request: Request):
     # window so a single user can't fire dozens of referrals before we
     # finish matching the first one. Both the limit and the window are
     # admin-configurable (app_config / intake_rate_limit).
-    rate_doc = await db.app_config.find_one(
-        {"key": "intake_rate_limit"}, {"_id": 0},
-    )
+    # Reuse rate_cfg_doc fetched above (test-mode check) to avoid a
+    # second round-trip.
+    rate_doc = rate_cfg_doc
     max_per_window = int(
         (rate_doc or {}).get("max_requests_per_window") or 1
     )
     window_minutes = int((rate_doc or {}).get("window_minutes") or 60)
-    if max_per_window > 0 and window_minutes > 0:
+    if not test_mode_active and max_per_window > 0 and window_minutes > 0:
         import re as _re
         cutoff = (
             datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
@@ -198,7 +211,6 @@ async def create_request(payload: RequestCreate, request: Request):
             )
             wait_minutes = window_minutes
             if most_recent and most_recent.get("created_at"):
-                from helpers import _parse_iso
                 last_dt = _parse_iso(most_recent["created_at"])
                 if last_dt:
                     elapsed = (

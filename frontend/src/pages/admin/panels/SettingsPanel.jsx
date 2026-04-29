@@ -14,6 +14,15 @@ export default function SettingsPanel({ client }) {
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // Test mode: time-boxed admin bypass of both rate-limit axes so the
+  // admin can run end-to-end intake tests without tripping their own
+  // anti-spam guards. `testModeUntil` is an ISO timestamp; we re-tick
+  // a local countdown every second once it's set.
+  const [testModeUntil, setTestModeUntil] = useState(null);
+  const [testModeSecsLeft, setTestModeSecsLeft] = useState(0);
+  const [testModeMinutes, setTestModeMinutes] = useState(60);
+  const [testModeSaving, setTestModeSaving] = useState(false);
+
   // LLM web-research enrichment toggle + stats.
   const [reEnabled, setReEnabled] = useState(false);
   const [reStats, setReStats] = useState(null);
@@ -34,6 +43,15 @@ export default function SettingsPanel({ client }) {
         setWindowMin(r.data.window_minutes);
         if (typeof r.data.max_per_ip_per_hour === "number") {
           setMaxPerIp(r.data.max_per_ip_per_hour);
+        }
+        if (r.data.test_mode_until) {
+          setTestModeUntil(r.data.test_mode_until);
+          setTestModeSecsLeft(
+            Number(r.data.test_mode_seconds_remaining) || 0,
+          );
+        } else {
+          setTestModeUntil(null);
+          setTestModeSecsLeft(0);
         }
         setLoaded(true);
       } catch (e) {
@@ -118,6 +136,57 @@ export default function SettingsPanel({ client }) {
       toast.error(e?.response?.data?.detail || e.message || "Warmup failed to start");
     } finally {
       setWarmupStarting(false);
+    }
+  };
+
+  // Tick the test-mode countdown locally so the admin sees it shrink in
+  // real time. When it hits 0, clear the local state — the next page
+  // load (or the next /api/requests submission) confirms it server-side.
+  useEffect(() => {
+    if (!testModeUntil || testModeSecsLeft <= 0) return undefined;
+    const id = setInterval(() => {
+      setTestModeSecsLeft((s) => {
+        if (s <= 1) {
+          setTestModeUntil(null);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [testModeUntil, testModeSecsLeft]);
+
+  const enableTestMode = async () => {
+    const minutes = Math.max(1, Math.min(1440, Number(testModeMinutes) || 60));
+    setTestModeSaving(true);
+    try {
+      const r = await client.post(
+        "/admin/intake-rate-limit/test-mode",
+        { minutes },
+      );
+      setTestModeUntil(r.data.test_mode_until);
+      setTestModeSecsLeft(Number(r.data.test_mode_seconds_remaining) || 0);
+      toast.success(
+        `Test mode ON for ${minutes} minute${minutes === 1 ? "" : "s"} — rate limits bypassed.`,
+      );
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message || "Failed to enable test mode");
+    } finally {
+      setTestModeSaving(false);
+    }
+  };
+
+  const disableTestMode = async () => {
+    setTestModeSaving(true);
+    try {
+      await client.delete("/admin/intake-rate-limit/test-mode");
+      setTestModeUntil(null);
+      setTestModeSecsLeft(0);
+      toast.success("Test mode disabled — rate limits enforced again.");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message || "Failed to disable test mode");
+    } finally {
+      setTestModeSaving(false);
     }
   };
 
@@ -257,6 +326,101 @@ export default function SettingsPanel({ client }) {
               ) : null}
               Save rate limit
             </button>
+          </div>
+        )}
+      </div>
+
+      {/* Test mode — time-boxed bypass of rate limits */}
+      <div
+        className="bg-white border border-[#E8E5DF] rounded-2xl p-6"
+        data-testid="test-mode-card"
+      >
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
+            <h3 className="font-serif-display text-2xl text-[#2D4A3E]">
+              Test mode
+            </h3>
+            <p className="text-sm text-[#6D6A65] mt-2 max-w-2xl leading-relaxed">
+              Temporarily bypass <strong>both</strong> rate limits (per-IP
+              and per-email) so you can run end-to-end intake tests without
+              tripping your own anti-spam guards. Honeypot, timing, and
+              Turnstile remain active — only the throttle is relaxed.
+            </p>
+          </div>
+          {testModeUntil ? (
+            <span
+              className="inline-flex items-center gap-2 rounded-full bg-[#FFF6E8] border border-[#F1C97B] px-3 py-1 text-xs font-semibold text-[#7A4D00] whitespace-nowrap"
+              data-testid="test-mode-active-badge"
+            >
+              <span className="h-2 w-2 rounded-full bg-[#E1A92E] animate-pulse" />
+              ACTIVE · {Math.floor(testModeSecsLeft / 60)}m {testModeSecsLeft % 60}s left
+            </span>
+          ) : (
+            <span
+              className="inline-flex items-center gap-2 rounded-full bg-[#F5F2EC] border border-[#E0DCD3] px-3 py-1 text-xs text-[#6D6A65] whitespace-nowrap"
+              data-testid="test-mode-inactive-badge"
+            >
+              <span className="h-2 w-2 rounded-full bg-[#A4A29E]" />
+              Off
+            </span>
+          )}
+        </div>
+
+        {testModeUntil ? (
+          <div className="mt-5 flex items-center gap-3 flex-wrap">
+            <button
+              type="button"
+              onClick={disableTestMode}
+              disabled={testModeSaving}
+              className="px-4 py-2 rounded-md bg-[#2D4A3E] text-white text-sm font-medium hover:bg-[#1F3A30] disabled:opacity-50"
+              data-testid="test-mode-disable-btn"
+            >
+              {testModeSaving ? (
+                <Loader2 size={14} className="inline mr-1.5 animate-spin" />
+              ) : null}
+              Turn off now
+            </button>
+            <span className="text-xs text-[#6D6A65]">
+              Auto-expires in {Math.floor(testModeSecsLeft / 60)} min{" "}
+              {testModeSecsLeft % 60}s.
+            </span>
+          </div>
+        ) : (
+          <div className="mt-5 flex items-end gap-3 flex-wrap">
+            <div>
+              <label
+                htmlFor="tm-mins"
+                className="text-xs uppercase tracking-wider text-[#6D6A65]"
+              >
+                Duration (minutes)
+              </label>
+              <Input
+                id="tm-mins"
+                type="number"
+                min={1}
+                max={1440}
+                value={testModeMinutes}
+                onChange={(e) => setTestModeMinutes(e.target.value)}
+                className="mt-1 max-w-[120px]"
+                data-testid="test-mode-minutes-input"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={enableTestMode}
+              disabled={testModeSaving || !testModeMinutes}
+              className="tv-btn-primary !py-2 !px-4 text-sm disabled:opacity-50"
+              data-testid="test-mode-enable-btn"
+            >
+              {testModeSaving ? (
+                <Loader2 size={14} className="inline mr-1.5 animate-spin" />
+              ) : null}
+              Enable test mode
+            </button>
+            <span className="text-xs text-[#6D6A65]">
+              Caps at 24h. Also clears the IP log so your next submission
+              starts fresh.
+            </span>
           </div>
         )}
       </div>

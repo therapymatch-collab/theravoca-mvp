@@ -1500,21 +1500,41 @@ async def admin_get_intake_rate_limit() -> dict[str, Any]:
     doc = await db.app_config.find_one(
         {"key": "intake_rate_limit"}, {"_id": 0},
     )
-    if not doc:
-        return dict(_DEFAULT_INTAKE_RATE)
-    return {
+    out: dict[str, Any] = {
         "max_requests_per_window": int(
-            doc.get("max_requests_per_window")
+            (doc or {}).get("max_requests_per_window")
             or _DEFAULT_INTAKE_RATE["max_requests_per_window"]
         ),
         "window_minutes": int(
-            doc.get("window_minutes") or _DEFAULT_INTAKE_RATE["window_minutes"]
+            (doc or {}).get("window_minutes")
+            or _DEFAULT_INTAKE_RATE["window_minutes"]
         ),
         "max_per_ip_per_hour": int(
-            doc.get("max_per_ip_per_hour")
+            (doc or {}).get("max_per_ip_per_hour")
             or _DEFAULT_INTAKE_RATE["max_per_ip_per_hour"]
         ),
     }
+    # Test-mode: when set and not yet expired, both rate-limit axes are
+    # bypassed for /api/requests. Frontend uses `test_mode_until` to show
+    # the countdown / disable banner.
+    test_until = (doc or {}).get("test_mode_until")
+    if test_until:
+        try:
+            from helpers import _parse_iso
+            until_dt = _parse_iso(test_until)
+            now = datetime.now(timezone.utc)
+            if until_dt and until_dt > now:
+                out["test_mode_until"] = test_until
+                out["test_mode_seconds_remaining"] = int(
+                    (until_dt - now).total_seconds()
+                )
+            else:
+                out["test_mode_until"] = None
+        except Exception:
+            out["test_mode_until"] = None
+    else:
+        out["test_mode_until"] = None
+    return out
 
 
 @router.put("/admin/intake-rate-limit", dependencies=[Depends(require_admin)])
@@ -1566,6 +1586,61 @@ async def admin_set_intake_rate_limit(payload: dict) -> dict[str, Any]:
         "window_minutes": window,
         "max_per_ip_per_hour": ip_per_hour,
     }
+
+
+# ─── Test mode (admin-only, time-boxed rate-limit bypass) ─────────────────
+# When enabled, /api/requests skips both the per-IP and per-email rate
+# limits for the configured duration. Bot defenses (honeypot, timing
+# heuristic, Turnstile) remain ON — test mode only relaxes the throttle
+# so the same admin can run end-to-end intake tests without tripping
+# their own anti-spam guards.
+@router.post(
+    "/admin/intake-rate-limit/test-mode",
+    dependencies=[Depends(require_admin)],
+)
+async def admin_enable_test_mode(payload: dict) -> dict[str, Any]:
+    try:
+        minutes = int(payload.get("minutes") or 60)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "minutes must be an integer")
+    # Cap at 24h so a forgotten test-mode toggle can't permanently
+    # disable spam protection.
+    if minutes < 1 or minutes > 24 * 60:
+        raise HTTPException(
+            400, "minutes must be between 1 and 1440 (24 hours)"
+        )
+    until = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+    until_iso = until.isoformat()
+    await db.app_config.update_one(
+        {"key": "intake_rate_limit"},
+        {
+            "$set": {
+                "key": "intake_rate_limit",
+                "test_mode_until": until_iso,
+            }
+        },
+        upsert=True,
+    )
+    # Also flush the IP log so the very next intake from this admin's IP
+    # starts fresh — otherwise the >=cap check still fires from prior
+    # entries until the rolling hour expires.
+    await db.intake_ip_log.delete_many({})
+    return {
+        "test_mode_until": until_iso,
+        "test_mode_seconds_remaining": minutes * 60,
+    }
+
+
+@router.delete(
+    "/admin/intake-rate-limit/test-mode",
+    dependencies=[Depends(require_admin)],
+)
+async def admin_disable_test_mode() -> dict[str, Any]:
+    await db.app_config.update_one(
+        {"key": "intake_rate_limit"},
+        {"$unset": {"test_mode_until": ""}},
+    )
+    return {"test_mode_until": None}
 
 
 # ─── External scrape-source registry (admin-tunable) ────────────────────
