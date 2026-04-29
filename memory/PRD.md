@@ -57,6 +57,11 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+### iter-99 — Therapist FAQ admin↔public sync fix (Feb 7, 2026)
+- Fixed: the `/therapists/join#faq` accordion was rendering the hardcoded `THERAPIST_FAQS` seed array (6 items) instead of the `therapistFaqs` value from `useFaqs("therapist", THERAPIST_FAQS)`, so every admin edit in the FAQ panel appeared to save but never reached the live page.
+- After fix: verified via live API that `/api/faqs?audience=therapist` returns the 5 admin-saved FAQ items and the public page renders exactly those — bundled seed is now the fallback-only case when the API is empty/unreachable.
+- Parallel Landing.jsx patient-side FAQ was already correctly wired to `faqs.map` from the hook — no change needed there.
+
 ### iter-98 — Admin match-gap panel surfaces every HARD filter (Feb 7, 2026)
 - The admin "Why we couldn't fill 30 matches" funnel in request detail was missing three critical hard filters that the patient sets as HARD:
   - **Preferred language (HARD)** — when `language_strict=true` & `preferred_language≠English`. This was the user's specific complaint on the Mandarin-HARD request (only 3 therapists in the pool speak Mandarin).

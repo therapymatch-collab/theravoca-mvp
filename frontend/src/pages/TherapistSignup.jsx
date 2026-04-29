@@ -931,8 +931,16 @@ export default function TherapistSignup() {
             <h2 className="font-serif-display text-4xl text-[#2D4A3E] leading-tight text-center">
               Common questions
             </h2>
+            {/* `therapistFaqs` comes from `useFaqs("therapist", THERAPIST_FAQS)`
+                which fetches the admin-edited FAQ list from MongoDB
+                (GET /api/faqs/therapist) and falls back to the bundled
+                seed array when the DB hasn't been touched. Rendering
+                the hardcoded `THERAPIST_FAQS` here instead of
+                `therapistFaqs` was the cause of the admin-vs-live
+                FAQ drift — every admin edit looked saved but the
+                public page still showed the bundled seed copy. */}
             <Accordion type="single" collapsible className="mt-8" data-testid="therapist-faq">
-              {THERAPIST_FAQS.map((f) => (
+              {therapistFaqs.map((f) => (
                 <AccordionItem
                   key={f.q}
                   value={`item-${f.q}`}
