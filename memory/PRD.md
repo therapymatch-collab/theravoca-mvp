@@ -57,7 +57,23 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
-### iter-99 — Therapist FAQ admin↔public sync fix (Feb 7, 2026)
+## Iteration 100 — Matching Outcome Simulator (Admin → More → Matching simulator) (Feb 8, 2026)
+
+- **Fixed simulator therapist-pool filter bug** — `simulator.py` was using `{status:'active', approved:True, billable:True}` (wrong field names → always returned "No active therapists in pool"). Swapped to the production filter used in `helpers.py`: `{is_active != False, pending_approval != True, subscription_status not in [past_due, canceled, unpaid, incomplete]}`. Now correctly sees the 122-therapist seeded pool.
+- **Built SimulatorPanel.jsx** (`/app/frontend/src/pages/admin/panels/`) — admin-only audit surface wiring `/api/admin/simulator/run|runs|runs/{id}`. Sections:
+  - Run controls (num_requests 10–200, notify_top_n, optional seed) + "Run simulation" button.
+  - Top StatBox row (Requests, Therapist pool, Zero-pool rate, Score σ) with `highlight` tint when thresholds breached.
+  - Suggested-fix cards color-coded by severity (critical/warning/info/ok), each showing action label + body copy.
+  - Notified-pool histogram (0 / 1-4 / 5-9 / 10-19 / 20-29 / 30+ buckets).
+  - Filter-failure horizontal bar chart showing which HARD filters knock the most therapists out.
+  - Inconsistency clusters panel pairing low-vs-high similar requests with their HARD-flag differences.
+  - Per-request accordion (expand → "Why the pool shrank" badges, top-10 Step-1 matches, synthetic Step-2 applications with Δ score, blurb excerpt, breakdown chips).
+  - Prior runs list with Load / Delete (confirm) actions.
+- **Tab wiring** — new `simulator` entry in `AdminDashboard.jsx` SECONDARY list (More dropdown), uses `Activity` lucide icon, testid `more-tab-simulator`.
+- **Tests**: `tests/test_iteration97_simulator.py` — 13/13 passing (auth 401, validation 400, 200 on happy path, persistence/list/get/delete, therapist-pool non-zero, filter-failures shape, HARD flags, applications detail).
+- **Verified by testing agent (iteration_97.json)**: 100% backend + 100% frontend. Desktop + 375×667 mobile flows pass; no console errors; no horizontal overflow. Simulator correctly flags the 45% zero-pool rate on the current seed as a CRITICAL suggestion — working as designed.
+
+## Iteration 99 — Therapist FAQ admin↔public sync fix (Feb 7, 2026)
 - Fixed: the `/therapists/join#faq` accordion was rendering the hardcoded `THERAPIST_FAQS` seed array (6 items) instead of the `therapistFaqs` value from `useFaqs("therapist", THERAPIST_FAQS)`, so every admin edit in the FAQ panel appeared to save but never reached the live page.
 - After fix: verified via live API that `/api/faqs?audience=therapist` returns the 5 admin-saved FAQ items and the public page renders exactly those — bundled seed is now the fallback-only case when the API is empty/unreachable.
 - Parallel Landing.jsx patient-side FAQ was already correctly wired to `faqs.map` from the hook — no change needed there.
