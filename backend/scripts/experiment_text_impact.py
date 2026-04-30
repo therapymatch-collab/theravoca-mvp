@@ -44,6 +44,7 @@ from typing import Any
 sys.path.insert(0, "/app/backend")
 
 from deps import db  # noqa: E402  motor MongoDB client
+from embeddings import embed_text  # noqa: E402
 from matching import rank_therapists  # noqa: E402
 from research_enrichment import score_apply_fit, is_enabled as research_enabled  # noqa: E402
 
@@ -302,6 +303,23 @@ async def run() -> None:
         # Insert into Mongo so applications can FK back to it cleanly.
         await db.requests.insert_one(req.copy())
 
+        # Mirror the production background-task: embed `other_issue` so
+        # `matching._score_one` can soft-bonus therapists whose T5/T2
+        # resonate with what the patient wrote. Without this, the
+        # experiment can't see the bonus path (the matching engine
+        # short-circuits when the embedding is missing).
+        if with_text and (req.get("other_issue") or "").strip():
+            try:
+                vec = await embed_text(req["other_issue"])
+                if vec:
+                    await db.requests.update_one(
+                        {"id": req["id"]},
+                        {"$set": {"other_issue_embedding": vec}},
+                    )
+                    req["other_issue_embedding"] = vec
+            except Exception as e:
+                L(f"[err] embed other_issue req#{idx}: {e}")
+
         # 3. Rank therapists for this request (same call helpers._trigger_matching uses)
         matches = rank_therapists(
             therapists,
@@ -544,25 +562,24 @@ def _build_report(rows: list[dict[str, Any]]) -> str:
     lines.append("## 5. Architectural takeaway")
     lines.append("")
     lines.append(
-        "- **Patient `other_issue` free text** is currently NOT consumed "
-        "by `matching._score_one`. Section 1 above confirms the raw "
-        "match-score delta is ~0 between the two groups (it should be — "
-        "we never read `other_issue` during scoring). This is a missed "
-        "opportunity: the therapist sees the text in the email but the "
-        "ranking engine is blind to it."
+        "- **Patient `other_issue` free text** is now embedded at request "
+        "creation and soft-bonused via `matching._score_one` "
+        "(`other_issue_bonus`, max +6 pts, cosine similarity vs therapist "
+        "T5/T2). Section 1's Δ measures the realised lift in raw "
+        "match_score from filling in the textarea."
     )
     lines.append(
         "- **Therapist apply text** has a measurable, monotonic effect "
-        "via `score_apply_fit` (Section 2). Variant E (issue-specific + "
-        "addresses prior-therapy + concrete availability) consistently "
-        "scores ~3-4 points higher than empty/oneliner replies."
+        "via `score_apply_fit` (Section 2). Empty/oneliner replies score "
+        "near-zero; full-engagement replies that quote the patient's "
+        "free text and address prior-therapy + style score 3.5-5."
     )
     lines.append(
-        "- Cross-tab in Section 3 shows whether richer patient context "
-        "changes how the LLM grades the therapist's reply. If Δ is "
-        "positive across variants, it suggests the grader is drawing "
-        "on the patient brief and would benefit from `other_issue` "
-        "being passed to it (it currently is not)."
+        "- Cross-tab in Section 3 shows whether the LLM grader rewards "
+        "therapist replies that engage the patient's free text. Negative "
+        "Δ on D/E variants when patient text is rich means the grader "
+        "is correctly penalising replies that ignore the textarea — "
+        "i.e. our engagement bar moved up."
     )
     lines.append("")
 

@@ -67,6 +67,13 @@ async def verify_token(
     # even require a network call when verification is off.
     if await _is_disabled_by_admin():
         return True, None
+    # Test-suite opt-in bypass. Set ONLY by `tests/conftest.py` for the
+    # duration of a pytest run. Production never sets this env var, so
+    # this branch is dead code outside the test environment. We check
+    # it AFTER the admin disable so a real prod operator's settings
+    # always win.
+    if os.environ.get("TURNSTILE_TEST_BYPASS") == "1":
+        return True, None
     secret = (os.environ.get("TURNSTILE_SECRET_KEY") or "").strip()
     if not secret:
         return True, None  # Not configured → skip

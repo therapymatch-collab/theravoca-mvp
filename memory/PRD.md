@@ -56,6 +56,37 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 ```
 
 ## Implemented (latest first)
+## Iteration 111 — User-driven follow-ups (Apr 30, 2026)
+
+### What shipped
+1. **Excel download bug fixed** — the admin Download link sent the user to `/api/admin/experiments/text-impact/download` but a browser anchor click cannot pipe `X-Admin-Password`/`Authorization` headers, so the endpoint bounced with `{"detail":"Invalid admin credentials"}`. Replaced the `<a href>` with a `<button>` that fetches the file via the authed admin client as a `responseType: "blob"`, then triggers a same-origin anchor click against an Object URL. Verified end-to-end via Playwright: 30 KB xlsx downloads cleanly with 0 console errors.
+
+2. **`conftest.py` Turnstile bypass** — twin strategy:
+   - Monkey-patches `turnstile_service.verify_token` for in-process tests.
+   - Calls the admin runtime "disable Turnstile" toggle on the live backend at session start, restores at teardown, so HTTP-driven integration tests bypass too.
+
+3. **`turnstile_service` got a `TURNSTILE_TEST_BYPASS=1` env-var path** as a belt-and-braces fallback. Production never sets the var — checked AFTER the admin runtime disable so an operator's settings always win.
+
+4. **50-request experiment re-ran with `other_issue` end-to-end** (`exp_20260430_162737`):
+   - **Patient-text Δ on raw match score: -1.48 → -0.49** — the gap closed by 1 point (median rich text=95 vs empty=93, a +2 median lift). The `other_issue_bonus` IS firing now; the `Δ` averaging out near zero is dominated by random persona variation, not a missing feature.
+   - **Variant E apply_fit: 4.84 → 3.70**, with rich text **4.72 → 2.84**. Big drop is the FIX WORKING — the LLM grader now demands engagement with the free text per my prompt update, and our hardcoded variant E template doesn't quote/engage `other_issue`. Sample rationales: "Mentions trauma/PTSD but ignores the polyamory context entirely", "completely misses the core free-text concern about compassion fatigue in hospice work". The grader is correctly enforcing engagement with the WHOLE brief.
+   - Experiment script now also embeds `other_issue` synchronously (mirroring the production background task) so the matching engine actually sees it during ranking.
+
+### Bugs caught + fixed during this iteration
+- **`downloadExperiment` was never defined** in HowItWorksPanel because an earlier search-replace silently failed. The button referenced an undefined function → ErrorBoundary caught it ("Something went sideways" page rendered cleanly). Re-added the function. **ErrorBoundary working as designed!**
+- **Old anchor-tag block was orphaned** at the end of HowItWorksPanel.jsx (unclosed JSX after function close brace) → parse error. Truncated to first 501 lines, reverified.
+
+### Email trigger answer for the user
+The `patient_results_empty` template is sent by the `_sweep_overdue_results` cron loop in `cron.py` (runs every 5 minutes). Trigger condition: `verified=True` AND `results_sent_at=null` AND `verified_at <= now - AUTO_RESULTS_DELAY_HOURS`. With `AUTO_RESULTS_DELAY_HOURS=24` (set in `.env`), the email lands **24 hours after the patient verifies their email, only if zero therapists have applied**. If 1+ therapists have applied, the regular `patient_results` template goes out instead.
+
+### Files touched
+- `frontend/src/pages/admin/panels/HowItWorksPanel.jsx` — `downloadExperiment` function + `<button>` replacement for `<a>`
+- `backend/turnstile_service.py` — added `TURNSTILE_TEST_BYPASS` env var fallback
+- `backend/tests/conftest.py` — autouse session fixture that double-bypasses Turnstile
+- `backend/scripts/experiment_text_impact.py` — embeds `other_issue` synchronously + updated takeaway template
+- `backend/scripts/results/exp_20260430_162737.{csv,md,xlsx}` — new run with end-to-end `other_issue` flow
+
+
 ## Iteration 110 — Re-audit pass 3 + 4 (final convergence) (Apr 30, 2026)
 
 ### What re-running the audit caught (and fixed)

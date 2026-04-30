@@ -121,6 +121,9 @@ const STEPS = [
 export default function HowItWorksPanel() {
   const client = useAdminClient();
   const [exp, setExp] = useState(null);
+  // Track download in flight so the button can show "Downloading…" and
+  // disable on rapid double-clicks. Errors surface via sonner.
+  const [dlPending, setDlPending] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -132,6 +135,43 @@ export default function HowItWorksPanel() {
       }
     })();
   }, [client]);
+
+  // Browser anchor tags can't pipe the admin auth headers (X-Admin-Password
+  // / Authorization) on a plain `<a href>` click — so the previous version
+  // hit `/api/admin/experiments/text-impact/download` unauthenticated and
+  // bounced with `{"detail": "Invalid admin credentials"}`. Fetch the file
+  // through the authed admin client as a blob, then trigger a same-origin
+  // anchor click against an Object URL. Same UX, real auth.
+  const downloadExperiment = async () => {
+    if (dlPending) return;
+    setDlPending(true);
+    try {
+      const r = await client.get(
+        "/admin/experiments/text-impact/download",
+        { responseType: "blob" },
+      );
+      const blob = new Blob([r.data], {
+        type:
+          r.headers?.["content-type"] ||
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = exp?.filename || "theravoca_experiment.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Defer revoke so Firefox/Safari finish piping the download.
+      setTimeout(() => window.URL.revokeObjectURL(url), 1500);
+    } catch (e) {
+      const msg = e?.response?.data?.detail || "Download failed.";
+      const { toast } = await import("sonner");
+      toast.error(msg);
+    } finally {
+      setDlPending(false);
+    }
+  };
 
   return (
     <div className="mt-6 space-y-4" data-testid="how-it-works-panel">
@@ -456,22 +496,19 @@ export default function HowItWorksPanel() {
             Used to calibrate the algorithm changes documented above.
           </p>
           {exp && exp.available ? (
-            <a
-              href={
-                (process.env.REACT_APP_BACKEND_URL || "") +
-                "/api/admin/experiments/text-impact/download"
-              }
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm text-[#2D4A3E] font-medium hover:underline mt-3"
+            <button
+              type="button"
+              onClick={downloadExperiment}
+              disabled={dlPending}
+              className="inline-flex items-center gap-1.5 text-sm text-[#2D4A3E] font-medium hover:underline mt-3 disabled:opacity-60 disabled:cursor-not-allowed"
               data-testid="experiment-download-link"
             >
               <Download size={14} />
-              Download {exp.filename}
+              {dlPending ? "Downloading…" : `Download ${exp.filename}`}
               <span className="text-[11px] text-[#6D6A65] font-normal">
                 ({(exp.size_bytes / 1024).toFixed(1)} kB)
               </span>
-            </a>
+            </button>
           ) : (
             <p className="text-xs italic text-[#9C9893] mt-3">
               {exp === null
@@ -502,3 +539,4 @@ export default function HowItWorksPanel() {
     </div>
   );
 }
+
