@@ -901,6 +901,14 @@ def score_therapist(
         if deep["bonus"]:
             breakdown["deep_match"] = deep["bonus"]
             total = round(min(150.0, total + deep["bonus"]), 2)
+    # Cap displayed match-score at 99: no match is ever truly perfect,
+    # and a 100% chip on the patient UI sets an expectation we can't
+    # meet (every therapist falls short of "perfect" on something —
+    # personality fit, life experience, the small things we can't
+    # measure). 99 still communicates "exceptional fit" while leaving
+    # head-room for honesty. Filtering / -1 sentinels are NOT capped.
+    if isinstance(total, (int, float)) and total > 0:
+        total = min(99.0, total)
     return {
         "total": total,
         "breakdown": breakdown,

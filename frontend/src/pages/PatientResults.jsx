@@ -5,6 +5,7 @@ import { Loader2, Phone, Mail, Star, Sparkles, CalendarPlus, Send, Inbox, CheckC
 import { Header, Footer } from "@/components/SiteShell";
 import useSiteCopy from "@/lib/useSiteCopy";
 import credentialLabel from "@/lib/credentialLabel";
+import EmailButton from "@/components/EmailButton";
 import { api, getSession } from "@/lib/api";
 import { RESULTS_POLL_INTERVAL_MS } from "@/lib/constants";
 import {
@@ -170,7 +171,7 @@ function whyMatchedChips(breakdown, therapist, request) {
   return out;
 }
 
-function buildConsultMailto(therapist, request) {
+function buildConsultParts(therapist, request) {
   const firstName = (therapist?.name || "").split(",")[0].split(" ")[0] || "there";
   const issues = (request?.presenting_issues || [])
     .slice(0, 2)
@@ -191,12 +192,31 @@ function buildConsultMailto(therapist, request) {
     "",
     "Looking forward to it,",
   ].join("\n");
-  // `mailto:` URLs require RFC-3986 percent-encoding (%20 for spaces), NOT
-  // the application/x-www-form-urlencoded scheme that URLSearchParams uses
-  // (which encodes spaces as `+`). iOS/Android Mail read the `+` literally
-  // so subjects looked like "Free+15-min+consult". Use encodeURIComponent.
-  const q = `subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  return `mailto:${therapist?.email || ""}?${q}`;
+  return { to: therapist?.email || "", subject, body };
+}
+
+// Build URLs for each supported send-from-here channel. We expose all
+// of them via the EmailButton dropdown so a desktop user without a
+// configured `mailto:` handler can still send the message.
+function buildEmailUrls({ to, subject, body }) {
+  // `mailto:` requires RFC-3986 percent-encoding (%20 for spaces), NOT
+  // form-encoded `+` — iOS Mail rendered "Free+15-min+consult" literally.
+  const enc = (s) => encodeURIComponent(s);
+  return {
+    mailto: `mailto:${to}?subject=${enc(subject)}&body=${enc(body)}`,
+    gmail: `https://mail.google.com/mail/?view=cm&fs=1&to=${enc(to)}&su=${enc(subject)}&body=${enc(body)}`,
+    outlook: `https://outlook.office.com/mail/deeplink/compose?to=${enc(to)}&subject=${enc(subject)}&body=${enc(body)}`,
+    yahoo: `https://compose.mail.yahoo.com/?to=${enc(to)}&subject=${enc(subject)}&body=${enc(body)}`,
+  };
+}
+
+// Heuristic: are we on a mobile device? Used to default the primary
+// click action to `mailto:` (which always works on phones) vs. the
+// dropdown menu (better default for desktop, where mailto: silently
+// fails when no default mail client is set).
+function isMobileDevice() {
+  if (typeof navigator === "undefined") return false;
+  return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
 }
 
 // Computes "where you may not align" gaps from a per-therapist match breakdown.
@@ -604,6 +624,9 @@ export default function PatientResults() {
   // Site-copy resolver. Used to render `results.heading` /
   // `results.subhead` overrides from the admin editor.
   const copy = useSiteCopy();
+  // Cached at mount — `isMobileDevice()` only reads navigator.userAgent
+  // so result is stable for this render cycle.
+  const mobileDevice = isMobileDevice();
 
   useEffect(() => {
     let active = true;
@@ -974,21 +997,32 @@ export default function PatientResults() {
                         )}
 
                         <div className="flex flex-wrap gap-2 mt-3">
-                          <a
-                            href={buildConsultMailto(t, request)}
-                            className="inline-flex items-center gap-1.5 bg-[#2D4A3E] text-white rounded-lg px-3 py-1.5 text-xs font-medium hover:bg-[#3A5E50] transition"
-                            data-testid={`consult-btn-${i}`}
+                          <EmailButton
+                            urls={(() => {
+                              const parts = buildConsultParts(t, request);
+                              return buildEmailUrls(parts);
+                            })()}
+                            to={t.email || ""}
+                            isMobile={mobileDevice}
+                            className="inline-flex items-center gap-1.5 bg-[#2D4A3E] text-white rounded-lg px-3 py-1.5 text-xs font-medium hover:bg-[#3A5E50] transition cursor-pointer"
+                            testId={`consult-btn-${i}`}
                           >
                             <CalendarPlus size={13} /> Book free consult
-                          </a>
-                          <a
-                            href={`mailto:${t.email}`}
-                            className="inline-flex items-center gap-1.5 bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg px-3 py-1.5 text-xs hover:border-[#2D4A3E] transition"
-                            data-testid={`contact-email-${i}`}
+                          </EmailButton>
+                          <EmailButton
+                            urls={buildEmailUrls({
+                              to: t.email || "",
+                              subject: "Hello from TheraVoca",
+                              body: "",
+                            })}
+                            to={t.email || ""}
+                            isMobile={mobileDevice}
+                            className="inline-flex items-center gap-1.5 bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg px-3 py-1.5 text-xs hover:border-[#2D4A3E] transition cursor-pointer text-[#2B2A29]"
+                            testId={`contact-email-${i}`}
                           >
                             <Mail size={13} className="text-[#2D4A3E]" />
                             Email
-                          </a>
+                          </EmailButton>
                           {t.phone && (
                             <a
                               href={`tel:${t.phone}`}

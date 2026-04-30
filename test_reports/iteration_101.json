@@ -1,0 +1,29 @@
+{
+  "summary": "Iter 101 — Verified 5-task bundle: (1) score cap at 99 in matching.py, (2) prelaunch_invite now lives in editable email-templates with extended fields, (3) hard-capacity urgency_strict correctly = ['asap'] after string-vs-list fix, (4) desktop Book-free-consult + Email popovers with 5 mail-provider menu items + copy button, (5) simulator + patient-results scores render as integers. 7/7 pytest passed. Frontend data-testids all present (consult-btn-0 + contact-email-0 with -menu/-gmail/-outlook/-yahoo/-mailto/-copy suffixes). Patient results percents observed on live request: 96, 4, 92, 8, 81, 20, 72, 28 — all integers, no decimals, no 100%. hard-capacity counts={asap:0,within_2_3_weeks:121,within_month:121} and disabled.urgency_strict=['asap'] match spec exactly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration101_score_cap_prelaunch.py",
+    "/app/test_reports/pytest/iter101_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "matching.py line 910-911: score cap uses `if total > 0` which correctly preserves the -1 sentinel but silently ignores negative non-sentinel values (shouldn't happen, but worth a defensive assert or explicit `!= -1` check for clarity).",
+    "hard_capacity.py line 65-81: urgency_capacity string-vs-list bug fix is sound. Consider type-hinting urgency_capacity in the therapist model (Pydantic) so this kind of drift is caught at load time rather than via scoring tests.",
+    "EmailButton.jsx: isMobile is derived once from navigator.userAgent via a helper; if viewport is resized mid-session (desktop user opens devtools responsive mode) the popover/mailto branch won't re-evaluate. Non-blocking, but worth a useEffect+resize listener if you ever see reports about it."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration101_score_cap_prelaunch.py (NEW)"
+  ],
+  "success_rate": {"backend": "100% (7/7 pytest)", "frontend": "95% (all desktop testids + score-integer rendering verified; mobile behaviour verified by source-code inspection rather than live UA spoof due to Playwright context-UA limitation)"},
+  "test_credentials": "admin: admin123! (Master password mode). Patient results: /results/6877a7f9-3323-4fe6-91f0-84fe8ab5d082?t=1PzkJKrfhamDkyoTJEdtg2Ee-jBunIim (4 applications with decimal match_scores like 95.86 — correctly rendered as integers on UI).",
+  "seed_data_creation": "None. PUT /api/admin/email-templates/prelaunch_invite {subject:'New subject for testing'} was reset back to default within the same test (test_put_prelaunch_invite_persists_and_reset).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file test_iteration101_score_cap_prelaunch.py auto-loads REACT_APP_BACKEND_URL from /app/frontend/.env so pytest works outside an E1 shell. Uses a REAL patient request from db.patient_requests to score against — don't replace with a synthetic dict unless you also populate all the keys score_therapist() reads (state, client_type, age_group, primary_concerns, payment_type etc.). For mobile UA-based tests in future, use playwright browser.new_context(user_agent='...iPhone...') instead of set_extra_http_headers which only affects outgoing HTTP, not navigator.userAgent.",
+  "rca of the issue": "All 5 tasks validated working. Root fix for task 2 was hard_capacity.py treating therapist.urgency_capacity as a string (single cap bucket) rather than iterating it like a list — the old code `for cap in t.get('urgency_capacity') or []:` iterated each character of the string, so 'asap' → ['a','s','a','p'] which never matched the ladder sets. Fixed to `cap = (t.get('urgency_capacity') or '').lower()` + ladder lookup. Verified by /api/admin/hard-capacity counts=121/121 (was 0/0/0 under the bug)."
+}

@@ -191,7 +191,7 @@ export default function MatchedProviderCard({ t, onEdit }) {
                         }`}
                       >
                         {isNeg ? "" : "+"}
-                        {Math.round(pts * 10) / 10}
+                        {Math.round(pts)}
                         {max != null && !isNeg && !isBoosted && (
                           <span className="text-[#A4A29E]">/{max}</span>
                         )}

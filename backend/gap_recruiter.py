@@ -191,6 +191,10 @@ async def run_gap_recruitment(dry_run: bool = True, max_drafts: int = DRAFT_LIMI
     # Lazy-import to avoid circular dependency with admin route module.
     from routes.admin import _compute_coverage_gap_analysis
 
+    # Refresh prelaunch_invite template overrides at the start of every
+    # cycle so admin edits take effect on the next run.
+    await _load_template_overrides()
+
     coverage = await _compute_coverage_gap_analysis()
     gaps = coverage.get("gaps", [])
     if not gaps:
@@ -313,8 +317,15 @@ def _build_recruit_email(candidate: dict, draft_id: str | None = None) -> tuple[
 
     `draft_id` is appended as `?recruit_code=<8-char-token>` so we can attribute
     therapist signups back to the gap-fill invite they came from.
+
+    The wording is fully editable via admin → Email templates →
+    "Pre-launch invite (gap recruiter)". We render the template
+    synchronously by reaching into the global `db` because this fn is
+    already called from inside async contexts; falling back to the
+    DEFAULTS dict if the DB read fails (e.g. during cron startup).
     """
     from email_service import _wrap, BRAND, _get_app_url
+    from email_templates import DEFAULTS, render
 
     first = (candidate.get("name") or "there").split(" ")[0]
     rationale = candidate.get("match_rationale") or "Your specialties align with where we're growing."
@@ -324,33 +335,67 @@ def _build_recruit_email(candidate: dict, draft_id: str | None = None) -> tuple[
         f"?recruit_code={code}"
         f"&utm_source=gap_recruit&utm_campaign=pre_launch"
     )
+
+    # Pull the editable copy. We use DEFAULTS here directly (sync) and
+    # rely on the admin-saved override being loaded into a module-level
+    # cache by `_load_template_overrides` below — keeps this fn sync
+    # without changing the caller signature.
+    overrides = _PRELAUNCH_OVERRIDES_CACHE.get("data") or {}
+    base = dict(DEFAULTS.get("prelaunch_invite") or {})
+    tpl = {**base, **{k: v for k, v in overrides.items() if k in base}}
+    vars_ = {
+        "first_name": first,
+        "rationale": rationale,
+        "code": code,
+        "signup_url": signup_url,
+    }
+
+    greeting = render(tpl.get("greeting", "Hi {first_name},"), **vars_)
+    intro = render(tpl.get("intro", ""), **vars_)
+    rationale_html = render(tpl.get("rationale", "{rationale}"), **vars_)
+    cta_label = render(tpl.get("cta_label", "See if TheraVoca is a fit"), **vars_)
+    pricing_note = render(tpl.get("pricing_note", ""), **vars_)
+    footer = render(tpl.get("footer_note", ""), **vars_)
+    subject = render(tpl.get("subject", ""), **vars_)
+    heading = tpl.get("heading", "Pre-launch invite")
+
     inner = f"""
-    <p style="font-size:16px;line-height:1.6;">Hi {first},</p>
+    <p style="font-size:16px;line-height:1.6;">{greeting}</p>
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">{intro}</p>
     <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-      I'm reaching out from TheraVoca, a small Idaho-based therapist matching service.
-      We're building our directory ahead of launch, and your practice came up as a strong fit
-      for an underserved area we're trying to fill.
-    </p>
-    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-      <em>{rationale}</em>
+      <em>{rationale_html}</em>
     </p>
     <p style="margin:28px 0;">
       <a href="{signup_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;
         text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">
-        See if TheraVoca is a fit
+        {cta_label}
       </a>
     </p>
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">
-      30-day free trial, $45/mo after — no clients, no charge. We don't sell your email.
+      {pricing_note}
     </p>
     <p style="color:{BRAND['muted']};font-size:11px;line-height:1.6;border-top:1px solid #E8E5DF;padding-top:10px;margin-top:18px;">
-      You're receiving this because TheraVoca is recruiting for an underserved
-      Idaho specialty before public launch. Reference code: <code>{code}</code>.
-      You can ignore this email — we won't follow up unless you click above.
+      {footer}
     </p>
     """
-    subject = "Idaho therapist outreach — joining TheraVoca's launch network"
-    return subject, _wrap("Pre-launch invite", inner)
+    return subject, _wrap(heading, inner)
+
+
+# Module-level cache for the prelaunch_invite template overrides. Refreshed
+# at the start of every gap-recruit cycle so changes the admin saves are
+# reflected within one cycle. Avoids per-email DB reads.
+_PRELAUNCH_OVERRIDES_CACHE: dict[str, Any] = {"data": None}
+
+
+async def _load_template_overrides() -> None:
+    """Refresh the module-level prelaunch_invite override cache."""
+    try:
+        doc = await db.email_templates.find_one(
+            {"key": "prelaunch_invite"}, {"_id": 0},
+        )
+        _PRELAUNCH_OVERRIDES_CACHE["data"] = doc or {}
+    except Exception:
+        _PRELAUNCH_OVERRIDES_CACHE["data"] = {}
 
 
 async def send_pending_drafts() -> dict[str, Any]:

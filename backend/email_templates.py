@@ -146,6 +146,36 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "footer_note": "If you didn't request this, you can safely ignore this email.",
         "available_vars": "code, ttl_minutes",
     },
+    "prelaunch_invite": {
+        "title": "Pre-launch invite (gap recruiter)",
+        "description": (
+            "Sent by the gap recruiter to therapists in underserved Idaho "
+            "specialties before public launch. Auto-recruit cycle generates "
+            "drafts; admin approves before they go out."
+        ),
+        "subject": "Idaho therapist outreach — joining TheraVoca's launch network",
+        "heading": "Pre-launch invite",
+        "greeting": "Hi {first_name},",
+        "intro": (
+            "I'm reaching out from TheraVoca, a small Idaho-based therapist "
+            "matching service. We're building our directory ahead of launch, "
+            "and your practice came up as a strong fit for an underserved "
+            "area we're trying to fill."
+        ),
+        "rationale": "{rationale}",
+        "cta_label": "See if TheraVoca is a fit",
+        "pricing_note": (
+            "30-day free trial, $45/mo after — no clients, no charge. "
+            "We don't sell your email."
+        ),
+        "footer_note": (
+            "You're receiving this because TheraVoca is recruiting for an "
+            "underserved Idaho specialty before public launch. Reference "
+            "code: {code}. You can ignore this email — we won't follow up "
+            "unless you click above."
+        ),
+        "available_vars": "first_name, rationale, code, signup_url",
+    },
 }
 
 
@@ -183,7 +213,7 @@ async def upsert_template(
     """Persist editable fields for a template. Whitelisted fields only."""
     if key not in DEFAULTS:
         raise ValueError(f"Unknown template key: {key}")
-    allowed = {"subject", "heading", "greeting", "intro", "cta_label", "footer_note"}
+    allowed = {"subject", "heading", "greeting", "intro", "cta_label", "footer_note", "rationale", "pricing_note", "body"}
     update = {k: v for k, v in fields.items() if k in allowed and isinstance(v, str)}
     update["key"] = key
     await db.email_templates.update_one(

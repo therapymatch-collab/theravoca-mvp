@@ -62,7 +62,14 @@ def _passes_insurance(t: dict, carrier: str) -> bool:
 def _passes_urgency(t: dict, urgency: str) -> bool:
     if not urgency or urgency == "flexible":
         return True
-    cap = [str(x).lower() for x in (t.get("urgency_capacity") or [])]
+    # urgency_capacity is a single string ("asap" / "within_2_3_weeks" /
+    # "within_month"), NOT a list. (matching.py line 329 also reads it
+    # as a string.) Earlier versions of this file iterated the string
+    # as a list which silently broke all urgency-strict checks against
+    # any therapist with a populated value.
+    cap = (t.get("urgency_capacity") or "").lower()
+    if not cap:
+        return False
     # Matching ladder — asap can only be filled by asap-capable;
     # within_2_3_weeks accepts asap or within_2_3_weeks, etc.
     ladder = {
@@ -71,7 +78,7 @@ def _passes_urgency(t: dict, urgency: str) -> bool:
         "within_month": {"asap", "within_2_3_weeks", "within_month"},
     }
     accepted = ladder.get(urgency, set())
-    return any(c in accepted for c in cap)
+    return cap in accepted
 
 
 async def compute_capacity(db) -> dict:

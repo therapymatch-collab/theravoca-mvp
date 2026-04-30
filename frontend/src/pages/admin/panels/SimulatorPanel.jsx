@@ -306,7 +306,7 @@ function RequestRow({ req, idx, open, onToggle }) {
                       {t.therapist_name || t.therapist_id}
                     </span>
                     <span className="text-sm font-semibold text-[#2D4A3E] tabular-nums">
-                      {t.step1_score?.toFixed?.(1) ?? t.step1_score}
+                      {Math.round(t.step1_score ?? 0)}
                     </span>
                   </div>
                 ))}
@@ -343,13 +343,13 @@ function RequestRow({ req, idx, open, onToggle }) {
                         <span className="text-xs text-[#6D6A65]">
                           Step-1:{" "}
                           <span className="text-[#3F3D3B] font-semibold">
-                            {a.step1_score?.toFixed?.(1) ?? a.step1_score}
+                            {Math.round(a.step1_score ?? 0)}
                           </span>
                         </span>
                         <span className="text-xs text-[#6D6A65]">
                           Step-2:{" "}
                           <span className="text-[#2D4A3E] font-semibold">
-                            {a.step2_score?.toFixed?.(1) ?? a.step2_score}
+                            {Math.round(a.step2_score ?? 0)}
                           </span>
                         </span>
                         <span className={`text-xs font-semibold ${deltaColor}`}>
