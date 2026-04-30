@@ -56,6 +56,47 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 ```
 
 ## Implemented (latest first)
+## Iteration 113 — Pre-launch "Wipe test data" button (May 1, 2026)
+
+User-requested admin tool to clear all pre-launch test data while preserving the seeded therapist directory + all admin/site config.
+
+### Backend (`/app/backend/routes/admin.py`)
+- **`GET /api/admin/wipe-test-data/preview`** — returns concrete counts of every collection that would be cleared, plus how many therapists are seeded vs about to be deleted. Read-only, used to populate the confirmation dialog.
+- **`POST /api/admin/wipe-test-data`** — destructive wipe. Requires `confirm_token=="WIPE TEST DATA"` (exact case + spelling) in the body — intentional friction so a stray click can't fire it.
+- **Wipe scope** (16 collections cleared entirely):
+  - Patient-side: `requests`, `applications`, `declines`, `patient_accounts`
+  - Outreach + recruiting: `outreach_invites`, `outreach_opt_outs`, `recruit_drafts`, `auto_recruit_cycles`
+  - Simulator + experiments: `simulator_runs`, `simulator_requests`
+  - Operational logs: `feedback`, `followups`, `magic_codes`, `password_login_attempts`, `intake_ip_log`, `cron_runs`
+  - Therapists: deletes any whose email is NOT `therapymatch+...@gmail.com` (real-world signups during testing)
+- **Preserved**: 223 seeded therapists with `therapymatch+` emails (incl. backfilled bios), `site_copy` (incl. how-it-works), `faqs`, `blog_posts`, `email_templates`, scrape sources, admin team accounts, app/auto-recruit/Turnstile/rate-limit settings, `geocache`.
+
+### Frontend (`/app/frontend/src/pages/AdminDashboard.jsx`)
+- Red "Wipe test data" button placed next to "Strip backfilled data" in the admin header (same destructive-action visual language).
+- Modal opens preview API on mount → shows per-collection delete counts in a dusty-rose card + a forest-green "Will keep" card.
+- Strong typed-confirm: input field requires exact phrase `WIPE TEST DATA`. Button stays `disabled` until the input matches exactly (case + spelling). Verified live: empty + lowercase both keep it disabled; correct phrase enables it.
+- Test IDs: `wipe-test-data-btn`, `wipe-test-data-dialog`, `wipe-preview-counts`, `wipe-confirm-input`, `wipe-confirm-btn`, `wipe-cancel-btn`.
+
+### Tests
+- `tests/test_iteration113_wipe_test_data.py` — 6 contract tests pass:
+  1. Both routes registered in FastAPI
+  2. Preview rejects unauthenticated callers (401)
+  3. Preview returns expected shape (all 16 collections + therapists counts + preserved_note)
+  4. POST rejects unauthenticated callers (401)
+  5. POST without `confirm_token` returns 400
+  6. POST with wrong-case token returns 400
+
+### Live verification
+- Curl confirmed: preview returns `{collections_to_clear: {requests:480, applications:1101, ...}, therapists_to_delete:3, therapists_kept:223, total_documents_to_delete:9417}`
+- Curl confirmed: wrong token + no token + no auth all properly rejected
+- Playwright confirmed: dialog opens, counts render, confirm button correctly toggles disabled/enabled based on typed phrase, cancel closes
+
+### Files touched
+- `backend/routes/admin.py` — 2 new endpoints + `_WIPE_COLLECTIONS` constant + `_SEEDED_THERAPIST_FILTER`
+- `frontend/src/pages/AdminDashboard.jsx` — `openWipeDialog`, `runWipeTestData`, button, dialog
+- `backend/tests/test_iteration113_wipe_test_data.py` — new (6 tests)
+
+
 ## Iteration 112 — Step-2 rank verified globally + email-path consistency (May 1, 2026)
 
 ### Verification (the user's "double-check" ask)

@@ -1204,6 +1204,111 @@ async def admin_backfill_status(_: bool = Depends(require_admin)):
     }
 
 
+# ── Pre-launch test-data wipe ────────────────────────────────────────────
+# A blunt-but-guarded button that clears every collection containing
+# patient/operational test data (requests, applications, simulator runs,
+# auto-recruit cycles, outreach invites, magic codes, etc.) and removes
+# any therapists that aren't part of the seeded `therapymatch+` pool.
+# Designed for "everything we used to test the matching engine, gone —
+# but the seeded therapist directory + all admin/site config preserved."
+_SEEDED_THERAPIST_FILTER = {
+    "email": {"$regex": "therapymatch\\+", "$options": "i"},
+}
+
+_WIPE_COLLECTIONS = [
+    # Patient-side data
+    "requests",
+    "applications",
+    "declines",
+    "patient_accounts",
+    # Outreach + recruiting test artifacts
+    "outreach_invites",
+    "outreach_opt_outs",
+    "recruit_drafts",
+    "auto_recruit_cycles",
+    # Simulator + experiment artifacts
+    "simulator_runs",
+    "simulator_requests",
+    # Operational logs that pile up during testing
+    "feedback",
+    "followups",
+    "magic_codes",
+    "password_login_attempts",
+    "intake_ip_log",
+    "cron_runs",
+]
+
+
+@router.get("/admin/wipe-test-data/preview")
+async def admin_wipe_test_data_preview(_: bool = Depends(require_admin)):
+    """Show counts of what `POST /admin/wipe-test-data` would delete.
+    Read-only — no side effects. Used by the admin UI to populate the
+    confirmation dialog with concrete numbers."""
+    counts: dict[str, int] = {}
+    for col in _WIPE_COLLECTIONS:
+        counts[col] = await db[col].count_documents({})
+    seeded_kept = await db.therapists.count_documents(_SEEDED_THERAPIST_FILTER)
+    therapists_to_delete = await db.therapists.count_documents(
+        {"$nor": [_SEEDED_THERAPIST_FILTER]},
+    )
+    return {
+        "collections_to_clear": counts,
+        "therapists_to_delete": therapists_to_delete,
+        "therapists_kept": seeded_kept,
+        "total_documents_to_delete": (
+            sum(counts.values()) + therapists_to_delete
+        ),
+        "preserved_note": (
+            "Kept: seeded therapists with therapymatch+ emails (incl. "
+            "backfilled bios), site_copy + how-it-works, FAQs, blog posts, "
+            "email templates, scrape sources, admin team accounts, app/"
+            "auto-recruit/Turnstile/rate-limit settings, geocache."
+        ),
+    }
+
+
+@router.post("/admin/wipe-test-data")
+async def admin_wipe_test_data(payload: dict, _: bool = Depends(require_admin)):
+    """Pre-launch destructive wipe. Requires `confirm_token=="WIPE TEST DATA"`
+    in the body (intentional friction so this can't fire on a stray click).
+
+    Deletes every document from the collections in `_WIPE_COLLECTIONS`
+    (patient/operational test data) and every therapist whose email is NOT
+    in the seeded `therapymatch+` pool. Preserves the directory of seeded
+    therapists, all site config, and all admin team data.
+    """
+    token = (payload or {}).get("confirm_token", "")
+    if token != "WIPE TEST DATA":
+        raise HTTPException(
+            400,
+            "confirm_token must equal 'WIPE TEST DATA' (case + spelling).",
+        )
+    cleared: dict[str, int] = {}
+    for col in _WIPE_COLLECTIONS:
+        result = await db[col].delete_many({})
+        cleared[col] = result.deleted_count
+    # Therapists: delete any document NOT in the seeded pool. Use $nor so
+    # documents missing the email field (corrupted) are also deleted.
+    therapists_result = await db.therapists.delete_many(
+        {"$nor": [_SEEDED_THERAPIST_FILTER]},
+    )
+    seeded_kept = await db.therapists.count_documents(_SEEDED_THERAPIST_FILTER)
+    logger.warning(
+        "admin_wipe_test_data: cleared=%s therapists_deleted=%d kept=%d",
+        cleared, therapists_result.deleted_count, seeded_kept,
+    )
+    return {
+        "ok": True,
+        "cleared": cleared,
+        "therapists_deleted": therapists_result.deleted_count,
+        "therapists_kept": seeded_kept,
+        "total_documents_deleted": (
+            sum(cleared.values()) + therapists_result.deleted_count
+        ),
+    }
+
+
+
 @router.post("/admin/seed")
 async def admin_seed(_: bool = Depends(require_admin)):
     existing = await db.therapists.count_documents({})

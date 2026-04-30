@@ -629,6 +629,50 @@ export default function AdminDashboard() {
     }
   };
 
+  // ── Pre-launch wipe state ─────────────────────────────────────────────
+  // The button opens a modal that calls /admin/wipe-test-data/preview to
+  // show concrete delete counts, then requires the admin to type the
+  // exact phrase "WIPE TEST DATA" before the destructive POST is enabled.
+  const [wipeOpen, setWipeOpen] = useState(false);
+  const [wipePreview, setWipePreview] = useState(null);
+  const [wipeConfirm, setWipeConfirm] = useState("");
+  const [wipeBusy, setWipeBusy] = useState(false);
+
+  const openWipeDialog = async () => {
+    setWipeOpen(true);
+    setWipeConfirm("");
+    setWipePreview(null);
+    try {
+      const r = await client.get("/admin/wipe-test-data/preview");
+      setWipePreview(r.data);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Couldn't load wipe preview");
+      setWipeOpen(false);
+    }
+  };
+
+  const runWipeTestData = async () => {
+    if (wipeConfirm !== "WIPE TEST DATA") return;
+    setWipeBusy(true);
+    try {
+      const res = await client.post("/admin/wipe-test-data", {
+        confirm_token: "WIPE TEST DATA",
+      });
+      const total = res.data.total_documents_deleted;
+      const kept = res.data.therapists_kept;
+      toast.success(
+        `Wiped ${total} test documents. Kept ${kept} seeded therapists.`,
+      );
+      setWipeOpen(false);
+      refresh();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Wipe failed");
+    } finally {
+      setWipeBusy(false);
+    }
+  };
+
+
   const [researchingReviews, setResearchingReviews] = useState(false);
   const runReviewResearch = async () => {
     if (!confirm(
@@ -996,6 +1040,15 @@ export default function AdminDashboard() {
                 title="Pre-launch reversal: restore real emails + remove all fields backfill added. User-edited fields are preserved."
               >
                 Strip backfilled data
+              </button>
+              <button
+                className="!py-2 !px-4 text-sm rounded-md border border-[#D45D5D] text-[#D45D5D] bg-white hover:bg-[#D45D5D] hover:text-white transition"
+                onClick={openWipeDialog}
+                data-testid="wipe-test-data-btn"
+                title="Pre-launch: delete every request, application, simulator run, and non-seeded therapist. Keeps the seeded therapist directory + all admin/site config."
+              >
+                <Trash2 size={14} className="inline mr-1.5" />
+                Wipe test data
               </button>
               <button
                 className="tv-btn-secondary !py-2 !px-4 text-sm disabled:opacity-60"
@@ -1711,6 +1764,123 @@ export default function AdminDashboard() {
           )}
         </div>
       </main>
+
+      {/* Pre-launch wipe-test-data dialog. Strong typed-confirm: button
+          is disabled until the admin types the exact phrase. */}
+      <Dialog open={wipeOpen} onOpenChange={(o) => !o && setWipeOpen(false)}>
+        <DialogContent
+          className="max-w-xl bg-white border-[#E8E5DF]"
+          data-testid="wipe-test-data-dialog"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-serif-display text-2xl text-[#D45D5D]">
+              Wipe test data
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 text-sm text-[#3A3A3A]">
+            <p>
+              <strong>Pre-launch only.</strong> This will permanently delete
+              every patient-facing and operational test record, while
+              keeping the seeded therapist directory + all admin/site
+              configuration intact.
+            </p>
+            {!wipePreview ? (
+              <div className="flex items-center gap-2 text-[#6B6B6B]">
+                <Loader2 size={16} className="animate-spin" /> Loading preview…
+              </div>
+            ) : (
+              <>
+                <div
+                  className="rounded-md border border-[#E8E5DF] bg-[#FBF8F2] p-4"
+                  data-testid="wipe-preview-counts"
+                >
+                  <div className="text-xs uppercase tracking-wider text-[#C87965] mb-2">
+                    Will delete
+                  </div>
+                  <ul className="space-y-1 text-[13px] font-mono">
+                    {Object.entries(wipePreview.collections_to_clear).map(
+                      ([col, n]) => (
+                        <li key={col} className="flex justify-between">
+                          <span>{col}</span>
+                          <span className="text-[#D45D5D]">{n}</span>
+                        </li>
+                      ),
+                    )}
+                    <li className="flex justify-between border-t border-[#E8E5DF] mt-2 pt-2">
+                      <span>therapists (non-seeded)</span>
+                      <span className="text-[#D45D5D]">
+                        {wipePreview.therapists_to_delete}
+                      </span>
+                    </li>
+                    <li className="flex justify-between font-semibold mt-2">
+                      <span>Total documents</span>
+                      <span className="text-[#D45D5D]">
+                        {wipePreview.total_documents_to_delete}
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+                <div className="rounded-md border border-[#D9E5DC] bg-[#F2F8F4] p-4">
+                  <div className="text-xs uppercase tracking-wider text-[#2D4A3E] mb-2">
+                    Will keep
+                  </div>
+                  <p className="text-[13px] leading-relaxed">
+                    <strong>{wipePreview.therapists_kept}</strong> seeded
+                    therapists with <code>therapymatch+</code> emails (and
+                    their backfilled bios/specialties).{" "}
+                    {wipePreview.preserved_note}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-[#6B6B6B] mb-1.5">
+                    Type{" "}
+                    <code className="text-[#D45D5D]">WIPE TEST DATA</code> to
+                    enable
+                  </label>
+                  <Input
+                    value={wipeConfirm}
+                    onChange={(e) => setWipeConfirm(e.target.value)}
+                    placeholder="WIPE TEST DATA"
+                    autoComplete="off"
+                    className="font-mono"
+                    data-testid="wipe-confirm-input"
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <button
+              className="tv-btn-secondary !py-2 !px-4 text-sm"
+              onClick={() => setWipeOpen(false)}
+              data-testid="wipe-cancel-btn"
+            >
+              Cancel
+            </button>
+            <button
+              className="!py-2 !px-4 text-sm rounded-md bg-[#D45D5D] text-white hover:bg-[#B84545] transition disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={runWipeTestData}
+              disabled={
+                wipeBusy ||
+                !wipePreview ||
+                wipeConfirm !== "WIPE TEST DATA"
+              }
+              data-testid="wipe-confirm-btn"
+            >
+              {wipeBusy ? (
+                <>
+                  <Loader2 size={14} className="inline mr-1.5 animate-spin" />
+                  Wiping…
+                </>
+              ) : (
+                <>
+                  <Trash2 size={14} className="inline mr-1.5" /> Wipe now
+                </>
+              )}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={!!editTherapist}
