@@ -652,13 +652,60 @@ async def public_request_results(
         quality_bonus = min(
             12.0, len_score + issue_score + action_score + personal_score,
         )
-        a["patient_rank_score"] = round(min(100.0, ms * 0.6 + speed_bonus + quality_bonus), 1)
+        # Apply-fit (LLM-graded 0-5) — captures whether the therapist
+        # ENGAGED the brief (named the concern, addressed style, quoted
+        # the patient's free text). Multiplied by 2 so a 5/5 contributes
+        # +10 to the rank score.
+        apply_fit = float(a.get("apply_fit") or 0)
+        apply_fit_bonus = round(apply_fit * 2.0, 1)
+        # Commitment-toggle bonus (max +9). Therapist explicitly
+        # confirms availability / urgency / payment in the apply form.
+        commit_bonus = 0.0
+        if a.get("confirms_availability"):
+            commit_bonus += 3.0
+        if a.get("confirms_urgency"):
+            commit_bonus += 3.0
+        if a.get("confirms_payment"):
+            commit_bonus += 3.0
+        # Step-2 patient-facing rank.
+        # Raw = Step-1 baseline (0-57, since match_score caps at 95)
+        #     + speed (0-30)
+        #     + blurb-quality (0-12)
+        #     + apply-fit (0-10)
+        #     + commit toggles (0-9)
+        # Max raw = 118.
+        # We rescale to a 0-100 display by dividing by 1.18, then floor at
+        # the 99 ceiling so we never display "100% match" (mirrors the
+        # 95% Step-1 cap philosophy: no relationship is ever perfect on
+        # paper). This is the fix for the "all 6 applicants show 95%"
+        # bug — clipping at 100 was crushing the entire Step-2 signal.
+        raw_step2 = (
+            ms * 0.6
+            + speed_bonus
+            + quality_bonus
+            + apply_fit_bonus
+            + commit_bonus
+        )
+        a["patient_rank_score"] = round(min(99.0, raw_step2 / 1.18), 1)
         a["response_quality"] = {
             "length": round(len_score, 1),
             "issue_match": issue_score,
             "action_signal": action_score,
             "personal_voice": personal_score,
             "total": round(quality_bonus, 1),
+        }
+        # Surface the constituent Step-2 components so the UI (and the
+        # admin Simulator) can explain WHY one therapist outranks
+        # another. Numbers are RAW (pre-rescale) so they sum visibly to
+        # `raw_step2` and the rescale math stays explainable.
+        a["rank_components"] = {
+            "step1_baseline": round(ms * 0.6, 1),
+            "speed_bonus": round(speed_bonus, 1),
+            "quality_bonus": round(quality_bonus, 1),
+            "apply_fit_bonus": apply_fit_bonus,
+            "commit_bonus": round(commit_bonus, 1),
+            "raw_total": round(raw_step2, 1),
+            "max_possible": 118.0,
         }
 
     apps.sort(key=lambda a: (a.get("patient_rank_score", 0), a.get("created_at", "")), reverse=True)

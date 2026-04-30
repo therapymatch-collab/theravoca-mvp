@@ -910,9 +910,27 @@ export default function PatientResults() {
                           <h3 className="font-serif-display text-xl text-[#2D4A3E] leading-tight truncate">
                             {t.name}
                           </h3>
-                          <div className="inline-flex items-center gap-1 bg-[#2D4A3E] text-white text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0">
+                          <div
+                            className="inline-flex items-center gap-1 bg-[#2D4A3E] text-white text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0"
+                            title={
+                              app.rank_components
+                                ? `Step-2 ranking: baseline ${app.rank_components.step1_baseline} + ` +
+                                  `speed ${app.rank_components.speed_bonus} + ` +
+                                  `blurb-quality ${app.rank_components.quality_bonus} + ` +
+                                  `apply-fit ${app.rank_components.apply_fit_bonus} + ` +
+                                  `commit ${app.rank_components.commit_bonus}`
+                                : "Match strength"
+                            }
+                            data-testid={`therapist-rank-score-${i}`}
+                          >
                             <Star size={10} fill="currentColor" />
-                            {Math.round(app.match_score)}%
+                            {/* Step-2 rank score (patient_rank_score) is what
+                                actually orders the cards: it folds in apply
+                                quality, blurb engagement, speed, and commit
+                                toggles on top of the Step-1 95%-capped match.
+                                Falls back to match_score on legacy applications
+                                that pre-date the field. */}
+                            {Math.round(app.patient_rank_score ?? app.match_score)}%
                           </div>
                         </div>
                         <div className="text-xs text-[#6D6A65] mt-0.5 break-words">
@@ -1075,7 +1093,7 @@ export default function PatientResults() {
                             >
                               <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-[#C87965] font-semibold">
                                 <AlertCircle size={11} />
-                                Where you may not align ({Math.round(100 - app.match_score)}% gap)
+                                Where you may not align ({Math.round(100 - (app.patient_rank_score ?? app.match_score))}% gap)
                               </div>
                               <ul className="mt-1.5 space-y-0.5">
                                 {gaps.map((g) => (
