@@ -42,11 +42,9 @@ export function AdminClientProvider({ password, children }) {
 
 export default function useAdminClient(fallbackPassword) {
   const ctx = useContext(AdminClientContext);
-  // Always-call hook, conditional value: if a context is present use
-  // it; otherwise build a fresh client from the fallback password.
-  // Memoized so callers can include the returned client in deps lists
-  // safely.
-  // eslint-disable-next-line react-hooks/rules-of-hooks
+  // Always-call hook, conditional value: useMemo IS called
+  // unconditionally; only its returned value is conditional. Memoised
+  // so callers can include the returned client in deps lists safely.
   const fallback = useMemo(
     () => (ctx ? null : adminClient(fallbackPassword)),
     [ctx, fallbackPassword],

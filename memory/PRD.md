@@ -57,6 +57,29 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+## Iteration 106 — Backfill + useAdminClient hook + Pydantic Literals (Feb 8, 2026)
+
+### 1. urgency_capacity='asap' backfill
+- New `/app/backend/scripts/backfill_urgency_asap.py` — picks 35 active therapists (rotated across license types for a balanced spread), sets `urgency_capacity='asap'`. Idempotent. Already executed.
+- Result: `/api/admin/hard-capacity` counts now `{asap:35, within_2_3_weeks:121, within_month:121}`. `disabled.urgency_strict=[]` — `asap` HARD toggle is no longer greyed out for patients. Coverage Gaps "Protected HARD selections" view drops the urgency axis entirely.
+
+### 2. AdminClientProvider + `useAdminClient` hook
+- New `/app/frontend/src/lib/useAdminClient.jsx` — a Context + hook that gives any nested admin component a guaranteed-authenticated axios client without prop-drilling. Closes the regression class behind iter99's CoverageGapPanel 401 (panel had quietly imported the bare `api`).
+- `AdminDashboard.jsx` now wraps its return in `<AdminClientProvider password={pwd}>`. Existing prop-drilled `client` callsites continue to work (the hook accepts a `clientProp || ctxClient` pattern in `CoverageGapPanel.jsx`, exemplar for future migrations).
+- Future cleanup logged: `SimulatorPanel`, `RecruitDraftsPanel`, `SettingsPanel` can move off prop-drilled `client` to the hook in a separate pass — non-blocking.
+
+### 3. Pydantic Literals on therapist signup
+- `/app/backend/models.py` adds canonical literals: `UrgencyCapacity`, `ModalityOffering`, `ClientType`, `AgeGroup`. Applied to `TherapistSignup` so future drift on `urgency_capacity`, `modality_offering`, `client_types`, `age_groups` fails at signup with a 422 + actionable message.
+- `TherapistOut` is unused in routes (verified by grep — only declared, never imported as a `response_model`), so adding the Literals there is no-op; we don't change it.
+
+### 4. Data-drift detector (bonus, found by testing agent)
+- iter102 testing surfaced 1 active therapist (Whitney Wollweber) with `urgency_capacity='1_2_per_week'` — invalid, would silently never match any patient.
+- New `/app/backend/scripts/detect_therapist_drift.py` finds + fixes drift across all 4 axes. Run without args → reports + exits 1; with `--fix` → coerces invalid values to conservative defaults (urgency → "within_month", modality_offering → "both", invalid client_types/age_groups dropped from list). Already executed; pool is now 100% drift-free.
+
+### Verified (iteration_102.json)
+- **Backend: 11/11 pytest pass.** Pydantic rejects all bad literals at /api/therapists/signup; backfill confirmed at /api/admin/hard-capacity; prelaunch_invite + score-cap regressions hold.
+- **Frontend: 100%.** Coverage Gaps panel renders cleanly through the new `useAdminClient` context. No console errors, no /api 4xx/5xx.
+
 ## Iteration 105 — Score cap + email templates + multi-provider mail buttons + audit (Feb 8, 2026)
 
 Five user-requested fixes:
