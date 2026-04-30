@@ -7,7 +7,6 @@ import {
   Shield,
 } from "lucide-react";
 import { FactStat } from "./_panelShared";
-import { api } from "@/lib/api";
 
 const DIMENSION_LABELS = {
   specialty: "Clinical specialties",
@@ -22,18 +21,23 @@ const DIMENSION_LABELS = {
 
 // Pre-launch coverage report — surfaces gaps in our therapist directory
 // so the recruiter knows where to focus outreach.
-export default function CoverageGapPanel({ data, loading, onReload }) {
+export default function CoverageGapPanel({ data, loading, onReload, client }) {
   const [hardCap, setHardCap] = useState(null);
   useEffect(() => {
+    if (!client) return;
     let alive = true;
     (async () => {
       try {
-        const r = await api.get("/admin/hard-capacity");
+        const r = await client.get("/admin/hard-capacity");
         if (alive) setHardCap(r.data);
-      } catch (_) { /* soft-fail */ }
+      } catch (_) {
+        /* soft-fail — protected section just doesn't render */
+      }
     })();
-    return () => { alive = false; };
-  }, []);
+    return () => {
+      alive = false;
+    };
+  }, [client]);
   if (loading || !data) {
     return (
       <div className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl p-12 text-center text-[#6D6A65]" data-testid="coverage-gap-loading">

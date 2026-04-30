@@ -1597,6 +1597,7 @@ export default function AdminDashboard() {
                     data={coverageGap}
                     loading={coverageGapLoading}
                     onReload={loadCoverageGap}
+                    client={client}
                   />
                   <RecruitDraftsPanel
                     data={recruitDrafts}
