@@ -7,6 +7,7 @@ import {
   Shield,
 } from "lucide-react";
 import { FactStat } from "./_panelShared";
+import useAdminClient from "@/lib/useAdminClient";
 
 const DIMENSION_LABELS = {
   specialty: "Clinical specialties",
@@ -21,7 +22,11 @@ const DIMENSION_LABELS = {
 
 // Pre-launch coverage report — surfaces gaps in our therapist directory
 // so the recruiter knows where to focus outreach.
-export default function CoverageGapPanel({ data, loading, onReload, client }) {
+export default function CoverageGapPanel({ data, loading, onReload, client: clientProp }) {
+  // Prefer the context-provided client (new pattern), fall back to the
+  // legacy prop so the existing call-site keeps working.
+  const ctxClient = useAdminClient();
+  const client = clientProp || ctxClient;
   const [hardCap, setHardCap] = useState(null);
   useEffect(() => {
     if (!client) return;

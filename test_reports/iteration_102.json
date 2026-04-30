@@ -1,0 +1,40 @@
+{
+  "summary": "Iter-102 — verified the 3-task bundle: (1) urgency_capacity='asap' backfill (counts.urgency.asap=35; 'asap' no longer in disabled.urgency_strict; protected-axis-urgency_strict element absent in CoverageGapPanel — only language_strict + gender_required remain as protections); (2) Pydantic Literals on /api/therapists/signup (urgency_capacity='whenever', modality_offering='hybrid', client_types=['foo'], age_groups=['toddler'] all rejected with 422+'literal' error; valid payload sails through Pydantic to the route layer); (3) AdminClientProvider + useAdminClient hook works — CoverageGapPanel's protected-hard-section renders via context (no auth errors, zero console errors, zero /api/ 4xx/5xx). Regression: prelaunch_invite still in /api/admin/email-templates and matching.score_therapist returns score<=99 cap. 11/11 pytest passed. ⚠ Found 1 legacy data-drift therapist (id b425f1c7-2a58-4865-9acc-e1342fea2537) with urgency_capacity='1_2_per_week' — not blocked because TherapistOut doesn't constrain urgency_capacity, but the matching.py predicate will silently miss this therapist. Worth a one-off cleanup.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/admin/therapists", "issue": "1 active therapist (b425f1c7-2a58-4865-9acc-e1342fea2537) has urgency_capacity='1_2_per_week' — invalid value, won't match any patient urgency bucket. Backfill leftover or hand-edit drift."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration102_literals_and_backfill.py",
+    "/app/test_reports/pytest/iter102_results.xml"
+  ],
+  "action_items": [
+    "Optional cleanup: PUT /admin/therapists/b425f1c7-2a58-4865-9acc-e1342fea2537 to set urgency_capacity to one of {asap, within_2_3_weeks, within_month} — currently '1_2_per_week' silently fails matching.",
+    "Consider extending the Literal constraints to TherapistOut (currently only on TherapistSignup) so future GET responses surface drift rather than serialising junk values silently.",
+    "Optional: migrate remaining nested admin panels (SimulatorPanel, RecruitDraftsPanel, SettingsPanel) off the prop-drilled `client` prop onto useAdminClient to eliminate the legacy prop fully."
+  ],
+  "critical_code_review_comments": [
+    "models.py: TherapistOut intentionally omits urgency_capacity / modality_offering / client_types / age_groups — meaning serialisation never validates them. The whole point of the new Literals is then defeated for the read path. Either add the fields to TherapistOut with the same Literal types (forces drift to surface on first GET), or document that the Literals are a *signup-time-only* guard.",
+    "useAdminClient.jsx: the `eslint-disable react-hooks/rules-of-hooks` is misleading — useMemo IS being called unconditionally; only its returned value is conditional. The disable comment should be removed; the hook usage is already lint-clean.",
+    "useAdminClient.jsx: when both `ctx` and `fallbackPassword` are present and ctx exists, we still build a (cached) fallback client via useMemo — small wasted work. Tighten with `useMemo(() => ctx ? null : adminClient(fallbackPassword), [ctx, fallbackPassword])` already does this; double-check no callers pass a stale fallback after a logout (the cache key is `[ctx, fallbackPassword]` so it's fine).",
+    "AdminDashboard.jsx: `<AdminClientProvider password={pwd}>` wraps the main return, but the legacy `client` (built from `adminClient(pwd)` at line 151) is still threaded down to PendingTherapistsPanel + AllProvidersPanel + RequestsPanel. Two clients per dashboard render is wasteful — either delete the line-151 client and have all panels pull from context, or lock callers to the prop. Mixing both is the exact bug class the hook is supposed to prevent.",
+    "Backfill data-drift: '1_2_per_week' on one therapist suggests there's a manual edit path or older seed run that doesn't validate. Without TherapistOut Literals, no observability — add at minimum a one-time admin script: `db.therapists.find({urgency_capacity: {$nin: ['asap','within_2_3_weeks','within_month','full']}})` in CI."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration102_literals_and_backfill.py (NEW, 11 tests)"
+  ],
+  "success_rate": {"backend": "100% (11/11 pytest)", "frontend": "100% — coverage-gap-panel + protected-hard-section render cleanly via useAdminClient context, zero console errors, zero /api/ 4xx/5xx, asap correctly unblocked"},
+  "test_credentials": "admin: admin123! (Master password mode). Used sessionStorage.setItem('tv_admin_pwd', 'admin123!') + navigate to /admin/dashboard to bypass the dropdown-menu/login-form click conflict (Sign in form-button collides with Sign-in nav-dropdown when both visible).",
+  "seed_data_creation": "None. Test signup uses unique therapymatch+litNNN@gmail.com — bad-literal cases never hit DB (rejected at 422); valid case is rejected by turnstile at 400 so also never persisted.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Tests live in /app/backend/tests/test_iteration102_literals_and_backfill.py — 11 tests covering hard-capacity backfill (2), Pydantic literals on /api/therapists/signup (5 — valid + 4 bad), backwards-compat through admin/therapists serialisation (2), and prelaunch_invite + score-cap regressions (2). Note: valid-signup test accepts 400 'Missing security verification token' as success because that 400 only fires AFTER Pydantic validation passes — proof literals didn't reject. Front-end: master-password login form's 'Sign in' button collides with the nav-bar 'Sign in' dropdown — workaround is to set sessionStorage.tv_admin_pwd directly and navigate to /admin/dashboard. The protected-axis-urgency_strict data-testid is the canonical signal that asap-backfill is effective.",
+  "rca of the issue": "All 3 ship items validated. Notable finding: TherapistOut model in /app/backend/models.py has the new Literal types declared but they're applied only on TherapistSignup. Serialisation through GET endpoints does NOT use the Literals — so existing drift docs (e.g. the '1_2_per_week' urgency_capacity) silently pass through. Mitigation: add the Literal types to TherapistOut as well, or run a one-off cleanup query to normalise drifted docs."
+}

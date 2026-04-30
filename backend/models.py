@@ -1,9 +1,20 @@
 """Pydantic models for TheraVoca API."""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, EmailStr, Field
+
+
+# ── Constrained literals — caught by Pydantic at signup/edit time ──
+# These mirror the matching axis predicates in `matching.py` and the
+# patient-side option lists. Adding a new bucket?  Update the literal
+# AND the predicate; otherwise the matcher will silently fail to find
+# the therapist when patients pick the new bucket.
+UrgencyCapacity = Literal["asap", "within_2_3_weeks", "within_month"]
+ModalityOffering = Literal["telehealth", "in_person", "both"]
+ClientType = Literal["individual", "couples", "family", "group"]
+AgeGroup = Literal["child", "teen", "young_adult", "adult", "older_adult"]
 
 
 class Specialty(BaseModel):
@@ -42,13 +53,13 @@ class TherapistSignup(BaseModel):
     license_picture: Optional[str] = None  # base64 data URL
     website: Optional[str] = ""  # public — patients can click through
     office_addresses: list[str] = Field(default_factory=list)  # full street addresses
-    client_types: list[str] = Field(default_factory=lambda: ["individual"])
-    age_groups: list[str] = Field(default_factory=list, max_length=3)
+    client_types: list[ClientType] = Field(default_factory=lambda: ["individual"])
+    age_groups: list[AgeGroup] = Field(default_factory=list, max_length=3)
     primary_specialties: list[str] = Field(default_factory=list, max_length=2)
     secondary_specialties: list[str] = Field(default_factory=list, max_length=3)
     general_treats: list[str] = Field(default_factory=list, max_length=5)
     modalities: list[str] = Field(default_factory=list, max_length=6)
-    modality_offering: str = "both"
+    modality_offering: ModalityOffering = "both"
     office_locations: list[str] = Field(default_factory=list)
     insurance_accepted: list[str] = Field(default_factory=list)
     # Languages the therapist can conduct sessions in BEYOND English
@@ -60,7 +71,7 @@ class TherapistSignup(BaseModel):
     sliding_scale: bool = False
     years_experience: int = Field(ge=0, le=70, default=1)
     availability_windows: list[str] = Field(default_factory=list)
-    urgency_capacity: str = "within_month"
+    urgency_capacity: UrgencyCapacity = "within_month"
     style_tags: list[str] = Field(default_factory=list)
     free_consult: bool = False
     bio: Optional[str] = ""

@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
+import { AdminClientProvider } from "@/lib/useAdminClient";
 import credentialLabel from "@/lib/credentialLabel";
 import { imageToDataUrl } from "@/lib/image";
 import { ADMIN_POLL_INTERVAL_MS, STATUS_UNAUTHORIZED } from "@/lib/constants";
@@ -960,6 +961,7 @@ export default function AdminDashboard() {
   };
 
   return (
+    <AdminClientProvider password={pwd}>
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
       <Header />
       <main className="flex-1 px-5 py-10 md:py-14" data-testid="admin-dashboard">
@@ -2621,6 +2623,7 @@ export default function AdminDashboard() {
       </Dialog>
       <Footer />
     </div>
+    </AdminClientProvider>
   );
 }
 
