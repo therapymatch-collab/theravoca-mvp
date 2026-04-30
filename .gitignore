@@ -157,3 +157,28 @@ credentials.json
 *.pem
 *.key
 .credentials
+
+
+# DB exports — admin_users contains bcrypt hashes for team accounts;
+# never push to a public repo. Other exports in /exports/ (site_copy,
+# faqs, email_templates, app_config, etc.) are safe.
+exports/admin_users_export.json
+# Forward-compatible: if you re-run the export AFTER the app has live
+# patient/operational data, these files will contain PII or secrets.
+# Pre-gitignored so a future export doesn't accidentally leak.
+exports/patient_accounts_export.json
+exports/magic_codes_export.json
+exports/password_login_attempts_export.json
+exports/requests_export.json
+exports/applications_export.json
+exports/outreach_invites_export.json
+exports/outreach_opt_outs_export.json
+exports/recruit_drafts_export.json
+exports/intake_ip_log_export.json
+exports/feedback_export.json
+exports/declines_export.json
+exports/followups_export.json
+exports/simulator_runs_export.json
+exports/simulator_requests_export.json
+exports/auto_recruit_cycles_export.json
+exports/cron_runs_export.json
