@@ -3156,5 +3156,55 @@ async def auto_recruit_approve(
     return {"ok": True, "approved": approved}
 
 
+# ─── Experiment download (text-impact study) ───────────────────────────────
+# Lightweight read-only endpoint that streams the latest run's xlsx so the
+# admin can download it from the "How matching works" panel without us
+# having to host a separate static-file route.
+@router.get("/admin/experiments/text-impact/latest")
+async def admin_experiment_text_impact_latest(
+    _: None = Depends(require_admin),
+):
+    """Returns metadata + a download URL for the most recent
+    `experiment_text_impact` xlsx. The xlsx itself is served by the
+    sibling `/download` endpoint below as binary."""
+    from pathlib import Path
+    results_dir = Path("/app/backend/scripts/results")
+    files = sorted(results_dir.glob("exp_*.xlsx"), reverse=True)
+    if not files:
+        return {"available": False}
+    f = files[0]
+    return {
+        "available": True,
+        "filename": f.name,
+        "size_bytes": f.stat().st_size,
+        "modified_at": datetime.fromtimestamp(
+            f.stat().st_mtime, tz=timezone.utc,
+        ).isoformat(),
+        "download_url": "/api/admin/experiments/text-impact/download",
+    }
+
+
+@router.get("/admin/experiments/text-impact/download")
+async def admin_experiment_text_impact_download(
+    _: None = Depends(require_admin),
+):
+    """Streams the latest text-impact xlsx as an attachment."""
+    from pathlib import Path
+
+    from fastapi.responses import FileResponse
+    results_dir = Path("/app/backend/scripts/results")
+    files = sorted(results_dir.glob("exp_*.xlsx"), reverse=True)
+    if not files:
+        raise HTTPException(404, "No experiment results available yet.")
+    return FileResponse(
+        path=str(files[0]),
+        filename=files[0].name,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+    )
+
+
 # Suppress unused-import warnings on logger (kept for future logging)
 void = logger

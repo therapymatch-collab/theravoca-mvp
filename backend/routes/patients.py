@@ -362,6 +362,29 @@ async def create_request(payload: RequestCreate, request: Request):
             except Exception as e:
                 logger.warning("p3 embed failed for %s: %s", rid, e)
         _spawn_bg(_bg_embed_p3(), name=f"embed_p3_{rid[:8]}")
+    # Pre-compute embedding for the patient's `Anything else?` free text
+    # (other_issue) so the matching engine can soft-bonus therapists
+    # whose T5 lived-experience or T2 progress-story overlaps with
+    # what the patient actually said. This runs for EVERY request that
+    # filled in the textarea (not gated on deep-match opt-in) — the
+    # text-impact experiment showed empty/rich `other_issue` produces
+    # ~0 score delta today, this fix closes that gap.
+    if (payload.other_issue or "").strip():
+        async def _bg_embed_other_issue() -> None:
+            try:
+                from embeddings import embed_text
+                vec = await embed_text(payload.other_issue or "")
+                if vec:
+                    await db.requests.update_one(
+                        {"id": rid},
+                        {"$set": {
+                            "other_issue_embedding": vec,
+                            "other_issue_embedding_text": (payload.other_issue or "").strip()[:2000],
+                        }},
+                    )
+            except Exception as e:
+                logger.warning("other_issue embed failed for %s: %s", rid, e)
+        _spawn_bg(_bg_embed_other_issue(), name=f"embed_oi_{rid[:8]}")
     # Log the IP for the rate-limit window. We only keep these for ~24h
     # via a TTL index on `ts_at` (BSON Date) — see server.py startup.
     if client_ip:

@@ -39,11 +39,17 @@ export function Field({ label, children }) {
   );
 }
 
-export function PillRow({ items, selected, onSelect, testid, disabledValues, disabledReasons }) {
+export function PillRow({ items, selected, onSelect, testid, disabledValues, disabledReasons, showRank = false }) {
   // `disabledValues` (Set<string> | string[]) marks options as
   // unavailable — used by hard-capacity to grey out child/teen age
   // groups, family/group client types, etc. when our active
   // therapist directory has < 30 providers in that bucket.
+  //
+  // `showRank` (default false) surfaces the SELECTION ORDER as a small
+  // 1°/2°/3° badge on each active pill. Used by the presenting-issues
+  // step where the order is meaningful (issue #1 is a HARD filter,
+  // #2/#3 are soft-scored bonuses) but was previously invisible to
+  // patients.
   const disabledSet = new Set(
     Array.isArray(disabledValues)
       ? disabledValues.map((s) => String(s).toLowerCase())
@@ -55,6 +61,7 @@ export function PillRow({ items, selected, onSelect, testid, disabledValues, dis
     <div className="flex flex-wrap gap-2">
       {items.map((it) => {
         const active = selected.includes(it.v);
+        const rank = showRank && active ? selected.indexOf(it.v) + 1 : null;
         const isDisabled =
           !active && disabledSet.has(String(it.v).toLowerCase());
         const reason =
@@ -67,10 +74,16 @@ export function PillRow({ items, selected, onSelect, testid, disabledValues, dis
             type="button"
             onClick={() => !isDisabled && onSelect(it.v)}
             disabled={isDisabled}
-            title={reason || undefined}
+            title={
+              rank === 1
+                ? "1st priority — primary concern (used as a hard filter)"
+                : rank
+                  ? `Priority #${rank} — soft scoring bonus`
+                  : reason || undefined
+            }
             aria-disabled={isDisabled}
             data-testid={`${testid}-${it.v}${isDisabled ? "-disabled" : ""}`}
-            className={`text-sm px-4 py-2 rounded-full border transition ${
+            className={`text-sm px-4 py-2 rounded-full border transition inline-flex items-center gap-1.5 ${
               active
                 ? "bg-[#2D4A3E] text-white border-[#2D4A3E] shadow-sm"
                 : isDisabled
@@ -78,6 +91,18 @@ export function PillRow({ items, selected, onSelect, testid, disabledValues, dis
                   : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
             }`}
           >
+            {rank && (
+              <span
+                className={`text-[10px] font-bold leading-none px-1.5 py-0.5 rounded-full ${
+                  rank === 1
+                    ? "bg-[#F0C674] text-[#2B2A29]"
+                    : "bg-white/25 text-white"
+                }`}
+                data-testid={`${testid}-${it.v}-rank-${rank}`}
+              >
+                {rank === 1 ? "1st" : rank === 2 ? "2nd" : "3rd"}
+              </span>
+            )}
             {it.l}
           </button>
         );

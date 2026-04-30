@@ -56,6 +56,58 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 ```
 
 ## Implemented (latest first)
+## Iteration 109 — Patient `other_issue` end-to-end + scoring algo explainer + Excel report (Apr 30, 2026)
+
+### What shipped (all 6 user requests)
+
+1. **`other_issue` now feeds `score_apply_fit`** — the LLM grader now sees the patient's free-text `Anything else?` field, so therapists are graded on whether they engage the WHOLE brief, not just the slug list (`research_enrichment.py:541`). Variant E in the experiment was getting +0.24 over no-text baseline because the grader was blind to the field; this closes that gap.
+
+2. **`other_issue` wired into matching engine as soft bonus (max +6 pts)** — `routes/patients.py` now embeds the textarea on submit (background task, mirrors P3 pattern). `matching._score_one` computes cosine similarity vs therapist `t5_embedding` (lived experience) + `t2_embedding` (progress story), blended 0.7/0.3, capped at MAX_OTHER_ISSUE_BONUS=6. Verified via direct rank_therapists call: same therapist scored 92 without patient text → **95 with resonant text** (+3 pt measured lift, +6 max).
+
+3. **Excel report** — `scripts/csv_to_xlsx.py` produces a polished 4-sheet workbook (Summary / Raw / By variant / By patient). Served by new admin endpoints:
+   - `GET /api/admin/experiments/text-impact/latest` (metadata)
+   - `GET /api/admin/experiments/text-impact/download` (xlsx file stream)
+
+4. **Email template `patient_results_empty` rewritten** — dropped "we weren't able to confirm a match within the first 24 hours" framing. New copy: "Just a quick update — we're actively reaching out to additional therapists who fit your needs. Great matches are worth getting right…". Forward-looking, never frames as a failure.
+
+5. **Admin patient detail (`RequestFullBrief.jsx`) — full-picture surface**
+   - Free-text `other_issue` rendered verbatim (or "(patient left this blank)" italic when empty).
+   - Hard-filter axes tagged with red **HARD** pills (location_state, client_type, age_group always; payment / gender / language / availability / urgency only when their strict toggle is on — surfaced as a row of strict-mode tags at top).
+   - Presenting issues now show `1°/2°/3°` priority chips with tooltip explaining the rule (only #1 is hard-filtered, #2 + #3 are soft bonuses).
+   - Prior-therapy notes also surfaced when present, since they feed the apply-fit grader.
+
+6. **Patient intake — visible priority labels on issue pills**
+   - `PillRow` accepts new `showRank` prop. When set, each active pill shows a **1st / 2nd / 3rd** badge (gold for primary, white-25%-alpha for #2 / #3).
+   - Hint text rewritten: "Pick up to 3, in priority order — your 1st pick is the primary concern (used as a hard filter to find specialists). 2nd & 3rd add bonus weight to the ranking." — explicit about the hard-vs-soft distinction.
+
+7. **`HowItWorksPanel` got a "Scoring algorithm — line by line" deep-dive**
+   - Pass 1 — Hard filters (always-on + patient-toggleable) with explicit explainer that picking 3 issues only hard-filters on the 1st.
+   - Pass 2 — Soft scoring table (axis × max points × notes), all 11 axes documented.
+   - Pass 3 — Deep-match overlay (V2: relationship_style / way_of_working / contextual_resonance, with the embedding pipeline + admin-tunable weights).
+   - Research enrichment bonus (evidence_depth + approach_alignment, 30-day cache).
+   - Apply-fit grade with empirical lift table from the experiment (run id `exp_20260430_111623`).
+   - Final cap @ 95% explained.
+   - Excel download card linked at the bottom of the panel.
+
+### Supporting work
+- `scripts/seed_t5_t2_text.py` — one-off migration that populates realistic `t5_lived_experience` + `t2_progress_story` text on every active therapist (121 done) and embeds both fields. Without this, the new `other_issue` bonus would silently no-op for the seeded therapist pool. Idempotent — safe to re-run after seed reload.
+- `scripts/backfill_therapist_embeddings.py` — companion idempotent script for re-embedding T5/T2 if text is updated.
+
+### Files touched
+- `backend/research_enrichment.py` — `other_issue` now in apply-fit grading prompt
+- `backend/routes/patients.py` — background embed task for `other_issue`
+- `backend/matching.py` — `MAX_OTHER_ISSUE_BONUS` + bonus block in `_score_one` + `other_issue_axes` in return payload
+- `backend/email_templates.py` — `patient_results_empty` rewrite
+- `backend/routes/admin.py` — 2 new endpoints for experiment xlsx
+- `backend/scripts/csv_to_xlsx.py` — new
+- `backend/scripts/seed_t5_t2_text.py` — new (one-off migration)
+- `backend/scripts/backfill_therapist_embeddings.py` — new (idempotent)
+- `frontend/src/components/intake/IntakeUI.jsx` — `showRank` prop on PillRow
+- `frontend/src/components/intake/steps/WhoIssuesSteps.jsx` — wired `showRank` + clearer hint
+- `frontend/src/pages/admin/panels/RequestFullBrief.jsx` — full rewrite (HARD pills, priority chips, free-text panels)
+- `frontend/src/pages/admin/panels/HowItWorksPanel.jsx` — scoring algo deep-dive + Excel download card
+
+
 ## Iteration 108 — Rate-limit input fix + global integer match scores + master-query modality breakdown + 30-day warmup filter + child/teen/family/group recruiting (Apr 30, 2026)
 
 ### Bugs fixed

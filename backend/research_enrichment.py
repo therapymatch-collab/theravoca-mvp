@@ -537,20 +537,30 @@ async def score_apply_fit(
     style = ", ".join(request.get("style_preference") or []) or "(no style preference)"
     prior = request.get("prior_therapy") or "not_sure"
     prior_notes = (request.get("prior_therapy_notes") or "")[:200]
+    # Patient's free-text "Anything else?" context. Was previously not
+    # passed into the grader; experiment_text_impact run showed variant E
+    # only got +0.24 lift from rich patient context — because the grader
+    # never saw it. Now we feed it in so therapists are graded on whether
+    # they engage the WHOLE brief, not just the slug list.
+    other_issue = (request.get("other_issue") or "").strip()[:500]
 
+    extra_brief = (
+        f"\n- Patient also wrote (free text): \"{other_issue}\"" if other_issue else ""
+    )
     prompt = f"""You are grading a therapist's APPLY-message for fit with a
 specific patient request. Score 0-5 (decimals OK):
 
 - 5: addresses the patient's primary concern by name AND speaks to their
-     prior-therapy experience or style preference.
-- 3-4: addresses the primary concern; doesn't go further.
+     prior-therapy experience or style preference AND engages any
+     free-text context the patient wrote.
+- 3-4: addresses the primary concern and ONE of (style / prior / free text).
 - 1-2: generic intro, mentions concerns only in passing.
 - 0: doesn't engage the patient's brief at all.
 
 PATIENT BRIEF
 - Presenting issues: {issues}
 - Style preference: {style}
-- Prior therapy: {prior} — notes: {prior_notes}
+- Prior therapy: {prior} — notes: {prior_notes}{extra_brief}
 
 THERAPIST ({therapist.get('name')}) APPLY MESSAGE:
 \"\"\"

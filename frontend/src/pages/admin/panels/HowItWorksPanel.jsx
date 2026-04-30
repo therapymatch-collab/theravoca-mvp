@@ -8,9 +8,15 @@
  * patient hand-off → automated follow-ups → algorithm self-improvement
  * → marketing self-improvement → pricing.
  *
+ * Now also includes a deep-dive on the SCORING ALGORITHM (hard filters,
+ * soft axes + weights, deep-match overlay, research enrichment, apply-
+ * fit grading, 95% cap) and a download link for the latest text-impact
+ * experiment Excel report.
+ *
  * Open questions are surfaced inline so the team has a concrete
  * checklist of what's automated vs. what still needs design / build.
  */
+import { useEffect, useState } from "react";
 import {
   Megaphone,
   Filter,
@@ -24,7 +30,10 @@ import {
   TrendingUp,
   Bot,
   DollarSign,
+  Download,
+  FileSpreadsheet,
 } from "lucide-react";
+import useAdminClient from "@/lib/useAdminClient";
 
 const STEPS = [
   {
@@ -110,6 +119,20 @@ const STEPS = [
 ];
 
 export default function HowItWorksPanel() {
+  const client = useAdminClient();
+  const [exp, setExp] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await client.get("/admin/experiments/text-impact/latest");
+        setExp(r.data || null);
+      } catch (_) {
+        setExp({ available: false });
+      }
+    })();
+  }, [client]);
+
   return (
     <div className="mt-6 space-y-4" data-testid="how-it-works-panel">
       <div className="bg-white border border-[#E8E5DF] rounded-2xl p-6">
@@ -172,10 +195,293 @@ export default function HowItWorksPanel() {
           and local press, we can verify which specialties actually
           appear in their <em>practice</em> — not just their checkbox
           list — and re-rank Step-1 scores accordingly. This is the
-          difference between "matches their stated profile" and
-          "matches the shape of their actual practice."
+          difference between &quot;matches their stated profile&quot; and
+          &quot;matches the shape of their actual practice.&quot;
         </p>
       </div>
+
+      {/* ── Scoring algorithm deep-dive ───────────────────────────── */}
+      <div
+        className="bg-white border border-[#E8E5DF] rounded-2xl p-6 space-y-5"
+        data-testid="scoring-algo-explainer"
+      >
+        <div>
+          <h3 className="font-serif-display text-2xl text-[#2D4A3E]">
+            Scoring algorithm — line by line
+          </h3>
+          <p className="text-sm text-[#6D6A65] mt-2 max-w-3xl leading-relaxed">
+            Every patient request is scored against every active
+            therapist. The pipeline runs three passes, each capped so a
+            single axis can&apos;t dominate. The final score is always
+            capped at <strong>95%</strong> — we never claim a perfect
+            match on first pass.
+          </p>
+        </div>
+
+        {/* Pass 1 — Hard filters */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-[#7B2D2D] text-white">
+              Pass 1 — Hard filters
+            </span>
+            <span className="text-xs text-[#6D6A65]">
+              fail any one → therapist excluded outright (score = -1)
+            </span>
+          </div>
+          <ul className="text-sm text-[#2B2A29] leading-relaxed space-y-1.5 ml-1">
+            <li>
+              <strong>Always-on:</strong> location_state · client_type
+              · age_group · presenting_issues[0] (primary concern only)
+            </li>
+            <li>
+              <strong>Always-on:</strong> the therapist must list the
+              patient&apos;s <em>primary</em> issue in
+              <code className="mx-1 px-1.5 py-0.5 rounded bg-[#F2EFE9] text-[#7B2D2D]">
+                primary_specialties
+              </code>
+              <em>or</em>
+              <code className="mx-1 px-1.5 py-0.5 rounded bg-[#F2EFE9] text-[#7B2D2D]">
+                secondary_specialties
+              </code>
+              <em>or</em>
+              <code className="mx-1 px-1.5 py-0.5 rounded bg-[#F2EFE9] text-[#7B2D2D]">
+                general_treats
+              </code>
+              . All three count equally for the filter — primary
+              vs secondary only matters for soft scoring.
+            </li>
+            <li>
+              <strong>Patient-toggleable:</strong> insurance_strict
+              · gender_required · availability_strict · urgency_strict
+              · language_strict — each is soft-scored by default,
+              hard-filtered when the patient flips the strict toggle.
+            </li>
+          </ul>
+          <p className="text-xs text-[#6D6A65] mt-2 italic leading-relaxed">
+            A patient who picks <strong>three</strong> presenting
+            issues only hard-filters on the first one. Issues #2 and
+            #3 add soft scoring bonuses (see Pass 2 below) but never
+            disqualify a therapist. This is why the intake form labels
+            the picks <strong>1st / 2nd / 3rd priority</strong> — only
+            the 1st is filter-critical.
+          </p>
+        </div>
+
+        {/* Pass 2 — Soft-axis scoring */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-[#2D4A3E] text-white">
+              Pass 2 — Soft scoring (0-100)
+            </span>
+            <span className="text-xs text-[#6D6A65]">
+              every surviving therapist scored on these axes
+            </span>
+          </div>
+          <table className="w-full text-sm border border-[#E8E5DF] rounded-lg overflow-hidden">
+            <thead className="bg-[#F8F4EB] text-[#6D6A65]">
+              <tr>
+                <th className="text-left px-3 py-2 font-medium">Axis</th>
+                <th className="text-right px-3 py-2 font-medium">Max points</th>
+                <th className="text-left px-3 py-2 font-medium">Notes</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#E8E5DF]">
+              {[
+                ["Issues (presenting concern coverage)", 30, "Primary issue in therapist's primary_specialties = full points; secondary = ~70%; general_treats = ~40%. Issues #2 + #3 add diminishing-returns bonuses."],
+                ["Availability windows", 12, "Overlap between patient's preferred time-of-day and therapist's open slots."],
+                ["Modality / format", 10, "Telehealth · in-person · hybrid alignment."],
+                ["Urgency", 8, "Therapist's urgency_capacity vs patient's `urgency` field."],
+                ["Prior therapy", 6, "Soft signal — prior_therapy=yes_not_helped slightly favours therapists with deeper experience."],
+                ["Years of experience", 6, "Patient's `experience_preference` ranges (early/mid/seasoned) vs therapist's years_experience."],
+                ["Gender preference", 6, "Soft unless gender_required is true."],
+                ["Style preference", 6, "warm / structured / direct / exploratory."],
+                ["Payment fit + alignment", 12, "Sliding-scale availability + insurance match (or cash budget)."],
+                ["Modality preferences (CBT/EMDR/IFS/etc.)", 4, "List intersection — patient picks N, therapist offers M, scored on overlap."],
+                ["Languages", 4, "Patient's preferred_language in therapist's languages_spoken."],
+              ].map(([axis, pts, note]) => (
+                <tr key={axis}>
+                  <td className="px-3 py-2 text-[#2B2A29]">{axis}</td>
+                  <td className="px-3 py-2 text-right font-mono text-[#2D4A3E]">
+                    {pts}
+                  </td>
+                  <td className="px-3 py-2 text-[#6D6A65] text-xs leading-snug">
+                    {note}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pass 3 — Deep-match overlay (V2) */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-[#C87965] text-white">
+              Pass 3 — Deep-match overlay (V2)
+            </span>
+            <span className="text-xs text-[#6D6A65]">
+              opt-in only, when patient checks &quot;deep match&quot;
+            </span>
+          </div>
+          <p className="text-sm text-[#2B2A29] leading-relaxed">
+            Three open-text axes are embedded with{" "}
+            <code className="text-xs px-1 py-0.5 rounded bg-[#F2EFE9]">
+              text-embedding-3-small
+            </code>{" "}
+            and scored via cosine similarity:
+          </p>
+          <ul className="text-sm text-[#2B2A29] leading-relaxed mt-2 space-y-1.5 ml-1">
+            <li>
+              <strong>Relationship style</strong> — patient P1 vs
+              therapist (T1, T4) blend.
+            </li>
+            <li>
+              <strong>Way of working</strong> — patient P2 vs
+              therapist T3.
+            </li>
+            <li>
+              <strong>Contextual resonance</strong> — patient P3 vs
+              therapist T5 (lived-experience open text). This is the
+              axis the new free-text patient note also feeds into.
+            </li>
+          </ul>
+          <p className="text-xs text-[#6D6A65] mt-2 italic">
+            Default weights: relationship 0.40 · working 0.35 ·
+            contextual 0.25 — admin-tunable in the Settings panel.
+          </p>
+        </div>
+
+        {/* Research enrichment bonus */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-[#A8553F] text-white">
+              Research enrichment bonus (background)
+            </span>
+            <span className="text-xs text-[#6D6A65]">
+              cached 30 days · runs async after match
+            </span>
+          </div>
+          <p className="text-sm text-[#2B2A29] leading-relaxed">
+            For each notified therapist we pull 4-6 public web pages
+            (their site, Psychology Today, long-form interviews, local
+            press) and ask Claude Sonnet 4.5 to extract themes. Two
+            scores fold into the rank:
+          </p>
+          <ul className="text-sm text-[#2B2A29] leading-relaxed mt-2 space-y-1.5 ml-1">
+            <li>
+              <strong>evidence_depth</strong> (0-15) — how often
+              the patient&apos;s primary issue actually appears in the
+              therapist&apos;s public writing, vs being a checkbox.
+            </li>
+            <li>
+              <strong>approach_alignment</strong> (0-10) — match
+              between the patient&apos;s style preference and the
+              therapist&apos;s self-described approach as it appears
+              in long-form context.
+            </li>
+          </ul>
+          <p className="text-xs text-[#6D6A65] mt-2 italic">
+            Cold-cache therapists score without this bonus on
+            first-touch; the warmup endpoint backfills overnight.
+          </p>
+        </div>
+
+        {/* Apply-fit grade */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-[#5C6B4A] text-white">
+              Apply-fit grade (post-application)
+            </span>
+            <span className="text-xs text-[#6D6A65]">
+              0-5, LLM-graded against patient brief
+            </span>
+          </div>
+          <p className="text-sm text-[#2B2A29] leading-relaxed">
+            When the therapist clicks Apply and writes their reply,
+            <code className="mx-1 px-1.5 py-0.5 rounded bg-[#F2EFE9] text-[#5C6B4A]">
+              score_apply_fit
+            </code>
+            grades the message 0-5 against the patient&apos;s
+            presenting_issues, style_preference, prior_therapy_notes,
+            and now the <strong>free-text &quot;Anything else?&quot;</strong>
+            field too. Stored on the application doc and surfaced to
+            the patient on the results page.
+          </p>
+          <ul className="text-xs text-[#6D6A65] leading-relaxed mt-2 space-y-1 ml-1 italic">
+            <li>5: addresses primary concern + style + prior + free text.</li>
+            <li>3-4: addresses primary concern + ONE other axis.</li>
+            <li>1-2: generic intro, mentions concerns only in passing.</li>
+            <li>0: doesn&apos;t engage the brief at all.</li>
+          </ul>
+          <p className="text-xs text-[#6D6A65] mt-2 leading-relaxed">
+            Empirical lift (50-request, 250-application study, run id{" "}
+            <code className="text-[10px]">exp_20260430_111623</code>):
+            empty/oneliner → 0.0 · generic long → 0.87 · issue-specific
+            → 3.2 · full-engagement → 4.84. Length alone buys you
+            ~+0.9 — relevance is what the grader rewards.
+          </p>
+        </div>
+
+        {/* Final cap */}
+        <div className="flex items-start gap-3 bg-[#F8F4EB] rounded-lg p-3">
+          <span className="text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-[#2B2A29] text-white whitespace-nowrap">
+            Cap @ 95%
+          </span>
+          <p className="text-xs text-[#6D6A65] leading-relaxed">
+            After all passes, the final match_score is rounded to a
+            whole integer and capped at 95%. We deliberately never
+            show 100% — every therapist relationship has more
+            information to discover than the engine could ever
+            encode, and we set patient expectations honestly.
+          </p>
+        </div>
+      </div>
+
+      {/* ── Experiment download ──────────────────────────────────── */}
+      <div
+        className="bg-white border border-[#E8E5DF] rounded-2xl p-5 flex items-start gap-4"
+        data-testid="experiment-download-card"
+      >
+        <div className="w-10 h-10 rounded-lg bg-[#E9F0E6] text-[#2D4A3E] flex items-center justify-center shrink-0">
+          <FileSpreadsheet size={20} strokeWidth={1.8} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h4 className="font-medium text-[#2B2A29]">
+            Text-impact experiment — Excel report
+          </h4>
+          <p className="text-sm text-[#6D6A65] leading-relaxed mt-1">
+            50 patient requests × 5 therapists × 5 message variants = 250
+            graded applies. Quantifies how patient free-text + therapist
+            apply-message length / specificity move the apply_fit score.
+            Used to calibrate the algorithm changes documented above.
+          </p>
+          {exp && exp.available ? (
+            <a
+              href={
+                (process.env.REACT_APP_BACKEND_URL || "") +
+                "/api/admin/experiments/text-impact/download"
+              }
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm text-[#2D4A3E] font-medium hover:underline mt-3"
+              data-testid="experiment-download-link"
+            >
+              <Download size={14} />
+              Download {exp.filename}
+              <span className="text-[11px] text-[#6D6A65] font-normal">
+                ({(exp.size_bytes / 1024).toFixed(1)} kB)
+              </span>
+            </a>
+          ) : (
+            <p className="text-xs italic text-[#9C9893] mt-3">
+              {exp === null
+                ? "Loading…"
+                : "No report generated yet — run scripts/experiment_text_impact.py to create one."}
+            </p>
+          )}
+        </div>
+      </div>
+
       <div
         className="bg-[#F2F4F0] border border-[#D9DDD2] rounded-2xl p-5"
         data-testid="how-it-works-loop"

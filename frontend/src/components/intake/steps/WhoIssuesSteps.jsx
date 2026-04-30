@@ -79,13 +79,14 @@ export function IssuesStep({ data, set, toggleArr }) {
     <div>
       <Group
         label="Main concerns the client wants help with"
-        hint={`Pick up to 3, in priority order. Top of list = highest priority. (${data.presenting_issues.length}/3)`}
+        hint={`Pick up to 3, in priority order — your 1st pick is the primary concern (used as a hard filter to find specialists). 2nd & 3rd add bonus weight to the ranking. (${data.presenting_issues.length}/3)`}
       >
         <PillRow
           items={ISSUES}
           selected={data.presenting_issues}
           onSelect={(v) => toggleArr("presenting_issues", v, 3)}
           testid="issue"
+          showRank
         />
       </Group>
       <div className="mt-6">
