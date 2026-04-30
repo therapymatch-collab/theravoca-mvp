@@ -21,13 +21,16 @@ export function WhoStep({ data, set, hardCapacity }) {
       .filter((p) => p.axis === "age_group")
       .map((p) => [String(p.value).toLowerCase(), p.label]),
   );
-  const ctReasonForActive =
-    ctDisabled.includes(data.client_type)
-      ? ctReasons[String(data.client_type).toLowerCase()]
+  // Compose a generic "n option(s) unavailable" hint when any pill in
+  // the axis is disabled — gives the patient an at-a-glance reason
+  // for the struck-through options without forcing them to hover.
+  const ctHint =
+    ctDisabled.length > 0
+      ? `${ctDisabled.length} option${ctDisabled.length === 1 ? "" : "s"} unavailable — we're recruiting more therapists in those formats`
       : "";
-  const agReasonForActive =
-    agDisabled.includes(data.age_group)
-      ? agReasons[String(data.age_group).toLowerCase()]
+  const agHint =
+    agDisabled.length > 0
+      ? `${agDisabled.length} option${agDisabled.length === 1 ? "" : "s"} unavailable — we're recruiting more therapists for those age groups`
       : "";
   return (
     <div className="space-y-6">
@@ -40,9 +43,9 @@ export function WhoStep({ data, set, hardCapacity }) {
           disabledValues={ctDisabled}
           disabledReasons={ctReasons}
         />
-        {ctReasonForActive && (
+        {ctHint && (
           <p className="text-xs text-[#B37E35] mt-2" data-testid="client-type-warning">
-            {ctReasonForActive}
+            {ctHint}
           </p>
         )}
       </Group>
@@ -55,9 +58,9 @@ export function WhoStep({ data, set, hardCapacity }) {
           disabledValues={agDisabled}
           disabledReasons={agReasons}
         />
-        {agReasonForActive && (
+        {agHint && (
           <p className="text-xs text-[#B37E35] mt-2" data-testid="age-group-warning">
-            {agReasonForActive}
+            {agHint}
           </p>
         )}
       </Group>

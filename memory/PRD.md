@@ -57,6 +57,46 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+## Iteration 107 — Bundle: 95% cap + missing template + insurance render fix + low-coverage warnings + age/client-type grey-out + panel migration (Feb 8, 2026)
+
+Seven user-requested fixes verified end-to-end (iter103: 9/9 backend pytest + frontend visual + code-review audit, 100% pass).
+
+### 1. Score cap lowered 99 → 95
+- `matching.py`: `total = min(95.0, total)` — no match is ever truly perfect.
+
+### 2. "New referral inquiry" added to editable templates
+- `email_templates.DEFAULTS["new_referral_inquiry"]` — full subject/heading/greeting/intro/rationale/cta_label/pricing_note/footer_note. Available vars: `first_name, score, rationale, signup_url, opt_out_url`.
+- `outreach_agent.py`: rendered email block now reads from DEFAULTS + `_NRI_OVERRIDES_CACHE` (refreshed via `_load_template_overrides()` at the top of `run_outreach_for_request`). Same pattern as iter105's prelaunch_invite.
+- Audit confirmed all 14 outbound emails are now editable templates. None missed.
+
+### 3. Insurance hidden when payment_type='either' (PatientResults expanded view)
+- Bug: render code was `(payment_type === "insurance" && insurance_name) ? insurance_name : ""` — strict equality hid the field when the patient picked "either" but typed an insurance plan.
+- Fix: rewrote the IIFE to surface `insurance_name` regardless of `payment_type`, falling back to legacy `insurance_plans` array. Verified on the user-reported request `f6304cc8-…` which had `insurance_name='Mountain Health Co-op'` + `payment_type='either'`.
+
+### 4. Red low-coverage warning on admin request rows
+- `RequestsPanel.jsx`: `TARGET_NOTIFIED=30` constant + `isUnderCovered` predicate (notified < 30 AND status in [matched, delivered, results_sent]). Renders an `AlertTriangle` icon next to the email + tints the row dusty-rose + shows `5 /30` in red on the Notified column. Testid `request-low-coverage-{id}`.
+- 3 existing under-covered requests now flagged: `f6304cc8…` (5/30), `0040edfc…`, `7c9d60e4…`.
+
+### 5. Grey-out child/teen + family/group in intake
+- `hard_capacity.py`: extended `disabled` map with `client_type` and `age_group` axes; added matching `protections` entries with count + recruitment label.
+- `IntakeUI.PillRow`: new `disabledValues` + `disabledReasons` props — disabled pills get `cursor-not-allowed line-through opacity-70` styling + `title` tooltip.
+- `WhoIssuesSteps.WhoStep`: passes hard-capacity disabled lists into both pill rows + renders inline `"N option(s) unavailable — we're recruiting more therapists for those age groups"` hints (testids `client-type-warning`, `age-group-warning`).
+- Live state against current 122-therapist pool: `family` (28/30), `group` (11/30), `child` (5/30) all greyed out. `teen` (37/30) clears.
+
+### 6. useAdminClient migration for SimulatorPanel + AutoRecruitSection + SettingsPanel
+- All three now use `const ctxClient = useAdminClient(); const client = clientProp || ctxClient;` — backward-compatible with the legacy `client` prop. `TurnstileToggleCard` (nested inside SettingsPanel) migrated too.
+- Line-150 `adminClient(pwd)` retained because it's still used by AdminDashboard's own data-loading helpers — but it's no longer needed for child panels. Future cleanup could move those helpers onto the hook too.
+
+### 7. Triple-check audit (testing agent code review)
+- Confirmed iter104 payment_alignment fix intact (line 417+ uses correct `payment_alignment` raw key).
+- Confirmed iter105 urgency_capacity-as-string fix intact (`accepted = ladder.get(...)` returns a `set`, not iterated as list).
+- Confirmed iter106 Pydantic Literals still rejected at TherapistSignup boundary.
+- No new mis-mappings or score/label drift surfaced. All 14 templates accounted for.
+
+### Verified (iteration_103.json)
+- Backend: 9/9 pytest pass (score cap; templates persistence; hard-capacity client_type/age_group; outreach cache import; integration smoke).
+- Frontend: 100% — admin panels (Simulator/AutoRecruit/Settings/Coverage gaps) all render via `useAdminClient`; low-coverage badges visible on 3 under-covered requests; intake disabled pills correctly styled with strikethrough; Coverage gaps "Protected HARD selections" view now includes client_type (family/group) + age_group (child) sections.
+
 ## Iteration 106 — Backfill + useAdminClient hook + Pydantic Literals (Feb 8, 2026)
 
 ### 1. urgency_capacity='asap' backfill
