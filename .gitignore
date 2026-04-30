@@ -181,4 +181,12 @@ exports/followups_export.json
 exports/simulator_runs_export.json
 exports/simulator_requests_export.json
 exports/auto_recruit_cycles_export.json
-exports/cron_runs_export.json
+exports/cron_runs_export.json-e 
+# Environment and credential files
+.env
+.env.*
+*.env
+credentials.json
+*.pem
+*.key
+.credentials
