@@ -56,6 +56,41 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 ```
 
 ## Implemented (latest first)
+## Iteration 110 — Re-audit pass 3 + 4 (final convergence) (Apr 30, 2026)
+
+### What re-running the audit caught (and fixed)
+
+🟠 **`PatientResults` rendered a blank page when given an invalid request id.** The original `useEffect` only handled 401 (redirect to sign-in) and otherwise let `data` stay null forever — leaving the user stuck on a spinner with no message. Fixed: added `loadError` state that captures status + detail; renders a "This link expired" panel with `Back to home` + `Sign in` buttons. Verified end-to-end via Playwright.
+
+🟠 **Stale `_MockDb` in `test_iteration9_match_breakdown.py::TestEmailRendering`.** The mock didn't have a `requests` attribute that `email_service.send_patient_results` started reading after iter-9. Added `requests = _Coll()` to the mock. Both tests pass now.
+
+🟠 **Test isolation bug in `test_iteration101_score_cap_prelaunch::test_score_total_capped_at_99`.** Test passed in isolation but failed when run with other async tests because `asyncio.get_event_loop().run_until_complete(...)` reached for a closed loop after pytest-asyncio teardown. Fixed: switched to `asyncio.new_event_loop()` so the test always brings its own.
+
+🟡 **F841 lint warning in `cleanup_languages_spoken.py`** (the unused-var that lint kept flagging). Fixed by actually USING the `removed` variable in the diff print-out — now the script tells you *which* invalid language strings it dropped, not just the before/after lists.
+
+🟡 **404 panel copy polish** — the API's `detail: "Not Found"` was being concatenated into the next sentence ("Not Found If you submitted…"). Swapped to a status-aware ternary so we emit the friendly explanation without the raw API detail.
+
+⚠️ **Wrong canonical literal during data drift backfill (caught + reverted within 30s).** Used `this_month` instead of `within_month` (the real `UrgencyCapacity` literal). Reverted before any side-effect; double-checked with distribution histogram.
+
+### Final test status (after fixes)
+- **120 / 121 passing** in the curated suite (the 121st is `skipped`, not failing) covering all matching, scoring, deep-match, simulator, auto-recruit, email rendering, payment, literals/backfill, and bundle tests.
+- Pre-existing failures left intentionally untouched: ~80 legacy iter-2→iter-70 integration tests blocked by Turnstile in the test env. Need a `conftest.py`-level mock of `turnstile_service.verify_turnstile` to unblock — that's a separate test-infrastructure project, not a code regression.
+
+### Final lint status
+- **Backend ruff: 0 issues** across all 80+ Python files
+- **Frontend ESLint: 0 issues** across all `/app/frontend/src`
+- All 4 services (backend, frontend, mongo, nginx-code-proxy) RUNNING, no error log entries
+
+### Live system verified
+- Landing, Sign-in, Admin login, How-it-works panel, Request detail (with iter-109 hard-pills + 1°/2°/3° priority chips + free-text panel), Matched provider cards (post nested-button fix) — all render cleanly
+- `other_issue_embedding` confirmed populated on real intake submission (1536-dim vector, correct for `text-embedding-3-small`)
+- `/results/<bad-id>` → graceful "This link expired" panel (was: blank page)
+- Zero real JS console errors across all flows
+
+### Audit converged
+4 passes. Each pass surfaced fewer + smaller issues than the previous. By pass 4 the only console output was the expected 404 from the test's own intentionally-bad URL.
+
+
 ## Iteration 110 — Full codebase audit + fixes (Apr 30, 2026)
 
 ### Audit scope

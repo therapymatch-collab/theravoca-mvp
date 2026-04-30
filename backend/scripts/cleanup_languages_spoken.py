@@ -135,14 +135,17 @@ async def main():
             )
             changed += 1
             if len(removed_samples) < 10:
+                # Show what got dropped — useful when the script is run
+                # with `tee` so the operator can spot-check the diff.
                 removed = [x for x in raw if x not in clean]
-                removed_samples.append((t.get("name", ""), raw, clean))
+                removed_samples.append((t.get("name", ""), raw, clean, removed))
     print(f"Scanned {total} therapists · cleaned {changed}")
     print("\nSample diffs:")
-    for name, raw, clean in removed_samples:
+    for name, raw, clean, removed in removed_samples:
         print(f"  {name}")
-        print(f"    before: {raw}")
-        print(f"    after : {clean}")
+        print(f"    before:  {raw}")
+        print(f"    after:   {clean}")
+        print(f"    dropped: {removed}")
 
 
 if __name__ == "__main__":

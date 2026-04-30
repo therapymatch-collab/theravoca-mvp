@@ -193,13 +193,17 @@ class TestBackwardsCompatLegacyRequest:
 # ─── Email service: send_patient_results renders chips when bd present ────────
 class _MockDb:
     """Stand-in for Motor's AsyncIOMotorDatabase. Returns no overrides so
-    email_service falls back to DEFAULTS (no event loop binding required)."""
+    email_service falls back to DEFAULTS (no event loop binding required).
+    `requests` attribute added because `send_patient_results` now reads
+    the request doc to surface site-copy / banner overrides; an empty
+    find_one is enough to keep that branch happy in the unit test."""
 
     class _Coll:
         async def find_one(self, *args, **kwargs):
             return None
 
     email_templates = _Coll()
+    requests = _Coll()
 
 
 class TestEmailRendering:

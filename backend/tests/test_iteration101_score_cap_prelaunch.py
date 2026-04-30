@@ -145,7 +145,17 @@ class TestScoreCap:
             assert tested >= 5, f"Only tested {tested} valid therapists"
             client.close()
 
-        asyncio.get_event_loop().run_until_complete(_run())
+        # Isolate: always create a FRESH event loop instead of reaching for
+        # the existing one. Earlier tests in the suite use pytest-asyncio
+        # which closes the running loop on teardown — calling
+        # `get_event_loop().run_until_complete(...)` here would raise
+        # `RuntimeError: Event loop is closed`. Pre-existing pollution
+        # bug; this fix is local + safe.
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_run())
+        finally:
+            loop.close()
 
     def test_filtered_sentinel_not_capped(self):
         import matching

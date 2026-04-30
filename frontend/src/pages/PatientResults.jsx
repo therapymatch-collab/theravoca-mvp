@@ -630,6 +630,12 @@ function RefDetail({ label, value, span = 1, hard = false }) {
 export default function PatientResults() {
   const { requestId } = useParams();
   const [data, setData] = useState(null);
+  // `loadError` captures non-401 failures (mainly 404 for expired/invalid
+  // result links, plus 5xx). Without this, a missing request id used to
+  // leave the page stuck on the spinner forever — the user saw a blank
+  // page with just the Feedback widget. Now we render a friendly
+  // "this link is no longer valid" panel instead.
+  const [loadError, setLoadError] = useState(null);
   const navigate = useNavigate();
   const [sp] = useSearchParams();
   const viewToken = sp.get("t") || "";
@@ -651,7 +657,10 @@ export default function PatientResults() {
       : `/requests/${requestId}/results`;
     const load = () =>
       api.get(url, { headers }).then((res) => {
-        if (active) setData(res.data);
+        if (active) {
+          setData(res.data);
+          setLoadError(null);
+        }
       }).catch((err) => {
         if (!active) return;
         if (err?.response?.status === 401) {
@@ -664,7 +673,19 @@ export default function PatientResults() {
             )}`,
             { replace: true },
           );
+          return;
         }
+        // Persist the error so we can render a useful message rather
+        // than spinning forever. Capture status + a friendly fallback.
+        const status = err?.response?.status || 0;
+        setLoadError({
+          status,
+          message:
+            err?.response?.data?.detail ||
+            (status === 404
+              ? "This results link is no longer valid."
+              : "We couldn't load your matches. Please refresh."),
+        });
       });
     load();
     const intervalId = setInterval(load, RESULTS_POLL_INTERVAL_MS);
@@ -674,10 +695,57 @@ export default function PatientResults() {
     };
   }, [requestId, viewToken, session?.token, navigate]);
 
+  if (loadError && !data) {
+    return (
+      <div
+        className="min-h-screen bg-[#FDFBF7] flex items-center justify-center px-6"
+        data-testid="results-load-error"
+      >
+        <div className="max-w-md text-center space-y-4">
+          <h1 className="font-serif-display text-3xl text-[#2D4A3E]">
+            {loadError.status === 404
+              ? "This link expired"
+              : "We hit a snag"}
+          </h1>
+          <p className="text-sm text-[#6D6A65] leading-relaxed">
+            {loadError.status === 404 ? (
+              <>
+                If you submitted a request, your most recent results email
+                will have an updated link.
+              </>
+            ) : (
+              loadError.message
+            )}
+          </p>
+          <div className="flex flex-wrap gap-3 justify-center pt-2">
+            <a
+              href="/"
+              className="px-4 py-2 rounded-full bg-[#2D4A3E] text-white text-sm font-medium hover:bg-[#1F3A30] transition"
+              data-testid="results-error-home-btn"
+            >
+              Back to home
+            </a>
+            <a
+              href="/sign-in?role=patient"
+              className="px-4 py-2 rounded-full border border-[#2D4A3E] text-[#2D4A3E] text-sm font-medium hover:bg-[#F0EBE0] transition"
+              data-testid="results-error-signin-btn"
+            >
+              Sign in
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!data) {
     return (
-      <div className="min-h-screen bg-[#FDFBF7] flex items-center justify-center">
+      <div
+        className="min-h-screen bg-[#FDFBF7] flex flex-col items-center justify-center gap-3"
+        data-testid="results-loading"
+      >
         <Loader2 className="animate-spin text-[#2D4A3E]" />
+        <p className="text-sm text-[#6D6A65]">Loading your matches…</p>
       </div>
     );
   }
