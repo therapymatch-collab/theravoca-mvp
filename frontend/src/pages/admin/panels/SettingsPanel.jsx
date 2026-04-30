@@ -4,6 +4,25 @@ import { Loader2, Shield, ShieldOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import useAdminClient from "@/lib/useAdminClient";
 
+// Silent one-time retry for initial admin GETs. Cloudflare's bot-fight
+// layer can return a transient 403 on the very first request from a
+// fresh browser session before its `__cf_bm` cookie is minted; the
+// retry happens after a short delay so by the second attempt the cookie
+// is in place and the request sails through. Only the SECOND failure
+// surfaces a toast so the admin doesn't see a scary "Failed to load…"
+// flash on every page load.
+async function _adminGetWithRetry(client, path, { delayMs = 600 } = {}) {
+  try {
+    return await client.get(path);
+  } catch (firstErr) {
+    // Don't retry on hard 401 (truly unauthenticated) — that needs a
+    // re-login, not a retry. 4xx (incl. CF's 403) and 5xx do retry.
+    if (firstErr?.response?.status === 401) throw firstErr;
+    await new Promise((r) => setTimeout(r, delayMs));
+    return client.get(path);
+  }
+}
+
 // Runtime Turnstile disable toggle — lets the admin pause Cloudflare
 // bot protection during AI / E2E test runs without touching env vars.
 // Backend: GET/PUT /api/admin/turnstile-settings. Public consumers
@@ -20,7 +39,7 @@ function TurnstileToggleCard({ client: clientProp }) {
 
   const load = async () => {
     try {
-      const r = await client.get("/admin/turnstile-settings");
+      const r = await _adminGetWithRetry(client, "/admin/turnstile-settings");
       setDisabled(!!r.data?.disabled);
       setConfigured(!!r.data?.configured);
       setReason(r.data?.disabled_reason || "");
@@ -180,7 +199,7 @@ export default function SettingsPanel({ client: clientProp }) {
     let alive = true;
     (async () => {
       try {
-        const r = await client.get("/admin/intake-rate-limit");
+        const r = await _adminGetWithRetry(client, "/admin/intake-rate-limit");
         if (!alive) return;
         setMaxPer(r.data.max_requests_per_window);
         setWindowMin(r.data.window_minutes);
@@ -205,7 +224,7 @@ export default function SettingsPanel({ client: clientProp }) {
         );
       }
       try {
-        const r2 = await client.get("/admin/research-enrichment");
+        const r2 = await _adminGetWithRetry(client, "/admin/research-enrichment");
         if (!alive) return;
         setReEnabled(!!r2.data.enabled);
         setReStats({
@@ -219,7 +238,7 @@ export default function SettingsPanel({ client: clientProp }) {
         console.warn("research-enrichment status unreachable:", e?.message);
       }
       try {
-        const r3 = await client.get("/admin/research-enrichment/warmup");
+        const r3 = await _adminGetWithRetry(client, "/admin/research-enrichment/warmup");
         if (!alive) return;
         setWarmup(r3.data || null);
       } catch (e) {
@@ -721,7 +740,7 @@ function DeepMatchWeightsCard({ client }) {
     let cancelled = false;
     (async () => {
       try {
-        const r = await client.get("/admin/deep-match-weights");
+        const r = await _adminGetWithRetry(client, "/admin/deep-match-weights");
         if (cancelled) return;
         setW({
           relationship_style: r.data.relationship_style,
