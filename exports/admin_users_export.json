@@ -1,0 +1,175 @@
+[
+  {
+    "id": "2d72c8c9-f744-4d1d-8207-db2666604d30",
+    "email": "team_1777377614@theravoca.test",
+    "name": "Team Tester",
+    "password_hash": "$2b$12$hAUC1O3gpZxOXMqhhCe4xuAGPLW3sq5HdbCDf1M.HUyagxtprjNx.",
+    "role": "staff",
+    "is_active": false,
+    "created_at": "2026-04-28T12:00:14.514836+00:00",
+    "last_login_at": "2026-04-28T12:00:17.222030+00:00",
+    "deactivated_at": "2026-04-28T12:00:17.335288+00:00"
+  },
+  {
+    "id": "be7a2a1d-49fc-49d0-88e6-3d060fcbe25f",
+    "email": "x@y.com",
+    "name": "X",
+    "password_hash": "$2b$12$LGmjTr0X5SRulMDuFTubi.haWnU.u.N76tTqScNifSWVWH7Ndo0Eq",
+    "role": "staff",
+    "is_active": true,
+    "created_at": "2026-04-28T12:03:26.693765+00:00",
+    "last_login_at": null
+  },
+  {
+    "id": "dc66f9ba-5fa9-4c62-80d6-2332bce4f70f",
+    "email": "team_1777377816@theravoca.test",
+    "name": "Team Tester",
+    "password_hash": "$2b$12$alWsvjHlCq9JenpOur2vQOm2XJ1R9iU2PzZWcrYFCHH80nkRy5Q0O",
+    "role": "staff",
+    "is_active": false,
+    "created_at": "2026-04-28T12:03:36.882402+00:00",
+    "last_login_at": "2026-04-28T12:03:39.529665+00:00",
+    "deactivated_at": "2026-04-28T12:03:39.659684+00:00"
+  },
+  {
+    "id": "a582fb77-139c-43c5-89c1-bf78cbf568c3",
+    "email": "frontend_1777377825@theravoca.test",
+    "name": "Frontend Tester",
+    "password_hash": "$2b$12$8NV.sJi5IWPljmrTjvDl9O8jrwTo9DOrkEV7/aYJf2YE5enwI2b/a",
+    "role": "staff",
+    "is_active": true,
+    "created_at": "2026-04-28T12:03:45.616638+00:00",
+    "last_login_at": "2026-04-28T12:04:54.017710+00:00"
+  },
+  {
+    "id": "25b7a822-206a-47c8-86c9-ad0f36b8991d",
+    "email": "ui_1461897@theravoca.test",
+    "name": "UI Test",
+    "password_hash": "$2b$12$kpRUocjOEFLtEcC5ncTrBunxDeGt0A8pLAnHmcxPXosMUCXZiI.9a",
+    "role": "staff",
+    "is_active": true,
+    "created_at": "2026-04-28T12:04:56.852682+00:00",
+    "last_login_at": null
+  },
+  {
+    "id": "e47a9ee3-a546-4f58-b18c-7781bb3c24fc",
+    "email": "team_1777379681@theravoca.test",
+    "name": "Team Tester",
+    "password_hash": "$2b$12$8AkyF3X5KEHj0xvUpRrRwepQHapFLeUWmM1Vx4Mp4UV1tyFsoCAzS",
+    "role": "staff",
+    "is_active": false,
+    "created_at": "2026-04-28T12:34:43.187841+00:00",
+    "last_login_at": "2026-04-28T12:34:45.832982+00:00",
+    "deactivated_at": "2026-04-28T12:34:45.963931+00:00"
+  },
+  {
+    "id": "721fd17b-62b9-4512-8473-4dc3a16d3a7f",
+    "email": "team_1777559014@theravoca.test",
+    "name": "Team Tester",
+    "password_hash": "$2b$12$7A9IxFlJ8uSX8jL8QVuyGe4EX6VIKr1aP3xRiynsJ/NnfbVL1014W",
+    "role": "staff",
+    "is_active": false,
+    "created_at": "2026-04-30T14:25:57.414584+00:00",
+    "last_login_at": "2026-04-30T14:26:00.035161+00:00",
+    "deactivated_at": "2026-04-30T14:26:00.160533+00:00"
+  },
+  {
+    "id": "f4d0e0f5-97ca-408b-b990-044db79198c3",
+    "email": "team_1777559247@theravoca.test",
+    "name": "Team Tester",
+    "password_hash": "$2b$12$dF1hASrVbxde2zzmqJVl3eE8WtuJu2NtLKm5xOuVKnHRjXvdNVY8y",
+    "role": "staff",
+    "is_active": false,
+    "created_at": "2026-04-30T14:29:34.746169+00:00",
+    "last_login_at": "2026-04-30T14:29:40.148315+00:00",
+    "deactivated_at": "2026-04-30T14:29:40.279320+00:00"
+  },
+  {
+    "id": "5d39b74b-d7b1-4aab-bb94-51298f4942b1",
+    "email": "team_1777559557@theravoca.test",
+    "name": "Team Tester",
+    "password_hash": "$2b$12$pufUPvPBt0OYIXkW3IRvPeaBlmPMKHItd4iwaHMLpL5Iuv1GPDbBi",
+    "role": "staff",
+    "is_active": false,
+    "created_at": "2026-04-30T14:33:23.341146+00:00",
+    "last_login_at": "2026-04-30T14:33:25.869199+00:00",
+    "deactivated_at": "2026-04-30T14:33:25.990673+00:00"
+  },
+  {
+    "id": "081b5810-0f3a-4489-a368-a059787da59f",
+    "email": "team_1777559675@theravoca.test",
+    "name": "Team Tester",
+    "password_hash": "$2b$12$qOFNHoZje2B2pKi3u3A4T.Fj2yDDe5yn.kCH5AaGJDvXztE0hwb52",
+    "role": "staff",
+    "is_active": false,
+    "created_at": "2026-04-30T14:35:22.539993+00:00",
+    "last_login_at": "2026-04-30T14:35:25.031589+00:00",
+    "deactivated_at": "2026-04-30T14:35:25.175718+00:00"
+  },
+  {
+    "id": "57295c66-1c40-4367-aed7-9931546bd75f",
+    "email": "team_1777562785@theravoca.test",
+    "name": "Team Tester",
+    "password_hash": "$2b$12$vpTaZ6RY9mAVXo85fYGmJOA1sSY4YL803XY2q5XevOKRVx/u/hIDm",
+    "role": "staff",
+    "is_active": false,
+    "created_at": "2026-04-30T15:27:05.981372+00:00",
+    "last_login_at": "2026-04-30T15:27:08.556290+00:00",
+    "deactivated_at": "2026-04-30T15:27:08.672465+00:00"
+  },
+  {
+    "id": "dd3809e2-2d3a-4570-8b65-bf137fc7489c",
+    "email": "team_1777562904@theravoca.test",
+    "name": "Team Tester",
+    "password_hash": "$2b$12$AGwwbQGxWatVcAFcC07vW.4VQ7kJiUnmEa2D/zQkAlS702bMok9gG",
+    "role": "staff",
+    "is_active": false,
+    "created_at": "2026-04-30T15:29:05.219111+00:00",
+    "last_login_at": "2026-04-30T15:29:07.742484+00:00",
+    "deactivated_at": "2026-04-30T15:29:07.853894+00:00"
+  },
+  {
+    "id": "3d61c603-9e12-4adc-9b67-f32fd78059d4",
+    "email": "team_1777563025@theravoca.test",
+    "name": "Team Tester",
+    "password_hash": "$2b$12$QT5qs.iwqLjzoO3N8PmIx.Uvbl2B2cO6rR.ILuLAa3hU3rEKDWysS",
+    "role": "staff",
+    "is_active": false,
+    "created_at": "2026-04-30T15:31:06.190451+00:00",
+    "last_login_at": "2026-04-30T15:31:09.783875+00:00",
+    "deactivated_at": "2026-04-30T15:31:09.888887+00:00"
+  },
+  {
+    "id": "097987e3-8ef2-4dc9-8b3d-012328ae877d",
+    "email": "team_1777565217@theravoca.test",
+    "name": "Team Tester",
+    "password_hash": "$2b$12$yJjbj49Mn.1CXDEdrQqC9.cId6j0CG8f96G.yWiCNDyCWGxv0gK3O",
+    "role": "staff",
+    "is_active": false,
+    "created_at": "2026-04-30T16:08:39.382981+00:00",
+    "last_login_at": "2026-04-30T16:08:41.995571+00:00",
+    "deactivated_at": "2026-04-30T16:08:42.117296+00:00"
+  },
+  {
+    "id": "4b16dfd0-9a47-45fc-be79-70d0984fed21",
+    "email": "team_1777565463@theravoca.test",
+    "name": "Team Tester",
+    "password_hash": "$2b$12$UNT1RDU16zkQGpKw8V6s/eyEXYHdgP9pw5L7ubPRCNNtliCAuWNky",
+    "role": "staff",
+    "is_active": false,
+    "created_at": "2026-04-30T16:12:45.105519+00:00",
+    "last_login_at": "2026-04-30T16:12:47.637966+00:00",
+    "deactivated_at": "2026-04-30T16:12:47.791471+00:00"
+  },
+  {
+    "id": "ec2239bb-2f79-42a5-bd9c-777044a5fca3",
+    "email": "team_1777565728@theravoca.test",
+    "name": "Team Tester",
+    "password_hash": "$2b$12$bBUs5.k592t7UJiz0rI3memzKJsxkIkbCtGBP.QjfDhx3sf3HZW7G",
+    "role": "staff",
+    "is_active": false,
+    "created_at": "2026-04-30T16:17:16.868361+00:00",
+    "last_login_at": "2026-04-30T16:17:19.442378+00:00",
+    "deactivated_at": "2026-04-30T16:17:19.563284+00:00"
+  }
+]

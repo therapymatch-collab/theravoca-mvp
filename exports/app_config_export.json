@@ -1,0 +1,69 @@
+[
+  {
+    "key": "referral_source_options",
+    "options": [
+      "Google search",
+      "ChatGPT / AI assistant",
+      "Instagram",
+      "Friend / family",
+      "Therapist referred me",
+      "News article / podcast",
+      "Other",
+      "Prefer not to say"
+    ]
+  },
+  {
+    "key": "intake_rate_limit",
+    "max_requests_per_window": 1,
+    "window_minutes": 60,
+    "max_per_ip_per_hour": 8,
+    "test_mode_until": "2026-04-30T18:54:18.260016+00:00"
+  },
+  {
+    "key": "scrape_sources",
+    "sources": []
+  },
+  {
+    "key": "research_enrichment",
+    "enabled": true
+  },
+  {
+    "key": "deep_research_warmup",
+    "completed_at": "2026-04-30T17:54:30.900192+00:00",
+    "current_name": null,
+    "done": 0,
+    "failed": 0,
+    "running": false,
+    "started_at": "2026-04-30T17:54:30.898613+00:00",
+    "total": 0,
+    "cancelled": true,
+    "interrupted_by_restart": true
+  },
+  {
+    "key": "a2p_10dlc",
+    "brand_id": "BN1234567",
+    "campaign_id": "CM7654321",
+    "notes": "iter67 test - delete me",
+    "status": "brand_pending",
+    "updated_at": "2026-04-30T16:18:32.684226+00:00"
+  },
+  {
+    "key": "last_test_sms",
+    "error_code": 30034,
+    "error_message": null,
+    "final_status": "undelivered",
+    "intended_to": "+12036237529",
+    "ok": false,
+    "sid": "SM95081fe79e79c53f8d1f4445a05d8f08",
+    "status": "queued",
+    "tested_at": "2026-04-30T16:18:30.439055+00:00",
+    "to": "+12036237529",
+    "troubleshooting_hint": "A2P 10DLC registration required. US carriers block unregistered numbers from sending SMS. Register at twilio.com/console/sms/a2p-messaging \u2014 or switch to a verified toll-free number."
+  },
+  {
+    "key": "turnstile_settings",
+    "disabled": false,
+    "disabled_at": null,
+    "disabled_reason": ""
+  }
+]

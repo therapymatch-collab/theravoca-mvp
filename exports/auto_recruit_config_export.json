@@ -1,0 +1,15 @@
+[
+  {
+    "enabled": true,
+    "dry_run": true,
+    "require_approval": true,
+    "target_zero_pool_pct": 5.0,
+    "max_drafts_per_cycle": 10,
+    "max_sends_per_day_email": 10,
+    "max_sends_per_day_sms": 10,
+    "cycle_frequency": "weekly",
+    "sim_num_requests": 200,
+    "last_cycle_at": "2026-04-30T17:53:00.456586+00:00",
+    "last_cycle_id": "fb77c9af-8acb-4362-820f-05c5027c48de"
+  }
+]

@@ -1,0 +1,56 @@
+[
+  {
+    "key": "zip:83616|USA",
+    "lat": 43.6978487,
+    "lng": -116.3741608,
+    "source": "nominatim"
+  },
+  {
+    "key": "zip:83702|USA",
+    "lat": 43.6280888,
+    "lng": -116.2069978,
+    "source": "nominatim"
+  },
+  {
+    "key": "zip:83833|USA",
+    "lat": 47.5771112,
+    "lng": -116.7494208,
+    "source": "nominatim"
+  },
+  {
+    "key": "city:new york|ID",
+    "lat": 43.5604075,
+    "lng": -116.2894714,
+    "source": "nominatim"
+  },
+  {
+    "key": "city:ketchum|ID",
+    "lat": 43.680741,
+    "lng": -114.363662,
+    "source": "nominatim"
+  },
+  {
+    "key": "city:sandpoint|ID",
+    "lat": 48.2761306,
+    "lng": -116.5487835,
+    "source": "nominatim"
+  },
+  {
+    "key": "city:emmett|ID",
+    "lat": 43.8734979,
+    "lng": -116.4993012,
+    "source": "nominatim"
+  },
+  {
+    "key": "zip:83001|USA",
+    "lat": 43.4731761,
+    "lng": -110.7864962,
+    "source": "nominatim"
+  },
+  {
+    "key": "city:jackson|WY",
+    "lat": 43.479965,
+    "lng": -110.761815,
+    "source": "nominatim"
+  }
+]

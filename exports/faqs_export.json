@@ -1,0 +1,112 @@
+[
+  {
+    "id": "a3bdee1a-9cde-47d4-9d90-da630c9ad3f4",
+    "audience": "patient",
+    "question": "What is TheraVoca, and how does it work?",
+    "answer": "TheraVoca turns what you need into a structured referral and connects you with therapists who are genuinely interested in helping. No long searching or guesswork on your end.",
+    "position": 1,
+    "published": true,
+    "created_at": "2026-04-28T16:28:36.379454+00:00",
+    "updated_at": "2026-04-28T16:35:20.726027+00:00"
+  },
+  {
+    "id": "749ee219-7090-4e45-8293-4b8d299c66e9",
+    "audience": "patient",
+    "question": "Is there a fee for patients?",
+    "answer": "Nope, not during our pilot. Our goal is to prove value first. You'll never be billed without your explicit consent.",
+    "position": 0,
+    "published": true,
+    "created_at": "2026-04-28T16:28:36.406786+00:00",
+    "updated_at": "2026-04-28T16:35:20.725077+00:00"
+  },
+  {
+    "id": "3a1d030c-338a-427c-a3d7-55259834c99b",
+    "audience": "patient",
+    "question": "What happens after I submit my referral request?",
+    "answer": "We send your anonymous referral to licensed therapists in your state. Within 24 hours, you receive a personalized list of therapists who have read your needs and want to work with you.",
+    "position": 2,
+    "published": true,
+    "created_at": "2026-04-28T16:28:36.407378+00:00",
+    "updated_at": "2026-04-28T16:35:20.726539+00:00"
+  },
+  {
+    "id": "64e15084-686c-423c-a4bd-e97e39b23396",
+    "audience": "patient",
+    "question": "Will therapists know who I am right away?",
+    "answer": "No. We only share anonymous details about your referral. You always stay in control of when and how you reveal your identity.",
+    "position": 3,
+    "published": true,
+    "created_at": "2026-04-28T16:28:36.407847+00:00",
+    "updated_at": "2026-04-28T16:28:36.407853+00:00"
+  },
+  {
+    "id": "10ab5bc3-b1da-4024-9333-61402ca4c92d",
+    "audience": "patient",
+    "question": "What if I don't feel good about my matches?",
+    "answer": "We're here to help you explore other options at no added stress, including trying again.",
+    "position": 4,
+    "published": true,
+    "created_at": "2026-04-28T16:28:36.408269+00:00",
+    "updated_at": "2026-04-28T16:28:36.408274+00:00"
+  },
+  {
+    "id": "ef42b9e5-09f1-4a67-9937-ef4d74924e5b",
+    "audience": "patient",
+    "question": "Is TheraVoca available in my area?",
+    "answer": "We are launching state by state. Currently live in Idaho. If we're not in your state, we'll add you to our waitlist.",
+    "position": 5,
+    "published": true,
+    "created_at": "2026-04-28T16:28:36.408665+00:00",
+    "updated_at": "2026-04-28T16:28:36.408670+00:00"
+  },
+  {
+    "id": "fb6d2f76-1d26-4d85-b294-5435675502e9",
+    "audience": "therapist",
+    "question": "How does TheraVoca find patients for me?",
+    "answer": "Patients submit anonymous, structured referrals describing what they need. We score them against your specialties, payment options, and schedule, then notify you only when the match is \u226570%.",
+    "position": 0,
+    "published": true,
+    "created_at": "2026-04-28T16:28:36.409518+00:00",
+    "updated_at": "2026-04-28T16:28:36.409524+00:00"
+  },
+  {
+    "id": "7067d018-57b5-413d-ab7d-e7f55f4031ef",
+    "audience": "therapist",
+    "question": "Do I have to commit to every referral?",
+    "answer": "Never. Each match comes with the patient's full referral context \u2014 you opt in or pass with one click. No pressure, no minimums.",
+    "position": 1,
+    "published": true,
+    "created_at": "2026-04-28T16:28:36.409869+00:00",
+    "updated_at": "2026-04-28T16:28:36.409875+00:00"
+  },
+  {
+    "id": "f4cdb771-55aa-4231-8eda-4ab2b1cd7f36",
+    "audience": "therapist",
+    "question": "What about insurance?",
+    "answer": "We don't credential you. You bill insurance the same way you do today (or stay cash-pay). We just route the right patients to you.",
+    "position": 2,
+    "published": true,
+    "created_at": "2026-04-28T16:28:36.410208+00:00",
+    "updated_at": "2026-04-28T16:28:36.410213+00:00"
+  },
+  {
+    "id": "fd80ba6e-b484-40cd-ac21-139c309a3dcf",
+    "audience": "therapist",
+    "question": "How private is my profile?",
+    "answer": "Your contact info is hidden until you accept a referral. We never publish a public profile or sell your data.",
+    "position": 3,
+    "published": true,
+    "created_at": "2026-04-28T16:28:36.410523+00:00",
+    "updated_at": "2026-04-28T16:28:36.410528+00:00"
+  },
+  {
+    "id": "913df0e5-071f-4ed1-bba6-c664f10f5648",
+    "audience": "therapist",
+    "question": "How much does it cost?",
+    "answer": "30-day free trial, then $45/month. Cancel anytime. No setup fees, no per-referral charges.",
+    "position": 4,
+    "published": true,
+    "created_at": "2026-04-28T16:28:36.410821+00:00",
+    "updated_at": "2026-04-28T16:28:36.410826+00:00"
+  }
+]

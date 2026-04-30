@@ -1,0 +1,25 @@
+[
+  {
+    "key": "therapist_notification",
+    "greeting": "Hi {first_name},",
+    "intro": "You have a new TheraVoca referral that fits your practice."
+  },
+  {
+    "key": "magic_code",
+    "intro": "Use this code to sign in. It expires in {ttl_minutes} minutes.",
+    "subject": "Your TheraVoca sign-in code: {code}"
+  },
+  {
+    "key": "prelaunch_invite",
+    "subject": "Idaho therapist outreach \u2014 joining TheraVoca's launch network",
+    "cta_label": "See if TheraVoca is a fit",
+    "footer_note": "You're receiving this because TheraVoca is recruiting for an underserved Idaho specialty before public launch. Reference code: {code}. You can ignore this email \u2014 we won't follow up unless you click above.",
+    "greeting": "Hi {first_name},",
+    "heading": "Pre-launch invite",
+    "intro": "I'm reaching out from TheraVoca, a  patient-therapist matching service. We're building our directory ahead of launch, and your practice came up as a strong fit for an underserved area we're trying to fill."
+  },
+  {
+    "key": "new_referral_inquiry",
+    "subject": "TheraVoca referral request \u2014 {score}% estimated match"
+  }
+]
