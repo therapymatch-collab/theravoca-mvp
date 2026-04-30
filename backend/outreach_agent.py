@@ -63,7 +63,7 @@ def _score_pt_candidate(c: dict, request: dict) -> tuple[int, str]:
     # Keep the language generic and focused on practice-fit only.
     if overlap:
         rationale = (
-            f"Their practice focus on {', '.join(sorted(overlap)).replace('_', ' ')} "
+            f"Your practice focus on {', '.join(sorted(overlap)).replace('_', ' ')} "
             f"matches this patient's primary concern."
         )
     else:

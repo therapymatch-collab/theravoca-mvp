@@ -18,7 +18,16 @@ import { PAYMENT } from "./intakeOptions";
  *    "in-network only" toggle
  *  - cash budget input + optional sliding-scale opt-in
  */
-export default function PaymentStep({ data, set }) {
+export default function PaymentStep({ data, set, hardCapacity }) {
+  const hc = hardCapacity || { isDisabled: () => false, reasonFor: () => "" };
+  const insHardDisabled = hc.isDisabled(
+    "insurance_strict",
+    data.insurance_name === "Other (specify)" ? data.insurance_name_other : data.insurance_name,
+  );
+  const insReason = hc.reasonFor(
+    "insurance_strict",
+    data.insurance_name === "Other (specify)" ? data.insurance_name_other : data.insurance_name,
+  );
   return (
     <div className="space-y-5">
       <Group label="How would the client like to pay?">
@@ -71,22 +80,33 @@ export default function PaymentStep({ data, set }) {
       )}
       {data.payment_type === "insurance" && data.insurance_name && (
         <label
-          className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer hover:border-[#2D4A3E] transition"
+          className={`flex items-start gap-3 border rounded-xl px-4 py-3 transition ${
+            insHardDisabled
+              ? "bg-[#F2EFE9] border-[#E8E5DF] cursor-not-allowed opacity-60"
+              : "bg-[#FDFBF7] border-[#E8E5DF] cursor-pointer hover:border-[#2D4A3E]"
+          }`}
           data-testid="insurance-strict-row"
         >
           <Checkbox
-            checked={data.insurance_strict}
-            onCheckedChange={(v) => set("insurance_strict", !!v)}
+            checked={!insHardDisabled && data.insurance_strict}
+            disabled={insHardDisabled}
+            onCheckedChange={(v) => !insHardDisabled && set("insurance_strict", !!v)}
             className="mt-0.5 border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
             data-testid="insurance-strict-toggle"
           />
           <span className="text-sm text-[#2B2A29] leading-relaxed">
             <strong>Hard requirement:</strong> only show therapists who
             explicitly accept this insurance.{" "}
-            <span className="text-[#6D6A65]">
-              Off (default) means out-of-network therapists can still
-              appear if they're a strong fit.
-            </span>
+            {insHardDisabled ? (
+              <span className="block mt-1 text-xs text-[#B37E35]">
+                {insReason || "Too few in-network therapists right now — we'll still prioritise them, but can't make it a hard filter."}
+              </span>
+            ) : (
+              <span className="text-[#6D6A65]">
+                Off (default) means out-of-network therapists can still
+                appear if they're a strong fit.
+              </span>
+            )}
           </span>
         </label>
       )}

@@ -2248,6 +2248,87 @@ async def public_referral_source_options() -> dict[str, Any]:
     return {"options": _reorder_referral_options(options)}
 
 
+@public_router.get("/config/turnstile")
+async def public_turnstile_config() -> dict[str, Any]:
+    """Public endpoint the React app calls on mount to decide whether
+    to render the Turnstile widget. Returns `{enabled: bool}` —
+    `enabled=False` when either (a) the admin has flipped the
+    runtime-disable toggle (used during AI-driven E2E testing) or
+    (b) the `TURNSTILE_SITE_KEY` env isn't configured.
+    The widget only renders when `enabled=True`."""
+    import turnstile_service
+    disabled = await turnstile_service._is_disabled_by_admin()
+    configured = bool(
+        (os.environ.get("TURNSTILE_SITE_KEY") or "").strip()
+    )
+    return {"enabled": (not disabled) and configured}
+
+
+@public_router.get("/config/hard-capacity")
+async def public_hard_capacity() -> dict[str, Any]:
+    """Returns which HARD intake options should be greyed out because
+    there aren't enough therapists in the directory passing them.
+    Lightweight aggregate — used by the intake form on mount.
+    (Admins see the same data + full protection reasons via
+    /api/admin/hard-capacity)."""
+    import hard_capacity
+    result = await hard_capacity.compute_capacity(db)
+    # Lean payload for public consumers — omit raw counts to keep
+    # directory breakdown private. We only need the disabled flags +
+    # the short protections blurbs for the UI tooltip.
+    return {
+        "pool_size": result["pool_size"],
+        "min_required": result["min_required"],
+        "disabled": result["disabled"],
+        "protections": result["protections"],
+    }
+
+
+@router.get("/admin/hard-capacity", dependencies=[Depends(require_admin)])
+async def admin_hard_capacity() -> dict[str, Any]:
+    """Admin view — full capacity snapshot with raw counts per variant."""
+    import hard_capacity
+    return await hard_capacity.compute_capacity(db)
+
+
+@router.get("/admin/turnstile-settings", dependencies=[Depends(require_admin)])
+async def admin_get_turnstile_settings() -> dict[str, Any]:
+    doc = await db.app_config.find_one(
+        {"key": "turnstile_settings"}, {"_id": 0, "disabled": 1, "disabled_at": 1, "disabled_reason": 1},
+    )
+    return {
+        "disabled": bool((doc or {}).get("disabled")),
+        "disabled_at": (doc or {}).get("disabled_at"),
+        "disabled_reason": (doc or {}).get("disabled_reason") or "",
+        "configured": bool(
+            (os.environ.get("TURNSTILE_SITE_KEY") or "").strip()
+            and (os.environ.get("TURNSTILE_SECRET_KEY") or "").strip()
+        ),
+    }
+
+
+@router.put("/admin/turnstile-settings", dependencies=[Depends(require_admin)])
+async def admin_set_turnstile_settings(payload: dict) -> dict[str, Any]:
+    """Flip the runtime disable toggle. `{disabled: true, reason?: str}`.
+    When disabled, BOTH backend verification and the frontend widget
+    short-circuit — so automated tests don't need a real Turnstile token."""
+    disabled = bool(payload.get("disabled"))
+    reason = (payload.get("reason") or "").strip()[:240]
+    update = {"disabled": disabled}
+    if disabled:
+        update["disabled_at"] = datetime.now(timezone.utc).isoformat()
+        update["disabled_reason"] = reason or "AI / E2E testing"
+    else:
+        update["disabled_at"] = None
+        update["disabled_reason"] = ""
+    await db.app_config.update_one(
+        {"key": "turnstile_settings"},
+        {"$set": update, "$setOnInsert": {"key": "turnstile_settings"}},
+        upsert=True,
+    )
+    return {"ok": True, "disabled": disabled}
+
+
 # ─── Outreach opt-out — public, no auth ─────────────────────────────────
 def _render_opt_out_page(*, success: bool, email: str | None, phone: str | None,
                         already: bool = False) -> str:

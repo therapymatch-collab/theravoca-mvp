@@ -10,7 +10,10 @@ import { AVAILABILITY, URGENCY, PRIOR_THERAPY } from "./intakeOptions";
  * "yes_not_helped" so the patient can describe what worked / what
  * didn't).
  */
-export default function LogisticsStep({ data, set, toggleArr }) {
+export default function LogisticsStep({ data, set, toggleArr, hardCapacity }) {
+  const hc = hardCapacity || { isDisabled: () => false, reasonFor: () => "" };
+  const urgencyHardDisabled = hc.isDisabled("urgency_strict", data.urgency);
+  const urgencyReason = hc.reasonFor("urgency_strict", data.urgency);
   return (
     <div className="space-y-6">
       <Group
@@ -52,18 +55,28 @@ export default function LogisticsStep({ data, set, toggleArr }) {
       </Group>
       {data.urgency && data.urgency !== "flexible" && (
         <label
-          className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer hover:border-[#2D4A3E] transition -mt-3"
+          className={`flex items-start gap-3 border rounded-xl px-4 py-3 transition -mt-3 ${
+            urgencyHardDisabled
+              ? "bg-[#F2EFE9] border-[#E8E5DF] cursor-not-allowed opacity-60"
+              : "bg-[#FDFBF7] border-[#E8E5DF] cursor-pointer hover:border-[#2D4A3E]"
+          }`}
           data-testid="urgency-strict-row"
         >
           <Checkbox
-            checked={data.urgency_strict}
-            onCheckedChange={(v) => set("urgency_strict", !!v)}
+            checked={!urgencyHardDisabled && data.urgency_strict}
+            disabled={urgencyHardDisabled}
+            onCheckedChange={(v) => !urgencyHardDisabled && set("urgency_strict", !!v)}
             className="mt-0.5 border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
             data-testid="urgency-strict-toggle"
           />
           <span className="text-sm text-[#2B2A29] leading-relaxed">
             <strong>Hard requirement:</strong> only show therapists who
             can start within this timeframe.
+            {urgencyHardDisabled && (
+              <span className="block mt-1 text-xs text-[#B37E35]">
+                {urgencyReason || "Too few therapists have openings in this timeframe right now — we'll still prioritise them, but can't make it a hard filter."}
+              </span>
+            )}
           </span>
         </label>
       )}

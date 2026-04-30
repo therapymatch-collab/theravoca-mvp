@@ -15,7 +15,11 @@ export default function FormatStep({
   zipMatchesState,
   zipError,
   setZipError,
+  hardCapacity,
 }) {
+  const hc = hardCapacity || { isDisabled: () => false, reasonFor: () => "" };
+  const inPersonDisabled = hc.isDisabled("in_person_only");
+  const inPersonReason = hc.reasonFor("in_person_only");
   return (
     <div className="space-y-6">
       <Group label="How would the client prefer to meet?">
@@ -83,13 +87,18 @@ export default function FormatStep({
           </div>
           {data.modality_preference === "prefer_inperson" && (
             <label
-              className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer hover:border-[#2D4A3E] transition"
+              className={`flex items-start gap-3 border rounded-xl px-4 py-3 transition ${
+                inPersonDisabled
+                  ? "bg-[#F2EFE9] border-[#E8E5DF] cursor-not-allowed opacity-60"
+                  : "bg-[#FDFBF7] border-[#E8E5DF] cursor-pointer hover:border-[#2D4A3E]"
+              }`}
               data-testid="distance-strict-row"
             >
               <Checkbox
-                checked={data.modality_preference === "in_person_only"}
+                checked={!inPersonDisabled && data.modality_preference === "in_person_only"}
+                disabled={inPersonDisabled}
                 onCheckedChange={(v) =>
-                  set(
+                  !inPersonDisabled && set(
                     "modality_preference",
                     v ? "in_person_only" : "prefer_inperson",
                   )
@@ -100,10 +109,16 @@ export default function FormatStep({
               <span className="text-sm text-[#2B2A29] leading-relaxed">
                 <strong>Hard requirement:</strong> only show therapists
                 with an office within 30 miles AND who offer in-person.{" "}
-                <span className="text-[#6D6A65]">
-                  Off (default) means telehealth-friendly therapists
-                  outside the radius can still appear.
-                </span>
+                {inPersonDisabled ? (
+                  <span className="block mt-1 text-xs text-[#B37E35]">
+                    {inPersonReason}
+                  </span>
+                ) : (
+                  <span className="text-[#6D6A65]">
+                    Off (default) means telehealth-friendly therapists
+                    outside the radius can still appear.
+                  </span>
+                )}
               </span>
             </label>
           )}

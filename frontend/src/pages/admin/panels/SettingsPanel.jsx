@@ -1,7 +1,145 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Shield, ShieldOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
+
+// Runtime Turnstile disable toggle — lets the admin pause Cloudflare
+// bot protection during AI / E2E test runs without touching env vars.
+// Backend: GET/PUT /api/admin/turnstile-settings. Public consumers
+// read the effective state from /api/config/turnstile.
+function TurnstileToggleCard({ client }) {
+  const [loaded, setLoaded] = useState(false);
+  const [disabled, setDisabled] = useState(false);
+  const [configured, setConfigured] = useState(false);
+  const [reason, setReason] = useState("");
+  const [disabledAt, setDisabledAt] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    try {
+      const r = await client.get("/admin/turnstile-settings");
+      setDisabled(!!r.data?.disabled);
+      setConfigured(!!r.data?.configured);
+      setReason(r.data?.disabled_reason || "");
+      setDisabledAt(r.data?.disabled_at || null);
+      setLoaded(true);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to load Turnstile settings");
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const save = async (nextDisabled) => {
+    setSaving(true);
+    try {
+      await client.put("/admin/turnstile-settings", {
+        disabled: nextDisabled,
+        reason: nextDisabled ? (reason || "AI / E2E testing") : "",
+      });
+      toast.success(
+        nextDisabled
+          ? "Turnstile disabled — intake + therapist signup will skip bot checks"
+          : "Turnstile re-enabled",
+      );
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Update failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className={`border rounded-2xl p-6 ${
+        disabled ? "bg-[#FBF3E0] border-[#E5B267]" : "bg-white border-[#E8E5DF]"
+      }`}
+      data-testid="turnstile-toggle-card"
+    >
+      <div className="flex items-start gap-3 flex-wrap">
+        <div className={`rounded-full p-2.5 ${disabled ? "bg-[#F5E0B5]" : "bg-[#EAF2E8]"}`}>
+          {disabled ? (
+            <ShieldOff size={20} className="text-[#B37E35]" />
+          ) : (
+            <Shield size={20} className="text-[#2D4A3E]" />
+          )}
+        </div>
+        <div className="flex-1 min-w-[200px]">
+          <h3 className="font-serif-display text-2xl text-[#2D4A3E]">
+            Cloudflare Turnstile
+          </h3>
+          <p className="text-sm text-[#6D6A65] mt-1 max-w-2xl leading-relaxed">
+            Bot protection on patient intake and therapist signup.
+            Temporarily disable during AI or E2E testing so automated
+            browsers don't get blocked. Honeypot + timing + IP
+            rate-limit guards stay active either way.
+          </p>
+          {!configured && (
+            <p className="mt-2 text-xs text-[#6D6A65] italic">
+              Turnstile keys aren't configured in this environment
+              (&nbsp;<code>TURNSTILE_SITE_KEY</code> /{" "}
+              <code>TURNSTILE_SECRET_KEY</code>&nbsp;), so the widget
+              isn't rendered regardless of this toggle.
+            </p>
+          )}
+        </div>
+        {loaded && (
+          <label className="inline-flex items-center gap-2 bg-white border border-[#E8E5DF] rounded-lg px-3 py-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={disabled}
+              disabled={saving}
+              onChange={(e) => save(e.target.checked)}
+              className="h-4 w-4"
+              data-testid="turnstile-toggle-input"
+            />
+            <span className="text-sm font-semibold text-[#3F3D3B]">
+              Disable for testing
+            </span>
+          </label>
+        )}
+      </div>
+
+      {disabled && loaded && (
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label
+              htmlFor="ts-reason"
+              className="text-xs uppercase tracking-wider text-[#6D6A65] font-semibold"
+            >
+              Reason (visible in audit log)
+            </label>
+            <Input
+              id="ts-reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              onBlur={() => save(true)}
+              placeholder="AI / E2E testing"
+              className="mt-1"
+              data-testid="turnstile-reason-input"
+              maxLength={240}
+            />
+          </div>
+          {disabledAt && (
+            <div className="text-xs text-[#6D6A65] flex items-end">
+              <span>
+                Disabled since{" "}
+                <span className="font-semibold text-[#B37E35]">
+                  {new Date(disabledAt).toLocaleString()}
+                </span>
+                . Remember to re-enable before going live.
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Platform-wide settings the admin can tune at runtime. Currently exposes
 // the patient-intake rate limit (X requests per Y minutes per email).
@@ -220,6 +358,8 @@ export default function SettingsPanel({ client }) {
 
   return (
     <div className="mt-6 space-y-6" data-testid="settings-panel">
+      <TurnstileToggleCard client={client} />
+
       <div className="bg-white border border-[#E8E5DF] rounded-2xl p-6">
         <h3 className="font-serif-display text-2xl text-[#2D4A3E]">
           Patient intake rate limit

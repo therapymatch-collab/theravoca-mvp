@@ -17,7 +17,12 @@ import { EXPERIENCE, GENDERS, STYLES, MODALITY_PREFS } from "./intakeOptions";
  * required-flag), preferred session language with optional hard
  * "language only" toggle, plus optional style / modality preferences.
  */
-export default function PrefsStep({ data, set, toggleArr }) {
+export default function PrefsStep({ data, set, toggleArr, hardCapacity }) {
+  const hc = hardCapacity || { isDisabled: () => false, reasonFor: () => "" };
+  const genderHardDisabled = hc.isDisabled("gender_required", data.gender_preference);
+  const genderReason = hc.reasonFor("gender_required", data.gender_preference);
+  const langHardDisabled = hc.isDisabled("language_strict", data.preferred_language);
+  const langReason = hc.reasonFor("language_strict", data.preferred_language);
   return (
     <div className="space-y-6">
       <Group label="Therapist experience preference (pick all that apply)">
@@ -54,14 +59,29 @@ export default function PrefsStep({ data, set, toggleArr }) {
           testid="gender"
         />
         {data.gender_preference !== "no_pref" && (
-          <label className="flex items-center gap-3 mt-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5 cursor-pointer">
+          <label
+            className={`flex items-start gap-3 mt-3 border rounded-xl px-3 py-2.5 ${
+              genderHardDisabled
+                ? "bg-[#F2EFE9] border-[#E8E5DF] cursor-not-allowed opacity-60"
+                : "bg-[#FDFBF7] border-[#E8E5DF] cursor-pointer"
+            }`}
+            data-testid="gender-required-row"
+          >
             <Switch
-              checked={data.gender_required}
-              onCheckedChange={(v) => set("gender_required", v)}
+              checked={!genderHardDisabled && !!data.gender_required}
+              disabled={genderHardDisabled}
+              onCheckedChange={(v) =>
+                !genderHardDisabled && set("gender_required", v)
+              }
               data-testid="gender-required"
             />
-            <span className="text-sm text-[#2B2A29]">
+            <span className="text-sm text-[#2B2A29] leading-relaxed">
               Required (only show therapists matching this gender)
+              {genderHardDisabled && (
+                <span className="block mt-1 text-xs text-[#B37E35]">
+                  {genderReason || "Too few therapists match this gender right now — we'll still prioritise them, but can't make it a hard filter."}
+                </span>
+              )}
             </span>
           </label>
         )}
@@ -96,23 +116,36 @@ export default function PrefsStep({ data, set, toggleArr }) {
         {data.preferred_language &&
           data.preferred_language !== "English" && (
             <label
-              className="flex items-start gap-3 mt-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer hover:border-[#2D4A3E] transition"
+              className={`flex items-start gap-3 mt-3 border rounded-xl px-4 py-3 transition ${
+                langHardDisabled
+                  ? "bg-[#F2EFE9] border-[#E8E5DF] cursor-not-allowed opacity-60"
+                  : "bg-[#FDFBF7] border-[#E8E5DF] cursor-pointer hover:border-[#2D4A3E]"
+              }`}
               data-testid="language-strict-row"
             >
               <Checkbox
-                checked={data.language_strict}
-                onCheckedChange={(v) => set("language_strict", !!v)}
+                checked={!langHardDisabled && data.language_strict}
+                disabled={langHardDisabled}
+                onCheckedChange={(v) =>
+                  !langHardDisabled && set("language_strict", !!v)
+                }
                 className="mt-0.5 border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
                 data-testid="language-strict-toggle"
               />
               <span className="text-sm text-[#2B2A29] leading-relaxed">
                 <strong>Hard requirement:</strong> only show therapists
                 who speak {data.preferred_language}.{" "}
-                <span className="text-[#6D6A65]">
-                  Off (default) means English-speaking therapists still
-                  appear, just ranked lower than{" "}
-                  {data.preferred_language}-speaking ones.
-                </span>
+                {langHardDisabled ? (
+                  <span className="block mt-1 text-xs text-[#B37E35]">
+                    {langReason}
+                  </span>
+                ) : (
+                  <span className="text-[#6D6A65]">
+                    Off (default) means English-speaking therapists still
+                    appear, just ranked lower than{" "}
+                    {data.preferred_language}-speaking ones.
+                  </span>
+                )}
               </span>
             </label>
           )}

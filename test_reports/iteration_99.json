@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 99 — bundled bugfixes (languages cleanup / hard-capacity / turnstile admin toggle / outreach wording) tested end-to-end. 11/12 backend tests pass (1 skip — no outreach invites in DB to sample). Backend: /api/config/turnstile, /api/admin/turnstile-settings (GET+PUT), /api/config/hard-capacity, /api/admin/hard-capacity all return correct shapes; turnstile_service.verify_token short-circuits to (True, None) when admin disable flag is set; languages_spoken cleanup is verified — zero offenders remain in the directory; outreach_agent.py source confirmed to use 'Your practice focus' (no 'Their practice focus' anywhere in source). Live aggregate against the seeded directory (pool_size=122) returns expected disabled lists: language_strict=['ASL','American Sign Language','Arabic','Hindi','Korean','Mandarin','Vietnamese'], gender_required=['nonbinary'], urgency_strict=['asap','within_2_3_weeks','within_month'], in_person_only=False (44>30), telehealth_only=False (122>30) — matches the spec's expectations and then some. Frontend Settings tab: Cloudflare Turnstile card (testid turnstile-toggle-card) renders at top of Settings, toggling 'Disable for testing' (turnstile-toggle-input) reveals turnstile-reason-input + 'Disabled since 4/30/2026, 12:10:40 AM' timestamp; toggling back off persists. Frontend Coverage gaps panel: ProtectedHardSection NEVER RENDERS in Master-password admin mode because CoverageGapPanel.jsx fetches /api/admin/hard-capacity with the bare `api` axios client which does not attach the X-Admin-Password header — request 401s and `hardCap` stays null, so the entire `protected-hard-section` (and its child `protected-axis-*` blocks) never mounts. SettingsPanel works fine because it receives the authenticated `client` prop — same fix needed in CoverageGapPanel. Restored turnstile to disabled=false at end.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/config/hard-capacity", "issue": "urgency_strict returns ALL three buckets (asap, within_2_3_weeks, within_month) because seeded therapists have urgency_capacity=[] (count=0 across the board). Spec only asserts 'asap' must be present, which is satisfied. Long-term: backfill urgency_capacity on the seed data so this list has signal."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Admin → Coverage gaps → Protected HARD selections section",
+        "issue": "ProtectedHardSection block never renders in Master-password mode. CoverageGapPanel.jsx line 31 calls `api.get('/admin/hard-capacity')` but `api` (lib/api.js line 65) is a bare axios instance that doesn't attach the X-Admin-Password header. Request 401s, soft-fail leaves hardCap=null, the testid 'protected-hard-section' element is never mounted. Fix: thread the same `client` (adminClient) prop the rest of the panel system already receives, or call the existing useAdminClient/context, similar to how SettingsPanel.jsx uses its `client` prop on line 20. Verification: 401 visible in browser console (`Failed to load resource: the server responded with a status of 401 ()`).",
+        "affected_selectors": ["[data-testid='protected-hard-section']", "[data-testid='protected-axis-language_strict']", "[data-testid='protected-axis-gender_required']", "[data-testid='protected-axis-urgency_strict']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration99_languages_hardcap_turnstile.py",
+    "/app/test_reports/pytest/iter99_results.xml"
+  ],
+  "action_items": [
+    "(HIGH) Fix CoverageGapPanel.jsx so /api/admin/hard-capacity is fetched through the authenticated admin client (the same `client` prop used by other admin panels). Without this, the new Protected HARD selections section is invisible to anyone signed in via Master password.",
+    "(LOW) Consider seeding urgency_capacity values on at least 30 of the 122 seeded therapists so urgency_strict isn't permanently grey for asap/within_2_3_weeks/within_month — currently every urgency option would be greyed out for live patients."
+  ],
+  "critical_code_review_comments": [
+    "CoverageGapPanel.jsx imports `api` directly from @/lib/api but admin endpoints require auth. This anti-pattern (bare api on /admin/*) will silently disable any feature that depends on the response — e.g. ProtectedHardSection. Other admin panels correctly take a `client` prop. Recommend a lint rule or a thin `adminApi` re-export that throws/redirects on 401 so future admin features can't repeat this.",
+    "hard_capacity.compute_capacity iterates the directory ~6× (one full scan per axis). Pool is small (~122) so it's fine today, but a single scan accumulating all six counters would halve CPU as the directory grows.",
+    "turnstile_service._is_disabled_by_admin is awaited on every public_turnstile_config call — that's a Mongo round-trip per page-load. Consider an in-process TTL cache (60s) or a startup cache that flips on the PUT route.",
+    "/api/config/hard-capacity exposes pool_size + protections labels publicly. Labels include exact counts ('Only 3 nonbinary therapists in our directory'). This is probably fine for a directory site but worth a privacy/PR check before launch."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration99_languages_hardcap_turnstile.py"
+  ],
+  "success_rate": {"backend": "100% (11 pass, 1 skip — no outreach invites in DB)", "frontend": "75% (Settings card works; Coverage gaps protected section blocked by 401)"},
+  "test_credentials": "Admin Master password admin123! (X-Admin-Password header). MongoDB at MONGO_URL (test_database).",
+  "seed_data_creation": "None — read-only verification. The Turnstile test toggles disabled→true→false and the teardown_method restores disabled=false to avoid leaking state.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend fix verified live: pool_size=122, language_strict has 7 entries (ASL/American Sign Language/Arabic/Hindi/Korean/Mandarin/Vietnamese), gender_required=['nonbinary'], urgency_strict=['asap','within_2_3_weeks','within_month'], in_person=44 (NOT disabled), telehealth=122 (NOT disabled). After the CoverageGapPanel auth fix, the next testing pass should: (1) confirm protected-hard-section visible with at least 3 protected-axis-* children, (2) confirm intake greying on /intake/new for Mandarin language + nonbinary gender + asap urgency (deferred this time because the patient intake form has a multi-step wizard and the protected section blocker should be cleared first), (3) verify outreach invite rationale wording in a real preview email by creating an invite end-to-end. Endpoints verified: GET /api/config/turnstile, GET/PUT /api/admin/turnstile-settings, GET /api/config/hard-capacity, GET /api/admin/hard-capacity. Test file at /app/backend/tests/test_iteration99_languages_hardcap_turnstile.py is reusable for regression.",
+  "rca of the issue": "Frontend integration RCA: CoverageGapPanel.jsx (line 31) was added with `import { api } from '@/lib/api'` and `api.get('/admin/hard-capacity')`. The shared `api` instance does not attach the X-Admin-Password header, so when the admin signs in via Master password (cookie-less mode), the request returns 401. The component's catch-all `(_) => {}` swallow leaves hardCap=null and the surrounding JSX `{hardCap && <ProtectedHardSection .../> }` never mounts — making the whole new section silently invisible. SettingsPanel/TurnstileToggleCard works because it receives the authenticated `client` prop. Mitigation: swap the bare `api` import for the same `client` prop pattern used by other admin panels."
+}

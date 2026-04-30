@@ -30,6 +30,22 @@ def is_configured() -> bool:
     )
 
 
+async def _is_disabled_by_admin() -> bool:
+    """True when the admin has flipped the runtime disable switch.
+    Stored in `app_config` under key=`turnstile_settings`,
+    `disabled=True`. Used so admins can pause bot protection during
+    AI-driven end-to-end testing without restarting the backend.
+    Fails soft — any DB error returns False (= enabled)."""
+    try:
+        from deps import db
+        doc = await db.app_config.find_one(
+            {"key": "turnstile_settings"}, {"_id": 0, "disabled": 1},
+        )
+        return bool((doc or {}).get("disabled"))
+    except Exception:
+        return False
+
+
 async def verify_token(
     token: Optional[str],
     *,
@@ -46,6 +62,11 @@ async def verify_token(
     Cloudflare outage; the caller decides whether to reject or fall
     back to other defenses.
     """
+    # Admin-controllable runtime disable (Settings → "Disable Turnstile
+    # during AI testing"). Checked BEFORE the key lookup so we don't
+    # even require a network call when verification is off.
+    if await _is_disabled_by_admin():
+        return True, None
     secret = (os.environ.get("TURNSTILE_SECRET_KEY") or "").strip()
     if not secret:
         return True, None  # Not configured → skip

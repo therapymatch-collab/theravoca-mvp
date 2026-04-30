@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { ArrowRight, Check } from "lucide-react";
 import { api } from "@/lib/api";
 import useSiteCopy from "@/lib/useSiteCopy";
+import useHardCapacity from "@/lib/useHardCapacity";
 import {
   P1Step,
   P2Step,
@@ -56,6 +57,7 @@ const DEEP_MATCH_STEPS = [
 export default function IntakeForm() {
   const navigate = useNavigate();
   const t = useSiteCopy();
+  const hardCapacity = useHardCapacity();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -75,8 +77,31 @@ export default function IntakeForm() {
   // submit; backend fail-softs if Turnstile isn't configured there.
   const [turnstileToken, setTurnstileToken] = useState("");
   const turnstileRef = useRef(null);
-  const turnstileSiteKey = process.env.REACT_APP_TURNSTILE_SITE_KEY || "";
+  // Runtime config: the admin can disable Turnstile at runtime via
+  // Settings → "Disable Turnstile during AI testing". We fetch the
+  // effective enabled flag from the backend and fall back to the
+  // compile-time env var when the fetch hasn't resolved yet.
+  const [turnstileEnabled, setTurnstileEnabled] = useState(
+    !!process.env.REACT_APP_TURNSTILE_SITE_KEY,
+  );
+  const turnstileSiteKey =
+    turnstileEnabled ? (process.env.REACT_APP_TURNSTILE_SITE_KEY || "") : "";
   const turnstileWidgetIdRef = useRef(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await api.get("/config/turnstile");
+        if (alive) setTurnstileEnabled(!!r.data?.enabled);
+      } catch (_) {
+        // Keep the env-var fallback on network error.
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Inject the Turnstile script once (when configured) and render the
   // widget into our container. Explicit-render mode lets us re-use the
@@ -656,19 +681,20 @@ export default function IntakeForm() {
                 zipMatchesState={zipMatchesState}
                 zipError={zipError}
                 setZipError={setZipError}
+                hardCapacity={hardCapacity}
               />
             )}
 
             {currentId === "payment" && (
-              <PaymentStep data={data} set={set} />
+              <PaymentStep data={data} set={set} hardCapacity={hardCapacity} />
             )}
 
             {currentId === "logistics" && (
-              <LogisticsStep data={data} set={set} toggleArr={toggleArr} />
+              <LogisticsStep data={data} set={set} toggleArr={toggleArr} hardCapacity={hardCapacity} />
             )}
 
             {currentId === "prefs" && (
-              <PrefsStep data={data} set={set} toggleArr={toggleArr} />
+              <PrefsStep data={data} set={set} toggleArr={toggleArr} hardCapacity={hardCapacity} />
             )}
 
             {currentId === "priority" && (

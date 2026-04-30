@@ -1,10 +1,13 @@
+import { useEffect, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
   Loader2,
+  Shield,
 } from "lucide-react";
 import { FactStat } from "./_panelShared";
+import { api } from "@/lib/api";
 
 const DIMENSION_LABELS = {
   specialty: "Clinical specialties",
@@ -20,6 +23,17 @@ const DIMENSION_LABELS = {
 // Pre-launch coverage report — surfaces gaps in our therapist directory
 // so the recruiter knows where to focus outreach.
 export default function CoverageGapPanel({ data, loading, onReload }) {
+  const [hardCap, setHardCap] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await api.get("/admin/hard-capacity");
+        if (alive) setHardCap(r.data);
+      } catch (_) { /* soft-fail */ }
+    })();
+    return () => { alive = false; };
+  }, []);
   if (loading || !data) {
     return (
       <div className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl p-12 text-center text-[#6D6A65]" data-testid="coverage-gap-loading">
@@ -63,6 +77,10 @@ export default function CoverageGapPanel({ data, loading, onReload }) {
           </button>
         </div>
       </div>
+
+      {hardCap && (
+        <ProtectedHardSection data={hardCap} />
+      )}
 
       {gap_summary.total === 0 ? (
         <div className="bg-white border border-[#2D4A3E]/30 rounded-2xl p-8 text-center" data-testid="gap-zero-state">
@@ -172,6 +190,102 @@ function DistBlock({ title, entries, max = 8 }) {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+// ─── Protected HARD selections ────────────────────────────────────────────
+// Companion to the patient-side hard-capacity guard. When the active
+// directory has < min_required therapists passing a given HARD option,
+// the intake UI greys out the toggle so patients don't pin themselves
+// into a zero-pool shortlist. This section tells the admin which
+// toggles are currently protected and why — so recruiting can target
+// the dimensions that are throttling patient choice.
+const AXIS_LABELS = {
+  language_strict: "Language (HARD)",
+  gender_required: "Therapist gender required",
+  in_person_only: "In-person only",
+  telehealth_only: "Telehealth only",
+  insurance_strict: "Insurance must accept",
+  urgency_strict: "Urgency must match",
+};
+
+function ProtectedHardSection({ data }) {
+  const protections = data?.protections || [];
+  const minReq = data?.min_required || 30;
+  // Group by axis for a cleaner layout.
+  const byAxis = {};
+  protections.forEach((p) => {
+    (byAxis[p.axis] = byAxis[p.axis] || []).push(p);
+  });
+  const axes = Object.keys(byAxis);
+  return (
+    <div
+      className="bg-white border border-[#E8E5DF] rounded-2xl p-5"
+      data-testid="protected-hard-section"
+    >
+      <div className="flex items-start gap-3 flex-wrap">
+        <div className="bg-[#EAF2E8] rounded-full p-2">
+          <Shield size={18} className="text-[#2D4A3E]" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-serif-display text-xl text-[#2D4A3E]">
+            Protected HARD selections
+          </h3>
+          <p className="text-sm text-[#6D6A65] mt-1 max-w-2xl leading-relaxed">
+            Intake greys out these HARD toggles because fewer than{" "}
+            <strong>{minReq}</strong> active therapists would pass them —
+            so patients don't accidentally pin themselves into a zero-match
+            shortlist. Recruit into these axes to unlock them.
+          </p>
+        </div>
+      </div>
+      {axes.length === 0 ? (
+        <div className="mt-4 text-sm text-[#2D4A3E] bg-[#EAF2E8] border border-[#A5C8A1] rounded-xl p-3">
+          <CheckCircle2 size={14} className="inline -mt-0.5 mr-1.5" />
+          Every HARD toggle is available right now — no directory-driven
+          protections active.
+        </div>
+      ) : (
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          {axes.map((axis) => (
+            <div
+              key={axis}
+              className="border border-[#E8E5DF] rounded-xl p-3"
+              data-testid={`protected-axis-${axis}`}
+            >
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-[#FBECE6] text-[#C87965]">
+                  greyed out
+                </span>
+                <span className="font-semibold text-[#2D4A3E] text-sm">
+                  {AXIS_LABELS[axis] || axis}
+                </span>
+              </div>
+              <ul className="mt-2 space-y-1.5">
+                {byAxis[axis].map((p, i) => (
+                  <li
+                    key={i}
+                    className="text-xs text-[#3F3D3B] flex items-start gap-2"
+                  >
+                    <span className="text-[#B37E35] font-semibold tabular-nums shrink-0 w-12">
+                      {p.count}/{minReq}
+                    </span>
+                    <span className="flex-1">
+                      <span className="font-semibold text-[#2D4A3E] capitalize">
+                        {String(p.value).replace(/_/g, " ")}
+                      </span>
+                      <span className="block text-[#6D6A65] leading-relaxed mt-0.5">
+                        {p.label}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
