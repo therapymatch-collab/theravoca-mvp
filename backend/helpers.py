@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -13,6 +14,116 @@ from email_service import send_patient_results, send_therapist_notification
 from geocoding import haversine_miles
 from matching import gap_axes, rank_therapists
 from sms_service import send_therapist_referral_sms
+
+
+def _parse_iso(s: str) -> Optional[datetime]:
+    """Tolerant ISO-8601 parser. Returns None on bad input."""
+    try:
+        return datetime.fromisoformat((s or "").replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+_ACTION_KEYWORDS = (
+    "consult", "available", "open slot", "schedule", "next week",
+    "this week", "free 15", "intake call", "appointment", "tomorrow",
+    "in-person", "telehealth", "offer", "i can see you",
+)
+# Theoretical max raw_total used to rescale `patient_rank_score` to a
+# 0-99 display number. Keep this in sync with the component caps below.
+PATIENT_RANK_MAX = 118.0
+
+
+def compute_patient_rank_score(application: dict, request: dict) -> dict:
+    """Compute the Step-2 patient-facing rank for a single application.
+
+    Returns a dict shaped like:
+      {
+        "patient_rank_score": 0-99 float (rescaled),
+        "response_quality": {...component scores 0-12...},
+        "rank_components": {...raw step1 / speed / quality / fit / commit...},
+      }
+
+    The breakdown surfaces in the patient's UI (tooltip on score chip)
+    AND the admin Applications panel so both views agree on ranking.
+
+    Components (raw, pre-rescale):
+      - step1_baseline (0-57)  match_score * 0.6, capped at 95% Step-1
+      - speed_bonus    (0-30)  faster reply within first 24h scores higher
+      - quality_bonus  (0-12)  length + issue match + action signal + voice
+      - apply_fit_bonus(0-10)  apply_fit (LLM grade 0-5) * 2
+      - commit_bonus   (0-9)   +3 each for confirms_availability/urgency/payment
+    Total max raw = 118. Rescaled to 0-99 (raw / 1.18) so the realistic
+    top is ~91 and ceiling is 99 — never display 100% (mirrors the 95%
+    Step-1 cap philosophy: no relationship is perfect on paper).
+    """
+    ms = float(application.get("match_score") or 0)
+    matched_at = request.get("matched_at") or request.get("created_at")
+    matched_dt = _parse_iso(matched_at) if matched_at else None
+    speed_bonus = 0.0
+    if matched_dt:
+        applied_dt = _parse_iso(application.get("created_at") or "")
+        if applied_dt:
+            hours = max(0.0, (applied_dt - matched_dt).total_seconds() / 3600.0)
+            speed_bonus = max(0.0, min(30.0, 30.0 * (24.0 - hours) / 24.0))
+
+    msg = (application.get("message") or "").lower()
+    msg_len = len(msg)
+    len_score = min(6.0, msg_len / 300.0 * 6.0)
+    issue_score = 0.0
+    patient_issues = [
+        i.lower() for i in (request.get("presenting_issues") or []) if i
+    ]
+    for issue in patient_issues:
+        # Match the slug OR human-readable form ("trauma_ptsd" matches
+        # "trauma" / "ptsd"). Tokens shorter than 4 chars are dropped to
+        # avoid false positives like "ed".
+        tokens = [issue] + issue.replace("_", " ").split()
+        if any(tok in msg for tok in tokens if len(tok) >= 4):
+            issue_score = 3.0
+            break
+    action_score = 2.0 if any(k in msg for k in _ACTION_KEYWORDS) else 0.0
+    personal_score = 1.0 if re.search(
+        r"\b(i\s|i'd|i'll|i've|i'm|my\s)", msg,
+    ) else 0.0
+    quality_bonus = min(
+        12.0, len_score + issue_score + action_score + personal_score,
+    )
+
+    apply_fit = float(application.get("apply_fit") or 0)
+    apply_fit_bonus = round(apply_fit * 2.0, 1)
+
+    commit_bonus = 0.0
+    if application.get("confirms_availability"):
+        commit_bonus += 3.0
+    if application.get("confirms_urgency"):
+        commit_bonus += 3.0
+    if application.get("confirms_payment"):
+        commit_bonus += 3.0
+
+    raw_step2 = (
+        ms * 0.6 + speed_bonus + quality_bonus + apply_fit_bonus + commit_bonus
+    )
+    patient_rank_score = round(min(99.0, raw_step2 / 1.18), 1)
+    return {
+        "patient_rank_score": patient_rank_score,
+        "response_quality": {
+            "length": round(len_score, 1),
+            "issue_match": issue_score,
+            "action_signal": action_score,
+            "personal_voice": personal_score,
+            "total": round(quality_bonus, 1),
+        },
+        "rank_components": {
+            "step1_baseline": round(ms * 0.6, 1),
+            "speed_bonus": round(speed_bonus, 1),
+            "quality_bonus": round(quality_bonus, 1),
+            "apply_fit_bonus": apply_fit_bonus,
+            "commit_bonus": round(commit_bonus, 1),
+            "raw_total": round(raw_step2, 1),
+            "max_possible": PATIENT_RANK_MAX,
+        },
+    }
 
 
 def _now_iso() -> str:

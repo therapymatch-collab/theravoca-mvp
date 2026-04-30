@@ -355,7 +355,20 @@ async def admin_request_detail(request_id: str, _: bool = Depends(require_admin)
                 "research_themes": rs.get("themes") or {},
             })
     apps = await db.applications.find({"request_id": request_id}, {"_id": 0}).to_list(50)
-    apps.sort(key=lambda a: a["match_score"], reverse=True)
+    # Compute Step-2 patient-facing rank for each application so the
+    # admin sees the SAME score the patient will see (and can verify
+    # before clicking Release). Single source of truth =
+    # `helpers.compute_patient_rank_score`.
+    from helpers import compute_patient_rank_score
+    for a in apps:
+        a.update(compute_patient_rank_score(a, req))
+    # Sort by the new Step-2 rank (high → low) so admin's view matches
+    # the patient's. Falls back to match_score on legacy applications
+    # that pre-date the field (None ranks last).
+    apps.sort(
+        key=lambda a: (a.get("patient_rank_score") or 0, a.get("match_score") or 0),
+        reverse=True,
+    )
     invited = await db.outreach_invites.find(
         {"request_id": request_id}, {"_id": 0},
     ).sort("created_at", -1).to_list(200)

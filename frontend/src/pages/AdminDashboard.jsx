@@ -2469,24 +2469,72 @@ export default function AdminDashboard() {
                   <p className="text-sm text-[#6D6A65]">No therapist responses yet.</p>
                 ) : (
                   <div className="space-y-3">
-                    {detail.applications.map((a) => (
+                    {detail.applications.map((a) => {
+                      const rc = a.rank_components || {};
+                      const rankScore = a.patient_rank_score ?? a.match_score;
+                      const tooltip = a.rank_components
+                        ? (
+                            `Step-2 patient rank: ` +
+                            `baseline ${rc.step1_baseline} + ` +
+                            `speed ${rc.speed_bonus} + ` +
+                            `blurb-quality ${rc.quality_bonus} + ` +
+                            `apply-fit ${rc.apply_fit_bonus} + ` +
+                            `commit ${rc.commit_bonus} = ` +
+                            `${rc.raw_total}/${rc.max_possible} → ${rankScore}%\n` +
+                            `(Step-1 baseline match was ${a.match_score}%)`
+                          )
+                        : `Match score: ${a.match_score}%`;
+                      return (
                       <div
                         key={a.id}
                         className="border border-[#E8E5DF] rounded-xl p-4"
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2">
                           <div className="font-medium text-[#2B2A29]">
                             {a.therapist_name}
                           </div>
-                          <span className="font-mono text-xs bg-[#2D4A3E] text-white px-2 py-0.5 rounded">
-                            {Math.round(a.match_score)}%
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {/* Step-2 rank score the patient sees. Tooltip
+                                exposes the per-component breakdown so the
+                                admin can verify ranking quality before
+                                clicking Release. */}
+                            <span
+                              className="font-mono text-xs bg-[#2D4A3E] text-white px-2 py-0.5 rounded"
+                              title={tooltip}
+                              data-testid={`admin-app-rank-${a.id}`}
+                            >
+                              {Math.round(rankScore)}%
+                            </span>
+                            {/* Show the Step-1 match_score next to it as a
+                                small muted chip so the admin can see both
+                                values at once. */}
+                            {a.patient_rank_score != null && (
+                              <span
+                                className="font-mono text-[10px] text-[#6D6A65] bg-[#F2EFE9] px-1.5 py-0.5 rounded"
+                                title={`Step-1 baseline match score (capped at 95%)`}
+                              >
+                                ↑{Math.round(a.match_score)}
+                              </span>
+                            )}
+                            {/* Apply-fit grade chip — small, muted, only
+                                shown when present. Lets the admin see the
+                                LLM grade at a glance. */}
+                            {a.apply_fit != null && a.apply_fit > 0 && (
+                              <span
+                                className="font-mono text-[10px] text-[#2D4A3E] bg-[#E9F0E6] px-1.5 py-0.5 rounded"
+                                title={a.apply_fit_rationale || `Apply-fit: ${a.apply_fit}/5`}
+                              >
+                                fit {Number(a.apply_fit).toFixed(1)}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <p className="text-sm text-[#2B2A29] mt-2 italic">
-                          "{a.message}"
+                          &ldquo;{a.message}&rdquo;
                         </p>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
