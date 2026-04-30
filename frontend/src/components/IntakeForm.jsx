@@ -667,7 +667,7 @@ export default function IntakeForm() {
 
           <div className="min-h-[280px] tv-fade-up" key={step}>
             {currentId === "who" && (
-              <WhoStep data={data} set={set} />
+              <WhoStep data={data} set={set} hardCapacity={hardCapacity} />
             )}
 
             {currentId === "issues" && (

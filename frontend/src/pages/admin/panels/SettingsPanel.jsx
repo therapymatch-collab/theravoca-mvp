@@ -2,12 +2,15 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Shield, ShieldOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import useAdminClient from "@/lib/useAdminClient";
 
 // Runtime Turnstile disable toggle — lets the admin pause Cloudflare
 // bot protection during AI / E2E test runs without touching env vars.
 // Backend: GET/PUT /api/admin/turnstile-settings. Public consumers
 // read the effective state from /api/config/turnstile.
-function TurnstileToggleCard({ client }) {
+function TurnstileToggleCard({ client: clientProp }) {
+  const ctxClient = useAdminClient();
+  const client = clientProp || ctxClient;
   const [loaded, setLoaded] = useState(false);
   const [disabled, setDisabled] = useState(false);
   const [configured, setConfigured] = useState(false);
@@ -144,7 +147,9 @@ function TurnstileToggleCard({ client }) {
 // Platform-wide settings the admin can tune at runtime. Currently exposes
 // the patient-intake rate limit (X requests per Y minutes per email).
 // Backend: GET/PUT /api/admin/intake-rate-limit.
-export default function SettingsPanel({ client }) {
+export default function SettingsPanel({ client: clientProp }) {
+  const ctxClient = useAdminClient();
+  const client = clientProp || ctxClient;
   const [loaded, setLoaded] = useState(false);
   const [maxPer, setMaxPer] = useState(1);
   const [windowMin, setWindowMin] = useState(60);

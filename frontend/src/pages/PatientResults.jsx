@@ -334,14 +334,18 @@ function YourReferralPanel({ request }) {
     .map((s) => ISSUE_LABELS[s] || s.replace(/_/g, " "))
     .join(", ");
   // Insurance is rendered from `insurance_name` (the human-readable plan
-  // the patient typed in) when payment_type=="insurance". Older records
-  // sometimes carry an `insurance_plans` array — preserve that path so
-  // legacy referrals still render correctly.
-  const insurances = Array.isArray(request.insurance_plans)
-    ? request.insurance_plans.join(", ")
-    : (request.payment_type === "insurance" && request.insurance_name)
-      ? request.insurance_name
-      : "";
+  // the patient typed in). Older records sometimes carry an
+  // `insurance_plans` array. We surface insurance whenever EITHER field
+  // has data — the patient may have set `payment_type='either'` while
+  // still picking an insurance plan as preferred, in which case a
+  // strict `payment_type==='insurance'` check would silently hide it.
+  const insurances = (() => {
+    if (Array.isArray(request.insurance_plans) && request.insurance_plans.length) {
+      return request.insurance_plans.join(", ");
+    }
+    if (request.insurance_name) return request.insurance_name;
+    return "";
+  })();
   // Modality / session-format display. The DB stores it under
   // `modality_preference` (telehealth_only / in_person_only / hybrid);
   // older records may use `session_format`.

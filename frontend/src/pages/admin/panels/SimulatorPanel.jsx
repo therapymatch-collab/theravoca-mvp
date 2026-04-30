@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { StatBox } from "./_panelShared";
 import AutoRecruitSection from "./AutoRecruitSection";
+import useAdminClient from "@/lib/useAdminClient";
 
 // ─── Matching Outcome Simulator ─────────────────────────────────────────────
 // Admin-only audit tool. Generates synthetic patient requests, runs them
@@ -397,7 +398,9 @@ function RequestRow({ req, idx, open, onToggle }) {
   );
 }
 
-export default function SimulatorPanel({ client, setTab }) {
+export default function SimulatorPanel({ client: clientProp, setTab }) {
+  const ctxClient = useAdminClient();
+  const client = clientProp || ctxClient;
   const [numRequests, setNumRequests] = useState(50);
   const [notifyTopN, setNotifyTopN] = useState(30);
   const [seed, setSeed] = useState("");

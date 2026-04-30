@@ -38,6 +38,23 @@ logger = logging.getLogger("theravoca.outreach")
 EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 PT_SCRAPING_ENABLED = os.environ.get("PT_SCRAPING_ENABLED", "true").lower() == "true"
 
+# Module-level cache for the new_referral_inquiry template overrides.
+# Refreshed at the start of each outreach campaign so admin edits to
+# the template propagate within the next outreach run. Avoids per-send
+# DB reads.
+_NRI_OVERRIDES_CACHE: dict[str, Any] = {"data": None}
+
+
+async def _load_template_overrides() -> None:
+    """Refresh the new_referral_inquiry template override cache."""
+    try:
+        doc = await db.email_templates.find_one(
+            {"key": "new_referral_inquiry"}, {"_id": 0},
+        )
+        _NRI_OVERRIDES_CACHE["data"] = doc or {}
+    except Exception:
+        _NRI_OVERRIDES_CACHE["data"] = {}
+
 
 def _score_pt_candidate(c: dict, request: dict) -> tuple[int, str]:
     """Lightweight scorer for PT-scraped candidates.
@@ -345,15 +362,38 @@ async def _send_outreach_invite(
             f'</p>'
         )
 
+        # Editable copy from email_templates → "new_referral_inquiry".
+        # We render once per outreach send. Falls back to DEFAULTS when
+        # admin hasn't customised yet. Reads sync from a module-level
+        # cache (refreshed at the start of each outreach campaign in
+        # `_load_template_overrides()` below).
+        from email_templates import DEFAULTS, render
+        overrides = _NRI_OVERRIDES_CACHE.get("data") or {}
+        base = dict(DEFAULTS.get("new_referral_inquiry") or {})
+        tpl = {**base, **{k: v for k, v in overrides.items() if k in base}}
+        vars_ = {
+            "first_name": first,
+            "score": score,
+            "rationale": rationale,
+            "signup_url": signup_url,
+            "opt_out_url": opt_out_url,
+        }
+        greeting = render(tpl.get("greeting", "Hi {first_name},"), **vars_)
+        intro_html = render(tpl.get("intro", ""), **vars_)
+        rationale_html = render(tpl.get("rationale", "{rationale}"), **vars_)
+        cta_label = render(tpl.get("cta_label", "Apply for this referral"), **vars_)
+        pricing_note = render(tpl.get("pricing_note", ""), **vars_)
+        footer = render(tpl.get("footer_note", ""), **vars_)
+        subject = render(tpl.get("subject", "TheraVoca referral request — {score}%"), **vars_)
+        heading = tpl.get("heading", "New referral inquiry")
+
         inner = f"""
-        <p style="font-size:16px;line-height:1.6;">Hi {first},</p>
+        <p style="font-size:16px;line-height:1.6;">{greeting}</p>
         <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-          I run TheraVoca, a small Idaho-based therapist matching service. We just received
-          a referral request that looks like a strong fit for your practice — estimated
-          <strong>{score}% match</strong> based on your public practice information.
+          {intro_html}
         </p>
         <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-          <em>{rationale}</em>
+          <em>{rationale_html}</em>
         </p>
         {source_note}
         <div style="background:{BRAND['bg']};border:1px solid {BRAND['border']};border-radius:12px;padding:16px 20px;margin:18px 0;">
@@ -365,26 +405,23 @@ async def _send_outreach_invite(
           </table>
         </div>
         <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-          To apply, create your free profile (30-day free trial, $45/mo after). You'll be
-          auto-matched with this referral the moment your profile is live, and you'll only
-          get notifications for future patients who score 70%+ on your specialties and schedule.
+          {pricing_note}
         </p>
         <p style="margin:28px 0;">
           <a href="{signup_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">
-            Apply for this referral
+            {cta_label}
           </a>
         </p>
         <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">
-          If this isn't a fit, no need to reply — we won't contact you again unless we get
-          another high-fit patient. We don't sell or share your email.
+          {footer}
         </p>
         {opt_out_footer}
         """
         try:
             await _send(
                 email,
-                f"TheraVoca referral request — {score}% estimated match",
-                _wrap("New referral inquiry", inner),
+                subject,
+                _wrap(heading, inner),
             )
             return {"ok": True, "channel": "email", "error": None}
         except Exception as e:
@@ -535,6 +572,10 @@ async def run_outreach_for_request(request_id: str) -> dict[str, Any]:
         return {"error": "request_not_found"}
     if req.get("outreach_run_at"):
         return {"skipped": "already_run", "at": req["outreach_run_at"]}
+
+    # Pull latest editable copy for the new_referral_inquiry email so
+    # admin overrides apply to this campaign.
+    await _load_template_overrides()
 
     needed = req.get("outreach_needed_count") or 0
     if needed <= 0:

@@ -39,21 +39,43 @@ export function Field({ label, children }) {
   );
 }
 
-export function PillRow({ items, selected, onSelect, testid }) {
+export function PillRow({ items, selected, onSelect, testid, disabledValues, disabledReasons }) {
+  // `disabledValues` (Set<string> | string[]) marks options as
+  // unavailable — used by hard-capacity to grey out child/teen age
+  // groups, family/group client types, etc. when our active
+  // therapist directory has < 30 providers in that bucket.
+  const disabledSet = new Set(
+    Array.isArray(disabledValues)
+      ? disabledValues.map((s) => String(s).toLowerCase())
+      : disabledValues
+        ? Array.from(disabledValues).map((s) => String(s).toLowerCase())
+        : [],
+  );
   return (
     <div className="flex flex-wrap gap-2">
       {items.map((it) => {
         const active = selected.includes(it.v);
+        const isDisabled =
+          !active && disabledSet.has(String(it.v).toLowerCase());
+        const reason =
+          isDisabled && disabledReasons
+            ? disabledReasons[String(it.v).toLowerCase()] || disabledReasons[it.v]
+            : "";
         return (
           <button
             key={it.v}
             type="button"
-            onClick={() => onSelect(it.v)}
-            data-testid={`${testid}-${it.v}`}
+            onClick={() => !isDisabled && onSelect(it.v)}
+            disabled={isDisabled}
+            title={reason || undefined}
+            aria-disabled={isDisabled}
+            data-testid={`${testid}-${it.v}${isDisabled ? "-disabled" : ""}`}
             className={`text-sm px-4 py-2 rounded-full border transition ${
               active
                 ? "bg-[#2D4A3E] text-white border-[#2D4A3E] shadow-sm"
-                : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+                : isDisabled
+                  ? "bg-[#F2EFE9] text-[#9C9893] border-[#E8E5DF] cursor-not-allowed line-through opacity-70"
+                  : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
             }`}
           >
             {it.l}

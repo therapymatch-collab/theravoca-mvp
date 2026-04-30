@@ -9,6 +9,7 @@ import {
   Clock,
   AlertTriangle,
 } from "lucide-react";
+import useAdminClient from "@/lib/useAdminClient";
 
 // ─── Auto-recruit control section ─────────────────────────────────────────
 // Self-healing recruiter — runs simulator, builds recruit plan, calls
@@ -64,7 +65,9 @@ function fmtDate(iso) {
   }
 }
 
-export default function AutoRecruitSection({ client, setTab }) {
+export default function AutoRecruitSection({ client: clientProp, setTab }) {
+  const ctxClient = useAdminClient();
+  const client = clientProp || ctxClient;
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);

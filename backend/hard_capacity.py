@@ -115,6 +115,22 @@ async def compute_capacity(db) -> dict:
             s = str(raw).strip()
             if s:
                 ins_c[s.lower()] += 1
+    # Client type (individual / couples / family / group). Each
+    # therapist exposes the formats they offer in `client_types`;
+    # patients pick exactly one on the intake form.
+    ct_c: Counter[str] = Counter()
+    for t in pool:
+        for raw in (t.get("client_types") or []):
+            s = str(raw).strip().lower()
+            if s:
+                ct_c[s] += 1
+    # Age group (child / teen / young_adult / adult / older_adult).
+    ag_c: Counter[str] = Counter()
+    for t in pool:
+        for raw in (t.get("age_groups") or []):
+            s = str(raw).strip().lower()
+            if s:
+                ag_c[s] += 1
     # Urgency ladders — compute each capacity bucket count.
     urgency_counts = {
         u: sum(1 for t in pool if _passes_urgency(t, u))
@@ -158,6 +174,17 @@ async def compute_capacity(db) -> dict:
         "urgency_strict": [
             u for u, v in urgency_counts.items() if v < MIN_REQUIRED
         ],
+        # Client type (HARD-by-default — patient picks exactly one
+        # and the matcher filters on it). Surfacing thin buckets so
+        # the intake form can warn the patient before they pick one
+        # we can't fulfil.
+        "client_type": sorted([
+            ct for ct, v in ct_c.items() if v < MIN_REQUIRED
+        ]),
+        # Age group (also HARD-by-default).
+        "age_group": sorted([
+            ag for ag, v in ag_c.items() if v < MIN_REQUIRED
+        ]),
     }
 
     # Human-readable explanations — what the tooltip says.
@@ -235,6 +262,32 @@ async def compute_capacity(db) -> dict:
                 f"currently accept {u.replace('_', ' ')} starts."
             ),
         })
+    for ct in disabled["client_type"]:
+        count = ct_c.get(ct, 0)
+        protections.append({
+            "axis": "client_type",
+            "value": ct,
+            "count": count,
+            "label": (
+                f"Only {count} therapist{'s' if count != 1 else ''} in our "
+                f"directory offer {ct} therapy. Picking this would leave "
+                f"you with too few matches — we're actively recruiting "
+                f"more {ct} therapists in Idaho."
+            ),
+        })
+    for ag in disabled["age_group"]:
+        count = ag_c.get(ag, 0)
+        pretty = ag.replace("_", " ")
+        protections.append({
+            "axis": "age_group",
+            "value": ag,
+            "count": count,
+            "label": (
+                f"Only {count} therapist{'s' if count != 1 else ''} "
+                f"in our directory see {pretty} clients. We're "
+                f"actively recruiting {pretty} specialists in Idaho."
+            ),
+        })
 
     return {
         "pool_size": pool_size,
@@ -248,6 +301,8 @@ async def compute_capacity(db) -> dict:
             "urgency": urgency_counts,
             "in_person": in_person,
             "telehealth": telehealth,
+            "client_type": dict(ct_c),
+            "age_group": dict(ag_c),
         },
         "disabled": disabled,
         "protections": protections,

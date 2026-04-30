@@ -1,5 +1,12 @@
-import { ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronRight } from "lucide-react";
 import { Th } from "./_shared";
+
+// Coverage threshold — when notified_count drops below this, the row
+// gets a red "low coverage" warning so the admin can scan a long
+// requests list and immediately see which patients we under-served.
+// Mirrors the 30-target used by the matching simulator + hard-capacity
+// guard.
+const TARGET_NOTIFIED = 30;
 
 // Renders the "Requests" admin tab: the wide table with one row per
 // patient request. Click a row to open the detail dialog.
@@ -37,15 +44,46 @@ export default function RequestsPanel({
               </td>
             </tr>
           )}
-          {filteredRequests.map((r) => (
+          {filteredRequests.map((r) => {
+            const notified = r.notified_count || 0;
+            // Only flag the row when the request has progressed past
+            // the matched stage — under-coverage isn't meaningful for
+            // a request that's still draft/pending. Compare against
+            // the 30-target.
+            const isUnderCovered =
+              notified > 0 &&
+              notified < TARGET_NOTIFIED &&
+              ["matched", "delivered", "results_sent"].includes(
+                String(r.status || "").toLowerCase(),
+              );
+            return (
             <tr
               key={r.id}
-              className="border-t border-[#E8E5DF] hover:bg-[#FDFBF7] cursor-pointer"
+              className={`border-t border-[#E8E5DF] cursor-pointer ${
+                isUnderCovered
+                  ? "bg-[#FBECE6]/40 hover:bg-[#FBECE6]/70"
+                  : "hover:bg-[#FDFBF7]"
+              }`}
               onClick={() => openDetail(r.id)}
               data-testid={`request-row-${r.id}`}
             >
               <td className="p-4">
-                <div className="text-[#2B2A29] font-medium">{r.email}</div>
+                <div className="text-[#2B2A29] font-medium flex items-center gap-1.5">
+                  {isUnderCovered && (
+                    <AlertTriangle
+                      size={14}
+                      className="text-[#C87965] shrink-0"
+                      aria-label="Low match coverage"
+                      data-testid={`request-low-coverage-${r.id}`}
+                    >
+                      <title>
+                        Only {notified} of {TARGET_NOTIFIED} target therapists
+                        notified — patient may see a thin shortlist.
+                      </title>
+                    </AlertTriangle>
+                  )}
+                  {r.email}
+                </div>
                 <div className="text-xs text-[#6D6A65]">
                   {r.id.slice(0, 8)}
                 </div>
@@ -65,7 +103,24 @@ export default function RequestsPanel({
                   <span className="text-[#C8C4BB] italic">—</span>
                 )}
               </td>
-              <td className="p-4">{r.notified_count || 0}</td>
+              <td
+                className={`p-4 font-semibold ${
+                  isUnderCovered ? "text-[#C87965]" : "text-[#2B2A29]"
+                }`}
+                title={
+                  isUnderCovered
+                    ? `Below 30-target — only ${notified} therapists notified`
+                    : ""
+                }
+              >
+                {notified}
+                {isUnderCovered && (
+                  <span className="text-xs font-normal text-[#C87965]">
+                    {" "}
+                    /{TARGET_NOTIFIED}
+                  </span>
+                )}
+              </td>
               <td className="p-4 font-semibold text-[#2D4A3E]">
                 {r.application_count || 0}
               </td>
@@ -84,7 +139,8 @@ export default function RequestsPanel({
                 <ChevronRight size={16} />
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

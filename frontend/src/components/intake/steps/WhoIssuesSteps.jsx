@@ -6,7 +6,29 @@ import { CLIENT_TYPES, AGE_GROUPS, ISSUES } from "./intakeOptions";
  * Step "who" — what type of therapy + age group of the client.
  * Idaho-only disclaimer at the bottom.
  */
-export function WhoStep({ data, set }) {
+export function WhoStep({ data, set, hardCapacity }) {
+  const hc = hardCapacity || {};
+  const ctDisabled = hc.capacity?.disabled?.client_type || [];
+  const agDisabled = hc.capacity?.disabled?.age_group || [];
+  // Build {value: reason} maps so the disabled pill shows a tooltip.
+  const ctReasons = Object.fromEntries(
+    (hc.capacity?.protections || [])
+      .filter((p) => p.axis === "client_type")
+      .map((p) => [String(p.value).toLowerCase(), p.label]),
+  );
+  const agReasons = Object.fromEntries(
+    (hc.capacity?.protections || [])
+      .filter((p) => p.axis === "age_group")
+      .map((p) => [String(p.value).toLowerCase(), p.label]),
+  );
+  const ctReasonForActive =
+    ctDisabled.includes(data.client_type)
+      ? ctReasons[String(data.client_type).toLowerCase()]
+      : "";
+  const agReasonForActive =
+    agDisabled.includes(data.age_group)
+      ? agReasons[String(data.age_group).toLowerCase()]
+      : "";
   return (
     <div className="space-y-6">
       <Group label="What type of therapy is needed?">
@@ -15,7 +37,14 @@ export function WhoStep({ data, set }) {
           selected={[data.client_type]}
           onSelect={(v) => set("client_type", v)}
           testid="client-type"
+          disabledValues={ctDisabled}
+          disabledReasons={ctReasons}
         />
+        {ctReasonForActive && (
+          <p className="text-xs text-[#B37E35] mt-2" data-testid="client-type-warning">
+            {ctReasonForActive}
+          </p>
+        )}
       </Group>
       <Group label="What age group is the client?">
         <PillRow
@@ -23,7 +52,14 @@ export function WhoStep({ data, set }) {
           selected={[data.age_group]}
           onSelect={(v) => set("age_group", v)}
           testid="age-group"
+          disabledValues={agDisabled}
+          disabledReasons={agReasons}
         />
+        {agReasonForActive && (
+          <p className="text-xs text-[#B37E35] mt-2" data-testid="age-group-warning">
+            {agReasonForActive}
+          </p>
+        )}
       </Group>
       <p className="text-xs text-[#6D6A65]">
         Our therapists are currently licensed in <strong>Idaho</strong> only during our beta launch.

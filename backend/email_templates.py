@@ -146,6 +146,42 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "footer_note": "If you didn't request this, you can safely ignore this email.",
         "available_vars": "code, ttl_minutes",
     },
+    "new_referral_inquiry": {
+        "title": "New referral inquiry (LLM outreach)",
+        "description": (
+            "Sent by the LLM outreach agent to UN-signed-up therapists "
+            "we found via Google Places + license-board lookups when an "
+            "active patient request scores 70%+ against their public "
+            "practice info. Different from the gap recruiter (which "
+            "targets coverage holes pre-launch); this fires per-request "
+            "to fill specific patient matches."
+        ),
+        "subject": "TheraVoca referral request — {score}% estimated match",
+        "heading": "New referral inquiry",
+        "greeting": "Hi {first_name},",
+        "intro": (
+            "I run TheraVoca, a small Idaho-based therapist matching "
+            "service. We just received a referral request that looks "
+            "like a strong fit for your practice — estimated "
+            "<strong>{score}% match</strong> based on your public "
+            "practice information."
+        ),
+        "rationale": "{rationale}",
+        "cta_label": "Apply for this referral",
+        "pricing_note": (
+            "To apply, create your free profile (30-day free trial, "
+            "$45/mo after). You'll be auto-matched with this referral "
+            "the moment your profile is live, and you'll only get "
+            "notifications for future patients who score 70%+ on your "
+            "specialties and schedule."
+        ),
+        "footer_note": (
+            "If this isn't a fit, no need to reply — we won't contact "
+            "you again unless we get another high-fit patient. We don't "
+            "sell or share your email."
+        ),
+        "available_vars": "first_name, score, rationale, signup_url, opt_out_url",
+    },
     "prelaunch_invite": {
         "title": "Pre-launch invite (gap recruiter)",
         "description": (
