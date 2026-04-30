@@ -23,6 +23,7 @@ MAX_EXPERIENCE = 5.0
 MAX_GENDER = 3.0
 MAX_STYLE = 2.0
 MAX_PAYMENT_FIT = 3.0  # bonus when patient accepts sliding scale AND therapist offers it
+MAX_PAYMENT_ALIGNMENT = 10.0  # penalty axis: 0 when patient asked for a specific insurance/cash path the therapist can't meet
 MAX_MODALITY_PREF = 4.0  # bonus when patient's preferred modalities (CBT/DBT/etc.) match therapist's
 
 # Maps experience preference label -> (lo, hi) years
@@ -413,6 +414,57 @@ def _score_payment_fit(t: dict, r: dict) -> float:
     return 0.0
 
 
+def _score_payment_alignment(t: dict, r: dict) -> float:
+    """Soft-penalty axis: scores whether the patient's stated payment
+    path is actually viable with this therapist.
+
+    Returns MAX_PAYMENT_ALIGNMENT (full credit) when at least one viable
+    payment route exists; 0 when the patient asked for a specific
+    insurance / cash-budget path and the therapist can't meet any of
+    them. Without this axis a soft-insurance mismatch shows ~96% match
+    even when the therapist doesn't take the patient's plan and the
+    patient gave no cash budget — misleading the patient.
+
+    Logic:
+      * `payment_type = either` → full credit (no specific demand).
+      * `payment_type = insurance` with a specific plan:
+          - therapist accepts it → full
+          - patient OK'd sliding-scale + therapist offers it → full
+          - patient gave a cash budget that fits → full
+          - none of the above → 0
+      * `payment_type = cash`:
+          - no budget given → full (not enough info to penalize)
+          - budget fits therapist's rate (≤ 1.2× or ≤ 2× w/ sliding) → full
+          - rate exceeds budget → 0
+    """
+    pay = (r.get("payment_type") or "either").lower()
+    if pay == "either":
+        return MAX_PAYMENT_ALIGNMENT
+
+    # Insurance path.
+    if pay == "insurance":
+        plan = (r.get("insurance_name") or "").strip()
+        # No specific plan supplied — can't penalize; full credit.
+        if not plan or plan.lower() in ("other", "other / not listed"):
+            return MAX_PAYMENT_ALIGNMENT
+        if _insurance_match(t, r):
+            return MAX_PAYMENT_ALIGNMENT
+        # Out-of-network fallback paths.
+        if r.get("sliding_scale_ok") and t.get("sliding_scale"):
+            return MAX_PAYMENT_ALIGNMENT
+        if r.get("budget") and _cash_match(t, r):
+            return MAX_PAYMENT_ALIGNMENT
+        return 0.0
+
+    # Cash path.
+    if pay == "cash":
+        if not r.get("budget"):
+            return MAX_PAYMENT_ALIGNMENT
+        return MAX_PAYMENT_ALIGNMENT if _cash_match(t, r) else 0.0
+
+    return MAX_PAYMENT_ALIGNMENT
+
+
 def _score_modality_pref(t: dict, r: dict) -> float:
     """Bonus axis: patient lists preferred therapy modalities (CBT/DBT/EMDR/etc.)
     that overlap with the therapist's modalities. Up to MAX_MODALITY_PREF.
@@ -462,7 +514,7 @@ def _priority_weights(priority_factors: list[str]) -> dict[str, float]:
     weights = {ax: 1.0 for ax in [
         "issues", "availability", "modality", "urgency",
         "prior_therapy", "experience", "gender", "style",
-        "payment_fit", "modality_pref",
+        "payment_fit", "payment_alignment", "modality_pref",
     ]}
     for f in priority_factors or []:
         for axis in PRIORITY_AXES.get(f, []):
@@ -718,6 +770,7 @@ def score_therapist(
         "gender": _score_gender(t, r),
         "style": _score_style(t, r),
         "payment_fit": _score_payment_fit(t, r),
+        "payment_alignment": _score_payment_alignment(t, r),
         "modality_pref": _score_modality_pref(t, r),
     }
 
@@ -976,6 +1029,7 @@ def gap_axes(
         "gender":       (MAX_GENDER,       "Gender preference"),
         "style":        (MAX_STYLE,        "Style preference"),
         "payment_fit":  (MAX_PAYMENT_FIT,  "Sliding-scale fit"),
+        "payment_alignment": (MAX_PAYMENT_ALIGNMENT, "Accepts your payment method"),
         "modality_pref":(MAX_MODALITY_PREF,"Preferred therapy approach"),
     }
 
@@ -1136,6 +1190,23 @@ def gap_axes(
             f"If you have training in {nice} or use a related approach, mention it.",
         )
 
+    def _payment_alignment() -> Optional[tuple[str, str]]:
+        pay = (request.get("payment_type") or "either").lower()
+        if pay != "insurance":
+            return None
+        plan = (request.get("insurance_name") or "").strip()
+        if not plan or plan.lower() in ("other", "other / not listed"):
+            return None
+        accepted = [str(s).lower() for s in (therapist.get("insurance_accepted") or [])]
+        if plan.lower() in accepted:
+            return None
+        if request.get("sliding_scale_ok") and therapist.get("sliding_scale"):
+            return None
+        return (
+            f"Patient asked for {plan}; you don't list it as in-network.",
+            f"If you bill {plan} via a payer-list provider, or accept superbills, mention it.",
+        )
+
     GENERATORS = {
         "issues": _issues,
         "availability": _availability,
@@ -1146,6 +1217,7 @@ def gap_axes(
         "gender": _gender,
         "style": _style,
         "payment_fit": _payment_fit,
+        "payment_alignment": _payment_alignment,
         "modality_pref": _modality_pref,
     }
 

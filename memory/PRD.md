@@ -57,6 +57,35 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+## Iteration 104 — Payment-fit gap labels + insurance-mismatch score penalty (Feb 8, 2026)
+
+User reported on the patient results page: "(1) if no cash amount is indicated by patient (only insurance), why list 'Cash rate is above what you indicated as comfortable' as a gap? and (2) how can it be 96% match if there's no match on insurance Aetna?"
+
+### Root causes
+1. **Misleading gap label**: `axisGapLabels.payment_fit = "Cash rate is above what you indicated as comfortable"` fired whenever the `payment_fit` axis (which is actually a **sliding-scale** bonus) scored < 50%. The label invented a "comfort threshold" that the patient never gave.
+2. **Missing soft-insurance score penalty**: when patient said `payment_type=insurance` with a specific carrier and `insurance_strict=False`, `_payment_pass()` correctly let the therapist through (cash fallback path) — but the matching algorithm had **no axis** that penalized "patient asked for Aetna, therapist doesn't take Aetna." The 3-pt `payment_fit` axis only awarded sliding-scale bonus, so a fully mismatched insurance still scored ~96% out of the 112-pt total.
+3. **Insurance gap detection used legacy field**: the gap detector read `request.insurance_plans` (legacy array) but the current schema uses `request.insurance_name` (singular) — so the explicit "Doesn't accept your insurance" gap never fired.
+
+### Fixes
+**Backend (`/app/backend/matching.py`)**
+- New axis `MAX_PAYMENT_ALIGNMENT = 10.0`, separate from `MAX_PAYMENT_FIT` (sliding-scale only, kept at 3.0).
+- New `_score_payment_alignment(t, r)`: returns full 10 pts when at least one viable payment route exists (insurance match, sliding-scale path, cash budget fits, or `payment_type=either`); returns 0 when patient asked for a specific insurance/cash path the therapist can't meet.
+- Wired into the `raw` breakdown dict, the priority-weights map, the AXIS explainer table, and the GENERATORS table (new `_payment_alignment` explainer for therapist-side notification copy: "Patient asked for Aetna; you don't list it as in-network. If you bill Aetna via a payer-list provider, or accept superbills, mention it.").
+
+**Frontend (`/app/frontend/src/pages/PatientResults.jsx`)**
+- Added `payment_alignment: { max: 10, label: "Accepts your payment method" }` to AXIS_META (drives the "what worked" reasons panel + score display).
+- Removed the misleading `payment_fit → "Cash rate is above what you indicated as comfortable"` mapping from `axisGapLabels` entirely.
+- Replaced with explicit gap detection:
+  - **Insurance mismatch gap** — fires when `payment_type === "insurance"` and patient's `insurance_name` (or legacy `insurance_plans`) isn't in the therapist's `insurance_accepted`. Label: "Doesn't accept your insurance: Aetna" (or "Cash-only practice — no in-network insurance" when therapist's accepted list is empty).
+  - **Cash-rate gap** — only fires when the patient ACTUALLY gave a `budget` AND the therapist's `cash_rate > 1.2 × budget`. Label includes both numbers: "Cash rate ($175) is above your $100 budget".
+
+### Verified
+Backend unit test against the user's actual case (Aetna patient + Cheri Woolley LMFT who takes UHC/BCBS/Tricare, no cash budget):
+- Before: 96% match (no insurance penalty)
+- After: 80% with mismatch vs 90% with matching insurance — clear, meaningful, honest 10-point delta. The gap label now correctly says "Doesn't accept your insurance: Aetna" instead of the phantom cash-comfort claim.
+
+Lint clean, services restarted.
+
 ## Iteration 103 — Four bundled fixes (Feb 8, 2026)
 
 Four user-requested fixes shipped together. All verified by testing agent iter99 + iter100 (100% backend, 90% frontend — remaining 10% is known intake-wizard Playwright flakiness, not a product bug).

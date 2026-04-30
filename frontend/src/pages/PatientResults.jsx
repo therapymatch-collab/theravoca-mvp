@@ -25,6 +25,7 @@ const AXIS_META = {
   gender: { max: 3, label: "Matches your gender preference" },
   style: { max: 2, label: "Aligns with your style preference" },
   payment_fit: { max: 3, label: "Open to your budget on a sliding scale" },
+  payment_alignment: { max: 10, label: "Accepts your payment method" },
   modality_pref: { max: 4, label: "Practices your preferred therapy approach" },
 };
 
@@ -227,11 +228,15 @@ function matchGaps(breakdown, request, therapist) {
   }
 
   // Generic axis-based gaps (score < 50% of max on a meaningful axis).
+  // NOTE: payment_fit is the SLIDING-SCALE bonus — its label is *not*
+  // a payment-budget gap. Real payment gaps (insurance mismatch / cash
+  // rate above budget) are computed explicitly below from request +
+  // therapist fields rather than from the breakdown axis, because the
+  // axis can't tell us whether the patient actually gave a budget.
   const axisGapLabels = {
     availability: "Schedule may be limited compared to what you need",
     modality: "Doesn't fully cover your preferred session format",
     urgency: "May not be able to start as quickly as you'd like",
-    payment_fit: "Cash rate is above what you indicated as comfortable",
     modality_pref: "Doesn't primarily practice your preferred therapy approach",
     gender: "Different gender than you preferred",
     style: "Different working style than you preferred",
@@ -243,29 +248,51 @@ function matchGaps(breakdown, request, therapist) {
     if (pct < 0.5) out.push({ key: k, label: axisGapLabels[k] });
   });
 
-  // Insurance gap — patient asked for a specific plan and the therapist
-  // doesn't accept any of them.
-  const insAsked = (request.insurance_plans || []).filter(Boolean);
+  // Insurance gap — patient gave a specific carrier and the therapist
+  // doesn't accept it. Reads `insurance_name` (current schema) with a
+  // fallback to `insurance_plans` (legacy array) so old records still
+  // surface the gap. Only fires when payment_type=insurance.
+  const payType = (request.payment_type || "").toLowerCase();
+  const insAsked = []
+    .concat(request.insurance_name ? [request.insurance_name] : [])
+    .concat(Array.isArray(request.insurance_plans) ? request.insurance_plans : [])
+    .map((s) => String(s || "").trim())
+    .filter(Boolean);
   const insAccepted = (therapist?.insurance_accepted || []).map((s) =>
     String(s).toLowerCase(),
   );
-  if (insAsked.length > 0) {
+  if (payType === "insurance" && insAsked.length > 0) {
     const matchAny = insAsked.some((p) =>
       insAccepted.includes(String(p).toLowerCase()),
     );
-    if (!matchAny && insAccepted.length > 0) {
-      out.push({
-        key: "insurance",
-        label: `Doesn't accept your insurance plan(s): ${insAsked
-          .slice(0, 2)
-          .join(", ")}`,
-      });
-    } else if (!matchAny) {
-      out.push({
-        key: "insurance",
-        label: "Cash-only practice — no in-network insurance",
-      });
+    if (!matchAny) {
+      if (insAccepted.length > 0) {
+        out.push({
+          key: "insurance",
+          label: `Doesn't accept your insurance: ${insAsked
+            .slice(0, 2)
+            .join(", ")}`,
+        });
+      } else {
+        out.push({
+          key: "insurance",
+          label: "Cash-only practice — no in-network insurance",
+        });
+      }
     }
+  }
+
+  // Cash-rate gap — only fires when the patient ACTUALLY gave a cash
+  // budget AND the therapist's published rate exceeds 1.2× that budget.
+  // Without an explicit budget there's no comfort threshold to compare
+  // to, so we say nothing rather than make up a phantom gap.
+  const cashBudget = Number(request.budget) || 0;
+  const cashRate = Number(therapist?.cash_rate) || 0;
+  if (cashBudget > 0 && cashRate > 0 && cashRate > cashBudget * 1.2) {
+    out.push({
+      key: "cash_rate",
+      label: `Cash rate ($${cashRate}) is above your $${cashBudget} budget`,
+    });
   }
 
   // De-dupe by key, cap at 4 items.
