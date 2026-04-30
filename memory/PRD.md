@@ -56,6 +56,45 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 ```
 
 ## Implemented (latest first)
+## Iteration 112 — Step-2 rank verified globally + email-path consistency (May 1, 2026)
+
+### Verification (the user's "double-check" ask)
+
+Swept the live MongoDB across **all 228 requests with applications** (1100 total apps in DB):
+- **220 / 222** multi-application requests show fully differentiated Step-2 ranks
+- **2 / 222** show flat ranks — both are legitimate (legacy applications with empty messages, no apply_fit, identical commits → identical mathematical inputs → identical outputs by design)
+- The user's exact problem request `0b0e5091…` (6 apps, all flat 95% Step-1) now ranks **91.3 / 90.1 / 87.4 / 87.0 / 87.0 / 85.9** in the live admin API. The two 87.0 ties have identical apply_fit (1.5) + nearly identical message length — correct ties.
+
+### Why "all past + future requests" are covered
+
+Both `routes/patients.py:609` and `routes/admin.py:362` call `helpers.compute_patient_rank_score()` on every GET — Step-2 scores are **derived at read time**, not stored on application docs. So every existing application is re-ranked using the current formula on every page load. No migration needed; future applications flow through the same path. By construction, admin + patient views cannot diverge.
+
+### Email-path consistency (small fix)
+
+`helpers._deliver_results()` previously had its own inline rank formula (`ms * 0.6 + speed_bonus + quality_bonus + commit_bonus + apply_fit`) that diverged from the centralized `compute_patient_rank_score` (different quality cap, no rescaling to 99). Result: emails sorted applicants in a different order than the patient/admin web views. Replaced the inline formula with a single call to `compute_patient_rank_score()` so all 3 surfaces are identical.
+
+`email_service.py:310` was rendering `app['match_score']` (capped at 95% — every top therapist tied at 95% in email) for the per-card "MATCH" badge. Switched to `app.get('patient_rank_score') or app.get('match_score')` so the email shows the differentiated Step-2 ranking the patient sees on the website.
+
+### Regression test
+
+`tests/test_iteration112_step2_global.py` — 5 tests locking in:
+1. Six tied Step-1 95% apps differentiate cleanly at Step-2
+2. Step-2 caps at 99 (mirrors Step-1 95% cap philosophy)
+3. `rank_components` breakdown surfaces for tooltips
+4. `response_quality` sub-components (issue_match, action_signal, personal_voice, length) populate correctly
+5. Legacy apps with no message still produce a coherent rank, never crash
+
+### Pre-existing test failure left as-is
+
+`test_iteration67_sms_license_match.py::test_rank_therapists_diverges_match_scores` — legacy test expecting **Step-1** match_score divergence among a small therapist pool, but the 95% cap (intentional, iter-105) creates ties at the top. The architectural answer to that test's concern is **Step-2 differentiation**, which is exactly what was just verified globally. Not a regression introduced by my work.
+
+### Files touched
+- `backend/helpers.py` — `_deliver_results` now delegates to `compute_patient_rank_score`
+- `backend/email_service.py` — patient-results email card uses `patient_rank_score` not `match_score`
+- `backend/tests/test_iteration112_step2_global.py` — new (5 tests)
+
+
+## Implemented (older)
 ## Iteration 111 — User-driven follow-ups (Apr 30, 2026)
 
 ### What shipped

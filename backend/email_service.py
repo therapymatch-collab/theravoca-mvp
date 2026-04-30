@@ -307,7 +307,7 @@ async def send_patient_results(to: str, request_id: str, applications: list[dict
 
         cards += f"""
         <div style="background:#ffffff;border:1px solid {BRAND['border']};border-radius:14px;padding:22px;margin-bottom:14px;">
-          <div style="display:inline-block;background:{BRAND['primary']};color:#ffffff;font-size:12px;padding:4px 10px;border-radius:999px;letter-spacing:0.05em;margin-bottom:10px;">{int(app['match_score'])}% MATCH</div>
+          <div style="display:inline-block;background:{BRAND['primary']};color:#ffffff;font-size:12px;padding:4px 10px;border-radius:999px;letter-spacing:0.05em;margin-bottom:10px;">{int(round(app.get('patient_rank_score') or app.get('match_score') or 0))}% MATCH</div>
           <h3 style="margin:6px 0 4px;font-family:Georgia,serif;font-size:22px;color:{BRAND['primary']};">{i}. {t['name']}</h3>
           <div style="color:{BRAND['muted']};font-size:13px;margin-bottom:10px;">{', '.join(specialties_list[:3]) or '—'} • {t.get('years_experience', '?')} yrs experience</div>
           {f'<p style="margin:10px 0;color:{BRAND["text"]};font-size:14px;line-height:1.6;font-style:italic;border-left:3px solid {BRAND["secondary"]};padding-left:12px;">"{app.get("message", "")}"</p>' if app.get('message') else ''}

@@ -589,48 +589,13 @@ async def _deliver_results(request_id: str) -> dict[str, Any]:
     if not req:
         raise HTTPException(404, "Request not found")
     apps = await db.applications.find({"request_id": request_id}, {"_id": 0}).to_list(50)
-    matched_at = req.get("matched_at") or req.get("created_at")
-    matched_dt = _parse_iso(matched_at) if matched_at else None
     research_scores = req.get("research_scores") or {}
+    # Single source of truth — same formula the patient + admin views use.
+    # Keeps email ordering consistent with what the patient sees on the
+    # results page when they click through.
     for a in apps:
-        ms = float(a.get("match_score") or 0)
-        speed_bonus = 0.0
-        if matched_dt:
-            applied_dt = _parse_iso(a.get("created_at") or "")
-            if applied_dt:
-                hours = max(0.0, (applied_dt - matched_dt).total_seconds() / 3600.0)
-                speed_bonus = max(0.0, min(30.0, 30.0 * (24.0 - hours) / 24.0))
-        msg_len = len(a.get("message") or "")
-        quality_bonus = min(10.0, msg_len / 300.0 * 10.0)
-        # Commitment-toggle bonus — when a therapist explicitly confirms
-        # they can meet the patient's availability / urgency / payment
-        # constraints in their apply form, we boost their patient-rank
-        # score. Each toggle worth +3 (max +9). Confirms_payment is
-        # particularly valuable for insurance patients since it means
-        # the therapist personally verified network status.
-        commit_bonus = 0.0
-        if a.get("confirms_availability"):
-            commit_bonus += 3.0
-        if a.get("confirms_urgency"):
-            commit_bonus += 3.0
-        if a.get("confirms_payment"):
-            commit_bonus += 3.0
-        # apply_fit is the LLM grading of how directly the message
-        # addresses THIS patient's brief (still 0-5).
-        apply_fit = float(a.get("apply_fit") or 0)
-        # Note: ms (match_score) ALREADY includes the research-axis
-        # bonus thanks to the new inline-enrichment pipeline. The old
-        # post-hoc `research_bonus` add has been removed to prevent
-        # double-counting. We still surface the rationale + axes in the
-        # patient view (research_scores has them).
+        a.update(compute_patient_rank_score(a, req))
         rs = research_scores.get(a["therapist_id"]) or {}
-        a["patient_rank_score"] = round(
-            min(
-                120.0,
-                ms * 0.6 + speed_bonus + quality_bonus + commit_bonus + apply_fit,
-            ),
-            1,
-        )
         a["research_rationale"] = rs.get("rationale") or ""
         a["evidence_depth"] = rs.get("evidence_depth") or 0
         a["approach_alignment"] = rs.get("approach_alignment") or 0
