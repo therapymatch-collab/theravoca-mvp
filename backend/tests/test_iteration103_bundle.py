@@ -13,7 +13,7 @@ import requests
 
 sys.path.insert(0, "/app/backend")
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://care-matcher-1.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://match-engine-test-1.preview.emergentagent.com").rstrip("/")
 ADMIN_PWD = os.environ.get("ADMIN_PASSWORD", "admin123!")
 
 

@@ -621,11 +621,13 @@ export default function SettingsPanel({ client: clientProp }) {
             Pre-warm deep-research cache
           </h4>
           <p className="text-xs text-[#6D6A65] mt-1.5 max-w-2xl leading-relaxed">
-            Run deep research on your top N therapists in the background
-            (DDG search + 5 page fetches + LLM extraction per therapist).
-            Cached for 30 days — once done, every patient request that
-            matches one of these therapists gets the enrichment bonus
-            instantly with no extra latency.
+            Run deep research on therapists whose cache is missing or
+            older than 30 days, in the background (DDG search + 5 page
+            fetches + LLM extraction per therapist). Already-fresh
+            therapists are skipped automatically, so re-clicking is
+            cheap. Cached for 30 days — once done, every patient request
+            that matches one of these therapists gets the enrichment
+            bonus instantly with no extra latency.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <Input

@@ -1,5 +1,5 @@
 {
-  "summary": "Iteration 17 frontend-only verification of (1) AdminTabsBar refactor with primary tabs inline + 'More' dropdown, (2) Master Query AI panel, (3) Blog Admin panel CRUD, (4) IntakeForm mobile smooth scroll. All 4 in-progress items pass end-to-end against https://care-matcher-1.preview.emergentagent.com.",
+  "summary": "Iteration 17 frontend-only verification of (1) AdminTabsBar refactor with primary tabs inline + 'More' dropdown, (2) Master Query AI panel, (3) Blog Admin panel CRUD, (4) IntakeForm mobile smooth scroll. All 4 in-progress items pass end-to-end against https://match-engine-test-1.preview.emergentagent.com.",
   "backend_issues": {"critical": [], "minor": []},
   "frontend_issues": {
     "ui_bugs": [],

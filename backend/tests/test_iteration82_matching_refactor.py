@@ -32,7 +32,7 @@ from matching import (  # noqa: E402
 
 BASE_URL = os.environ.get(
     "REACT_APP_BACKEND_URL",
-    "https://care-matcher-1.preview.emergentagent.com",
+    "https://match-engine-test-1.preview.emergentagent.com",
 ).rstrip("/")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123!")
 

@@ -148,7 +148,12 @@ export default function AdminDashboard() {
   const adminToken = sessionStorage.getItem("tv_admin_token");
   const adminEmail = sessionStorage.getItem("tv_admin_email");
   const adminName = sessionStorage.getItem("tv_admin_name");
-  const client = adminClient(pwd);
+  // Memoize the axios client so it has a stable reference across renders.
+  // Without this, every parent re-render (poll, state change, etc.)
+  // would mint a new client object and trigger any `[client]`-deps
+  // useEffect inside child panels (e.g. SettingsPanel re-loading the
+  // rate-limit form mid-typing and overwriting the user's input).
+  const client = useMemo(() => adminClient(pwd), [pwd]);
   const [stats, setStats] = useState(null);
   const [requests, setRequests] = useState([]);
   const [pendingTherapists, setPendingTherapists] = useState([]);

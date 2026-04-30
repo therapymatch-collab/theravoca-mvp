@@ -453,12 +453,15 @@ async def portal_therapist_analytics(
             score_count += 1
         for i in (r.get("presenting_issues") or []):
             issues_seen[i] += 1
-    avg_score = round(score_sum / score_count, 1) if score_count else 0.0
-
+    # Round to whole numbers — the portal UI shows these as `${n}%`
+    # chips and decimal precision (85.3%, 76.5%) reads as false-precision
+    # to therapists. Whole numbers convey the same information with less
+    # cognitive load.
+    avg_score = int(round(score_sum / score_count)) if score_count else 0
     applied = await db.applications.count_documents({"therapist_id": tid})
     declined = await db.declines.count_documents({"therapist_id": tid})
-    apply_rate = round(applied / invited * 100, 1) if invited else 0.0
-    decline_rate = round(declined / invited * 100, 1) if invited else 0.0
+    apply_rate = int(round(applied / invited * 100)) if invited else 0
+    decline_rate = int(round(declined / invited * 100)) if invited else 0
 
     # Refer-a-colleague chain
     referrals_made = await db.therapists.count_documents(

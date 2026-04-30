@@ -139,6 +139,44 @@ async def _build_snapshot() -> dict:
         for z, n in sorted(zip_counts.items(), key=lambda kv: -kv[1])[:50]
     ]
 
+    # Modality offering breakdown (in-person / telehealth / both) so the
+    # LLM can answer "how many therapists offer in-person sessions?" or
+    # "how many do telehealth?" without us having to add a new metric
+    # every time. We OR-match the legacy `offers_in_person` /
+    # `telehealth` flags with the canonical `modality_offering` enum so
+    # therapists who pre-date the v2 schema still get counted.
+    therapists_offering_in_person = await db.therapists.count_documents({
+        **t_match,
+        "$or": [
+            {"modality_offering": {"$in": ["in_person", "both"]}},
+            {"offers_in_person": True},
+        ],
+    })
+    therapists_offering_telehealth = await db.therapists.count_documents({
+        **t_match,
+        "$or": [
+            {"modality_offering": {"$in": ["telehealth", "both"]}},
+            {"telehealth": True},
+        ],
+    })
+    therapists_offering_both = await db.therapists.count_documents({
+        **t_match, "modality_offering": "both",
+    })
+    # Client-type breakdown (individual / couples / family / group) — same
+    # rationale as modality. Lets the LLM answer "how many therapists do
+    # we have who see couples?" / "see families?" / "run groups?".
+    client_type_counts: dict[str, int] = {}
+    for ct in ("individual", "couples", "family", "group"):
+        client_type_counts[ct] = await db.therapists.count_documents({
+            **t_match, "client_types": ct,
+        })
+    # Age-group breakdown (child / teen / young_adult / adult / older_adult).
+    age_group_counts: dict[str, int] = {}
+    for ag in ("child", "teen", "young_adult", "adult", "older_adult"):
+        age_group_counts[ag] = await db.therapists.count_documents({
+            **t_match, "age_groups": ag,
+        })
+
     # Concerns
     concerns: list[dict] = []
     async for row in db.requests.aggregate([
@@ -196,6 +234,11 @@ async def _build_snapshot() -> dict:
             "average_cash_rate_usd": avg_cash,
             "profile_publishable": publishable,
             "average_completeness_score_pct": avg_completeness,
+            "offering_in_person": therapists_offering_in_person,
+            "offering_telehealth": therapists_offering_telehealth,
+            "offering_both": therapists_offering_both,
+            "by_client_type": client_type_counts,
+            "by_age_group": age_group_counts,
         },
         "applications": {
             "total": total_applications,
@@ -267,7 +310,13 @@ async def admin_master_query(payload: dict, _: bool = Depends(require_admin)):
         "6. For 'how many therapists in <city/zip/state>' questions, use the "
         "`therapists_by_city`, `therapists_by_zip`, and `therapists_by_state` "
         "arrays. Match case-insensitively. If the location isn't in the array, "
-        "say zero (the array lists every location with at least one therapist)."
+        "say zero (the array lists every location with at least one therapist).\n"
+        "7. For 'how many therapists offer in-person sessions / telehealth / "
+        "both?' use `therapists.offering_in_person`, "
+        "`therapists.offering_telehealth`, and `therapists.offering_both`.\n"
+        "8. For 'how many see couples / families / groups / individuals?' use "
+        "`therapists.by_client_type`. For 'how many see children / teens / "
+        "young adults / adults / older adults?' use `therapists.by_age_group`."
     )
     chat = (
         LlmChat(

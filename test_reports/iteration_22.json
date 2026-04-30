@@ -49,7 +49,7 @@
     "/app/test_reports/pytest/iter60_results.xml (NEW)"
   ],
   "success_rate": {"backend": "80% (8/10 — 1 critical bug, 1 fixture skip)", "frontend": "FIXED Landing crash; full nav + logo + FAQ render verified"},
-  "test_credentials": "Admin master pwd: admin123! via X-Admin-Password header. REACT_APP_BACKEND_URL=https://care-matcher-1.preview.emergentagent.com",
+  "test_credentials": "Admin master pwd: admin123! via X-Admin-Password header. REACT_APP_BACKEND_URL=https://match-engine-test-1.preview.emergentagent.com",
   "seed_data_creation": "Tests create+delete TEST_-prefixed FAQ rows. test_reorder leaves 2 TEST_reorder_* rows orphaned because the reorder PUT 404'd before cleanup; main agent should run a one-time DELETE of any faqs.question starting with 'TEST_' after fixing the route order.",
   "retest_needed": true,
   "main_agent_can_self_test": true,

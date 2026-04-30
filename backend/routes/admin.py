@@ -2132,11 +2132,32 @@ async def admin_warmup_deep_research(payload: dict) -> dict[str, Any]:
     target_count = int(raw_count) if raw_count is not None else 30
     target_count = max(1, min(target_count, 200))
 
-    # Pick the top N therapists by review count + active status.
+    # Only target therapists whose deep-research cache is missing OR
+    # older than 30 days. Each cache costs ~30s of LLM/DDG work, so
+    # warming a therapist that was just refreshed is wasted spend; the
+    # research_enrichment module already treats <30d caches as fresh.
+    fresh_cutoff = (
+        datetime.now(timezone.utc) - timedelta(days=30)
+    ).isoformat()
+    stale_filter = {
+        "is_active": {"$ne": False},
+        "pending_approval": {"$ne": True},
+        "$or": [
+            {"research_refreshed_at": {"$exists": False}},
+            {"research_refreshed_at": None},
+            {"research_refreshed_at": {"$lt": fresh_cutoff}},
+        ],
+    }
+    # Pick stale therapists, oldest cache first (so never-warmed ones
+    # come up before therapists whose cache is just over 30 days).
     cursor = db.therapists.find(
-        {"is_active": {"$ne": False}, "pending_approval": {"$ne": True}},
-        {"_id": 0, "id": 1, "name": 1},
-    ).sort([("review_count", -1), ("years_experience", -1)]).limit(target_count)
+        stale_filter,
+        {"_id": 0, "id": 1, "name": 1, "research_refreshed_at": 1},
+    ).sort([
+        ("research_refreshed_at", 1),  # null/oldest first
+        ("review_count", -1),
+        ("years_experience", -1),
+    ]).limit(target_count)
     targets = await cursor.to_list(target_count)
 
     started = datetime.now(timezone.utc).isoformat()
@@ -2652,14 +2673,24 @@ async def _compute_coverage_gap_analysis() -> dict:
             })
     for ct in CLIENT_TYPES:
         have = client_counts.get(ct, 0)
-        target = 4 if ct in ("individual", "couples") else 2
+        # Targets reflect the patient demand we observe in the request
+        # stream. Family + group sessions are HARD-filter axes; if a
+        # patient ticks "couples / family / group only" and we have a
+        # thin pool there, we under-deliver. Bumped above the seeded
+        # MVP defaults so auto-recruit prioritises these axes.
+        target = {
+            "individual": 8,
+            "couples": 8,
+            "family": 35,
+            "group": 20,
+        }.get(ct, 4)
         if have < target:
             gaps.append({
                 "dimension": "client_type",
                 "key": ct,
                 "have": have,
                 "target": target,
-                "severity": "critical" if have == 0 else "warning",
+                "severity": "critical" if have == 0 or have < target / 2 else "warning",
                 "recommendation": (
                     f"Recruit {target - have} more therapist(s) offering "
                     f"`{ct}` therapy."

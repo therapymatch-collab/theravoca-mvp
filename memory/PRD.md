@@ -56,6 +56,49 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 ```
 
 ## Implemented (latest first)
+## Iteration 108 — Rate-limit input fix + global integer match scores + master-query modality breakdown + 30-day warmup filter + child/teen/family/group recruiting (Apr 30, 2026)
+
+### Bugs fixed
+1. **Admin Settings rate-limit inputs would not save typed values**
+   - Root cause: `AdminDashboard` was creating a fresh `adminClient(pwd)` instance on every parent re-render. When the `SettingsPanel` polled the warmup status every 5s and updated the parent (via state propagation through other panels), the unstable `client` prop tripped the load-from-server `useEffect` (`[client]` dep), which resets the form values mid-typing.
+   - Fix: `useMemo(() => adminClient(pwd), [pwd])` in `AdminDashboard.jsx`. Stable ref → load effect runs once on mount; typed values persist across re-renders + 5s polls.
+   - Verified via Playwright: typed `7` into `rate-limit-max-input`, waited 7s, value still `7`.
+
+2. **Decimal match scores still leaked into the UI**
+   - Backend (`matching.py`): rounded `total` to int after the 95% cap, so every consumer (patient results, portal KPIs, admin debug, simulator) now stores an int — no per-callsite rounding required.
+   - Backend (`portal.py` analytics): `avg_match_score`, `apply_rate`, `decline_rate` now return ints (was 1-decimal floats).
+   - Verified: `/api/portal/therapist/analytics` returns `avg_match_score: 88` (int).
+
+### Features added
+3. **Master Query — modality / client-type / age-group breakdown**
+   - `routes/master_query.py` snapshot now includes:
+     - `therapists.offering_in_person` / `offering_telehealth` / `offering_both`
+     - `therapists.by_client_type` (individual/couples/family/group counts)
+     - `therapists.by_age_group` (child/teen/young_adult/adult/older_adult counts)
+   - System prompt updated with rules 7 + 8 directing the LLM to these fields.
+   - Verified: Asking "How many therapists offer in-person sessions?" answers "**37 therapists** (from `therapists.offering_in_person: 37`)" with grounded citation.
+
+4. **Deep-research warmup — 30-day cache check**
+   - `admin_warmup_deep_research` now filters for therapists whose `research_refreshed_at` is missing or older than 30 days, sorted oldest-first. Already-fresh therapists are skipped, so re-clicking "Start warmup" is cheap.
+   - SettingsPanel copy updated to reflect the new behavior.
+   - Auto-trigger on therapist signup was already in place (`routes/therapists.py:140-153`, runs `get_or_build_research(force=True, deep=True)` in background after insert).
+
+5. **Child / teen / family / group backfill recruiting**
+   - Bumped `client_type` targets in `_compute_coverage_gap_analysis` so the gap recruiter prioritises these axes:
+     - `family`: 2 → **35** (current 28, deficit 7)
+     - `group`: 2 → **20** (current 11, deficit 9)
+     - `individual`: 4 → **8**, `couples`: 4 → **8**
+   - Triggered `POST /api/admin/gap-recruit/run` (dry-run) and the LLM produced **20 new recruit drafts**: 4 family, 4 group, 4 child + 1, 3 school_academic_stress, 3 Pocatello, 1 eating_concerns. All sit in `recruit_drafts` with `needs_approval=True` for the admin to approve in the Recruit Drafts panel.
+
+### Files touched
+- `backend/matching.py` — int round at end of `_score_one`
+- `backend/routes/portal.py` — int round on analytics aggregates
+- `backend/routes/master_query.py` — new snapshot fields + system prompt rules
+- `backend/routes/admin.py` — warmup stale-filter, client_type target bump
+- `frontend/src/pages/AdminDashboard.jsx` — useMemo on `client`
+- `frontend/src/pages/admin/panels/SettingsPanel.jsx` — copy update for warmup card
+
+
 
 ## Iteration 107 — Bundle: 95% cap + missing template + insurance render fix + low-coverage warnings + age/client-type grey-out + panel migration (Feb 8, 2026)
 

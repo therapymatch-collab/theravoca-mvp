@@ -15,7 +15,7 @@ import requests
 
 API = os.environ.get(
     "API_BASE_URL",
-    "https://care-matcher-1.preview.emergentagent.com/api",
+    "https://match-engine-test-1.preview.emergentagent.com/api",
 )
 ADMIN_PWD = os.environ.get("ADMIN_PASSWORD", "admin123!")
 HDR = {"X-Admin-Password": ADMIN_PWD}

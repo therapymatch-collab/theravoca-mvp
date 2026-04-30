@@ -909,6 +909,11 @@ def score_therapist(
     # head-room for honesty. Filtering / -1 sentinels are NOT capped.
     if isinstance(total, (int, float)) and total > 0:
         total = min(95.0, total)
+        # Round to a whole number so every UI surface (patient results,
+        # therapist portal, admin dashboard, simulator) renders the
+        # same integer without each callsite needing its own
+        # Math.round / toFixed(0). Filter sentinels (-1) skip this.
+        total = int(round(total))
     return {
         "total": total,
         "breakdown": breakdown,
