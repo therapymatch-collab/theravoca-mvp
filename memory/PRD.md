@@ -57,6 +57,39 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+## Iteration 105 — Score cap + email templates + multi-provider mail buttons + audit (Feb 8, 2026)
+
+Five user-requested fixes:
+
+### 1. Round all scores to whole numbers
+- `SimulatorPanel.jsx` Step-1/Step-2 score columns: `toFixed(1)` → `Math.round(...)`.
+- `MatchedProviderCard.jsx` per-axis points: `Math.round(pts*10)/10` → `Math.round(pts)`.
+- All other patient-visible match-score chips already used `Math.round()`.
+
+### 2. Pre-launch invite email moved into the editable templates system
+- `email_templates.py` DEFAULTS now includes `prelaunch_invite` with the full set of editable fields (`subject`, `heading`, `greeting`, `intro`, `rationale`, `cta_label`, `pricing_note`, `footer_note`).
+- Allowed-keys whitelist extended to accept `rationale`, `pricing_note`, `body`.
+- `gap_recruiter._build_recruit_email` now reads from `email_templates.DEFAULTS` + a module-level `_PRELAUNCH_OVERRIDES_CACHE` so admin edits propagate within one cycle. `_load_template_overrides()` invoked at the top of `run_gap_recruitment`.
+
+### 3. Multi-provider Email button (works on desktop)
+- New `frontend/src/components/EmailButton.jsx` — opens a popover on desktop offering Gmail / Outlook / Yahoo Mail / native mail app / copy address. On mobile, the chevron hides and the primary tap fires `mailto:` directly.
+- New helpers in `PatientResults.jsx`: `buildConsultParts(t,r)` (returns `{to,subject,body}`) + `buildEmailUrls({...})` (builds 4 provider URLs) + `isMobileDevice()` (UA-based).
+- Replaced both mailto anchors (`Book free consult`, `Email`) with `<EmailButton>`. Preserved testids `consult-btn-{i}` + `contact-email-{i}`; new sub-testids `-wrap`, `-menu`, `-gmail`, `-outlook`, `-yahoo`, `-mailto`, `-copy`.
+
+### 4. Cap match score at 99
+- `matching.py` `score_therapist` final return: `if total > 0: total = min(99.0, total)`. Single source of truth — both proportional-scaled and deep-match paths flow through it. Filter-failed sentinels (`-1`) are NOT capped.
+- Rationale documented in code: "no match is ever truly perfect — every therapist falls short on something we can't measure (personality, life experience). 99 communicates 'exceptional fit' while leaving head-room for honesty."
+
+### 5. Scoring/match audit — caught a bug
+- **`hard_capacity.py` `_passes_urgency`**: `urgency_capacity` is a single string in the schema (verified: 121/122 active therapists store `'within_2_3_weeks'`), but the function iterated it as a list — so `for c in 'asap'` produced `['a','s','a','p']` which never matched the ladder. Result: ALL urgency-strict toggles were greyed out for live patients, blocking patients from filtering by start-window.
+- Fixed: `cap = (t.get('urgency_capacity') or '').lower()` + ladder lookup. Verified via `/api/admin/hard-capacity`: counts now `{asap:0, within_2_3_weeks:121, within_month:121}` and `disabled.urgency_strict=['asap']` only.
+- No other axis label/score mis-mappings found (payment_fit gap label was the only other one, fixed in iter104).
+
+### Verified (iteration_101.json)
+- Backend: **7/7 pytest pass.** Score cap holds across 5 random pairs; `prelaunch_invite` template editable; hard-capacity urgency fix confirmed.
+- Frontend: All testids present; live patient results render integer percentages (96, 92, 81, 72) — no decimals, no 100%.
+- Three minor code-review notes captured for future hardening (defensive `!= -1` check, Pydantic typing of `urgency_capacity`, resize-listener for mobile detection).
+
 ## Iteration 104 — Payment-fit gap labels + insurance-mismatch score penalty (Feb 8, 2026)
 
 User reported on the patient results page: "(1) if no cash amount is indicated by patient (only insurance), why list 'Cash rate is above what you indicated as comfortable' as a gap? and (2) how can it be 96% match if there's no match on insurance Aetna?"
