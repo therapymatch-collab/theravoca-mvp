@@ -138,7 +138,7 @@ class TestScoreCap:
                 if total == -1 or res.get("filtered"):
                     continue  # sentinel, allowed
                 assert isinstance(total, (int, float))
-                assert total <= 99.0, f"Uncapped: total={total} therapist={t.get('full_name')}"
+                assert total <= 95.0, f"Uncapped: total={total} therapist={t.get('full_name')}"
                 tested += 1
                 if tested >= 5:
                     break

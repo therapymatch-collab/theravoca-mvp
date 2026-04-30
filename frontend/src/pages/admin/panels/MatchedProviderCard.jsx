@@ -65,10 +65,23 @@ export default function MatchedProviderCard({ t, onEdit }) {
       className="border border-[#E8E5DF] rounded-xl bg-white overflow-hidden"
       data-testid={`matched-provider-${t.id}`}
     >
-      <button
-        type="button"
+      {/* Outer is a div+role=button to avoid the React hydration warning
+          ("button cannot be a descendant of button") that fires when the
+          inner Edit-name link is also a button. Click + Enter/Space keys
+          toggle the breakdown — same behaviour as before, just without
+          the nested-button DOM. */}
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setOpen((o) => !o)}
-        className="w-full text-left px-4 py-3 flex items-center justify-between gap-3 hover:bg-[#FDFBF7] transition"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOpen((o) => !o);
+          }
+        }}
+        aria-expanded={open}
+        className="w-full text-left px-4 py-3 flex items-center justify-between gap-3 hover:bg-[#FDFBF7] transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2D4A3E]"
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2 flex-wrap">
@@ -128,7 +141,7 @@ export default function MatchedProviderCard({ t, onEdit }) {
             </span>
           </span>
         </div>
-      </button>
+      </div>
       {open && (
         <div className="border-t border-[#E8E5DF] bg-[#FDFBF7] px-4 py-3 text-xs space-y-4">
           {/* "Why this score?" — the new unified explainer */}

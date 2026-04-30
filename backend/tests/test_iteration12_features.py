@@ -27,9 +27,13 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123!")
 ADMIN_HEADERS = {"X-Admin-Password": ADMIN_PASSWORD, "Content-Type": "application/json"}
 
 EXPECTED_TEMPLATE_KEYS = {
+    # Kept in sync with `email_templates.py:DEFAULT_TEMPLATES`. Whenever
+    # a new template is added there, add the key here.
     "verification", "therapist_notification", "patient_results",
     "patient_results_empty", "therapist_signup_received", "therapist_approved",
-    "magic_code",
+    "therapist_rejected", "patient_followup_48h", "patient_followup_2w",
+    "therapist_followup_2w", "therapist_stale_profile_nag",
+    "magic_code", "new_referral_inquiry", "prelaunch_invite",
 }
 
 
@@ -84,21 +88,34 @@ class TestModalityPrefScoring:
         return base
 
     def test_breakdown_has_10_keys_including_modality_pref(self):
+        # Iter-name preserved for git history. The breakdown keyset has
+        # grown beyond 10 since this was written — every new soft axis
+        # adds a key. Source of truth is `matching._score_one`'s emitted
+        # `breakdown` dict. We assert the EXPECTED legacy keys are still
+        # present (i.e. nothing was renamed/dropped) without locking in
+        # an exact count, since adding a new axis is a non-breaking
+        # additive change.
         result = score_therapist(self._base_therapist(), self._base_request())
         assert "breakdown" in result
-        assert set(result["breakdown"].keys()) == {
+        legacy_keys = {
             "issues", "availability", "modality", "urgency",
             "prior_therapy", "experience", "gender", "style",
             "payment_fit", "modality_pref",
         }
-        assert len(result["breakdown"]) == 10
+        assert legacy_keys.issubset(set(result["breakdown"].keys())), (
+            f"axes drifted: {set(result['breakdown'].keys())}"
+        )
 
     def test_full_overlap_returns_max(self):
         # Patient prefers CBT + DBT, therapist offers both → MAX
+        # NOTE: when the raw axis-total exceeds 100, every axis is
+        # proportionally scaled down (`matching.py:863`), so we accept
+        # any value within 5% of MAX_MODALITY_PREF rather than exact.
         r = self._base_request(modality_preferences=["CBT", "DBT"])
         t = self._base_therapist(modalities=["CBT", "DBT", "EMDR"])
         result = score_therapist(t, r)
-        assert result["breakdown"]["modality_pref"] == MAX_MODALITY_PREF
+        assert result["breakdown"]["modality_pref"] >= MAX_MODALITY_PREF * 0.95
+        assert result["breakdown"]["modality_pref"] <= MAX_MODALITY_PREF
 
     def test_zero_overlap_returns_zero(self):
         r = self._base_request(modality_preferences=["EMDR"])
@@ -123,11 +140,14 @@ class TestModalityPrefScoring:
 # ── Module 2: Email templates admin endpoints ────────────────────────────────
 class TestEmailTemplatesAPI:
     def test_list_returns_seven_templates(self, session):
+        # Iter-name preserved for git history. The template count has
+        # grown organically — `EXPECTED_TEMPLATE_KEYS` is the source of
+        # truth.
         resp = session.get(f"{API}/admin/email-templates", headers=ADMIN_HEADERS)
         assert resp.status_code == 200
         templates = resp.json()
         assert isinstance(templates, list)
-        assert len(templates) == 7
+        assert len(templates) == len(EXPECTED_TEMPLATE_KEYS)
         keys = {t["key"] for t in templates}
         assert keys == EXPECTED_TEMPLATE_KEYS
         for t in templates:
