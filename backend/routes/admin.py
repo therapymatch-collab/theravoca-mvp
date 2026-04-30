@@ -1,11 +1,13 @@
 """Admin routes: login, requests, therapists, templates, declines, backfill, stats, cron triggers."""
 from __future__ import annotations
 
+import json
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response
 
 from cron import (
     _run_availability_prompts, _run_daily_billing_charges,
@@ -1241,6 +1243,30 @@ _WIPE_COLLECTIONS = [
     "intake_ip_log",
     "cron_runs",
 ]
+
+
+@router.get("/admin/therapists/export")
+async def admin_export_therapists(_: bool = Depends(require_admin)):
+    """Stream every document in the therapists collection as a JSON
+    file download. ObjectId is excluded via projection. Embeddings (T2/T5
+    1536-dim vectors) ARE included so the export can be round-tripped
+    into another MongoDB without re-embedding.
+
+    Use case: pre-launch backup before wipe-test-data, or to migrate
+    the seeded therapist directory into Atlas/another environment."""
+    cursor = db.therapists.find({}, {"_id": 0})
+    docs = await cursor.to_list(length=5000)
+    payload = json.dumps(docs, default=str, indent=2)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    filename = f"therapists_export_{timestamp}.json"
+    return Response(
+        content=payload,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Document-Count": str(len(docs)),
+        },
+    )
 
 
 @router.get("/admin/wipe-test-data/preview")
