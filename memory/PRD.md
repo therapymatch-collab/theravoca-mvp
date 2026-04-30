@@ -57,6 +57,31 @@ Build a lean MVP for **TheraVoca**, a real-time matching engine connecting patie
 
 ## Implemented (latest first)
 
+## Iteration 103 — Four bundled fixes (Feb 8, 2026)
+
+Four user-requested fixes shipped together. All verified by testing agent iter99 + iter100 (100% backend, 90% frontend — remaining 10% is known intake-wizard Playwright flakiness, not a product bug).
+
+### 1. `languages_spoken` data-quality cleanup
+- **`/app/backend/scripts/cleanup_languages_spoken.py`** (new, one-shot). Prunes entries that start with ❌, contain digits, match street-suffix tokens (street/ave/suite/apt/…), match known Idaho/Washington-border city names, or are obvious non-answers ("none", "n/a"). Conservative acceptance for the rest to avoid clobbering legitimate uncommon language names.
+- Executed live: 9 therapists cleaned. Verified: zero `❌`-prefixed or address-like entries remain.
+
+### 2. Grey-out protection for HARD intake selections
+- **Backend `/app/backend/hard_capacity.py`** (new, ~200 lines). Computes, per HARD axis, how many active therapists would pass — returns a `disabled` map + `protections` labels explaining each protection. Axes: `language_strict`, `gender_required`, `in_person_only`, `telehealth_only`, `insurance_strict`, `urgency_strict`. Threshold = 30 (matches the "30 notified per request" product target).
+- **`GET /api/config/hard-capacity`** (public, lean payload) + **`GET /api/admin/hard-capacity`** (full counts).
+- **Frontend hook `/app/frontend/src/lib/useHardCapacity.js`** — fetches once on intake mount; exposes `{capacity, isDisabled(axis, value), reasonFor(axis, value)}`.
+- **Intake-step updates** — PrefsStep (language_strict + gender_required), PaymentStep (insurance_strict), LogisticsStep (urgency_strict), FormatStep (distance-strict / in_person_only). Each disables the HARD checkbox + applies `opacity-60 cursor-not-allowed` and shows an amber-text explanation citing the live therapist count.
+- **Admin view** — `ProtectedHardSection` in `CoverageGapPanel.jsx`: 2-column card grid per axis with `count/30` rows + the human-readable protection label. Testids `protected-hard-section`, `protected-axis-{language_strict|gender_required|urgency_strict|insurance_strict}`.
+- **Current active protections** (against the 122-therapist seeded pool): language_strict={ASL/Arabic/Hindi/Korean/Mandarin/Vietnamese/American Sign Language}, gender_required={nonbinary}, urgency_strict={asap/within_2_3_weeks/within_month} (because seeded therapists have empty urgency_capacity — backfill needed before launch), in_person_only=False (44>30), telehealth_only=False (122>30).
+- **iter99 caught a bug** that iter100 fixed: `CoverageGapPanel.jsx` initially imported the bare `@/lib/api` axios instance which skipped the X-Admin-Password header, silently breaking the admin view. Fixed by threading the authenticated `client` prop from AdminDashboard.jsx line 1600.
+
+### 3. Cloudflare Turnstile runtime disable toggle
+- **Backend**: new `db.app_config` singleton (`key=turnstile_settings, disabled:bool, disabled_at, disabled_reason`). `turnstile_service._is_disabled_by_admin()` checked at the top of `verify_token()` — returns `(True, None)` immediately when disabled, skipping the Cloudflare round-trip.
+- **Endpoints**: `GET /api/config/turnstile` (public effective state), `GET|PUT /api/admin/turnstile-settings` (admin only).
+- **Frontend**: `TurnstileToggleCard` at the top of Settings panel. Toggle + reason input + "Disabled since {timestamp}" banner. IntakeForm + TherapistSignup fetch `/config/turnstile` on mount and skip the Turnstile widget when effective-disabled. Falls back to the env-var at compile time on fetch failure.
+
+### 4. Outreach wording fix
+- `/app/backend/outreach_agent.py` line 66: "Their practice focus on X matches this patient's primary concern." → "Your practice focus on X matches this patient's primary concern." (the email is addressed to the therapist, so second-person is correct).
+
 ## Iteration 102 — Auto-recruit closed-loop (Simulator + Coverage Gaps + Gap Recruiter) (Feb 8, 2026)
 
 User-requested self-healing recruitment system. The three audit tools now work together as an automated pipeline: **Simulator detects zero-pool hotspots → Auto-recruit builds a plan → Gap recruiter generates verified drafts → Admin approves → (post-launch) outreach fires**. Safety rails per user spec: dry-run only, admin must approve each batch, 10 drafts/day cap, weekly cycle targeting ≤5% zero-pool.
