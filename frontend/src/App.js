@@ -23,6 +23,7 @@ import FeedbackForm from "@/pages/FeedbackForm";
 import FeedbackWidget from "@/components/FeedbackWidget";
 import PreviewBanner from "@/components/PreviewBanner";
 import ScrollManager from "@/components/ScrollManager";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import NotFound from "@/pages/NotFound";
 import PromisePreview from "@/pages/PromisePreview";
 
@@ -46,38 +47,40 @@ function App() {
       <Toaster richColors position="top-center" />
       <BrowserRouter>
         <ScrollManager />
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/sign-in" element={<SignIn />} />
-          <Route path="/portal/patient" element={<PatientPortal />} />
-          <Route path="/portal/therapist" element={<TherapistPortal />} />
-          <Route path="/portal/therapist/edit" element={<TherapistEditProfile />} />
-          <Route path="/therapists/join" element={<TherapistSignup />} />
-          <Route path="/verify/:token" element={<VerifyEmail />} />
-          <Route
-            path="/therapist/apply/:requestId/:therapistId"
-            element={<TherapistApply />}
-          />
-          <Route path="/results/:requestId" element={<PatientResults />} />
-          <Route path="/followup/:requestId/:milestone" element={<FollowupForm />} />
-          <Route path="/admin" element={<AdminLogin />} />
-          <Route path="/admin/dashboard" element={<AdminDashboard />} />
-          <Route path="/account/setup-password" element={<AccountSetupPassword />} />
-          <Route path="/terms" element={<TermsOfUse />} />
-          <Route path="/privacy" element={<PrivacyNotice />} />
-          <Route path="/blog" element={<BlogList />} />
-          <Route path="/blog/:slug" element={<BlogPost />} />
-          <Route path="/preview/promise" element={<PromisePreview />} />
-          <Route
-            path="/feedback/patient/:requestId"
-            element={<FeedbackForm kind="patient" />}
-          />
-          <Route
-            path="/feedback/therapist/:therapistId"
-            element={<FeedbackForm kind="therapist" />}
-          />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/sign-in" element={<SignIn />} />
+            <Route path="/portal/patient" element={<PatientPortal />} />
+            <Route path="/portal/therapist" element={<TherapistPortal />} />
+            <Route path="/portal/therapist/edit" element={<TherapistEditProfile />} />
+            <Route path="/therapists/join" element={<TherapistSignup />} />
+            <Route path="/verify/:token" element={<VerifyEmail />} />
+            <Route
+              path="/therapist/apply/:requestId/:therapistId"
+              element={<TherapistApply />}
+            />
+            <Route path="/results/:requestId" element={<PatientResults />} />
+            <Route path="/followup/:requestId/:milestone" element={<FollowupForm />} />
+            <Route path="/admin" element={<AdminLogin />} />
+            <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            <Route path="/account/setup-password" element={<AccountSetupPassword />} />
+            <Route path="/terms" element={<TermsOfUse />} />
+            <Route path="/privacy" element={<PrivacyNotice />} />
+            <Route path="/blog" element={<BlogList />} />
+            <Route path="/blog/:slug" element={<BlogPost />} />
+            <Route path="/preview/promise" element={<PromisePreview />} />
+            <Route
+              path="/feedback/patient/:requestId"
+              element={<FeedbackForm kind="patient" />}
+            />
+            <Route
+              path="/feedback/therapist/:therapistId"
+              element={<FeedbackForm kind="therapist" />}
+            />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </ErrorBoundary>
         <FeedbackWidget />
         <PreviewBanner />
       </BrowserRouter>

@@ -1047,6 +1047,7 @@ def rank_therapists(
             "match_score": result["total"],
             "match_breakdown": result["breakdown"],
             "research_axes": result.get("research_axes") or {},
+            "other_issue_axes": result.get("other_issue_axes") or {},
         })
 
     scored.sort(

@@ -15,6 +15,9 @@ import {
 
 // Friendly labels for each scoring axis. Each entry maps axis -> { max, label }.
 // We surface the top 3 axes (where score > 50% of max) on the patient result card.
+// ── Keep this set in sync with `matching._score_one`'s emitted breakdown
+// keys. Missing entries are silently skipped by `topReasons`, so adding a
+// new axis to the engine without updating this table = invisible signal.
 const AXIS_META = {
   issues: { max: 35, label: "Specializes in your concerns" },
   availability: { max: 20, label: "Matches your schedule" },
@@ -28,6 +31,12 @@ const AXIS_META = {
   payment_fit: { max: 3, label: "Open to your budget on a sliding scale" },
   payment_alignment: { max: 10, label: "Accepts your payment method" },
   modality_pref: { max: 4, label: "Practices your preferred therapy approach" },
+  // Recently-added axes (kept in sync with `matching._score_one`).
+  language: { max: 4, label: "Speaks your preferred language" },
+  differentiator: { max: 5, label: "Offers something you specifically asked for" },
+  research_bonus: { max: 25, label: "Strong evidence in their public practice" },
+  deep_match: { max: 15, label: "Resonates with how you described yourself" },
+  other_issue_bonus: { max: 6, label: "Resonates with your written context" },
 };
 
 // Slug -> friendly label. Mirrors IntakeForm/TherapistSignup ISSUES list.

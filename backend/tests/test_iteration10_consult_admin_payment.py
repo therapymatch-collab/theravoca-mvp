@@ -30,6 +30,10 @@ AXIS_KEYS = {
     "issues", "availability", "modality", "urgency",
     "prior_therapy", "experience", "gender", "style", "payment_fit",
     "modality_pref",
+    # Added in later iterations — kept in sync with `_score_one`'s
+    # breakdown emission. Keep this set updated whenever a new axis
+    # is added to `matching.py`.
+    "payment_alignment", "reviews", "differentiator",
 }
 
 
@@ -100,7 +104,12 @@ class TestPaymentFitAxis:
         assert res["filtered"] is False
         bd = res["breakdown"]
         assert set(bd.keys()) == AXIS_KEYS, f"axes: {bd.keys()}"
-        assert bd["payment_fit"] == MAX_PAYMENT_FIT == 3.0
+        # When the raw total exceeds 100, every axis gets proportionally
+        # scaled down (matching.py:863). Accept any value within 5%
+        # of MAX_PAYMENT_FIT so this test is robust to the proportional
+        # scale-back without depending on the exact other-axis weights.
+        assert bd["payment_fit"] >= MAX_PAYMENT_FIT * 0.95
+        assert bd["payment_fit"] <= MAX_PAYMENT_FIT
 
     def test_payment_fit_zero_when_patient_false(self):
         t = _therapist(sliding_scale=True)
@@ -137,20 +146,28 @@ class TestInsuranceOtherSkip:
         assert res["filtered"] is False
 
     def test_specific_insurance_still_filters_when_no_match(self):
+        # Iter-77+: insurance is soft by default — only filters when the
+        # patient flips `insurance_strict=True`. This test now exercises
+        # the explicit strict path.
         t = _therapist(insurance_accepted=["Aetna"])
-        r = _request(payment_type="insurance", insurance_name="Cigna")
+        r = _request(
+            payment_type="insurance",
+            insurance_name="Cigna",
+            insurance_strict=True,
+        )
         res = score_therapist(t, r)
         assert res["filtered"] is True
         assert res.get("filter_failed") == "payment"
 
     def test_breakdown_has_9_keys_regression(self):
-        # Iter-12: breakdown now has 10 keys (added 'modality_pref'). This test
-        # name is kept for git history but the assertion follows the new contract.
+        # Iter name kept for git history. Source of truth is `AXIS_KEYS`
+        # which now includes the post-iter-12 additions (modality_pref +
+        # payment_alignment + reviews + differentiator).
         t = _therapist(sliding_scale=False)
         r = _request()
         res = score_therapist(t, r)
         assert set(res["breakdown"].keys()) == AXIS_KEYS
-        assert len(res["breakdown"]) == 10
+        assert len(res["breakdown"]) == len(AXIS_KEYS)
 
 
 # ─── 3. Existing hard filters still work ─────────────────────────────────────
