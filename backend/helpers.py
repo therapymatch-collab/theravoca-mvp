@@ -144,8 +144,31 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
         "Prior therapy": (req.get("prior_therapy") or "").replace("_", " ").title(),
         "Style preference": style_display,
     }
-    if req.get("prior_therapy") == "yes_not_helped" and req.get("prior_therapy_notes"):
-        summary["What didn't work last time"] = req["prior_therapy_notes"]
+    # Always surface the patient's free-text prior-therapy notes when
+    # present, regardless of whether they said "yes_helped" or
+    # "yes_not_helped". Previously the notes were ONLY shown when the
+    # patient said therapy didn't help — but a patient who DID benefit
+    # often writes the most actionable signal ("liked her style, took
+    # time to get to know us"), and the therapist needs that to write
+    # a relevant reply (which the apply-fit grader rewards). The label
+    # changes to match the patient's framing.
+    notes = (req.get("prior_therapy_notes") or "").strip()
+    if notes:
+        prior = req.get("prior_therapy") or ""
+        label = (
+            "What didn't work last time"
+            if prior == "yes_not_helped"
+            else "What worked last time" if prior == "yes_helped"
+            else "Notes on prior therapy"
+        )
+        summary[label] = notes
+    # `other_issue` (the *Anything else?* textarea) is the patient's own
+    # free-text framing of what they're looking for. Was previously not
+    # surfaced to the therapist at all — same fix as above. Truncated
+    # to 1500 chars in the unlikely event of a wall of text.
+    other = (req.get("other_issue") or "").strip()
+    if other:
+        summary["Anything else (patient note)"] = other[:1500]
     return summary
 
 

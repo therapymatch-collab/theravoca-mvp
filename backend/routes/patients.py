@@ -385,6 +385,27 @@ async def create_request(payload: RequestCreate, request: Request):
             except Exception as e:
                 logger.warning("other_issue embed failed for %s: %s", rid, e)
         _spawn_bg(_bg_embed_other_issue(), name=f"embed_oi_{rid[:8]}")
+    # Same treatment for `prior_therapy_notes`. Patients use this field
+    # to describe what worked / didn't work in past therapy ("liked her
+    # style, took time to get to know us"). Slugs alone (yes/no/not_sure)
+    # can't differentiate matches; embedding the note lets us soft-bonus
+    # therapists whose lived-experience / progress-story resonates.
+    if (payload.prior_therapy_notes or "").strip():
+        async def _bg_embed_prior_notes() -> None:
+            try:
+                from embeddings import embed_text
+                vec = await embed_text(payload.prior_therapy_notes or "")
+                if vec:
+                    await db.requests.update_one(
+                        {"id": rid},
+                        {"$set": {
+                            "prior_therapy_embedding": vec,
+                            "prior_therapy_embedding_text": (payload.prior_therapy_notes or "").strip()[:2000],
+                        }},
+                    )
+            except Exception as e:
+                logger.warning("prior_therapy embed failed for %s: %s", rid, e)
+        _spawn_bg(_bg_embed_prior_notes(), name=f"embed_pt_{rid[:8]}")
     # Log the IP for the rate-limit window. We only keep these for ~24h
     # via a TTL index on `ts_at` (BSON Date) — see server.py startup.
     if client_ip:

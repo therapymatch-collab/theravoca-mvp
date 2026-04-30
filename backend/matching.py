@@ -30,6 +30,10 @@ MAX_MODALITY_PREF = 4.0  # bonus when patient's preferred modalities (CBT/DBT/et
 # embeddings. Capped at 6 points so it materially differentiates the
 # top of the rank without overwhelming the structured-fit signal.
 MAX_OTHER_ISSUE_BONUS = 6.0
+# Patient `prior_therapy_notes` free-text resonance bonus. Smaller than
+# `other_issue` because the two signals overlap conceptually and we
+# don't want to double-count when both are filled in.
+MAX_PRIOR_THERAPY_BONUS = 4.0
 
 # Maps experience preference label -> (lo, hi) years
 EXPERIENCE_RANGES = {
@@ -921,9 +925,6 @@ def score_therapist(
             from embeddings import cosine_similarity
             sim_t5 = max(0.0, cosine_similarity(oi_vec, t.get("t5_embedding")))
             sim_t2 = max(0.0, cosine_similarity(oi_vec, t.get("t2_embedding")))
-            # Same blend as Contextual Resonance — T5 (lived experience)
-            # is the dominant signal, T2 (progress story) is a weaker
-            # secondary.
             blended = round(0.7 * sim_t5 + 0.3 * sim_t2, 4)
             bonus_oi = round(blended * MAX_OTHER_ISSUE_BONUS, 2)
             if bonus_oi:
@@ -937,6 +938,32 @@ def score_therapist(
             }
         except Exception:
             other_issue_axes = {}
+    # ── Patient `prior_therapy_notes` free-text resonance bonus ─────
+    # Patients describe what worked / didn't work in past therapy
+    # ("liked her style, took time to know us both"). Embed at request
+    # creation, cosine-compare against therapist T5/T2, soft-bonus when
+    # they resonate. Capped at MAX_PRIOR_THERAPY_BONUS=4 points so we
+    # don't double-count the very similar `other_issue_bonus`.
+    prior_therapy_axes: dict[str, float] = {}
+    pt_vec = r.get("prior_therapy_embedding")
+    if pt_vec:
+        try:
+            from embeddings import cosine_similarity
+            sim_t5 = max(0.0, cosine_similarity(pt_vec, t.get("t5_embedding")))
+            sim_t2 = max(0.0, cosine_similarity(pt_vec, t.get("t2_embedding")))
+            blended = round(0.7 * sim_t5 + 0.3 * sim_t2, 4)
+            bonus_pt = round(blended * MAX_PRIOR_THERAPY_BONUS, 2)
+            if bonus_pt:
+                breakdown["prior_therapy_bonus"] = bonus_pt
+                total = round(total + bonus_pt, 2)
+            prior_therapy_axes = {
+                "sim_t5": round(sim_t5, 4),
+                "sim_t2": round(sim_t2, 4),
+                "blended": blended,
+                "bonus": bonus_pt,
+            }
+        except Exception:
+            prior_therapy_axes = {}
     # Cap displayed match-score at 95: no match is ever truly perfect,
     # and a 100% chip on the patient UI sets an expectation we can't
     # meet (every therapist falls short of "perfect" on something —
@@ -957,6 +984,7 @@ def score_therapist(
         "research_axes": research_axes,  # rationale + chips for the patient view
         "deep_match": deep,
         "other_issue_axes": other_issue_axes,  # cosine breakdown for free-text bonus
+        "prior_therapy_axes": prior_therapy_axes,  # cosine breakdown for prior-therapy free-text bonus
     }
 
 
@@ -1048,6 +1076,7 @@ def rank_therapists(
             "match_breakdown": result["breakdown"],
             "research_axes": result.get("research_axes") or {},
             "other_issue_axes": result.get("other_issue_axes") or {},
+            "prior_therapy_axes": result.get("prior_therapy_axes") or {},
         })
 
     scored.sort(
