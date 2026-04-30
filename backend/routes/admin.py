@@ -1208,12 +1208,16 @@ async def admin_backfill_status(_: bool = Depends(require_admin)):
 # A blunt-but-guarded button that clears every collection containing
 # patient/operational test data (requests, applications, simulator runs,
 # auto-recruit cycles, outreach invites, magic codes, etc.) and removes
-# any therapists that aren't part of the seeded `therapymatch+` pool.
-# Designed for "everything we used to test the matching engine, gone —
-# but the seeded therapist directory + all admin/site config preserved."
-_SEEDED_THERAPIST_FILTER = {
-    "email": {"$regex": "therapymatch\\+", "$options": "i"},
-}
+# any therapists that aren't part of the original imported-xlsx seed pool.
+#
+# The canonical seed distinguisher is `source == "imported_xlsx"` — the
+# 122 therapists imported from the original Idaho directory spreadsheet.
+# Test-flow signups (source="signup") + gap-recruit auto-creations
+# (source="gap_recruit_signup") are wiped, even when their email also
+# matches the `therapymatch+` pattern. Without this filter the wipe
+# would preserve ~100 throwaway test therapists created during testing
+# iterations alongside the canonical 122.
+_SEEDED_THERAPIST_FILTER = {"source": "imported_xlsx"}
 
 _WIPE_COLLECTIONS = [
     # Patient-side data
@@ -1259,7 +1263,7 @@ async def admin_wipe_test_data_preview(_: bool = Depends(require_admin)):
             sum(counts.values()) + therapists_to_delete
         ),
         "preserved_note": (
-            "Kept: seeded therapists with therapymatch+ emails (incl. "
+            "Kept: 122 imported-xlsx seeded therapists (incl. "
             "backfilled bios), site_copy + how-it-works, FAQs, blog posts, "
             "email templates, scrape sources, admin team accounts, app/"
             "auto-recruit/Turnstile/rate-limit settings, geocache."

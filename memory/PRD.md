@@ -68,8 +68,8 @@ User-requested admin tool to clear all pre-launch test data while preserving the
   - Outreach + recruiting: `outreach_invites`, `outreach_opt_outs`, `recruit_drafts`, `auto_recruit_cycles`
   - Simulator + experiments: `simulator_runs`, `simulator_requests`
   - Operational logs: `feedback`, `followups`, `magic_codes`, `password_login_attempts`, `intake_ip_log`, `cron_runs`
-  - Therapists: deletes any whose email is NOT `therapymatch+...@gmail.com` (real-world signups during testing)
-- **Preserved**: 223 seeded therapists with `therapymatch+` emails (incl. backfilled bios), `site_copy` (incl. how-it-works), `faqs`, `blog_posts`, `email_templates`, scrape sources, admin team accounts, app/auto-recruit/Turnstile/rate-limit settings, `geocache`.
+  - Therapists: deletes any whose `source != "imported_xlsx"` (the canonical 122-therapist seed pool from the original Idaho directory spreadsheet). This is the **robust distinguisher** — using the email pattern `therapymatch+` would incorrectly preserve ~100 throwaway test signups created during testing iterations whose emails also happen to match that pattern.
+- **Preserved**: 122 imported-xlsx seeded therapists (incl. backfilled bios), `site_copy` (incl. how-it-works), `faqs`, `blog_posts`, `email_templates`, scrape sources, admin team accounts, app/auto-recruit/Turnstile/rate-limit settings, `geocache`.
 
 ### Frontend (`/app/frontend/src/pages/AdminDashboard.jsx`)
 - Red "Wipe test data" button placed next to "Strip backfilled data" in the admin header (same destructive-action visual language).

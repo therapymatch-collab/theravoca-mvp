@@ -1825,9 +1825,8 @@ export default function AdminDashboard() {
                     Will keep
                   </div>
                   <p className="text-[13px] leading-relaxed">
-                    <strong>{wipePreview.therapists_kept}</strong> seeded
-                    therapists with <code>therapymatch+</code> emails (and
-                    their backfilled bios/specialties).{" "}
+                    <strong>{wipePreview.therapists_kept}</strong> imported-xlsx
+                    seeded therapists (their backfilled bios/specialties stay).{" "}
                     {wipePreview.preserved_note}
                   </p>
                 </div>
