@@ -11,6 +11,7 @@ from .portal import router as portal_router
 from .site_copy import router as site_copy_router
 from .stripe_webhook import router as stripe_router
 from .therapists import router as therapists_router
+from .migrate import router as migrate_router
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(patients_router)
@@ -24,5 +25,6 @@ api_router.include_router(faqs_router)
 api_router.include_router(master_query_router)
 api_router.include_router(site_copy_router)
 api_router.include_router(stripe_router)
+api_router.include_router(migrate_router)
 
 __all__ = ["api_router"]
