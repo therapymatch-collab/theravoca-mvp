@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Leaf, ChevronDown, Menu, X } from "lucide-react";
 import useSiteCopy from "@/lib/useSiteCopy";
+import { getSession, clearSession, getAdminIdentity, clearAdminSession } from "@/lib/api";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,6 +44,17 @@ export function Header({ minimal = false }) {
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname, location.hash]);
+
+  // Check if any user session is active (patient, therapist, or admin).
+  const session = getSession();
+  const admin = getAdminIdentity();
+  const isLoggedIn = !!(session?.token || admin?.token || admin?.masterPwd);
+
+  const handleLogOut = () => {
+    clearSession();
+    clearAdminSession();
+    window.location.href = "/";
+  };
 
   // Lock body scroll while drawer is open.
   useEffect(() => {
@@ -103,57 +115,67 @@ export function Header({ minimal = false }) {
               >
                 {t("header.nav.therapists", "For therapists")}
               </a>
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  className="inline-flex items-center gap-1.5 hover:text-[#2D4A3E] transition outline-none"
-                  data-testid="nav-signin-trigger"
+              {isLoggedIn ? (
+                <button
+                  onClick={handleLogOut}
+                  className="hover:text-[#2D4A3E] transition"
+                  data-testid="nav-logout"
                 >
-                  {t("header.nav.signin", "Sign in")} <ChevronDown size={14} strokeWidth={2} />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  className="bg-white border-[#E8E5DF] w-56"
-                  data-testid="nav-signin-menu"
-                >
-                  <DropdownMenuItem asChild>
-                    <Link
-                      to="/sign-in?role=patient"
-                      className="cursor-pointer"
-                      data-testid="signin-as-patient"
-                    >
-                      <div>
-                        <div className="font-medium text-[#2B2A29]">Patient</div>
-                        <div className="text-xs text-[#6D6A65]">Track your matches</div>
-                      </div>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link
-                      to="/sign-in?role=therapist"
-                      className="cursor-pointer"
-                      data-testid="signin-as-therapist"
-                    >
-                      <div>
-                        <div className="font-medium text-[#2B2A29]">Therapist</div>
-                        <div className="text-xs text-[#6D6A65]">View your referrals</div>
-                      </div>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link
-                      to="/admin"
-                      className="cursor-pointer"
-                      data-testid="signin-as-admin"
-                    >
-                      <div>
-                        <div className="font-medium text-[#2B2A29]">Admin</div>
-                        <div className="text-xs text-[#6D6A65]">Operations console</div>
-                      </div>
-                    </Link>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                  Log out
+                </button>
+              ) : (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    className="inline-flex items-center gap-1.5 hover:text-[#2D4A3E] transition outline-none"
+                    data-testid="nav-signin-trigger"
+                  >
+                    {t("header.nav.signin", "Sign in")} <ChevronDown size={14} strokeWidth={2} />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    className="bg-white border-[#E8E5DF] w-56"
+                    data-testid="nav-signin-menu"
+                  >
+                    <DropdownMenuItem asChild>
+                      <Link
+                        to="/sign-in?role=patient"
+                        className="cursor-pointer"
+                        data-testid="signin-as-patient"
+                      >
+                        <div>
+                          <div className="font-medium text-[#2B2A29]">Patient</div>
+                          <div className="text-xs text-[#6D6A65]">Track your matches</div>
+                        </div>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link
+                        to="/sign-in?role=therapist"
+                        className="cursor-pointer"
+                        data-testid="signin-as-therapist"
+                      >
+                        <div>
+                          <div className="font-medium text-[#2B2A29]">Therapist</div>
+                          <div className="text-xs text-[#6D6A65]">View your referrals</div>
+                        </div>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link
+                        to="/admin"
+                        className="cursor-pointer"
+                        data-testid="signin-as-admin"
+                      >
+                        <div>
+                          <div className="font-medium text-[#2B2A29]">Admin</div>
+                          <div className="text-xs text-[#6D6A65]">Operations console</div>
+                        </div>
+                      </Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
               <a
                 href="/#start"
                 className="tv-btn-primary !py-2 !px-5 text-sm"
@@ -222,33 +244,45 @@ export function Header({ minimal = false }) {
               For therapists
             </a>
             <div className="border-t border-[#E8E5DF] my-2" />
-            <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] px-2 pt-1">
-              Sign in
-            </div>
-            <Link
-              to="/sign-in?role=patient"
-              className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition flex items-baseline justify-between"
-              data-testid="mobile-signin-patient"
-            >
-              <span>Patient</span>
-              <span className="text-xs text-[#6D6A65]">Track your matches</span>
-            </Link>
-            <Link
-              to="/sign-in?role=therapist"
-              className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition flex items-baseline justify-between"
-              data-testid="mobile-signin-therapist"
-            >
-              <span>Therapist</span>
-              <span className="text-xs text-[#6D6A65]">View referrals</span>
-            </Link>
-            <Link
-              to="/admin"
-              className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition flex items-baseline justify-between"
-              data-testid="mobile-signin-admin"
-            >
-              <span>Admin</span>
-              <span className="text-xs text-[#6D6A65]">Console</span>
-            </Link>
+            {isLoggedIn ? (
+              <button
+                onClick={handleLogOut}
+                className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition text-left w-full font-medium text-[#2B2A29]"
+                data-testid="mobile-logout"
+              >
+                Log out
+              </button>
+            ) : (
+              <>
+                <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] px-2 pt-1">
+                  Sign in
+                </div>
+                <Link
+                  to="/sign-in?role=patient"
+                  className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition flex items-baseline justify-between"
+                  data-testid="mobile-signin-patient"
+                >
+                  <span>Patient</span>
+                  <span className="text-xs text-[#6D6A65]">Track your matches</span>
+                </Link>
+                <Link
+                  to="/sign-in?role=therapist"
+                  className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition flex items-baseline justify-between"
+                  data-testid="mobile-signin-therapist"
+                >
+                  <span>Therapist</span>
+                  <span className="text-xs text-[#6D6A65]">View referrals</span>
+                </Link>
+                <Link
+                  to="/admin"
+                  className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition flex items-baseline justify-between"
+                  data-testid="mobile-signin-admin"
+                >
+                  <span>Admin</span>
+                  <span className="text-xs text-[#6D6A65]">Console</span>
+                </Link>
+              </>
+            )}
             <a
               href="/#start"
               className="tv-btn-primary justify-center mt-3"

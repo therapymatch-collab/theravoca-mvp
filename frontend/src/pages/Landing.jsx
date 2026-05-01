@@ -218,9 +218,7 @@ export default function Landing() {
             ].map((s, i) => (
               <div
                 key={s.n}
-                className={`bg-white border border-[#E8E5DF] rounded-3xl p-8 hover:-translate-y-1 transition ${
-                  i === 1 ? "md:translate-y-6" : ""
-                }`}
+                className="bg-white border border-[#E8E5DF] rounded-3xl p-8 hover:-translate-y-2 hover:shadow-lg transition-all duration-200 cursor-default"
                 data-testid={`how-step-${i}`}
               >
                 <div className="font-serif-display text-5xl text-[#C87965]">{s.n}</div>
