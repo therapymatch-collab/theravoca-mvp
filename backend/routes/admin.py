@@ -1012,9 +1012,9 @@ async def admin_test_sms(payload: dict, _: bool = Depends(require_admin)):
                 error_message = m.error_message
                 if final_status in ("delivered", "undelivered", "failed", "sent"):
                     break
-        except Exception:
+        except Exception as exc:
             # Pollers are best-effort; don't fail the test endpoint on this.
-            pass
+            logger.warning("SMS poll error: %s", exc)
 
     # Map common Twilio error codes to human-readable troubleshooting hints.
     hint = None

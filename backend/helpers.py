@@ -191,8 +191,7 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
         issues_display = ", ".join(i.replace("_", " ").title() for i in issues if i)
     else:
         issues_display = str(issues)
-    if req.get("other_issue"):
-        issues_display = (issues_display + " · " if issues_display else "") + req["other_issue"]
+
     payment_type_raw = (req.get("payment_type") or "either").lower()
     insurance_name = (req.get("insurance_name") or "").strip()
     budget = req.get("budget")
@@ -374,10 +373,19 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
     if research_enabled and therapist_ids:
         cur = db.therapists.find(
             {"id": {"$in": therapist_ids}},
-            {"_id": 0, "id": 1, "research_cache": 1},
+            {"_id": 0, "id": 1,
+                 "research_summary": 1, "research_themes": 1,
+                 "research_modality_evidence": 1, "research_style_signals": 1,
+                 "research_depth_signal": 1, "research_public_footprint": 1,
+                 "research_no_web": 1, "research_deep_mode": 1,
+                 "research_extra_sources": 1},
         )
         async for tdoc in cur:
-            cache = tdoc.get("research_cache") or {}
+            cache = {
+                    k.replace("research_", "", 1): v
+                    for k, v in tdoc.items()
+                    if k.startswith("research_") and v is not None
+                }
             # A cache is "warm" when the deep-research stage has actually
             # extracted themes for this therapist. Otherwise treat as cold.
             if cache.get("themes"):
@@ -486,6 +494,7 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
                 match_score=m["match_score"],
                 summary=summary,
                 gaps=gaps,
+                match_breakdown=m.get("match_breakdown"),
             )
         phone = m.get("phone_alert") or m.get("phone") or ""
         if phone and notify_sms:

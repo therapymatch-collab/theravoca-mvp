@@ -128,6 +128,7 @@ async def send_therapist_notification(
     match_score: float,
     summary: dict[str, Any],
     gaps: Optional[list[dict[str, Any]]] = None,
+    match_breakdown: Optional[dict[str, Any]] = None,
 ) -> None:
     tpl = await get_template(_db(), "therapist_notification")
     first_name = _first_name(therapist_name)
@@ -141,6 +142,47 @@ async def send_therapist_notification(
         f'<td style="padding:6px 0;color:{BRAND["text"]};font-size:14px;">{v}</td></tr>'
         for k, v in summary.items()
     )
+    # ── "Why you matched" — top positive-scoring axes ──────────────────
+    strengths_html = ""
+    if match_breakdown:
+        _axis_labels = {
+            "issues": "Specializes in your concerns",
+            "availability": "Matches your schedule",
+            "modality": "Offers your preferred format",
+            "urgency": "Can see you quickly",
+            "prior_therapy": "Right fit for your therapy history",
+            "experience": "Matches your experience preference",
+            "gender": "Matches your gender preference",
+            "style": "Aligns with your style preference",
+            "payment_fit": "Open to sliding-scale pricing",
+            "payment_alignment": "Accepts your payment method",
+            "modality_pref": "Practices your preferred therapy approach",
+            "other_issue_bonus": "Resonates with your personal note",
+            "prior_therapy_bonus": "Relates to your therapy background",
+            "research_bonus": "Deep-profile alignment",
+        }
+        top_axes = sorted(
+            (
+                (k, v, _axis_labels[k])
+                for k, v in match_breakdown.items()
+                if k in _axis_labels and isinstance(v, (int, float)) and v > 0
+            ),
+            key=lambda x: x[1],
+            reverse=True,
+        )[:3]
+        if top_axes:
+            chips = "".join(
+                f'<span style="display:inline-block;background:#ffffff;border:1px solid {BRAND["border"]};color:{BRAND["text"]};font-size:13px;padding:6px 12px;border-radius:999px;margin:3px 5px 3px 0;">{label}</span>'
+                for _, _, label in top_axes
+            )
+            strengths_html = (
+                f'<div style="background:#F0F7F4;border:1px solid #C6DDD2;border-radius:12px;'
+                f'padding:16px 20px;margin:0 0 16px;">'
+                f'<div style="font-size:13px;color:{BRAND["muted"]};text-transform:uppercase;'
+                f'letter-spacing:0.08em;margin-bottom:8px;">Why you matched</div>'
+                f'<div>{chips}</div>'
+                f'</div>'
+            )
     gaps_html = ""
     if gaps:
         rows = "".join(
@@ -188,6 +230,7 @@ async def send_therapist_notification(
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:8px 0 24px;">
       {summary_rows}
     </table>
+    {strengths_html}
     {gaps_html}
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:28px 0;">
       <tr>
