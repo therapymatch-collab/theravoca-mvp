@@ -18,6 +18,10 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from server import app as fastapi_app
 
+import json
+import asyncio
+from deps import db
+
 STAGING_USER = os.environ.get("STAGING_USER", "theravoca")
 STAGING_PASSWORD = os.environ.get("STAGING_PASSWORD", "")
 
@@ -150,13 +154,50 @@ class _SPAApp:
                 await response(scope, receive, send)
                 return
 
-            # For all other routes, serve index.html (SPA client-side routing)
-            response = FileResponse(_INDEX_HTML, media_type="text/html")
-            await response(scope, receive, send)
+            # For all other routes, serve index.html with site_copy injected
+            # to prevent FOUC (flash of unstyled/old content) and help SEO.
+            await _serve_index_with_site_copy(scope, receive, send)
             return
 
         # No static build — fall through to FastAPI (which will 404)
         await self.api_app(scope, receive, send)
+
+
+# ── Site-copy injection cache ─────────────────────────────────────
+# We cache the site_copy JSON and the injected HTML to avoid hitting
+# MongoDB on every single page load. Cache refreshes every 60s.
+_sc_cache = {"html": None, "ts": 0}
+_SC_TTL = 60  # seconds
+
+async def _serve_index_with_site_copy(scope, receive, send):
+    """Serve index.html with site_copy JSON injected as a <script> tag
+    so the React app has overrides instantly — no API flash."""
+    import time
+
+    now = time.time()
+    if _sc_cache["html"] and (now - _sc_cache["ts"]) < _SC_TTL:
+        html = _sc_cache["html"]
+    else:
+        try:
+            rows = await db.site_copy.find({}, {"_id": 0}).to_list(2000)
+            sc_map = {r["key"]: r["value"] for r in rows if "key" in r and "value" in r}
+        except Exception:
+            sc_map = {}
+
+        with open(_INDEX_HTML, "r", encoding="utf-8") as f:
+            raw_html = f.read()
+
+        # Inject site_copy as a global BEFORE React boots.
+        # Place it right before </head> so it's parsed before bundle JS.
+        sc_json = json.dumps(sc_map, ensure_ascii=True)
+        inject_tag = f'<script>window.__SITE_COPY__={sc_json};</script>'
+        html = raw_html.replace("</head>", f"{inject_tag}\n</head>")
+        _sc_cache["html"] = html
+        _sc_cache["ts"] = now
+
+    from starlette.responses import HTMLResponse
+    response = HTMLResponse(html)
+    await response(scope, receive, send)
 
 
 app = _SPAApp(_authed_app)
