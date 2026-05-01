@@ -136,4 +136,42 @@ async def _get_template(key: str) -> str:
         from db import db  # late import to avoid circular deps
         doc = await db.site_copy.find_one({"key": key})
         if doc and doc.get("value"):
-        
+                    return doc["value"]
+    except Exception:
+        pass
+    return SMS_TEMPLATE_DEFAULTS.get(key, "")
+
+
+async def send_therapist_referral_sms(
+    to: str,
+    therapist_first_name: str,
+    match_score: float,
+    apply_url: str,
+) -> dict[str, Any] | None:
+    """Short transactional SMS for new high-match referrals."""
+    template = await _get_template("sms.therapist_referral")
+    first = (therapist_first_name or "there").split(" ")[0]
+    body = template.format(
+        first_name=first,
+        match_score=int(round(match_score)),
+        apply_url=apply_url,
+    )
+    return await send_sms(to, body)
+
+
+async def send_patient_intake_receipt_sms(to: str) -> dict[str, Any] | None:
+    """Confirmation text to a patient right after they submit a referral.
+    Tells them we'll email matches inside 24h and how to reach support."""
+    template = await _get_template("sms.patient_intake_receipt")
+    body = template.format()  # no placeholders in default
+    return await send_sms(to, body)
+
+
+async def send_availability_prompt_sms(
+    to: str, therapist_first_name: str, portal_url: str
+) -> dict[str, Any] | None:
+    """Mon/Fri SMS reminder asking the therapist to refresh availability."""
+    first = (therapist_first_name or "there").split(" ")[0]
+    template = await _get_template("sms.availability_prompt")
+    body = template.format(first_name=first, portal_url=portal_url)
+    return await send_sms(to, body)
