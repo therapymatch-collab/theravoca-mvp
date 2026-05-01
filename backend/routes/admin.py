@@ -3322,4 +3322,351 @@ async def _compute_coverage_gap_analysis() -> dict:
         "gaps": gaps,
         "gap_summary": {
             "critical": sum(1 for g in gaps if g["severity"] == "critical"),
-            "warning": sum(1 for g in gaps if g["seve
+            "warning": sum(1 for g in gaps if g["severity"] == "warning"),
+            "total": len(gaps),
+        },
+    }
+
+
+@router.post("/admin/gap-recruit/run")
+async def admin_run_gap_recruit(
+    payload: dict | None = None, _: bool = Depends(require_admin),
+):
+    """Manually trigger the gap recruiter. Pre-launch, runs in dry-run mode
+    (fake `therapymatch+recruitNNN@gmail.com` emails). Post-launch, set
+    `dry_run=false` in the payload to use real emails."""
+    from gap_recruiter import run_gap_recruitment
+    dry = bool((payload or {}).get("dry_run", True))
+    cap = int((payload or {}).get("max_drafts", 30))
+    return await run_gap_recruitment(dry_run=dry, max_drafts=cap)
+
+
+@router.get("/admin/gap-recruit/drafts")
+async def admin_list_gap_drafts(_: bool = Depends(require_admin)):
+    """All recruit-draft rows, newest first."""
+    docs = await db.recruit_drafts.find(
+        {}, {"_id": 0},
+    ).sort("created_at", -1).to_list(length=500)
+    sent = sum(1 for d in docs if d.get("sent"))
+    pending = sum(1 for d in docs if not d.get("sent"))
+    dry = sum(1 for d in docs if d.get("dry_run"))
+    converted = sum(1 for d in docs if d.get("converted_therapist_id"))
+    return {
+        "drafts": docs,
+        "total": len(docs),
+        "sent": sent,
+        "pending": pending,
+        "dry_run_count": dry,
+        "converted": converted,
+    }
+
+
+@router.get("/admin/referral-analytics")
+async def admin_referral_analytics(_: bool = Depends(require_admin)):
+    """Referral analytics:
+    - patient `referred_by_patient_code` chains
+    - therapist `referred_by_code` chains
+    - gap-recruit conversion rate
+    - referral_source breakdown from intake form
+    """
+    from collections import Counter
+
+    # Patient → patient referrals
+    patient_chains: Counter = Counter()
+    patient_codes_seen: dict[str, dict] = {}
+    async for r in db.requests.find(
+        {}, {"_id": 0, "patient_referral_code": 1,
+             "referred_by_patient_code": 1, "email": 1, "created_at": 1},
+    ):
+        if r.get("patient_referral_code"):
+            patient_codes_seen[r["patient_referral_code"]] = {
+                "email": r.get("email"),
+                "code": r["patient_referral_code"],
+                "created_at": r.get("created_at"),
+            }
+        if r.get("referred_by_patient_code"):
+            patient_chains[r["referred_by_patient_code"]] += 1
+
+    top_patient_referrers = []
+    for code, n in patient_chains.most_common(20):
+        meta = patient_codes_seen.get(code) or {}
+        top_patient_referrers.append({
+            "code": code,
+            "inviter_email": meta.get("email") or "—",
+            "invited_count": n,
+        })
+
+    # Therapist refer-a-colleague chains
+    therapist_chains: Counter = Counter()
+    therapist_codes: dict[str, dict] = {}
+    async for t in db.therapists.find(
+        {}, {"_id": 0, "referral_code": 1, "referred_by_code": 1,
+             "name": 1, "email": 1},
+    ):
+        if t.get("referral_code"):
+            therapist_codes[t["referral_code"]] = {
+                "name": t.get("name"), "email": t.get("email"),
+                "code": t["referral_code"],
+            }
+        if t.get("referred_by_code"):
+            therapist_chains[t["referred_by_code"]] += 1
+
+    top_therapist_referrers = []
+    for code, n in therapist_chains.most_common(20):
+        meta = therapist_codes.get(code) or {}
+        top_therapist_referrers.append({
+            "code": code,
+            "inviter_name": meta.get("name") or "—",
+            "inviter_email": meta.get("email") or "—",
+            "invited_count": n,
+        })
+
+    # Referral source breakdown from intake form
+    src_counts: Counter = Counter()
+    async for r in db.requests.find({}, {"_id": 0, "referral_source": 1}):
+        src = (r.get("referral_source") or "").strip() or "(unspecified)"
+        src_counts[src] += 1
+
+    # Gap-recruit conversion
+    drafts_total = await db.recruit_drafts.count_documents({})
+    drafts_sent = await db.recruit_drafts.count_documents({"sent": True})
+    drafts_converted = await db.recruit_drafts.count_documents(
+        {"converted_therapist_id": {"$exists": True, "$ne": None}},
+    )
+
+    return {
+        "patient_referrals": {
+            "total_invited": sum(patient_chains.values()),
+            "unique_referrers": len(patient_chains),
+            "top": top_patient_referrers,
+        },
+        "therapist_referrals": {
+            "total_invited": sum(therapist_chains.values()),
+            "unique_referrers": len(therapist_chains),
+            "top": top_therapist_referrers,
+        },
+        "referral_sources": dict(src_counts.most_common()),
+        "gap_recruit": {
+            "total_drafts": drafts_total,
+            "sent": drafts_sent,
+            "converted": drafts_converted,
+            "conversion_rate": (
+                round(drafts_converted / drafts_sent * 100, 1)
+                if drafts_sent else 0.0
+            ),
+        },
+    }
+
+
+@router.delete("/admin/gap-recruit/drafts/{draft_id}")
+async def admin_delete_gap_draft(draft_id: str, _: bool = Depends(require_admin)):
+    res = await db.recruit_drafts.delete_one({"id": draft_id})
+    if res.deleted_count == 0:
+        raise HTTPException(404)
+    return {"ok": True}
+
+
+@router.post("/admin/gap-recruit/send-all")
+async def admin_send_gap_drafts(_: bool = Depends(require_admin)):
+    """Fire off all pending non-dry-run drafts via Resend. Pre-launch this
+    endpoint will return 0 sent because every draft is `dry_run=true`."""
+    from gap_recruiter import send_pending_drafts
+    return await send_pending_drafts()
+
+
+@router.post("/admin/gap-recruit/send-preview")
+async def admin_send_gap_preview(
+    payload: dict | None = None, _: bool = Depends(require_admin),
+):
+    """Send a small sample of pre-launch DRY-RUN drafts via Resend so the
+    admin can see what the actual recruit email looks like in their inbox.
+
+    Sends ALWAYS to the draft's fake `therapymatch+recruitNNN@gmail.com`
+    address — the user controls `therapymatch@gmail.com`, so the email lands
+    in their own inbox via Gmail's plus-aliasing trick.
+
+    Body: `{"limit": 3, "draft_ids": [...]}`. If `draft_ids` is empty, picks
+    one draft per gap dimension up to `limit`."""
+    from gap_recruiter import send_draft_preview
+    body = payload or {}
+    limit = max(1, min(int(body.get("limit") or 3), 10))
+    return await send_draft_preview(
+        limit=limit, ids=body.get("draft_ids") or [],
+    )
+
+
+@router.post("/admin/seed/reset")
+async def admin_seed_reset(_: bool = Depends(require_admin)):
+    """DESTRUCTIVE — clears requests/applications/declines/therapists/magic_codes
+    and re-seeds 100 fresh therapists (v3 schema). Also kicks off office geocoding."""
+    cleared = {
+        "requests": (await db.requests.delete_many({})).deleted_count,
+        "applications": (await db.applications.delete_many({})).deleted_count,
+        "declines": (await db.declines.delete_many({})).deleted_count,
+        "therapists": (await db.therapists.delete_many({})).deleted_count,
+        "magic_codes": (await db.magic_codes.delete_many({})).deleted_count,
+        "cron_runs": (await db.cron_runs.delete_many({})).deleted_count,
+    }
+    therapists = generate_seed_therapists(100)
+    await db.therapists.insert_many([t.copy() for t in therapists])
+    # Trigger geocoding inline so post-reset matching works without waiting for the
+    # async startup task. Uses cached city geos so it's fast (<2s for 100 therapists).
+    from helpers import _backfill_therapist_geo
+    await _backfill_therapist_geo()
+    return {"ok": True, "cleared": cleared, "seeded": len(therapists)}
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Matching-Outcome Simulator (admin-only)
+# ──────────────────────────────────────────────────────────────────────
+# Routes delegate to `backend/simulator.py` — this keeps admin.py from
+# growing further while giving ops a single surface to kick off a run,
+# list prior runs, fetch a specific report, and clean up synthetic
+# data. See simulator.py for the algorithmic detail + rationale.
+
+
+@router.post("/admin/simulator/run")
+async def simulator_run(
+    payload: dict,
+    _: None = Depends(require_admin),
+):
+    """Kick off a simulator run synchronously. A 50-request run
+    against a ~120-therapist pool completes in ~1-2 seconds because
+    all scoring is pure Python (no network / LLM calls)."""
+    import simulator
+    num_requests = int(payload.get("num_requests") or 50)
+    notify_top_n = int(payload.get("notify_top_n") or 30)
+    min_applications = int(payload.get("min_applications") or 5)
+    max_applications = int(payload.get("max_applications") or 12)
+    random_seed = payload.get("random_seed")
+    if not (10 <= num_requests <= 200):
+        raise HTTPException(400, "num_requests must be between 10 and 200.")
+    report = await simulator.run_simulation(
+        db,
+        num_requests=num_requests,
+        notify_top_n=notify_top_n,
+        min_applications=min_applications,
+        max_applications=max_applications,
+        random_seed=random_seed,
+    )
+    return report
+
+
+@router.get("/admin/simulator/runs")
+async def simulator_list_runs(
+    _: None = Depends(require_admin),
+    limit: int = 30,
+):
+    """List recent simulator runs — lightweight summary only."""
+    import simulator
+    return {"items": await simulator.list_runs(db, limit=limit)}
+
+
+@router.get("/admin/simulator/runs/{run_id}")
+async def simulator_get_run(
+    run_id: str,
+    _: None = Depends(require_admin),
+):
+    """Fetch the full report (with per-request detail) for one run."""
+    import simulator
+    doc = await simulator.load_run(db, run_id)
+    if not doc:
+        raise HTTPException(404, "Run not found")
+    return doc
+
+
+@router.delete("/admin/simulator/runs/{run_id}")
+async def simulator_delete_run(
+    run_id: str,
+    _: None = Depends(require_admin),
+):
+    """Delete one run + all its synthetic requests."""
+    import simulator
+    deleted = await simulator.delete_run(db, run_id)
+    return {"ok": True, "deleted": deleted}
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Auto-recruit — closed-loop recruiter (Simulator + Coverage Gaps +
+# Gap Recruiter). Pre-launch: dry-run + admin-approval-gated. See
+# backend/auto_recruit.py for the orchestration logic.
+# ──────────────────────────────────────────────────────────────────────
+
+
+@router.get("/admin/auto-recruit/status")
+async def auto_recruit_status(_: None = Depends(require_admin)):
+    """Returns current policy, last cycle, and pending-approval count.
+    Used by the admin panel header to render the live status card."""
+    import auto_recruit
+    cfg = await auto_recruit.get_config(db)
+    last_id = cfg.get("last_cycle_id")
+    last_cycle = None
+    if last_id:
+        last_cycle = await db.auto_recruit_cycles.find_one(
+            {"id": last_id}, {"_id": 0},
+        )
+    pending = await auto_recruit.count_pending_approval(db)
+    return {
+        "config": cfg,
+        "last_cycle": last_cycle,
+        "pending_approval_count": pending,
+    }
+
+
+@router.put("/admin/auto-recruit/config")
+async def auto_recruit_update_config(
+    payload: dict, _: None = Depends(require_admin),
+):
+    """Merge-patch the singleton config. Only known keys are accepted."""
+    import auto_recruit
+    cfg = await auto_recruit.update_config(db, payload)
+    return {"ok": True, "config": cfg}
+
+
+@router.post("/admin/auto-recruit/plan")
+async def auto_recruit_plan(_: None = Depends(require_admin)):
+    """Preview the plan WITHOUT creating drafts — runs a fresh simulator
+    + coverage-gap analysis and returns the would-be recruit targets."""
+    import auto_recruit
+    return await auto_recruit.compute_plan_preview(db)
+
+
+@router.post("/admin/auto-recruit/run")
+async def auto_recruit_run(_: None = Depends(require_admin)):
+    """Execute one full cycle — runs sim, builds plan, calls gap
+    recruiter, stamps new drafts with cycle id + needs_approval=True.
+    Never sends real email (dry_run enforced by config)."""
+    import auto_recruit
+    cycle = await auto_recruit.run_cycle(db, manual_trigger=True)
+    return cycle
+
+
+@router.get("/admin/auto-recruit/cycles")
+async def auto_recruit_list_cycles(
+    _: None = Depends(require_admin), limit: int = 30,
+):
+    """Recent cycles history (lightweight — omits per-draft detail)."""
+    import auto_recruit
+    return {"items": await auto_recruit.list_cycles(db, limit=limit)}
+
+
+@router.post("/admin/auto-recruit/approve")
+async def auto_recruit_approve(
+    payload: dict, _: None = Depends(require_admin),
+):
+    """Clear `needs_approval` on a batch of drafts. Accepts either
+    `{cycle_id}` to approve an entire cycle's drafts, or `{draft_ids: [...]}`
+    for a targeted approval. Returns count approved."""
+    import auto_recruit
+    cycle_id = payload.get("cycle_id")
+    draft_ids = payload.get("draft_ids") or None
+    if not cycle_id and not draft_ids:
+        raise HTTPException(400, "cycle_id or draft_ids required")
+    approved = await auto_recruit.approve_batch(
+        db, cycle_id=cycle_id, draft_ids=draft_ids,
+    )
+    return {"ok": True, "approved": approved}
+
+
+# Suppress unused-import warnings on logger (kept for future logging)
+void = logger

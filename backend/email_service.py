@@ -120,25 +120,6 @@ async def send_verification_email(to: str, request_id: str, token: str) -> None:
     await _send(to, subject, _wrap(tpl["heading"], inner))
 
 
-def _render_strengths(strengths: Optional[list[str]]) -> str:
-    """Render 'Why you matched' chips inside the match-score box."""
-    if not strengths:
-        return ""
-    chips = "".join(
-        f'<span style="display:inline-block;background:#ffffff;border:1px solid {BRAND["border"]};'
-        f'color:{BRAND["text"]};font-size:12px;padding:5px 10px;border-radius:999px;'
-        f'margin:2px 4px 2px 0;">{s}</span>'
-        for s in strengths
-    )
-    return (
-        f'<div style="margin-top:12px;">'
-        f'<div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;'
-        f'color:{BRAND["muted"]};margin-bottom:6px;">Why you matched</div>'
-        f'<div>{chips}</div>'
-        f'</div>'
-    )
-
-
 async def send_therapist_notification(
     to: str,
     therapist_name: str,
@@ -147,7 +128,6 @@ async def send_therapist_notification(
     match_score: float,
     summary: dict[str, Any],
     gaps: Optional[list[dict[str, Any]]] = None,
-    strengths: Optional[list[str]] = None,
 ) -> None:
     tpl = await get_template(_db(), "therapist_notification")
     first_name = _first_name(therapist_name)
@@ -204,7 +184,6 @@ async def send_therapist_notification(
     <div style="background:{BRAND['bg']};border:1px solid {BRAND['border']};border-radius:12px;padding:18px 22px;margin:20px 0;">
       <div style="font-size:13px;color:{BRAND['muted']};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Match Score</div>
       <div style="font-family:Georgia,serif;font-size:34px;color:{BRAND['primary']};">{match_score}%</div>
-      {_render_strengths(strengths)}
     </div>
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:8px 0 24px;">
       {summary_rows}
@@ -764,4 +743,21 @@ async def send_claim_profile_email(
         <div style="background:{BRAND['primary']};width:{score}%;height:100%;"></div>
       </div>
       <div style="font-size:14px;color:{BRAND['text']};font-weight:600;margin-bottom:8px;">What's missing:</div>
-      <ul style="margin:0;padding-left:18px;color:{BRAND['text']};font-size:14px;line-height:1
+      <ul style="margin:0;padding-left:18px;color:{BRAND['text']};font-size:14px;line-height:1.7;">
+        {bullets_html}
+      </ul>
+    </div>
+    <p style="margin:28px 0;text-align:center;">
+      <a href="{edit_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">
+        Complete my profile
+      </a>
+    </p>
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;text-align:center;">
+      You'll sign in with a one-time code sent to this email — no password to remember.
+    </p>
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">
+      Already signed in? Pop into your <a href="{portal_url}" style="color:{BRAND['primary']};">portal</a>
+      any time. Reply to this email if anything looks off — we'd love to hear from you.
+    </p>
+    """
+    await _send(to, subject, _wrap("Claim your TheraVoca profile", inner))

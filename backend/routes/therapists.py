@@ -619,4 +619,98 @@ async def therapist_referrals(
             "match_score": score,
             "match_breakdown": breakdown,
             "status": ref_status,
-            "summary": _safe_summary_for_the
+            "summary": _safe_summary_for_therapist({**r, "email": ""}),
+        })
+    return {"therapist": t, "referrals": out}
+
+
+
+# ─── Self-serve license document upload ─────────────────────────────────────
+# Therapist uploads a PDF / JPG / PNG of their license. We base64-store it
+# inline on the therapist doc (capped at 5 MB) and flag the row as
+# `pending_reapproval` so an admin reviews + re-publishes after upload.
+MAX_LICENSE_BYTES = 5 * 1024 * 1024  # 5 MB
+LICENSE_ALLOWED_TYPES = {
+    "application/pdf", "image/jpeg", "image/jpg", "image/png", "image/webp",
+}
+
+
+@router.post("/therapists/me/license-document")
+async def therapist_upload_license(
+    payload: dict,
+    session: dict = Depends(require_session(("therapist",))),
+):
+    """Therapist uploads a base64-encoded license document. Body:
+        {filename, content_type, data_base64}
+    """
+    email = session.get("email")
+    therapist = await db.therapists.find_one({"email": email}, {"_id": 0})
+    if not therapist:
+        raise HTTPException(404, "Therapist profile not found")
+
+    filename = (payload or {}).get("filename") or ""
+    content_type = (payload or {}).get("content_type") or ""
+    data_b64 = (payload or {}).get("data_base64") or ""
+    if not filename or not data_b64:
+        raise HTTPException(400, "filename and data_base64 are required")
+    if content_type not in LICENSE_ALLOWED_TYPES:
+        raise HTTPException(
+            400,
+            "Unsupported file type. Allowed: PDF, JPG, PNG, WEBP.",
+        )
+    try:
+        if "," in data_b64:
+            data_b64 = data_b64.split(",", 1)[1]
+        raw = base64.b64decode(data_b64, validate=True)
+    except Exception:
+        raise HTTPException(400, "Invalid base64 payload")
+    if len(raw) > MAX_LICENSE_BYTES:
+        raise HTTPException(
+            400,
+            f"File too large ({len(raw) // 1024} KB). Max 5 MB.",
+        )
+
+    now = _now_iso()
+    await db.therapists.update_one(
+        {"id": therapist["id"]},
+        {"$set": {
+            "license_document": {
+                "filename": filename[:200],
+                "content_type": content_type,
+                "size_bytes": len(raw),
+                "data_base64": data_b64,
+                "uploaded_at": now,
+            },
+            "pending_reapproval": True,
+            "updated_at": now,
+        }},
+    )
+    return {
+        "ok": True,
+        "filename": filename,
+        "size_bytes": len(raw),
+        "uploaded_at": now,
+        "pending_reapproval": True,
+    }
+
+
+@router.get("/therapists/me/license-document")
+async def therapist_get_my_license_doc(
+    session: dict = Depends(require_session(("therapist",))),
+):
+    email = session.get("email")
+    t = await db.therapists.find_one(
+        {"email": email}, {"_id": 0, "license_document": 1},
+    )
+    if not t:
+        raise HTTPException(404, "Therapist not found")
+    doc = t.get("license_document") or {}
+    if not doc:
+        return {"present": False}
+    return {
+        "present": True,
+        "filename": doc.get("filename"),
+        "content_type": doc.get("content_type"),
+        "size_bytes": doc.get("size_bytes"),
+        "uploaded_at": doc.get("uploaded_at"),
+    }

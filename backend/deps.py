@@ -154,4 +154,8 @@ __all__ = [
     "ADMIN_NOTIFY_EMAIL", "LICENSE_WARN_DAYS", "AVAILABILITY_PROMPT_DAYS",
     "DAILY_TASK_HOUR_LOCAL", "DAILY_TASK_TZ_OFFSET_HOURS",
     "JWT_SECRET", "JWT_ALGO", "SESSION_TTL_DAYS", "MAGIC_CODE_TTL_MINUTES",
- 
+    "MAGIC_CODE_MAX_PER_HOUR", "LOGIN_MAX_FAILURES", "LOGIN_LOCKOUT_MINUTES",
+    "_login_attempts", "_client_ip", "_check_lockout", "_record_failure", "_reset_failures",
+    "require_admin", "require_session", "_create_session_token",
+    "_decode_session_from_authorization",
+]
