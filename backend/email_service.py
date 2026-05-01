@@ -324,7 +324,7 @@ async def send_patient_results(to: str, request_id: str, applications: list[dict
           <div style="margin-top:16px;">{cta_cell}</div>
         </div>
         """
-    results_url = f"{_get_app_url()}/results/{request_id}"
+    results_url = f"{_get_app_url()}/results/{request_id}{token_query}"
     count = len(applications[:5])
     vars_ = {"count": count, "results_url": results_url}
     intro = render(tpl["intro"], **vars_)

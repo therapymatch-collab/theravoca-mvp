@@ -36,7 +36,7 @@ def _client() -> Client | None:
 
 
 def _from_number() -> str:
-    return os.environ.get("TWILIO_FROM_NUMBER", "").strip()
+    return (os.environ.get("TWILIO_FROM_NUMBER", "") or os.environ.get("TWILIO_PHONE_NUMBER", "")).strip()
 
 
 def _override_to() -> str:
