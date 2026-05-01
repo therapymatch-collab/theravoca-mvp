@@ -23,14 +23,14 @@ import os
 import uuid
 from typing import Any
 
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from llm_client import ask_claude, ANTHROPIC_API_KEY
 
 from deps import db
 from helpers import _now_iso
 
 logger = logging.getLogger("theravoca.review_research")
 
-EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+# API key is managed by llm_client module
 
 # Minimum reviews on any single source for us to trust the data.
 MIN_REVIEWS_PER_SOURCE = 10
@@ -39,8 +39,8 @@ MIN_REVIEWS_PER_SOURCE = 10
 async def _ask_llm(therapist: dict) -> dict | None:
     """Ask Claude what it can recall about this therapist's public reviews.
     Returns parsed JSON dict or None if the call failed / no data found."""
-    if not EMERGENT_KEY:
-        logger.warning("EMERGENT_LLM_KEY missing — skipping review research")
+    if not ANTHROPIC_API_KEY:
+        logger.warning("ANTHROPIC_API_KEY missing — skipping review research")
         return None
 
     name = therapist.get("name") or ""
@@ -83,21 +83,14 @@ CRITICAL RULES:
 
 Return ONLY the JSON. No prose, no markdown fences."""
 
-    chat = (
-        LlmChat(
-            api_key=EMERGENT_KEY,
-            session_id=f"reviews_{uuid.uuid4().hex[:10]}",
-            system_message=(
-                "You are a precise research agent. Never invent data. "
-                "Always return valid JSON. If unsure, return found=false."
-            ),
-        )
-        .with_model("anthropic", "claude-sonnet-4-5-20250929")
+    resp = await ask_claude(
+        prompt,
+        system_message=(
+            "You are a precise research agent. Never invent data. "
+            "Always return valid JSON. If unsure, return found=false."
+        ),
     )
-    try:
-        resp = await chat.send_message(UserMessage(text=prompt))
-    except Exception as e:
-        logger.exception("LLM review research call failed: %s", e)
+    if resp is None:
         return None
 
     text = (resp or "").strip()

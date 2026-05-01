@@ -41,7 +41,7 @@ from deps import db
 
 logger = logging.getLogger("theravoca.research")
 
-EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+from llm_client import ask_claude, ANTHROPIC_API_KEY
 HTTP_TIMEOUT_SEC = 8.0
 MAX_HTML_TEXT_BYTES = 20_000  # ~5K tokens — keeps each call cheap
 MAX_DEEP_TEXT_BYTES = 40_000  # bigger budget for the deep-research mode
@@ -225,7 +225,7 @@ async def _build_research_summary(t: dict, *, deep: bool = False) -> dict[str, A
     precision — recommended for the marquee 30-50 therapists in your
     directory rather than every cold pull.
     """
-    if not EMERGENT_KEY:
+    if not ANTHROPIC_API_KEY:
         return {"summary": "", "themes": {}, "no_web": True}
 
     name = t.get("name") or ""
@@ -261,11 +261,6 @@ async def _build_research_summary(t: dict, *, deep: bool = False) -> dict[str, A
         deep_text = "\n\n".join(chunks)[:MAX_DEEP_TEXT_BYTES]
 
     if not web_text and not bio and not deep_text:
-        return {"summary": "", "themes": {}, "no_web": True}
-
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-    except ImportError:
         return {"summary": "", "themes": {}, "no_web": True}
 
     listed_primary = t.get("primary_specialties") or []
@@ -318,21 +313,14 @@ Rules:
 - Return ONLY the JSON. No prose, no markdown fences.
 """
 
-    chat = (
-        LlmChat(
-            api_key=EMERGENT_KEY,
-            session_id=f"research_{uuid.uuid4().hex[:10]}",
-            system_message=(
-                "You are a precise evidence-extractor. Cite only what is in "
-                "the source text. Always return valid JSON."
-            ),
-        )
-        .with_model("anthropic", "claude-sonnet-4-5-20250929")
+    resp = await ask_claude(
+        prompt,
+        system_message=(
+            "You are a precise evidence-extractor. Cite only what is in "
+            "the source text. Always return valid JSON."
+        ),
     )
-    try:
-        resp = await chat.send_message(UserMessage(text=prompt))
-    except Exception as e:
-        logger.warning("research LLM call failed for %s: %s", name, e)
+    if resp is None:
         return {"summary": "", "themes": {}, "no_web": True}
 
     raw = (resp or "").strip()
@@ -520,7 +508,7 @@ async def score_apply_fit(
     addresses THIS patient's concerns. 0-5 + 1-sentence rationale."""
     if not (apply_text or "").strip():
         return {"apply_fit": 0.0, "rationale": "No apply message provided."}
-    if not EMERGENT_KEY:
+    if not ANTHROPIC_API_KEY:
         # Fallback — length-based heuristic so the field is always populated.
         n = len(apply_text)
         score = round(min(5.0, n / 400.0 * 5.0), 1)
@@ -528,11 +516,6 @@ async def score_apply_fit(
             "apply_fit": score,
             "rationale": f"Heuristic only (LLM unavailable): {n}-char reply.",
         }
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-    except ImportError:
-        return {"apply_fit": 0.0, "rationale": "LLM integration unavailable."}
-
     issues = ", ".join(request.get("presenting_issues") or []) or "(none stated)"
     style = ", ".join(request.get("style_preference") or []) or "(no style preference)"
     prior = request.get("prior_therapy") or "not_sure"
@@ -570,18 +553,11 @@ THERAPIST ({therapist.get('name')}) APPLY MESSAGE:
 Return STRICT JSON: {{"apply_fit": <0-5>, "rationale": "<one short sentence>"}}.
 No prose, no markdown."""
 
-    chat = (
-        LlmChat(
-            api_key=EMERGENT_KEY,
-            session_id=f"applyfit_{uuid.uuid4().hex[:10]}",
-            system_message="You grade therapist apply messages. Always JSON.",
-        )
-        .with_model("anthropic", "claude-sonnet-4-5-20250929")
+    resp = await ask_claude(
+        prompt,
+        system_message="You grade therapist apply messages. Always JSON.",
     )
-    try:
-        resp = await chat.send_message(UserMessage(text=prompt))
-    except Exception as e:
-        logger.warning("apply-fit LLM call failed: %s", e)
+    if resp is None:
         return {"apply_fit": 0.0, "rationale": "LLM call failed."}
     raw = (resp or "").strip()
     if raw.startswith("```"):

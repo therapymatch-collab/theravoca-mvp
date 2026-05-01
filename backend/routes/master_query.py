@@ -284,17 +284,9 @@ async def admin_master_query(payload: dict, _: bool = Depends(require_admin)):
 
     snapshot = await _cached_snapshot()
 
-    # Lazy import so the rest of admin still boots if the Emergent
-    # integrations package isn't installed for some reason.
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-    except ImportError as e:
-        logger.exception("emergentintegrations missing")
-        raise HTTPException(500, f"LLM integration unavailable: {e}")
-
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not api_key:
-        raise HTTPException(500, "EMERGENT_LLM_KEY is not configured on the server")
+    from llm_client import ask_claude, ANTHROPIC_API_KEY
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(500, "ANTHROPIC_API_KEY is not configured on the server")
 
     system = (
         "You are an analyst for TheraVoca, a patient-to-therapist matching platform. "
@@ -318,27 +310,16 @@ async def admin_master_query(payload: dict, _: bool = Depends(require_admin)):
         "`therapists.by_client_type`. For 'how many see children / teens / "
         "young adults / adults / older adults?' use `therapists.by_age_group`."
     )
-    chat = (
-        LlmChat(
-            api_key=api_key,
-            session_id=f"admin-mq-{uuid.uuid4()}",
-            system_message=system,
-        )
-        .with_model("anthropic", "claude-sonnet-4-5-20250929")
-    )
-
     import json as _json
     user_text = (
         f"SNAPSHOT (JSON):\n{_json.dumps(snapshot, default=str)}\n\n"
         f"QUESTION: {question}"
     )
-    try:
-        answer = await chat.send_message(UserMessage(text=user_text))
-    except Exception as e:
-        logger.exception("Master-query LLM call failed")
-        raise HTTPException(502, f"LLM call failed: {e}")
+    answer = await ask_claude(user_text, system_message=system)
+    if answer is None:
+        raise HTTPException(502, "LLM call failed")
     return {
         "question": question,
-        "answer": (answer or "").strip(),
+        "answer": answer.strip(),
         "snapshot_at": snapshot.get("now"),
     }

@@ -25,7 +25,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from llm_client import ask_claude, ANTHROPIC_API_KEY
 
 from deps import db
 from email_service import _get_app_url, _send, _wrap, BRAND
@@ -35,7 +35,7 @@ from sms_service import send_therapist_referral_sms
 
 logger = logging.getLogger("theravoca.outreach")
 
-EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+# API key is managed by llm_client module
 PT_SCRAPING_ENABLED = os.environ.get("PT_SCRAPING_ENABLED", "true").lower() == "true"
 
 # Module-level cache for the new_referral_inquiry template overrides.
@@ -162,8 +162,8 @@ async def _find_candidates_llm(
     """Ask Claude to generate `count` plausible Idaho therapist candidates that
     match this patient's brief. Used as a fallback when PT scraping yields too
     few real candidates."""
-    if not EMERGENT_KEY:
-        logger.warning("EMERGENT_LLM_KEY missing — skipping outreach")
+    if not ANTHROPIC_API_KEY:
+        logger.warning("ANTHROPIC_API_KEY missing — skipping outreach")
         return []
 
     summary = _safe_summary_for_therapist(request)
@@ -218,18 +218,14 @@ For each candidate, return strict JSON with these fields:
 
 Return ONLY a JSON array. No prose, no markdown fences. Empty array `[]` is acceptable if you have zero high-confidence matches."""
 
-    chat = (
-        LlmChat(api_key=EMERGENT_KEY, session_id=f"outreach_{uuid.uuid4().hex[:10]}",
-                system_message=(
-                    "You are a precise research agent. Never invent therapists. "
-                    "If unsure, return fewer candidates. Always return valid JSON."
-                ))
-        .with_model("anthropic", "claude-sonnet-4-5-20250929")
+    resp = await ask_claude(
+        prompt,
+        system_message=(
+            "You are a precise research agent. Never invent therapists. "
+            "If unsure, return fewer candidates. Always return valid JSON."
+        ),
     )
-    try:
-        resp = await chat.send_message(UserMessage(text=prompt))
-    except Exception as e:
-        logger.exception("LLM call failed: %s", e)
+    if resp is None:
         return []
 
     text = (resp or "").strip()

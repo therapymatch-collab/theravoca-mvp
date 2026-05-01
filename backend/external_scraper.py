@@ -45,7 +45,7 @@ from pt_scraper import (
 
 logger = logging.getLogger("theravoca.external_scraper")
 
-EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+from llm_client import ask_claude, ANTHROPIC_API_KEY
 HTTP_TIMEOUT_SEC = 8.0
 MAX_HTML_BYTES_FOR_LLM = 200_000
 PER_SOURCE_MAX_CANDIDATES = 25
@@ -88,17 +88,11 @@ async def _extract_via_llm(
     """Last-resort extractor: feed cleaned HTML to Claude and ask for a
     strict JSON list of therapists. Returns at most PER_SOURCE_MAX_CANDIDATES.
     """
-    if not EMERGENT_KEY:
+    if not ANTHROPIC_API_KEY:
         return []
     text = _strip_html(html)[:MAX_HTML_BYTES_FOR_LLM]
     if len(text) < 200:
         return []  # page is empty or JS-rendered
-
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-    except ImportError:
-        logger.exception("emergentintegrations missing — cannot run LLM extractor")
-        return []
 
     domain = urlparse(source_url).netloc or source_url
     prompt = f"""You are extracting a therapist directory from a webpage.
@@ -132,21 +126,14 @@ PAGE TEXT:
 {text}
 """
 
-    chat = (
-        LlmChat(
-            api_key=EMERGENT_KEY,
-            session_id=f"extscrape_{uuid.uuid4().hex[:10]}",
-            system_message=(
-                "You are a precise HTML-to-JSON extractor. "
-                "Never invent people. Always return valid JSON."
-            ),
-        )
-        .with_model("anthropic", "claude-sonnet-4-5-20250929")
+    resp = await ask_claude(
+        prompt,
+        system_message=(
+            "You are a precise HTML-to-JSON extractor. "
+            "Never invent people. Always return valid JSON."
+        ),
     )
-    try:
-        resp = await chat.send_message(UserMessage(text=prompt))
-    except Exception as e:
-        logger.warning("External LLM extract failed for %s: %s", source_url, e)
+    if resp is None:
         return []
 
     raw = (resp or "").strip()

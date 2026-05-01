@@ -21,14 +21,14 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from llm_client import ask_claude, ANTHROPIC_API_KEY
 
 from deps import db
 from helpers import _now_iso
 
 logger = logging.getLogger("theravoca.gap_recruiter")
 
-EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+# API key is managed by llm_client module
 
 # Cap how many candidates we ask Claude to find per gap, to keep run-time short.
 PER_GAP_CANDIDATES = 5
@@ -37,8 +37,8 @@ DRAFT_LIMIT_PER_RUN = 30
 
 async def _ask_for_candidates(gap: dict, count: int = PER_GAP_CANDIDATES) -> list[dict]:
     """Ask Claude for `count` real Idaho therapists who would close `gap`."""
-    if not EMERGENT_KEY:
-        logger.warning("EMERGENT_LLM_KEY missing — gap recruiter idle")
+    if not ANTHROPIC_API_KEY:
+        logger.warning("ANTHROPIC_API_KEY missing — gap recruiter idle")
         return []
     dim = gap.get("dimension")
     key = gap.get("key")
@@ -105,21 +105,14 @@ Return a strict JSON array. Each object:
 
 Return ONLY a JSON array. No prose, no markdown fences. Empty array `[]` is acceptable."""
 
-    chat = (
-        LlmChat(
-            api_key=EMERGENT_KEY,
-            session_id=f"gap_recruit_{uuid.uuid4().hex[:10]}",
-            system_message=(
-                "You are a precise research agent. Never invent therapists. "
-                "If unsure, return fewer or none. Always return valid JSON."
-            ),
-        )
-        .with_model("anthropic", "claude-sonnet-4-5-20250929")
+    resp = await ask_claude(
+        prompt,
+        system_message=(
+            "You are a precise research agent. Never invent therapists. "
+            "If unsure, return fewer or none. Always return valid JSON."
+        ),
     )
-    try:
-        resp = await chat.send_message(UserMessage(text=prompt))
-    except Exception as e:
-        logger.exception("Gap recruit LLM call failed: %s", e)
+    if resp is None:
         return []
 
     text = (resp or "").strip()
