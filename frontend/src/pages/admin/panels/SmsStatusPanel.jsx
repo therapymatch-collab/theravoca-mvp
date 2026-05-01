@@ -82,6 +82,7 @@ export default function SmsStatusPanel({ client }) {
   const [editValue, setEditValue] = useState("");
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [testingTemplate, setTestingTemplate] = useState(null);
+  const [testTo, setTestTo] = useState("");
 
   const refresh = async () => {
     try {
@@ -139,7 +140,7 @@ export default function SmsStatusPanel({ client }) {
   const testTemplate = async (key) => {
     setTestingTemplate(key);
     try {
-      const r = await client.post("/admin/test-sms", { template: key });
+      const r = await client.post("/admin/test-sms", { template: key, to: testTo.trim() || undefined });
       if (r.data?.final_status === "delivered") {
         toast.success("Template SMS delivered ✓");
       } else {
@@ -159,9 +160,13 @@ export default function SmsStatusPanel({ client }) {
   }, []);
 
   const sendTest = async () => {
+    if (!testTo.trim()) {
+      toast.error("Enter a phone number to send the test to");
+      return;
+    }
     setTesting(true);
     try {
-      const r = await client.post("/admin/test-sms", {});
+      const r = await client.post("/admin/test-sms", { to: testTo.trim() });
       if (r.data?.final_status === "delivered") {
         toast.success("SMS delivered ✓");
       } else if (r.data?.error_code) {
@@ -230,18 +235,29 @@ export default function SmsStatusPanel({ client }) {
             </p>
           ) : null}
         </div>
-        <button
-          type="button"
-          onClick={sendTest}
-          disabled={testing}
-          className="text-xs px-3 py-2 rounded-full bg-white border border-current shrink-0 disabled:opacity-50"
-          data-testid="sms-test-btn"
-        >
-          {testing ? (
-            <Loader2 size={12} className="inline mr-1 animate-spin" />
-          ) : null}
-          Send test SMS
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <input
+            type="tel"
+            value={testTo}
+            onChange={(e) => setTestTo(e.target.value)}
+            placeholder="+1 (555) 123-4567"
+            className="w-40 px-2.5 py-1.5 text-xs border rounded-full bg-white text-[#2B2A29] placeholder:text-[#B0ADA8]"
+            style={{ borderColor: "currentColor" }}
+            data-testid="sms-test-to"
+          />
+          <button
+            type="button"
+            onClick={sendTest}
+            disabled={testing || !testTo.trim()}
+            className="text-xs px-3 py-2 rounded-full bg-white border border-current shrink-0 disabled:opacity-50"
+            data-testid="sms-test-btn"
+          >
+            {testing ? (
+              <Loader2 size={12} className="inline mr-1 animate-spin" />
+            ) : null}
+            Send test
+          </button>
+        </div>
       </div>
 
       <div className="bg-white border border-[#E8E5DF] rounded-2xl p-6 space-y-4">
