@@ -1099,39 +1099,6 @@ def rank_therapists(
     return above[:top_n]
 
 
-_STRENGTH_LABELS = {
-    "issues": (35, "Specializes in their concerns"),
-    "availability": (20, "Matches their schedule"),
-    "modality": (15, "Offers their preferred format"),
-    "urgency": (10, "Can see them quickly"),
-    "prior_therapy": (10, "Right fit for their therapy history"),
-    "experience": (5, "Meets their experience preference"),
-    "gender": (3, "Matches their gender preference"),
-    "style": (2, "Aligns with their style preference"),
-    "payment_fit": (3, "Open to their budget"),
-    "modality_pref": (4, "Practices their preferred approach"),
-    "deep_match": (30, "Deep personality alignment"),
-}
-
-
-def match_strengths(breakdown: dict, top_n: int = 3) -> list[str]:
-    """Return up-to-3 human-readable labels describing WHY this therapist matched.
-
-    Uses the same axis breakdown as gap_axes but highlights the strongest
-    axes — the ones where the therapist scored highest.
-    """
-    scored = sorted(
-        (
-            (k, v, _STRENGTH_LABELS[k][1])
-            for k, v in breakdown.items()
-            if k in _STRENGTH_LABELS and _STRENGTH_LABELS[k][0] > 0 and v > 0
-        ),
-        key=lambda x: x[1],
-        reverse=True,
-    )[:top_n]
-    return [label for _, _, label in scored]
-
-
 def gap_axes(
     therapist: dict,
     request: dict,
@@ -1321,4 +1288,54 @@ def gap_axes(
             return None
         plan = (request.get("insurance_name") or "").strip()
         if not plan or plan.lower() in ("other", "other / not listed"):
-            return
+            return None
+        accepted = [str(s).lower() for s in (therapist.get("insurance_accepted") or [])]
+        if plan.lower() in accepted:
+            return None
+        if request.get("sliding_scale_ok") and therapist.get("sliding_scale"):
+            return None
+        return (
+            f"Patient asked for {plan}; you don't list it as in-network.",
+            f"If you bill {plan} via a payer-list provider, or accept superbills, mention it.",
+        )
+
+    GENERATORS = {
+        "issues": _issues,
+        "availability": _availability,
+        "modality": _modality,
+        "urgency": _urgency,
+        "prior_therapy": _prior_therapy,
+        "experience": _experience,
+        "gender": _gender,
+        "style": _style,
+        "payment_fit": _payment_fit,
+        "payment_alignment": _payment_alignment,
+        "modality_pref": _modality_pref,
+    }
+
+    # Walk axes ordered by gap size (max - score) desc, return top_n with details
+    candidates: list[dict] = []
+    for k, (mx, label) in AXIS.items():
+        score = breakdown.get(k, 0) or 0
+        if mx <= 0 or score >= mx:
+            continue
+        gen = GENERATORS.get(k)
+        result = gen() if gen else None
+        if not result:
+            continue
+        explanation, suggestion = result
+        candidates.append({
+            "key": k,
+            "label": label,
+            "explanation": explanation,
+            "suggestion": suggestion,
+            "gap": round(mx - score, 1),  # kept for sorting; not shown to user
+        })
+    candidates.sort(key=lambda c: c["gap"], reverse=True)
+    for c in candidates:
+        c.pop("gap", None)
+    return candidates[:top_n]
+
+
+def _humanize(s: str) -> str:
+    return (s or "").replace("_", " ").strip()

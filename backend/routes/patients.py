@@ -624,7 +624,82 @@ async def public_request_results(
 
     apps = apps_raw if not hold_active else []
 
-    # Per-application Step-2 rank score (used to ORDER cards in the
-    # patient view AND surfaced via tooltip on the score chip).
-    # Single source of truth lives in `helpers.compute_patient_rank_score`
-    # so
+    matched_at = req.get("matched_at") or req.get("created_at")
+    matched_dt2 = _parse_iso(matched_at) if matched_at else None
+    patient_issues = [
+        i.lower() for i in (req.get("presenting_issues") or []) if i
+    ]
+    for a in apps:
+        ms = float(a.get("match_score") or 0)
+        speed_bonus = 0.0
+        if matched_dt2:
+            applied_dt = _parse_iso(a.get("created_at") or "")
+            if applied_dt:
+                hours = max(0.0, (applied_dt - matched_dt2).total_seconds() / 3600.0)
+                speed_bonus = max(0.0, min(30.0, 30.0 * (24.0 - hours) / 24.0))
+        # Response-quality signal: rewards therapists who actually engaged
+        # with the patient's anonymous summary, not generic boilerplate.
+        # Components:
+        #   1. Length (0-6): up to 6 points for a substantive 300-char reply
+        #   2. Issue match (0-3): mentions any of the patient's presenting
+        #      concerns by name → +3
+        #   3. Action signal (0-2): offers a concrete next step (slot,
+        #      free consult, available time) → +2
+        #   4. Personal voice (0-1): uses first-person pronoun → +1
+        # Capped at 12 total. Replaces the older length-only `/300 * 10`
+        # heuristic so a 300-char generic reply no longer outranks a
+        # 200-char specific reply.
+        msg = (a.get("message") or "").lower()
+        msg_len = len(msg)
+        len_score = min(6.0, msg_len / 300.0 * 6.0)
+        issue_score = 0.0
+        if patient_issues:
+            for issue in patient_issues:
+                # Match on the slug OR the human-readable form ("trauma_ptsd"
+                # in the slug list also matches "trauma" / "ptsd").
+                tokens = [issue] + issue.replace("_", " ").split()
+                if any(tok in msg for tok in tokens if len(tok) >= 4):
+                    issue_score = 3.0
+                    break
+        action_keywords = (
+            "consult", "available", "open slot", "schedule", "next week",
+            "this week", "free 15", "intake call", "appointment", "tomorrow",
+            "in-person", "telehealth", "offer", "i can see you",
+        )
+        action_score = 2.0 if any(k in msg for k in action_keywords) else 0.0
+        personal_score = 1.0 if re.search(
+            r"\b(i\s|i'd|i'll|i've|i'm|my\s)", msg,
+        ) else 0.0
+        quality_bonus = min(
+            12.0, len_score + issue_score + action_score + personal_score,
+        )
+        a["patient_rank_score"] = round(min(100.0, ms * 0.6 + speed_bonus + quality_bonus), 1)
+        a["response_quality"] = {
+            "length": round(len_score, 1),
+            "issue_match": issue_score,
+            "action_signal": action_score,
+            "personal_voice": personal_score,
+            "total": round(quality_bonus, 1),
+        }
+
+    apps.sort(key=lambda a: (a.get("patient_rank_score", 0), a.get("created_at", "")), reverse=True)
+
+    enriched = []
+    breakdowns = req.get("notified_breakdowns") or {}
+    distances = req.get("notified_distances") or {}
+    for a in apps:
+        t = await db.therapists.find_one({"id": a["therapist_id"]}, {"_id": 0})
+        if t:
+            enriched.append({
+                **a,
+                "therapist": t,
+                "match_breakdown": breakdowns.get(a["therapist_id"]) or {},
+                "distance_miles": distances.get(a["therapist_id"]),
+            })
+    return {
+        "request": req,
+        "applications": enriched,
+        "hold_active": hold_active,
+        "hold_ends_at": hold_ends_at_iso,
+        "applications_pending_count": len(apps_raw) if hold_active else 0,
+    }
