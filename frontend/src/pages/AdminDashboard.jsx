@@ -3048,7 +3048,7 @@ function AdminTabsBar({
     },
     {
       id: "sms_status",
-      label: "SMS status",
+      label: "SMS",
       icon: <MessageSquareWarning size={14} />,
     },
     {
@@ -4123,3 +4123,4 @@ function ProviderTablePager({ total, pageSize, page, setPage }) {
     </div>
   );
 }
+       

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, MessageSquareWarning, CheckCircle2, ExternalLink } from "lucide-react";
+import { Loader2, MessageSquareWarning, CheckCircle2, ExternalLink, FileText, RotateCcw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 // SMS Status & A2P 10DLC Helper
@@ -75,6 +75,14 @@ export default function SmsStatusPanel({ client }) {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
 
+  // SMS templates state
+  const [templates, setTemplates] = useState([]);
+  const [templatesLoaded, setTemplatesLoaded] = useState(false);
+  const [editingKey, setEditingKey] = useState(null);
+  const [editValue, setEditValue] = useState("");
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [testingTemplate, setTestingTemplate] = useState(null);
+
   const refresh = async () => {
     try {
       const r = await client.get("/admin/sms-status");
@@ -89,8 +97,64 @@ export default function SmsStatusPanel({ client }) {
     }
   };
 
+  const refreshTemplates = async () => {
+    try {
+      const r = await client.get("/admin/sms-templates");
+      setTemplates(r.data?.templates || []);
+      setTemplatesLoaded(true);
+    } catch {
+      // endpoint may not exist yet on older deploy
+      setTemplatesLoaded(true);
+    }
+  };
+
+  const saveTemplate = async (key) => {
+    setSavingTemplate(true);
+    try {
+      await client.put("/admin/sms-templates", { key, value: editValue });
+      toast.success("Template saved");
+      setEditingKey(null);
+      await refreshTemplates();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Save failed");
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
+
+  const resetTemplate = async (key) => {
+    setSavingTemplate(true);
+    try {
+      await client.put("/admin/sms-templates", { key, value: "" });
+      toast.success("Reset to default");
+      setEditingKey(null);
+      await refreshTemplates();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Reset failed");
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
+
+  const testTemplate = async (key) => {
+    setTestingTemplate(key);
+    try {
+      const r = await client.post("/admin/test-sms", { template: key });
+      if (r.data?.final_status === "delivered") {
+        toast.success("Template SMS delivered ✓");
+      } else {
+        toast.success("Template SMS queued");
+      }
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Test failed");
+    } finally {
+      setTestingTemplate(null);
+    }
+  };
+
   useEffect(() => {
     refresh();
+    refreshTemplates();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -281,6 +345,144 @@ export default function SmsStatusPanel({ client }) {
           </button>
         </div>
       </div>
+
+      {/* SMS Templates */}
+      {templatesLoaded && templates.length > 0 && (
+        <div className="bg-white border border-[#E8E5DF] rounded-2xl p-6 space-y-4">
+          <div>
+            <h3 className="font-serif-display text-2xl text-[#2D4A3E]">
+              SMS templates
+            </h3>
+            <p className="text-sm text-[#6D6A65] mt-2 max-w-2xl leading-relaxed">
+              Edit the wording patients and therapists see. Use{" "}
+              <code className="text-xs bg-[#F4F1EC] px-1 py-0.5 rounded">
+                {"{placeholder}"}
+              </code>{" "}
+              syntax for dynamic values. Empty saves reset to the default.
+            </p>
+          </div>
+
+          {templates.map((t) => {
+            const isEditing = editingKey === t.key;
+            const label = t.key
+              .replace("sms.", "")
+              .replace(/_/g, " ")
+              .replace(/\b\w/g, (c) => c.toUpperCase());
+
+            return (
+              <div
+                key={t.key}
+                className="border border-[#E8E5DF] rounded-xl p-4"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <FileText size={14} className="text-[#6D6A65]" />
+                    <span className="font-medium text-sm text-[#2D4A3E]">
+                      {label}
+                    </span>
+                    {t.is_customized && (
+                      <span className="text-[10px] bg-[#E8F0EB] text-[#2D4A3E] px-1.5 py-0.5 rounded-full">
+                        customized
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!isEditing && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => testTemplate(t.key)}
+                          disabled={testingTemplate === t.key}
+                          className="text-xs px-2.5 py-1.5 rounded-full border border-[#E8E5DF] text-[#6D6A65] hover:bg-[#F4F1EC] disabled:opacity-50"
+                        >
+                          {testingTemplate === t.key ? (
+                            <Loader2
+                              size={10}
+                              className="inline mr-1 animate-spin"
+                            />
+                          ) : null}
+                          Test
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingKey(t.key);
+                            setEditValue(t.current_value);
+                          }}
+                          className="text-xs px-2.5 py-1.5 rounded-full border border-[#E8E5DF] text-[#6D6A65] hover:bg-[#F4F1EC]"
+                        >
+                          Edit
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {isEditing ? (
+                  <div className="space-y-3">
+                    <textarea
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-[#E8E5DF] rounded-lg text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-[#2D4A3E]/20"
+                    />
+                    {t.placeholders?.length > 0 && (
+                      <p className="text-xs text-[#6D6A65]">
+                        Placeholders:{" "}
+                        {t.placeholders.map((p) => (
+                          <code
+                            key={p}
+                            className="bg-[#F4F1EC] px-1 py-0.5 rounded mr-1"
+                          >
+                            {"{" + p + "}"}
+                          </code>
+                        ))}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2 justify-end">
+                      {t.is_customized && (
+                        <button
+                          type="button"
+                          onClick={() => resetTemplate(t.key)}
+                          disabled={savingTemplate}
+                          className="text-xs px-2.5 py-1.5 rounded-full border border-[#E8E5DF] text-[#6D6A65] hover:bg-[#F4F1EC] inline-flex items-center gap-1 disabled:opacity-50"
+                        >
+                          <RotateCcw size={10} /> Reset to default
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setEditingKey(null)}
+                        className="text-xs px-2.5 py-1.5 rounded-full border border-[#E8E5DF] text-[#6D6A65] hover:bg-[#F4F1EC]"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => saveTemplate(t.key)}
+                        disabled={savingTemplate}
+                        className="tv-btn-primary !py-1.5 !px-3 text-xs disabled:opacity-50"
+                      >
+                        {savingTemplate ? (
+                          <Loader2
+                            size={10}
+                            className="inline mr-1 animate-spin"
+                          />
+                        ) : null}
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-[#6D6A65] bg-[#FDFBF7] rounded-lg px-3 py-2 font-mono whitespace-pre-wrap">
+                    {t.current_value}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
