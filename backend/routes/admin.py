@@ -2577,17 +2577,17 @@ async def admin_list_sms_templates() -> dict[str, Any]:
         current = doc["value"] if doc and doc.get("value") else default
         # Describe available placeholders for each template
         placeholders = {
-            "sms.therapist_referral": "{first_name}, {match_score}, {apply_url}",
-            "sms.patient_intake_receipt": "(none)",
-            "sms.availability_prompt": "{first_name}, {portal_url}",
+            "sms.therapist_referral": ["first_name", "match_score", "apply_url"],
+            "sms.patient_intake_receipt": [],
+            "sms.availability_prompt": ["first_name", "portal_url"],
         }
         templates.append({
             "key": key,
             "label": key.replace("sms.", "").replace("_", " ").title(),
             "default": default,
-            "current": current,
+            "current_value": current,
             "is_customized": current != default,
-            "placeholders": placeholders.get(key, ""),
+            "placeholders": placeholders.get(key, []),
         })
     return {"templates": templates}
 
