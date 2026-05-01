@@ -140,6 +140,18 @@ class _SPAApp:
 
         path = scope.get("path", "")
 
+        # Dynamic robots.txt — block all crawlers on staging
+        if path == "/robots.txt":
+            if STAGING_PASSWORD:
+                body = "User-agent: *\nDisallow: /\n"
+            else:
+                body = "User-agent: *\nDisallow: /api/\nDisallow: /admin/\nSitemap: {}\n".format(
+                    os.environ.get("PUBLIC_APP_URL", "") + "/sitemap.xml"
+                )
+            response = PlainTextResponse(body, media_type="text/plain")
+            await response(scope, receive, send)
+            return
+
         # API routes → FastAPI backend
         if path.startswith("/api/") or path == "/health":
             await self.api_app(scope, receive, send)
@@ -191,6 +203,10 @@ async def _serve_index_with_site_copy(scope, receive, send):
         # Place it right before </head> so it's parsed before bundle JS.
         sc_json = json.dumps(sc_map, ensure_ascii=True)
         inject_tag = f'<script>window.__SITE_COPY__={sc_json};</script>'
+        # On staging, also inject noindex so crawlers that ignore robots.txt
+        # still won't index the page.
+        if STAGING_PASSWORD:
+            inject_tag = '<meta name="robots" content="noindex, nofollow">\n' + inject_tag
         html = raw_html.replace("</head>", f"{inject_tag}\n</head>")
         _sc_cache["html"] = html
         _sc_cache["ts"] = now
