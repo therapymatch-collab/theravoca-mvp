@@ -169,6 +169,20 @@ async def auth_request_code(payload: MagicCodeRequest):
 async def auth_verify_code(payload: MagicCodeVerify):
     email = payload.email.lower()
     now_iso = _now_iso()
+
+    # ── Brute-force protection: max 5 failed attempts per email+role
+    # within the last 15 minutes.  Uses a DB collection so it persists
+    # across restarts (unlike the in-memory admin lockout).
+    _bf_key = f"{email}:{payload.role}"
+    _bf_window = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
+    recent_fails = await db.verify_code_attempts.count_documents({
+        "key": _bf_key,
+        "failed": True,
+        "ts": {"$gte": _bf_window},
+    })
+    if recent_fails >= 5:
+        raise HTTPException(429, "Too many attempts — please request a new code")
+
     rec = await db.magic_codes.find_one({
         "email": email,
         "role": payload.role,
@@ -177,6 +191,10 @@ async def auth_verify_code(payload: MagicCodeVerify):
         "expires_at": {"$gte": now_iso},
     }, {"_id": 0})
     if not rec:
+        # Record failed attempt
+        await db.verify_code_attempts.insert_one({
+            "key": _bf_key, "failed": True, "ts": now_iso,
+        })
         raise HTTPException(401, "Invalid or expired code")
     await db.magic_codes.update_one(
         {"id": rec["id"]}, {"$set": {"used": True, "used_at": now_iso}}
@@ -281,7 +299,7 @@ async def portal_therapist_profile(
     caches) but keeps everything they're allowed to edit."""
     t = await db.therapists.find_one(
         {"email": {"$regex": f"^{re.escape(session['email'])}$", "$options": "i"}},
-        {"_id": 0},
+        {"_id": 0, "password_hash": 0, "password_set_at": 0},
     )
     if not t:
         raise HTTPException(404, "Therapist profile not found")
@@ -387,7 +405,7 @@ async def portal_therapist_update_profile(
             _embed_therapist_signals(current["id"], new_t5 or "", new_t2 or ""),
             name=f"embed_portal_{current['id'][:8]}",
         )
-    updated = await db.therapists.find_one({"id": current["id"]}, {"_id": 0})
+    updated = await db.therapists.find_one({"id": current["id"]}, {"_id": 0, "password_hash": 0, "password_set_at": 0})
     return {
         "ok": True,
         "profile": updated,

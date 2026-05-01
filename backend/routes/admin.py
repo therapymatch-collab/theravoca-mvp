@@ -36,7 +36,7 @@ async def admin_login(payload: dict, request: Request):
             status_code=429,
             detail=f"Too many failed attempts. Try again in {remaining // 60 + 1} minutes.",
         )
-    if payload.get("password") != ADMIN_PASSWORD:
+    if not ADMIN_PASSWORD or payload.get("password") != ADMIN_PASSWORD:
         _record_failure(ip)
         rec = _login_attempts.get(ip, {})
         attempts_left = max(0, LOGIN_MAX_FAILURES - rec.get("failures", 0))
@@ -624,7 +624,7 @@ async def admin_list_therapists(
         query["pending_approval"] = True
     elif pending is False:
         query["pending_approval"] = {"$ne": True}
-    rows = await db.therapists.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    rows = await db.therapists.find(query, {"_id": 0, "password_hash": 0, "password_set_at": 0}).sort("created_at", -1).to_list(500)
     # Attach lightweight license-status metadata so admin UI can render the
     # "Verify" badge without doing its own date math (keeps frontend lean
     # and lets us swap in live DOPL API calls here without touching React).
@@ -913,7 +913,7 @@ async def admin_update_therapist(
     res = await db.therapists.update_one({"id": therapist_id}, mongo_op)
     if res.matched_count == 0:
         raise HTTPException(404, "Therapist not found")
-    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0})
+    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0, "password_hash": 0, "password_set_at": 0})
     return {"ok": True, "therapist": t}
 
 
