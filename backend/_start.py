@@ -5,22 +5,33 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 _SPW = os.environ.get("STAGING_PASSWORD", "")
 
-# Routes that must be publicly accessible even when staging auth is on
+# Routes that must be publicly accessible even when staging auth is on.
+# This covers: verification links, sign-in pages, results pages,
+# therapist signup, feedback, auth API, public content, and webhooks.
 _PUBLIC_PREFIXES = (
+    # Frontend pages that need to be publicly reachable
     "/verify/",
-    "/api/requests/verify/",
     "/sign-in",
     "/results/",
+    "/therapist/apply/",
+    "/feedback/",
+    # Auth API — login, magic codes, password flows (all under /api/auth/)
+    "/api/auth/",
+    # Patient/therapist-facing API endpoints
+    "/api/requests/verify/",
     "/api/requests/results/",
+    "/api/therapists/apply/",
+    "/api/feedback",
+    # Public site content
     "/api/site-copy",
     "/api/faqs",
-    "/therapist/apply/",
-    "/api/therapists/apply/",
-    "/feedback/",
-    "/api/feedback",
-    "/api/portal/magic-code",
-    "/api/portal/verify-magic-code",
+    "/api/blog",
+    # Stripe webhook
     "/api/stripe/webhook",
+    # Portal API (has its own session auth, doesn't need double auth)
+    "/api/portal/",
+    # Health check
+    "/health",
 )
 
 class BasicAuth(BaseHTTPMiddleware):
