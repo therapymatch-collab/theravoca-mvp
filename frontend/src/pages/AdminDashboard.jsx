@@ -4123,4 +4123,3 @@ function ProviderTablePager({ total, pageSize, page, setPage }) {
     </div>
   );
 }
-       
