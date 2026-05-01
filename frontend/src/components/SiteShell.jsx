@@ -48,7 +48,24 @@ export function Header({ minimal = false }) {
   // Check if any user session is active (patient, therapist, or admin).
   const session = getSession();
   const admin = getAdminIdentity();
-  const isLoggedIn = !!(session?.token || admin?.token || admin?.masterPwd);
+  const isAdmin = !!(admin?.token || admin?.masterPwd);
+  const isPatient = session?.role === "patient";
+  const isTherapist = session?.role === "therapist";
+  const isLoggedIn = !!(session?.token || isAdmin);
+
+  // Where to send the user back to their portal
+  const portalPath = isAdmin
+    ? "/admin/dashboard"
+    : isTherapist
+    ? "/portal/therapist"
+    : isPatient
+    ? "/portal/patient"
+    : "/";
+  const portalLabel = isAdmin
+    ? "Admin panel"
+    : isTherapist
+    ? "My portal"
+    : "My matches";
 
   const handleLogOut = () => {
     clearSession();
@@ -116,13 +133,33 @@ export function Header({ minimal = false }) {
                 {t("header.nav.therapists", "For therapists")}
               </a>
               {isLoggedIn ? (
-                <button
-                  onClick={handleLogOut}
-                  className="hover:text-[#2D4A3E] transition"
-                  data-testid="nav-logout"
-                >
-                  Log out
-                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    className="inline-flex items-center gap-1.5 hover:text-[#2D4A3E] transition outline-none"
+                    data-testid="nav-account-trigger"
+                  >
+                    {portalLabel} <ChevronDown size={14} strokeWidth={2} />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    className="bg-white border-[#E8E5DF] w-48"
+                    data-testid="nav-account-menu"
+                  >
+                    <DropdownMenuItem asChild>
+                      <Link to={portalPath} className="cursor-pointer">
+                        <div className="font-medium text-[#2B2A29]">{portalLabel}</div>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={handleLogOut}
+                      className="cursor-pointer text-[#D45D5D]"
+                      data-testid="nav-logout"
+                    >
+                      Log out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               ) : (
                 <DropdownMenu>
                   <DropdownMenuTrigger
@@ -245,13 +282,22 @@ export function Header({ minimal = false }) {
             </a>
             <div className="border-t border-[#E8E5DF] my-2" />
             {isLoggedIn ? (
-              <button
-                onClick={handleLogOut}
-                className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition text-left w-full font-medium text-[#2B2A29]"
-                data-testid="mobile-logout"
-              >
-                Log out
-              </button>
+              <>
+                <Link
+                  to={portalPath}
+                  className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition font-medium text-[#2B2A29]"
+                  data-testid="mobile-portal-link"
+                >
+                  {portalLabel}
+                </Link>
+                <button
+                  onClick={handleLogOut}
+                  className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition text-left w-full text-[#D45D5D]"
+                  data-testid="mobile-logout"
+                >
+                  Log out
+                </button>
+              </>
             ) : (
               <>
                 <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] px-2 pt-1">
