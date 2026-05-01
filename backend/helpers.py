@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from deps import db, logger, DEFAULT_THRESHOLD, MIN_TARGET_MATCHES
 from email_service import send_patient_results, send_therapist_notification
 from geocoding import haversine_miles
-from matching import gap_axes, rank_therapists
+from matching import gap_axes, match_strengths, rank_therapists
 from sms_service import send_therapist_referral_sms
 
 
@@ -191,8 +191,6 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
         issues_display = ", ".join(i.replace("_", " ").title() for i in issues if i)
     else:
         issues_display = str(issues)
-    if req.get("other_issue"):
-        issues_display = (issues_display + " · " if issues_display else "") + req["other_issue"]
     payment_type_raw = (req.get("payment_type") or "either").lower()
     insurance_name = (req.get("insurance_name") or "").strip()
     budget = req.get("budget")
@@ -476,7 +474,9 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
     for m in new_matches:
         notify_email = m.get("notify_email", True)
         notify_sms = m.get("notify_sms", True)
-        gaps = gap_axes(m, req, m.get("match_breakdown") or {}, top_n=3)
+        bd = m.get("match_breakdown") or {}
+        gaps = gap_axes(m, req, bd, top_n=3)
+        strengths = match_strengths(bd, top_n=3)
         if notify_email:
             await send_therapist_notification(
                 to=m["email"],
@@ -486,6 +486,7 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
                 match_score=m["match_score"],
                 summary=summary,
                 gaps=gaps,
+                strengths=strengths,
             )
         phone = m.get("phone_alert") or m.get("phone") or ""
         if phone and notify_sms:
@@ -646,4 +647,4 @@ async def _backfill_therapist_geo() -> None:
         await db.therapists.update_one({"id": doc["id"]}, {"$set": {"office_geos": geos}})
         count += 1
     if count:
-  
+        logg

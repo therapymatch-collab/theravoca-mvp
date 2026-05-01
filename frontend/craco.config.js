@@ -38,6 +38,13 @@ let webpackConfig = {
     },
     configure: (webpackConfig) => {
 
+      // Remove ForkTsCheckerWebpackPlugin — it pulls in ajv-keywords
+      // which has an incompatible ajv version dep that crashes the build
+      // on Node 18+. Not needed since this is a JS (not TS) project.
+      webpackConfig.plugins = (webpackConfig.plugins || []).filter(
+        (plugin) => plugin.constructor.name !== "ForkTsCheckerWebpackPlugin"
+      );
+
       // Add ignored patterns to reduce watched directories
         webpackConfig.watchOptions = {
           ...webpackConfig.watchOptions,
