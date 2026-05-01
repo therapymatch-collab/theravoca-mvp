@@ -288,3 +288,24 @@ function StatusTimeline({ req }) {
                 {step.label}
               </div>
               <div className="text-[10px] text-[#6D6A65] mt-0.5 leading-tight line-clamp-2 break-words">
+                {step.sublabel}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function shortDate(iso) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return "—";
+  }
+}
