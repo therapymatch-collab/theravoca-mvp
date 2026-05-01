@@ -58,7 +58,7 @@ class TherapistSignup(BaseModel):
     primary_specialties: list[str] = Field(default_factory=list, max_length=2)
     secondary_specialties: list[str] = Field(default_factory=list, max_length=3)
     general_treats: list[str] = Field(default_factory=list, max_length=5)
-    modalities: list[str] = Field(default_factory=list, max_length=6)
+    modalities: list[str] = Field(default_factory=list, max_length=5)
     modality_offering: ModalityOffering = "both"
     office_locations: list[str] = Field(default_factory=list)
     insurance_accepted: list[str] = Field(default_factory=list)

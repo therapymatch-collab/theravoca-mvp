@@ -74,7 +74,23 @@ ENHANCING_FIELDS = [
     ("free_consult", "Offers a free initial consult", _truthy),
     ("sliding_scale", "Sliding scale availability", _truthy),
     ("website", "Website / Psychology-Today profile", _nonempty_str(4)),
+    # Deep match T-fields — needed for advanced matching. Backfilled
+    # records are flagged with _deep_match_backfilled=True and should
+    # be treated as "incomplete" until the therapist fills them in.
+    ("t1_stuck_ranked", "Deep match: session style ranking (T1)", _nonempty_list(5)),
+    ("t2_progress_story", "Deep match: client progress story (T2)", _nonempty_str(50)),
+    ("t3_breakthrough", "Deep match: breakthrough approach (T3)", _nonempty_list(2)),
+    ("t4_hard_truth", "Deep match: hard truth delivery style (T4)", _nonempty_str(1)),
+    ("t5_lived_experience", "Deep match: lived experience (T5)", _nonempty_str(30)),
 ]
+
+
+def _is_backfilled_field(therapist: dict, field_key: str) -> bool:
+    """Check if a specific field was backfilled with synthetic data."""
+    if not therapist.get("_deep_match_backfilled"):
+        return False
+    bf_fields = therapist.get("_deep_match_backfilled_fields") or []
+    return field_key in bf_fields
 
 
 def evaluate(therapist: dict) -> dict:
@@ -120,29 +136,4 @@ def evaluate(therapist: dict) -> dict:
             req_done += 1
         else:
             # For the synthetic key, drop the underscores so the UI gets a
-            # clean identifier it can wire test ids against.
-            clean = key.strip("_") if key.startswith("__") else key
-            req_missing.append({"key": clean, "label": label})
-
-    enh_missing: list[dict] = []
-    enh_done = 0
-    for key, label, validator in ENHANCING_FIELDS:
-        if validator(therapist.get(key)):
-            enh_done += 1
-        else:
-            enh_missing.append({"key": key, "label": label})
-
-    req_pct = req_done / max(1, len(REQUIRED_FIELDS))
-    enh_pct = enh_done / max(1, len(ENHANCING_FIELDS))
-    score = round(req_pct * 70 + enh_pct * 30)
-    publishable = req_done == len(REQUIRED_FIELDS)
-    return {
-        "score": score,
-        "publishable": publishable,
-        "required_missing": req_missing,
-        "enhancing_missing": enh_missing,
-        "required_total": len(REQUIRED_FIELDS),
-        "required_done": req_done,
-        "enhancing_total": len(ENHANCING_FIELDS),
-        "enhancing_done": enh_done,
-    }
+            # clea

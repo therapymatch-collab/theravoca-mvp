@@ -348,13 +348,6 @@ export default function TherapistPortal() {
               >
                 <Settings size={14} /> Edit profile
               </Link>
-              <button
-                onClick={signOut}
-                className="text-sm text-[#6D6A65] hover:text-[#2D4A3E] inline-flex items-center gap-1.5"
-                data-testid="therapist-signout"
-              >
-                <LogOut size={14} /> Sign out
-              </button>
             </div>
           </div>
 
@@ -448,11 +441,11 @@ export default function TherapistPortal() {
                 <Clock size={18} className="text-[#2D4A3E] mt-1 shrink-0" />
                 <div>
                   <div className="text-sm font-semibold text-[#2B2A29]">
-                    Twice-weekly availability check-in
+                    Weekly availability check-in
                   </div>
                   <p className="text-sm text-[#6D6A65] mt-1 leading-relaxed">
-                    Is your same-week availability still current? A 10-second confirmation
-                    keeps you on top of patient match results.
+                    Is your availability still current? A 10-second Monday morning
+                    confirmation keeps you on top of patient match results.
                   </p>
                 </div>
               </div>
@@ -1229,4 +1222,4 @@ function ReferralTag({ children }) {
       {children}
     </span>
   );
-}
+}                                                                                                                                                                                                                                                                                                        

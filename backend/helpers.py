@@ -171,6 +171,13 @@ def _strip_id(doc: dict[str, Any]) -> dict[str, Any]:
     return doc
 
 
+def _parse_iso(s: str) -> Optional[datetime]:
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
+
+
 def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
     """Anonymized referral summary for therapists."""
     location_bits = []
@@ -347,7 +354,7 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
             "is_active": {"$ne": False},
             "pending_approval": {"$ne": True},
             "subscription_status": {"$nin": ["past_due", "canceled", "unpaid", "incomplete"]},
-        }, {"_id": 0, "license_document": 0, "password_hash": 0},
+        }, {"_id": 0},
     )
     therapists = await therapists_cursor.to_list(2000)
     therapist_ids = [t["id"] for t in therapists if t.get("id")]
@@ -482,7 +489,8 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
             )
         phone = m.get("phone_alert") or m.get("phone") or ""
         if phone and notify_sms:
-            apply_url = f"{public_url}/therapist/apply/{req['id']}/{m['id']}"
+            from routes.therapists import generate_signed_url
+            apply_url = generate_signed_url(public_url, req["id"], m["id"], "apply")
             try:
                 await send_therapist_referral_sms(
                     to=phone,
@@ -597,15 +605,8 @@ async def _deliver_results(request_id: str) -> dict[str, Any]:
 
     enriched = []
     breakdowns = req.get("notified_breakdowns") or {}
-    # Batch-fetch all therapists in one query instead of N+1
-    app_tids = [a["therapist_id"] for a in apps if a.get("therapist_id")]
-    t_cursor = db.therapists.find(
-        {"id": {"$in": app_tids}},
-        {"_id": 0, "license_document": 0, "password_hash": 0},
-    )
-    t_map = {t["id"]: t async for t in t_cursor}
     for a in apps:
-        t = t_map.get(a["therapist_id"])
+        t = await db.therapists.find_one({"id": a["therapist_id"]}, {"_id": 0})
         if t:
             t_view = {
                 **t,
@@ -645,4 +646,4 @@ async def _backfill_therapist_geo() -> None:
         await db.therapists.update_one({"id": doc["id"]}, {"$set": {"office_geos": geos}})
         count += 1
     if count:
-        logger.info("Backfilled office_geos for %d therapists", count)
+  

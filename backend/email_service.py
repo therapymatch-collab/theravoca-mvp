@@ -131,8 +131,10 @@ async def send_therapist_notification(
 ) -> None:
     tpl = await get_template(_db(), "therapist_notification")
     first_name = _first_name(therapist_name)
-    apply_url = f"{_get_app_url()}/therapist/apply/{request_id}/{therapist_id}"
-    decline_url = f"{_get_app_url()}/therapist/apply/{request_id}/{therapist_id}?decline=1"
+    from routes.therapists import generate_signed_url
+    app_url = _get_app_url()
+    apply_url = generate_signed_url(app_url, request_id, therapist_id, "apply")
+    decline_url = generate_signed_url(app_url, request_id, therapist_id, "decline")
     portal_url = f"{_get_app_url()}/portal/therapist"
     summary_rows = "".join(
         f'<tr><td style="padding:6px 0;color:{BRAND["muted"]};font-size:13px;width:140px;">{k}</td>'
@@ -679,14 +681,14 @@ async def send_followup_survey(
 
 
 async def send_availability_prompt(to: str, therapist_name: str) -> None:
-    """Mon/Fri reminder asking the therapist to refresh their availability."""
+    """Monday morning reminder asking the therapist to refresh their availability."""
     first_name = _first_name(therapist_name)
     portal_url = f"{_get_app_url()}/portal/therapist"
     subject = "Quick check — is your TheraVoca availability still current?"
     inner = f"""
     <p style="font-size:16px;line-height:1.6;">Hi {first_name},</p>
     <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-      Twice a week we ping you to keep your <strong>same-week availability</strong> accurate.
+      Once a week we check in to keep your <strong>same-week availability</strong> accurate.
       A 10-second update keeps you on top of patient match results.
     </p>
     <p style="margin:28px 0;">
@@ -757,5 +759,4 @@ async def send_claim_profile_email(
       Already signed in? Pop into your <a href="{portal_url}" style="color:{BRAND['primary']};">portal</a>
       any time. Reply to this email if anything looks off — we'd love to hear from you.
     </p>
-    """
-    await _send(to, subject, _wrap("Claim your TheraVoca profile", inner))
+  

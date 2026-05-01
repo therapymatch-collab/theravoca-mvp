@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Loader2,
@@ -19,7 +19,14 @@ import { sessionClient, getSession, clearSession } from "@/lib/api";
 export default function PatientPortal() {
   const navigate = useNavigate();
   const t = useSiteCopy();
-  const session = getSession();
+  const rawSession = getSession();
+  // Memoize session by its values, not object reference, to prevent
+  // infinite useEffect re-runs (getSession returns a new object each call).
+  const session = useMemo(
+    () => rawSession,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rawSession?.token, rawSession?.role, rawSession?.email],
+  );
   const [requests, setRequests] = useState(null);
   const [hasPassword, setHasPassword] = useState(false);
 
@@ -281,24 +288,3 @@ function StatusTimeline({ req }) {
                 {step.label}
               </div>
               <div className="text-[10px] text-[#6D6A65] mt-0.5 leading-tight line-clamp-2 break-words">
-                {step.sublabel}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function shortDate(iso) {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-    });
-  } catch {
-    return "—";
-  }
-}

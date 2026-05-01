@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Leaf, ChevronDown, Menu, X } from "lucide-react";
+import { Leaf, ChevronDown, Menu, X, LogOut } from "lucide-react";
 import useSiteCopy from "@/lib/useSiteCopy";
-import { getSession, clearSession, getAdminIdentity, clearAdminSession } from "@/lib/api";
+import { getSession, clearSession } from "@/lib/api";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,9 +34,16 @@ function useScrollTopNavigate(to) {
 
 export function Header({ minimal = false }) {
   const t = useSiteCopy();
+  const navigate = useNavigate();
   const onLogoClick = useScrollTopNavigate("/");
   const onTherapistsClick = useScrollTopNavigate("/therapists/join");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const session = getSession();
+
+  const handleSignOut = () => {
+    clearSession();
+    navigate("/");
+  };
 
   // Close the mobile drawer whenever the route changes so it never leaks
   // into the next page load.
@@ -44,34 +51,6 @@ export function Header({ minimal = false }) {
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname, location.hash]);
-
-  // Check if any user session is active (patient, therapist, or admin).
-  const session = getSession();
-  const admin = getAdminIdentity();
-  const isAdmin = !!(admin?.token || admin?.masterPwd);
-  const isPatient = session?.role === "patient";
-  const isTherapist = session?.role === "therapist";
-  const isLoggedIn = !!(session?.token || isAdmin);
-
-  // Where to send the user back to their portal
-  const portalPath = isAdmin
-    ? "/admin/dashboard"
-    : isTherapist
-    ? "/portal/therapist"
-    : isPatient
-    ? "/portal/patient"
-    : "/";
-  const portalLabel = isAdmin
-    ? "Admin panel"
-    : isTherapist
-    ? "My portal"
-    : "My matches";
-
-  const handleLogOut = () => {
-    clearSession();
-    clearAdminSession();
-    window.location.href = "/";
-  };
 
   // Lock body scroll while drawer is open.
   useEffect(() => {
@@ -132,34 +111,14 @@ export function Header({ minimal = false }) {
               >
                 {t("header.nav.therapists", "For therapists")}
               </a>
-              {isLoggedIn ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    className="inline-flex items-center gap-1.5 hover:text-[#2D4A3E] transition outline-none"
-                    data-testid="nav-account-trigger"
-                  >
-                    {portalLabel} <ChevronDown size={14} strokeWidth={2} />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    className="bg-white border-[#E8E5DF] w-48"
-                    data-testid="nav-account-menu"
-                  >
-                    <DropdownMenuItem asChild>
-                      <Link to={portalPath} className="cursor-pointer">
-                        <div className="font-medium text-[#2B2A29]">{portalLabel}</div>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={handleLogOut}
-                      className="cursor-pointer text-[#D45D5D]"
-                      data-testid="nav-logout"
-                    >
-                      Log out
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+              {session ? (
+                <button
+                  onClick={handleSignOut}
+                  className="inline-flex items-center gap-1.5 hover:text-[#2D4A3E] transition"
+                  data-testid="nav-signout"
+                >
+                  <LogOut size={14} /> Sign out
+                </button>
               ) : (
                 <DropdownMenu>
                   <DropdownMenuTrigger
@@ -281,23 +240,14 @@ export function Header({ minimal = false }) {
               For therapists
             </a>
             <div className="border-t border-[#E8E5DF] my-2" />
-            {isLoggedIn ? (
-              <>
-                <Link
-                  to={portalPath}
-                  className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition font-medium text-[#2B2A29]"
-                  data-testid="mobile-portal-link"
-                >
-                  {portalLabel}
-                </Link>
-                <button
-                  onClick={handleLogOut}
-                  className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition text-left w-full text-[#D45D5D]"
-                  data-testid="mobile-logout"
-                >
-                  Log out
-                </button>
-              </>
+            {session ? (
+              <button
+                onClick={handleSignOut}
+                className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition flex items-center gap-2 w-full text-left"
+                data-testid="mobile-signout"
+              >
+                <LogOut size={14} /> Sign out
+              </button>
             ) : (
               <>
                 <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] px-2 pt-1">

@@ -224,12 +224,24 @@ def _distance_within(t: dict, r: dict, miles: float) -> bool:
     """Return True if any of the therapist's offices is within `miles` of the
     patient. If we don't have geo data on either side, default to True (don't
     block the match — let the patient + therapist sort it out)."""
+    import logging
+    _log = logging.getLogger(__name__)
     p = r.get("patient_geo") or {}
     plat, plng = p.get("lat"), p.get("lng")
     if plat is None or plng is None:
+        _log.warning(
+            "GEO_MISSING: Patient request %s has no geocoded location "
+            "(city=%s, zip=%s) — distance filter bypassed",
+            r.get("id", "?"), r.get("location_city", ""), r.get("location_zip", ""),
+        )
         return True
     offices = t.get("office_geos") or []
     if not offices:
+        _log.warning(
+            "GEO_MISSING: Therapist %s (%s) has no office_geos — "
+            "distance filter bypassed",
+            t.get("id", "?"), t.get("name", "?"),
+        )
         return True
     for o in offices:
         olat, olng = o.get("lat"), o.get("lng")
@@ -1311,19 +1323,4 @@ def gap_axes(
         result = gen() if gen else None
         if not result:
             continue
-        explanation, suggestion = result
-        candidates.append({
-            "key": k,
-            "label": label,
-            "explanation": explanation,
-            "suggestion": suggestion,
-            "gap": round(mx - score, 1),  # kept for sorting; not shown to user
-        })
-    candidates.sort(key=lambda c: c["gap"], reverse=True)
-    for c in candidates:
-        c.pop("gap", None)
-    return candidates[:top_n]
-
-
-def _humanize(s: str) -> str:
-    return (s or "").replace("_", " ").strip()
+       

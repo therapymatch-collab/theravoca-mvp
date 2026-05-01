@@ -3,13 +3,16 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
+import hmac
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from deps import db, logger, require_admin, require_session, _create_session_token
+from deps import db, logger, require_admin, require_session, _create_session_token, JWT_SECRET
 import stripe_service
 from email_service import send_therapist_signup_received
 from embeddings import embed_texts
@@ -21,6 +24,63 @@ from models import (
 from turnstile_service import verify_token as verify_turnstile
 
 router = APIRouter()
+
+# ─── Signed URL helpers for email links ────────────────────────────────
+# Generate/verify HMAC signatures so apply/decline email links can't be
+# forged. Links expire after SIGNED_URL_TTL_HOURS (default 72h).
+SIGNED_URL_TTL_HOURS = int(os.environ.get("SIGNED_URL_TTL_HOURS", "72"))
+
+
+def generate_action_signature(
+    request_id: str, therapist_id: str, action: str, expires_iso: str,
+) -> str:
+    """Create HMAC-SHA256 signature for an email action link."""
+    msg = f"{request_id}:{therapist_id}:{action}:{expires_iso}"
+    return hmac.new(
+        JWT_SECRET.encode(), msg.encode(), hashlib.sha256,
+    ).hexdigest()[:32]
+
+
+def generate_signed_url(
+    base_url: str, request_id: str, therapist_id: str, action: str,
+) -> str:
+    """Build a full signed URL for email links (apply/decline)."""
+    expires = (
+        datetime.now(timezone.utc) + timedelta(hours=SIGNED_URL_TTL_HOURS)
+    ).isoformat()
+    sig = generate_action_signature(request_id, therapist_id, action, expires)
+    return f"{base_url}/therapist/{action}/{request_id}/{therapist_id}?sig={sig}&exp={expires}"
+
+
+def _verify_action_signature(
+    request_id: str,
+    therapist_id: str,
+    action: str,
+    sig: Optional[str],
+    exp: Optional[str],
+) -> None:
+    """Verify a signed URL's signature and expiry. Raises 403 on failure.
+    During migration: if sig is None, log a warning but allow through so
+    old unsigned email links still work temporarily."""
+    if not sig:
+        logger.warning(
+            "Unsigned %s link used for request=%s therapist=%s — "
+            "old email link? Will require signatures in future.",
+            action, request_id, therapist_id,
+        )
+        return  # Grace period — remove after migration
+    if not exp:
+        raise HTTPException(403, "Link is missing expiration")
+    # Check expiry
+    try:
+        exp_dt = datetime.fromisoformat(exp)
+        if exp_dt < datetime.now(timezone.utc):
+            raise HTTPException(403, "This link has expired. Please check your email for a newer notification.")
+    except ValueError:
+        raise HTTPException(403, "Invalid link expiration")
+    expected = generate_action_signature(request_id, therapist_id, action, exp)
+    if not hmac.compare_digest(sig, expected):
+        raise HTTPException(403, "Invalid link signature")
 
 
 # ─── Embedding helper for the deep-match Contextual Resonance axis ──
@@ -359,7 +419,13 @@ async def therapist_bulk_apply(
 
 
 @router.get("/therapist/apply/{request_id}/{therapist_id}", response_model=dict)
-async def therapist_view(request_id: str, therapist_id: str):
+async def therapist_view(
+    request_id: str,
+    therapist_id: str,
+    sig: Optional[str] = Query(None),
+    exp: Optional[str] = Query(None),
+):
+    _verify_action_signature(request_id, therapist_id, "apply", sig, exp)
     req = await db.requests.find_one(
         {"id": request_id}, {"_id": 0, "email": 0, "verification_token": 0}
     )
@@ -395,7 +461,14 @@ async def therapist_view(request_id: str, therapist_id: str):
 
 
 @router.post("/therapist/apply/{request_id}/{therapist_id}", response_model=ApplicationOut)
-async def therapist_apply(request_id: str, therapist_id: str, payload: TherapistApplyIn):
+async def therapist_apply(
+    request_id: str,
+    therapist_id: str,
+    payload: TherapistApplyIn,
+    sig: Optional[str] = Query(None),
+    exp: Optional[str] = Query(None),
+):
+    _verify_action_signature(request_id, therapist_id, "apply", sig, exp)
     req = await db.requests.find_one({"id": request_id}, {"_id": 0})
     therapist = await db.therapists.find_one({"id": therapist_id}, {"_id": 0})
     if not req or not therapist:
@@ -466,9 +539,14 @@ async def therapist_apply(request_id: str, therapist_id: str, payload: Therapist
 
 
 @router.post("/therapist/decline/{request_id}/{therapist_id}", response_model=dict)
-async def therapist_decline(
-    request_id: str, therapist_id: str, payload: TherapistDeclineIn,
+async def therapist_decline_action(
+    request_id: str,
+    therapist_id: str,
+    payload: TherapistDeclineIn,
+    sig: Optional[str] = Query(None),
+    exp: Optional[str] = Query(None),
 ):
+    _verify_action_signature(request_id, therapist_id, "decline", sig, exp)
     req = await db.requests.find_one({"id": request_id}, {"_id": 0, "id": 1})
     therapist = await db.therapists.find_one(
         {"id": therapist_id}, {"_id": 0, "id": 1, "email": 1}
@@ -495,13 +573,20 @@ async def therapist_decline(
 
 
 @router.get("/therapist/{therapist_id}/referrals")
-async def therapist_referrals(therapist_id: str):
-    """Public-by-id list of all referrals this therapist was notified for."""
+async def therapist_referrals(
+    therapist_id: str,
+    session: dict = Depends(require_session(("therapist",))),
+):
+    """Authenticated referral list — therapist must be logged in and can
+    only view their own referrals."""
     t = await db.therapists.find_one(
         {"id": therapist_id}, {"_id": 0, "id": 1, "name": 1, "email": 1}
     )
     if not t:
         raise HTTPException(404)
+    # Verify the logged-in therapist owns this ID
+    if t["email"].lower() != session["email"].lower():
+        raise HTTPException(403, "You can only view your own referrals")
 
     cur = db.requests.find(
         {"notified_therapist_ids": therapist_id},
@@ -534,98 +619,4 @@ async def therapist_referrals(therapist_id: str):
             "match_score": score,
             "match_breakdown": breakdown,
             "status": ref_status,
-            "summary": _safe_summary_for_therapist({**r, "email": ""}),
-        })
-    return {"therapist": t, "referrals": out}
-
-
-
-# ─── Self-serve license document upload ─────────────────────────────────────
-# Therapist uploads a PDF / JPG / PNG of their license. We base64-store it
-# inline on the therapist doc (capped at 5 MB) and flag the row as
-# `pending_reapproval` so an admin reviews + re-publishes after upload.
-MAX_LICENSE_BYTES = 5 * 1024 * 1024  # 5 MB
-LICENSE_ALLOWED_TYPES = {
-    "application/pdf", "image/jpeg", "image/jpg", "image/png", "image/webp",
-}
-
-
-@router.post("/therapists/me/license-document")
-async def therapist_upload_license(
-    payload: dict,
-    session: dict = Depends(require_session(("therapist",))),
-):
-    """Therapist uploads a base64-encoded license document. Body:
-        {filename, content_type, data_base64}
-    """
-    email = session.get("email")
-    therapist = await db.therapists.find_one({"email": email}, {"_id": 0})
-    if not therapist:
-        raise HTTPException(404, "Therapist profile not found")
-
-    filename = (payload or {}).get("filename") or ""
-    content_type = (payload or {}).get("content_type") or ""
-    data_b64 = (payload or {}).get("data_base64") or ""
-    if not filename or not data_b64:
-        raise HTTPException(400, "filename and data_base64 are required")
-    if content_type not in LICENSE_ALLOWED_TYPES:
-        raise HTTPException(
-            400,
-            "Unsupported file type. Allowed: PDF, JPG, PNG, WEBP.",
-        )
-    try:
-        if "," in data_b64:
-            data_b64 = data_b64.split(",", 1)[1]
-        raw = base64.b64decode(data_b64, validate=True)
-    except Exception:
-        raise HTTPException(400, "Invalid base64 payload")
-    if len(raw) > MAX_LICENSE_BYTES:
-        raise HTTPException(
-            400,
-            f"File too large ({len(raw) // 1024} KB). Max 5 MB.",
-        )
-
-    now = _now_iso()
-    await db.therapists.update_one(
-        {"id": therapist["id"]},
-        {"$set": {
-            "license_document": {
-                "filename": filename[:200],
-                "content_type": content_type,
-                "size_bytes": len(raw),
-                "data_base64": data_b64,
-                "uploaded_at": now,
-            },
-            "pending_reapproval": True,
-            "updated_at": now,
-        }},
-    )
-    return {
-        "ok": True,
-        "filename": filename,
-        "size_bytes": len(raw),
-        "uploaded_at": now,
-        "pending_reapproval": True,
-    }
-
-
-@router.get("/therapists/me/license-document")
-async def therapist_get_my_license_doc(
-    session: dict = Depends(require_session(("therapist",))),
-):
-    email = session.get("email")
-    t = await db.therapists.find_one(
-        {"email": email}, {"_id": 0, "license_document": 1},
-    )
-    if not t:
-        raise HTTPException(404, "Therapist not found")
-    doc = t.get("license_document") or {}
-    if not doc:
-        return {"present": False}
-    return {
-        "present": True,
-        "filename": doc.get("filename"),
-        "content_type": doc.get("content_type"),
-        "size_bytes": doc.get("size_bytes"),
-        "uploaded_at": doc.get("uploaded_at"),
-    }
+            "summary": _safe_summary_for_the

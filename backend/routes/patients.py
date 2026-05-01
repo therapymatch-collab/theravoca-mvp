@@ -24,6 +24,28 @@ from validation import (
 router = APIRouter()
 
 
+# ─── Lightweight city/ZIP validation endpoint ──────────────────────────
+# Called by the frontend in real-time when patient enters both city + ZIP
+# for in-person/hybrid. Returns whether they're geographically consistent.
+@router.post("/requests/validate-location")
+async def validate_location(payload: dict):
+    city = (payload.get("city") or "").strip()
+    zip_code = (payload.get("zip") or "").strip()
+    state = (payload.get("state") or "ID").strip()
+    if not city and not zip_code:
+        return {"valid": True}
+    if city and zip_code:
+        msg = await validate_zip_city_consistent(db, zip_code, city, state)
+        if msg:
+            return {"valid": False, "error": msg}
+    if zip_code and not validate_zip_for_state(zip_code, state):
+        return {
+            "valid": False,
+            "error": f"ZIP {zip_code} doesn't appear to be in {state}. Please double-check.",
+        }
+    return {"valid": True}
+
+
 # Patient-facing display labels for the deep-match P1/P2 picks (v2).
 # Mirrors the slugs in the frontend IntakeForm. Used by
 # `_build_receipt_rows` so the email shows readable text instead of
@@ -605,29 +627,4 @@ async def public_request_results(
     # Per-application Step-2 rank score (used to ORDER cards in the
     # patient view AND surfaced via tooltip on the score chip).
     # Single source of truth lives in `helpers.compute_patient_rank_score`
-    # so this stays consistent with the admin Applications panel.
-    from helpers import compute_patient_rank_score
-    for a in apps:
-        a.update(compute_patient_rank_score(a, req))
-
-    apps.sort(key=lambda a: (a.get("patient_rank_score", 0), a.get("created_at", "")), reverse=True)
-
-    enriched = []
-    breakdowns = req.get("notified_breakdowns") or {}
-    distances = req.get("notified_distances") or {}
-    for a in apps:
-        t = await db.therapists.find_one({"id": a["therapist_id"]}, {"_id": 0})
-        if t:
-            enriched.append({
-                **a,
-                "therapist": t,
-                "match_breakdown": breakdowns.get(a["therapist_id"]) or {},
-                "distance_miles": distances.get(a["therapist_id"]),
-            })
-    return {
-        "request": req,
-        "applications": enriched,
-        "hold_active": hold_active,
-        "hold_ends_at": hold_ends_at_iso,
-        "applications_pending_count": len(apps_raw) if hold_active else 0,
-    }
+    # so

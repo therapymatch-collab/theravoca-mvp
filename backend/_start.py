@@ -1,68 +1,162 @@
-from server import app
-import pathlib, os, base64
-from fastapi.responses import FileResponse, Response
-from starlette.middleware.base import BaseHTTPMiddleware
+"""Staging wrapper for TheraVoca backend.
 
-_SPW = os.environ.get("STAGING_PASSWORD", "")
+Adds HTTP Basic Auth to all routes EXCEPT those in _PUBLIC_PREFIXES
+(login/auth flows, public API endpoints that have their own auth, etc.)
+and serves the React SPA from static_build/ for all non-API routes.
 
-# Routes that must be publicly accessible even when staging auth is on.
-# This covers: verification links, sign-in pages, results pages,
-# therapist signup, feedback, auth API, public content, and webhooks.
+Start command: uvicorn _start:app --host 0.0.0.0 --port $PORT
+"""
+from __future__ import annotations
+
+import base64
+import os
+import secrets
+
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse, FileResponse, Response
+from starlette.types import ASGIApp, Receive, Scope, Send
+
+from server import app as fastapi_app
+
+STAGING_USER = os.environ.get("STAGING_USER", "theravoca")
+STAGING_PASSWORD = os.environ.get("STAGING_PASSWORD", "")
+
+# Routes that bypass staging basic auth entirely.
+# These either have their own auth (JWT sessions, admin password)
+# or are public-facing endpoints patients/therapists hit from
+# unauthenticated contexts (email links, intake form, etc.).
 _PUBLIC_PREFIXES = (
-    # Frontend pages that need to be publicly reachable
+    # Frontend SPA routes that patients access from email links
     "/verify/",
     "/sign-in",
     "/results/",
     "/therapist/apply/",
     "/feedback/",
-    # Auth API — login, magic codes, password flows (all under /api/auth/)
+    # Backend API — auth endpoints (login, magic codes, passwords)
     "/api/auth/",
-    # Patient/therapist-facing API endpoints
-    "/api/requests/verify/",
-    "/api/requests/results/",
+    # Backend API — patient request endpoints (intake form, verification)
+    "/api/requests/",
+    # Backend API — therapist apply/decline (accessed from email links)
     "/api/therapists/apply/",
-    "/api/feedback",
-    # Public site content
+    "/api/therapist/apply/",
+    "/api/therapist/decline/",
+    # Backend API — public content
     "/api/site-copy",
     "/api/faqs",
     "/api/blog",
-    # Stripe webhook
+    # Backend API — Stripe webhook (has its own signature verification)
     "/api/stripe/webhook",
-    # Portal API (has its own session auth, doesn't need double auth)
+    # Backend API — portal (has its own JWT session auth)
     "/api/portal/",
+    # Backend API — feedback (public, patient-facing)
+    "/api/feedback",
     # Health check
     "/health",
+    # Static assets (JS, CSS, images, fonts)
+    "/static/",
+    "/favicon",
+    "/manifest",
+    "/asset-manifest",
+    "/logo",
 )
 
-class BasicAuth(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        if not _SPW:
-            return await call_next(request)
-        path = request.url.path
-        # Allow public routes through without auth
+
+class _BasicAuthMiddleware:
+    """ASGI middleware that wraps the FastAPI app with HTTP Basic Auth
+    for staging/preview environments. Public routes are exempted."""
+
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
+
+        # Skip auth for public routes
         if any(path.startswith(p) for p in _PUBLIC_PREFIXES):
-            return await call_next(request)
-        # Allow static assets (JS, CSS, images, fonts)
-        if any(path.endswith(ext) for ext in ('.js', '.css', '.png', '.jpg', '.svg', '.ico', '.woff', '.woff2', '.ttf', '.json', '.map')):
-            return await call_next(request)
-        auth = request.headers.get("Authorization", "")
-        if auth.startswith("Basic "):
+            await self.app(scope, receive, send)
+            return
+
+        # Skip if no staging password configured
+        if not STAGING_PASSWORD:
+            await self.app(scope, receive, send)
+            return
+
+        # Check for valid Basic Auth header
+        headers = dict(scope.get("headers", []))
+        auth_header = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
+
+        authenticated = False
+        if auth_header.startswith("Basic "):
             try:
-                d = base64.b64decode(auth[6:]).decode()
-                _, pw = d.split(":", 1)
-                if pw == _SPW:
-                    return await call_next(request)
+                decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+                user, pwd = decoded.split(":", 1)
+                if secrets.compare_digest(user, STAGING_USER) and secrets.compare_digest(
+                    pwd, STAGING_PASSWORD
+                ):
+                    authenticated = True
             except Exception:
                 pass
-        return Response("", status_code=401, headers={"WWW-Authenticate": 'Basic realm="TheraVoca Staging"'})
 
-app.add_middleware(BasicAuth)
+        if not authenticated:
+            response = PlainTextResponse(
+                "Authentication required",
+                status_code=401,
+                headers={"WWW-Authenticate": 'Basic realm="TheraVoca Staging"'},
+            )
+            await response(scope, receive, send)
+            return
 
-_sd = pathlib.Path(__file__).parent / "static_build"
-if _sd.exists():
-    @app.get("/{fp:path}")
-    async def serve_spa(fp: str):
-        f = _sd / fp
-        if f.exists() and f.is_file():
-            return FileResponse(str(f))
-        return FileResponse(str(_sd / "index.html"))
+        await self.app(scope, receive, send)
+
+
+# Wrap the FastAPI app with basic auth
+_authed_app = _BasicAuthMiddleware(fastapi_app)
+
+# Static file serving for the React SPA
+_STATIC_DIR = os.path.join(os.path.dirname(__file__), "static_build")
+_INDEX_HTML = os.path.join(_STATIC_DIR, "index.html")
+_HAS_STATIC = os.path.isdir(_STATIC_DIR) and os.path.isfile(_INDEX_HTML)
+
+
+class _SPAApp:
+    """ASGI app that serves the React SPA for non-API routes and delegates
+    API/health routes to the FastAPI backend (with basic auth)."""
+
+    def __init__(self, api_app: ASGIApp):
+        self.api_app = api_app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] != "http":
+            await self.api_app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
+
+        # API routes → FastAPI backend
+        if path.startswith("/api/") or path == "/health":
+            await self.api_app(scope, receive, send)
+            return
+
+        # Try to serve static file
+        if _HAS_STATIC:
+            # Check if it's a real static file (JS, CSS, image, etc.)
+            file_path = os.path.join(_STATIC_DIR, path.lstrip("/"))
+            if os.path.isfile(file_path) and not path == "/":
+                response = FileResponse(file_path)
+                await response(scope, receive, send)
+                return
+
+            # For all other routes, serve index.html (SPA client-side routing)
+            response = FileResponse(_INDEX_HTML, media_type="text/html")
+            await response(scope, receive, send)
+            return
+
+        # No static build — fall through to FastAPI (which will 404)
+        await self.api_app(scope, receive, send)
+
+
+app = _SPAApp(_authed_app)

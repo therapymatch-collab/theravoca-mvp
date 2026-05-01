@@ -32,7 +32,10 @@ PATIENT_DEMO_EMAIL = os.environ.get("PATIENT_DEMO_EMAIL", "")
 ADMIN_NOTIFY_EMAIL = os.environ.get("ADMIN_NOTIFY_EMAIL", "therapymatch@gmail.com")
 
 LICENSE_WARN_DAYS = int(os.environ.get("LICENSE_WARN_DAYS", "30"))
-AVAILABILITY_PROMPT_DAYS = (0, 4)  # Mon, Fri
+# Configurable via app_config.availability_prompt_days in admin.
+# Default: Monday only (0). Override with comma-separated day numbers (0=Mon..6=Sun).
+_avail_days_env = os.environ.get("AVAILABILITY_PROMPT_DAYS", "0")
+AVAILABILITY_PROMPT_DAYS = tuple(int(d.strip()) for d in _avail_days_env.split(",") if d.strip().isdigit())
 DAILY_TASK_HOUR_LOCAL = int(os.environ.get("DAILY_TASK_HOUR", "2"))
 DAILY_TASK_TZ_OFFSET_HOURS = int(os.environ.get("DAILY_TASK_TZ_OFFSET", "-7"))
 
@@ -151,8 +154,4 @@ __all__ = [
     "ADMIN_NOTIFY_EMAIL", "LICENSE_WARN_DAYS", "AVAILABILITY_PROMPT_DAYS",
     "DAILY_TASK_HOUR_LOCAL", "DAILY_TASK_TZ_OFFSET_HOURS",
     "JWT_SECRET", "JWT_ALGO", "SESSION_TTL_DAYS", "MAGIC_CODE_TTL_MINUTES",
-    "MAGIC_CODE_MAX_PER_HOUR", "LOGIN_MAX_FAILURES", "LOGIN_LOCKOUT_MINUTES",
-    "_login_attempts", "_client_ip", "_check_lockout", "_record_failure", "_reset_failures",
-    "require_admin", "require_session", "_create_session_token",
-    "_decode_session_from_authorization",
-]
+ 

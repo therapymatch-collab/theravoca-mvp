@@ -177,9 +177,12 @@ async def _run_license_expiry_alerts() -> dict[str, int]:
 
 
 async def _run_availability_prompts() -> dict[str, int]:
+    # Check app_config override first, fall back to deps constant
+    config_doc = await db.app_config.find_one({"key": "availability_prompt"}, {"_id": 0})
+    prompt_days = tuple(config_doc.get("days", [])) if config_doc else AVAILABILITY_PROMPT_DAYS
     local = _now_local()
-    if local.weekday() not in AVAILABILITY_PROMPT_DAYS:
-        return {"sent": 0, "reason": "not Mon/Fri"}
+    if local.weekday() not in prompt_days:
+        return {"sent": 0, "reason": f"not a prompt day (configured: {prompt_days})"}
     today_iso = local.date().isoformat()
     cur = db.therapists.find(
         {
@@ -440,10 +443,4 @@ async def _daily_loop() -> None:
                             "followups": follow, "structured_followups": structured,
                             "therapist_followups": t_follow,
                             "stale_profile_nag": stale,
-                            "gap_recruit": recruit,
-                            "auto_recruit_weekly": auto_rec,
-                        }},
-                    )
-        except Exception as e:
-            logger.exception("Daily-loop error: %s", e)
-        await asyncio.sleep(1800)
+           

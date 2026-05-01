@@ -113,6 +113,7 @@ export default function ReviewPreviewModal({
     ["Referred by", referralLine],
     ["Email", data.email || "—"],
     ["Phone", data.phone || "—"],
+    ...(data.other_issue ? [["Anything else", data.other_issue]] : []),
   ];
   return (
     <div

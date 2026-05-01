@@ -71,7 +71,7 @@ export default function Step5Format({
 
   return (
     <>
-      <Group title={<>Modalities you practice (pick 1–6) <Req /></>}>
+      <Group title={<>Modalities you practice (pick 1–5) <Req /></>}>
         <div className="flex flex-wrap gap-2">
           {MODALITIES.map((m) => {
             const active = data.modalities.includes(m);
@@ -79,7 +79,7 @@ export default function Step5Format({
               <button
                 key={m}
                 type="button"
-                onClick={() => toggleArr("modalities", m, 6)}
+                onClick={() => toggleArr("modalities", m, 5)}
                 data-testid={`signup-modality-${m}`}
                 className={`text-sm px-3.5 py-1.5 rounded-full border transition ${
                   active

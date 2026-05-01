@@ -1,13 +1,17 @@
+import { useCallback, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Group, Field, PillCol } from "@/components/intake/IntakeUI";
 import { MODALITY } from "./intakeOptions";
+import { api } from "@/lib/api";
 
 /**
  * Step "format" — telehealth/in-person preference, plus city + ZIP
  * gating (only required for in-person modes), plus an optional
  * hard-distance toggle. ZIP is validated in real time against the
  * patient's selected state via the parent `zipMatchesState` helper.
+ * City + ZIP are cross-validated via the backend geocoder to ensure
+ * they refer to the same area.
  */
 export default function FormatStep({
   data,
@@ -17,6 +21,30 @@ export default function FormatStep({
   setZipError,
   hardCapacity,
 }) {
+  const validateTimer = useRef(null);
+
+  // Debounced cross-validation: checks city + ZIP consistency via backend
+  const validateCityZip = useCallback(
+    (city, zip, state) => {
+      if (validateTimer.current) clearTimeout(validateTimer.current);
+      if (!city || !zip || zip.length < 5) return;
+      validateTimer.current = setTimeout(async () => {
+        try {
+          const res = await api.post("/requests/validate-location", {
+            city,
+            zip,
+            state: state || "ID",
+          });
+          if (!res.data.valid && res.data.error) {
+            setZipError(res.data.error);
+          }
+        } catch {
+          // Backend unavailable — let submit-time validation catch it
+        }
+      }, 600);
+    },
+    [setZipError],
+  );
   const hc = hardCapacity || { isDisabled: () => false, reasonFor: () => "" };
   const inPersonDisabled = hc.isDisabled("in_person_only");
   const inPersonReason = hc.reasonFor("in_person_only");
@@ -49,7 +77,12 @@ export default function FormatStep({
             <Field label="City">
               <Input
                 value={data.location_city}
-                onChange={(e) => set("location_city", e.target.value)}
+                onChange={(e) => {
+                  const city = e.target.value;
+                  set("location_city", city);
+                  setZipError("");
+                  validateCityZip(city, data.location_zip, data.location_state);
+                }}
                 placeholder="e.g. Boise"
                 className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
                 data-testid="city-input"
@@ -69,6 +102,9 @@ export default function FormatStep({
                     );
                   } else {
                     setZipError("");
+                    if (z.length === 5 && data.location_city) {
+                      validateCityZip(data.location_city, z, data.location_state);
+                    }
                   }
                 }}
                 placeholder="83702"
