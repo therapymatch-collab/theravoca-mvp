@@ -22,7 +22,7 @@ from email_service import send_therapist_approved, send_therapist_rejected
 from email_templates import DEFAULTS as EMAIL_TEMPLATE_DEFAULTS, list_templates, upsert_template
 from helpers import _deliver_results, _now_iso, _spawn_bg, _trigger_matching
 from seed_data import generate_seed_therapists
-from sms_service import send_sms
+from sms_service import send_sms, SMS_TEMPLATE_DEFAULTS
 
 router = APIRouter()
 
@@ -981,10 +981,29 @@ async def admin_delete_therapist(therapist_id: str) -> dict[str, Any]:
 @router.post("/admin/test-sms")
 async def admin_test_sms(payload: dict, _: bool = Depends(require_admin)):
     to = (payload or {}).get("to") or os.environ.get("TWILIO_DEV_OVERRIDE_TO", "")
-    body = (payload or {}).get("body") or "TheraVoca: SMS smoke test — your Twilio integration is wired up."
     if not to:
         raise HTTPException(400, "No recipient and no TWILIO_DEV_OVERRIDE_TO env set")
-    result = await send_sms(to, body)
+
+    # Support template preview: if "template" is set, render that template
+    # with sample data so the admin can see exactly what patients/therapists get.
+    template_key = (payload or {}).get("template", "")
+    if template_key and template_key in SMS_TEMPLATE_DEFAULTS:
+        from sms_service import _get_template
+        template = await _get_template(template_key)
+        sample_vars = {
+            "sms.therapist_referral": {"first_name": "Sarah", "match_score": 92, "apply_url": "https://theravoca.com/therapist/apply/sample123"},
+            "sms.patient_intake_receipt": {},
+            "sms.availability_prompt": {"first_name": "Sarah", "portal_url": "https://theravoca.com/portal"},
+        }
+        try:
+            body = template.format(**sample_vars.get(template_key, {}))
+        except (KeyError, IndexError):
+            body = template  # show raw template if formatting fails
+    else:
+        body = (payload or {}).get("body") or "TheraVoca: SMS smoke test — your Twilio integration is wired up."
+
+    # force=True bypasses TWILIO_ENABLED check — admin explicitly chose to test
+    result = await send_sms(to, body, force=True)
     if not result:
         return {"ok": False, "detail": "SMS send returned no result (check TWILIO_ENABLED + creds + logs)"}
 
@@ -2548,6 +2567,59 @@ async def admin_set_a2p(payload: dict) -> dict[str, Any]:
     return cfg
 
 
+# ─── SMS templates (editable via site_copy) ────────────────────────────────
+@router.get("/admin/sms-templates", dependencies=[Depends(require_admin)])
+async def admin_list_sms_templates() -> dict[str, Any]:
+    """Return all SMS templates with current values (from site_copy) and defaults."""
+    templates = []
+    for key, default in SMS_TEMPLATE_DEFAULTS.items():
+        doc = await db.site_copy.find_one({"key": key})
+        current = doc["value"] if doc and doc.get("value") else default
+        # Describe available placeholders for each template
+        placeholders = {
+            "sms.therapist_referral": "{first_name}, {match_score}, {apply_url}",
+            "sms.patient_intake_receipt": "(none)",
+            "sms.availability_prompt": "{first_name}, {portal_url}",
+        }
+        templates.append({
+            "key": key,
+            "label": key.replace("sms.", "").replace("_", " ").title(),
+            "default": default,
+            "current": current,
+            "is_customized": current != default,
+            "placeholders": placeholders.get(key, ""),
+        })
+    return {"templates": templates}
+
+
+@router.put("/admin/sms-templates", dependencies=[Depends(require_admin)])
+async def admin_update_sms_template(payload: dict) -> dict[str, Any]:
+    """Update an SMS template. Body: {key, value}. Set value="" to reset to default."""
+    key = (payload.get("key") or "").strip()
+    value = (payload.get("value") or "").strip()
+    if key not in SMS_TEMPLATE_DEFAULTS:
+        raise HTTPException(400, f"Unknown template key: {key}")
+    if not value:
+        # Reset to default — delete the override
+        await db.site_copy.delete_one({"key": key})
+        return {"key": key, "value": SMS_TEMPLATE_DEFAULTS[key], "reset": True}
+    # Validate placeholders won't break at render time
+    try:
+        sample = {
+            "first_name": "Test", "match_score": 90,
+            "apply_url": "https://example.com", "portal_url": "https://example.com",
+        }
+        value.format(**sample)
+    except (KeyError, IndexError) as e:
+        raise HTTPException(400, f"Invalid placeholder in template: {e}")
+    await db.site_copy.update_one(
+        {"key": key},
+        {"$set": {"key": key, "value": value, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    return {"key": key, "value": value, "reset": False}
+
+
 # ─── Research enrichment toggle + manual triggers ──────────────────────────
 @router.get("/admin/research-enrichment", dependencies=[Depends(require_admin)])
 async def admin_get_research_enrichment() -> dict[str, Any]:
@@ -3582,91 +3654,4 @@ async def simulator_delete_run(
 ):
     """Delete one run + all its synthetic requests."""
     import simulator
-    deleted = await simulator.delete_run(db, run_id)
-    return {"ok": True, "deleted": deleted}
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Auto-recruit — closed-loop recruiter (Simulator + Coverage Gaps +
-# Gap Recruiter). Pre-launch: dry-run + admin-approval-gated. See
-# backend/auto_recruit.py for the orchestration logic.
-# ──────────────────────────────────────────────────────────────────────
-
-
-@router.get("/admin/auto-recruit/status")
-async def auto_recruit_status(_: None = Depends(require_admin)):
-    """Returns current policy, last cycle, and pending-approval count.
-    Used by the admin panel header to render the live status card."""
-    import auto_recruit
-    cfg = await auto_recruit.get_config(db)
-    last_id = cfg.get("last_cycle_id")
-    last_cycle = None
-    if last_id:
-        last_cycle = await db.auto_recruit_cycles.find_one(
-            {"id": last_id}, {"_id": 0},
-        )
-    pending = await auto_recruit.count_pending_approval(db)
-    return {
-        "config": cfg,
-        "last_cycle": last_cycle,
-        "pending_approval_count": pending,
-    }
-
-
-@router.put("/admin/auto-recruit/config")
-async def auto_recruit_update_config(
-    payload: dict, _: None = Depends(require_admin),
-):
-    """Merge-patch the singleton config. Only known keys are accepted."""
-    import auto_recruit
-    cfg = await auto_recruit.update_config(db, payload)
-    return {"ok": True, "config": cfg}
-
-
-@router.post("/admin/auto-recruit/plan")
-async def auto_recruit_plan(_: None = Depends(require_admin)):
-    """Preview the plan WITHOUT creating drafts — runs a fresh simulator
-    + coverage-gap analysis and returns the would-be recruit targets."""
-    import auto_recruit
-    return await auto_recruit.compute_plan_preview(db)
-
-
-@router.post("/admin/auto-recruit/run")
-async def auto_recruit_run(_: None = Depends(require_admin)):
-    """Execute one full cycle — runs sim, builds plan, calls gap
-    recruiter, stamps new drafts with cycle id + needs_approval=True.
-    Never sends real email (dry_run enforced by config)."""
-    import auto_recruit
-    cycle = await auto_recruit.run_cycle(db, manual_trigger=True)
-    return cycle
-
-
-@router.get("/admin/auto-recruit/cycles")
-async def auto_recruit_list_cycles(
-    _: None = Depends(require_admin), limit: int = 30,
-):
-    """Recent cycles history (lightweight — omits per-draft detail)."""
-    import auto_recruit
-    return {"items": await auto_recruit.list_cycles(db, limit=limit)}
-
-
-@router.post("/admin/auto-recruit/approve")
-async def auto_recruit_approve(
-    payload: dict, _: None = Depends(require_admin),
-):
-    """Clear `needs_approval` on a batch of drafts. Accepts either
-    `{cycle_id}` to approve an entire cycle's drafts, or `{draft_ids: [...]}`
-    for a targeted approval. Returns count approved."""
-    import auto_recruit
-    cycle_id = payload.get("cycle_id")
-    draft_ids = payload.get("draft_ids") or None
-    if not cycle_id and not draft_ids:
-        raise HTTPException(400, "cycle_id or draft_ids required")
-    approved = await auto_recruit.approve_batch(
-        db, cycle_id=cycle_id, draft_ids=draft_ids,
-    )
-    return {"ok": True, "approved": approved}
-
-
-# Suppress unused-import warnings on logger (kept for future logging)
-void = logger
+    deleted = await simulator.de

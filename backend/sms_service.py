@@ -36,7 +36,8 @@ def _client() -> Client | None:
 
 
 def _from_number() -> str:
-    return (os.environ.get("TWILIO_FROM_NUMBER", "") or os.environ.get("TWILIO_PHONE_NUMBER", "")).strip()
+    return (os.environ.get("TWILIO_FROM_NUMBER", "")
+            or os.environ.get("TWILIO_PHONE_NUMBER", "")).strip()
 
 
 def _override_to() -> str:
@@ -61,15 +62,17 @@ def normalize_us_phone(raw: str) -> str | None:
     return None
 
 
-async def send_sms(to: str, body: str) -> dict[str, Any] | None:
+async def send_sms(to: str, body: str, *, force: bool = False) -> dict[str, Any] | None:
     """Send an SMS. Returns Twilio message dict on success, None on skip/failure.
 
     Honors:
       * TWILIO_ENABLED=false → no-op (dev kill switch)
       * TWILIO_DEV_OVERRIDE_TO → reroutes every SMS to a single verified number
         (essential for Twilio trial accounts)
+
+    If force=True, bypasses the TWILIO_ENABLED check (for admin test-sms).
     """
-    if not _enabled():
+    if not force and not _enabled():
         logger.info("SMS disabled (TWILIO_ENABLED!=true), would have sent to %s", to)
         return None
 
@@ -106,39 +109,31 @@ async def send_sms(to: str, body: str) -> dict[str, Any] | None:
         return None
 
 
-async def send_therapist_referral_sms(
-    to: str,
-    therapist_first_name: str,
-    match_score: float,
-    apply_url: str,
-) -> dict[str, Any] | None:
-    """Short transactional SMS for new high-match referrals."""
-    body = (
-        f"TheraVoca: New referral matched to you ({int(round(match_score))}%). "
-        f"Tap to review & apply within 24h: {apply_url}"
-    )
-    return await send_sms(to, body)
-
-
-
-async def send_patient_intake_receipt_sms(to: str) -> dict[str, Any] | None:
-    """Confirmation text to a patient right after they submit a referral.
-    Tells them we'll email matches inside 24h and how to reach support."""
-    body = (
+# ---------------------------------------------------------------------------
+# Editable SMS templates — stored in db.site_copy, with hardcoded fallbacks
+# ---------------------------------------------------------------------------
+# Template keys and their defaults. Placeholders use {curly_braces}.
+SMS_TEMPLATE_DEFAULTS: dict[str, str] = {
+    "sms.therapist_referral": (
+        "TheraVoca: New referral matched to you ({match_score}%). "
+        "Tap to review & apply within 24h: {apply_url}"
+    ),
+    "sms.patient_intake_receipt": (
         "TheraVoca: Got your referral — we're routing it to therapists in your "
         "state right now. You'll see your matches by email within 24 hours. "
         "Reply STOP to opt out."
-    )
-    return await send_sms(to, body)
+    ),
+    "sms.availability_prompt": (
+        "TheraVoca: Hi {first_name} — quick check, is your same-week availability "
+        "still current? Confirm or update in 10 sec: {portal_url}?confirmAvailability=1"
+    ),
+}
 
 
-async def send_availability_prompt_sms(
-    to: str, therapist_first_name: str, portal_url: str
-) -> dict[str, Any] | None:
-    """Mon/Fri SMS reminder asking the therapist to refresh availability."""
-    first = (therapist_first_name or "there").split(" ")[0]
-    body = (
-        f"TheraVoca: Hi {first} — quick check, is your same-week availability "
-        f"still current? Confirm or update in 10 sec: {portal_url}?confirmAvailability=1"
-    )
-    return await send_sms(to, body)
+async def _get_template(key: str) -> str:
+    """Load an SMS template from site_copy, falling back to the hardcoded default."""
+    try:
+        from db import db  # late import to avoid circular deps
+        doc = await db.site_copy.find_one({"key": key})
+        if doc and doc.get("value"):
+        
