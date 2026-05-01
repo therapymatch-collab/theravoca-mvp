@@ -68,6 +68,7 @@ import PatientsByEmailPanel from "@/pages/admin/panels/PatientsByEmailPanel";
 import FeedbackPanel from "@/pages/admin/panels/FeedbackPanel";
 import ProviderPreviewCard from "@/pages/admin/panels/ProviderPreviewCard";
 import SimulatorPanel from "@/pages/admin/panels/SimulatorPanel";
+import NetworkHealthPanel from "@/pages/admin/panels/NetworkHealthPanel";
 import { StatBox } from "@/pages/admin/panels/_panelShared";
 
 // ─── Editor option lists (mirrors TherapistSignup) ───
@@ -1695,6 +1696,10 @@ export default function AdminDashboard() {
 
               {tab === "sms_status" && <SmsStatusPanel client={client} />}
 
+              {tab === "network_health" && (
+                <NetworkHealthPanel client={client} />
+              )}
+
               {tab === "how_it_works" && <HowItWorksPanel />}
 
               {tab === "simulator" && <SimulatorPanel client={client} setTab={setTab} />}
@@ -2953,6 +2958,11 @@ function AdminTabsBar({
       label: "Master Query",
       icon: <Sparkles size={14} />,
     },
+    {
+      id: "network_health",
+      label: "Network Health",
+      icon: <Activity size={14} />,
+    },
   ];
 
   const SECONDARY = [
@@ -2978,16 +2988,7 @@ function AdminTabsBar({
       count: outreach?.total ?? null,
       onClick: onLoadOutreach,
     },
-    {
-      id: "coverage_gap",
-      label: "Coverage gaps",
-      icon: <AlertTriangle size={14} />,
-      count:
-        (coverageGap?.summary?.critical_gaps || 0) +
-        (coverageGap?.summary?.warning_gaps || 0) || null,
-      highlight: (coverageGap?.summary?.critical_gaps || 0) > 0,
-      onClick: onLoadCoverageGap,
-    },
+
     {
       id: "opt_outs",
       label: "Opt-outs",
@@ -3041,11 +3042,7 @@ function AdminTabsBar({
       label: "Settings",
       icon: <Sliders size={14} />,
     },
-    {
-      id: "scrape_sources",
-      label: "Scrape sources",
-      icon: <ExternalLink size={14} />,
-    },
+
     {
       id: "sms_status",
       label: "SMS",
@@ -3063,11 +3060,7 @@ function AdminTabsBar({
       label: "How it works",
       icon: <Brain size={14} />,
     },
-    {
-      id: "simulator",
-      label: "Matching simulator",
-      icon: <Activity size={14} />,
-    },
+
   ];
 
   const [moreOpen, setMoreOpen] = useState(false);
