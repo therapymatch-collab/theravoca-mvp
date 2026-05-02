@@ -276,8 +276,8 @@ async def scrape_pt_candidates(
     listings for the given state+city. Each candidate dict has:
         name, profile_url, phone, city, state, zip, lat, lng, source,
         license_types, primary_license, specialties, website, email
-    `email` is a best-guess address (e.g. info@<their-website>) — may be
-    empty when the therapist has no published website on PT.
+    `email` is populated later by contact_enricher.enrich_batch which
+    scrapes the therapist's actual website for real contact info.
     """
     out: list[dict] = []
     async with httpx.AsyncClient(follow_redirects=True) as client:
@@ -306,7 +306,7 @@ async def scrape_pt_candidates(
             for c in to_fetch:
                 detail = await _fetch_profile_details(c["profile_url"], client)
                 c.update(detail)
-                c["email"] = _guess_email_from_website(detail.get("website") or "", c["name"]) or ""
+                c["email"] = ""  # Real emails extracted by contact_enricher.enrich_batch
                 await asyncio.sleep(REQUEST_DELAY_SEC)
 
     logger.info(
