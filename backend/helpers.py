@@ -339,6 +339,39 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
     other = (req.get("other_issue") or "").strip()
     if other:
         summary["Anything else (patient note)"] = other[:1500]
+
+    # Deep match answers (P1/P2/P3) — only when patient opted in.
+    if req.get("deep_match_opt_in"):
+        _P1 = {
+            "leads_structured": "Someone who leads with structure and direction",
+            "follows_lead": "Someone who follows my lead and lets me set the pace",
+            "challenges": "Someone who challenges me, even when it’s uncomfortable",
+            "warm_first": "Someone who’s warm and encouraging above all",
+            "direct_honest": "Someone who’s direct and tells it like it is",
+            "guides_questions": "Someone who asks the right questions so I get there myself",
+        }
+        _P2 = {
+            "deep_emotional": "Go deep into emotions — feel what I’ve been avoiding",
+            "practical_tools": "Stay practical — give me tools I can use this week",
+            "explore_past": "Look back — understand where my patterns started",
+            "focus_forward": "Look forward — focus on who I’m becoming",
+            "build_insight": "Help me understand myself and why I do what I do",
+            "shift_relationships": "Help me change how I show up in my relationships",
+        }
+        p1 = req.get("p1_communication") or []
+        if p1:
+            summary["Relationship style (patient)"] = ", ".join(
+                _P1.get(s, s.replace("_", " ").title()) for s in p1
+            )
+        p2 = req.get("p2_change") or []
+        if p2:
+            summary["Way of working (patient)"] = ", ".join(
+                _P2.get(s, s.replace("_", " ").title()) for s in p2
+            )
+        p3 = (req.get("p3_resonance") or "").strip()
+        if p3:
+            summary["What they want you to already get"] = p3[:1500]
+
     return summary
 
 
