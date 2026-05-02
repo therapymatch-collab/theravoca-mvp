@@ -175,7 +175,7 @@ def _person_to_card(p: dict) -> dict:
     return {
         "name": p.get("name") or "",
         "profile_url": p.get("url") or p.get("@id") or "",
-        "phone": p.get("telephone") or "",
+        "phone": "",  # PT phones are contact-form numbers, not real
         "city": locality or "",
         "state": state_code,
         "zip": addr.get("postalCode") or "",
