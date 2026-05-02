@@ -69,7 +69,7 @@ export default function FeedbackTestPanel() {
 
   const getFeedback = async (requestId) => {
     try {
-      const res = await axios.get(\`/api/feedback/responses/\${requestId}\`);
+      const res = await axios.get(`/api/feedback/responses/${requestId}`);
       setFeedback((prev) => ({ ...prev, [requestId]: res.data?.responses || [] }));
     } catch {
       /* no feedback yet */
@@ -77,16 +77,16 @@ export default function FeedbackTestPanel() {
   };
 
   const triggerEmail = async (requestId, milestone) => {
-    const key = \`\${requestId}-\${milestone}\`;
+    const key = `${requestId}-${milestone}`;
     setSending((prev) => ({ ...prev, [key]: true }));
     try {
       await axios.post("/api/admin/feedback-testing/trigger", {
         request_id: requestId,
         milestone,
       });
-      toast.success(\`\${milestone} survey email sent\`);
+      toast.success(`${milestone} survey email sent`);
     } catch (e) {
-      toast.error(e?.response?.data?.detail || \`Failed to send \${milestone} email\`);
+      toast.error(e?.response?.data?.detail || `Failed to send ${milestone} email`);
     }
     setSending((prev) => ({ ...prev, [key]: false }));
   };
@@ -125,15 +125,15 @@ export default function FeedbackTestPanel() {
           <button
             onClick={toggleTesting}
             disabled={toggleLoading}
-            className={\`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none \${
+            className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
               testingEnabled ? "bg-[#2D4A3E]" : "bg-[#D3D1C7]"
-            }\`}
+            }`}
             data-testid="feedback-testing-toggle"
           >
             <span
-              className={\`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out \${
+              className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
                 testingEnabled ? "translate-x-5" : "translate-x-0"
-              }\`}
+              }`}
             />
           </button>
         </div>
@@ -177,7 +177,7 @@ export default function FeedbackTestPanel() {
                   </span>
                 </div>
                 <a
-                  href={\`/feedback/patient/\${r.id}?milestone=48h\`}
+                  href={`/feedback/patient/${r.id}?milestone=48h`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs text-[#2D4A3E] hover:underline flex items-center gap-1"
@@ -187,13 +187,13 @@ export default function FeedbackTestPanel() {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4">
                 {MILESTONES.map((ms) => {
-                  const sent = r[\`structured_followup_\${ms.code}_sent_at\`] || r[\`followup_sent_\${ms.code}\`];
+                  const sent = r[`structured_followup_${ms.code}_sent_at`] || r[`followup_sent_${ms.code}`];
                   const hasFb = fb.some((f) => f.milestone === ms.code);
-                  const key = \`\${r.id}-\${ms.code}\`;
+                  const key = `${r.id}-${ms.code}`;
                   return (
                     <div key={ms.code} className="border border-[#E8E5DF] rounded-xl p-3 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className={\`text-xs font-medium px-2 py-0.5 rounded-full \${ms.color}\`}>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ms.color}`}>
                           {ms.label}
                         </span>
                       </div>
@@ -219,7 +219,7 @@ export default function FeedbackTestPanel() {
                           Send
                         </button>
                         <a
-                          href={\`/feedback/patient/\${r.id}?milestone=\${ms.code}\`}
+                          href={`/feedback/patient/${r.id}?milestone=${ms.code}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs px-2 py-1 border border-[#E8E5DF] rounded-lg hover:bg-[#FDFBF7] text-[#2D4A3E]"
