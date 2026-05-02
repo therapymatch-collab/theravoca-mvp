@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Group, PillRow } from "@/components/intake/IntakeUI";
 import { CLIENT_TYPES, AGE_GROUPS, ISSUES } from "./intakeOptions";
 import { api } from "@/lib/api";
