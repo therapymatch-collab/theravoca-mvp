@@ -71,6 +71,7 @@ import OutcomeTrackingPanel from "@/pages/admin/panels/OutcomeTrackingPanel";
 import WaitlistPanel from "@/pages/admin/panels/WaitlistPanel";
 import ProviderPreviewCard from "@/pages/admin/panels/ProviderPreviewCard";
 import SimulatorPanel from "@/pages/admin/panels/SimulatorPanel";
+import ScraperTestPanel from "@/pages/admin/panels/ScraperTestPanel";
 import { StatBox } from "@/pages/admin/panels/_panelShared";
 
 // ─── Editor option lists (mirrors TherapistSignup) ───
@@ -1723,6 +1724,8 @@ export default function AdminDashboard() {
 
               {tab === "simulator" && <SimulatorPanel client={client} setTab={setTab} />}
 
+              {tab === "scraper_test" && <ScraperTestPanel client={client} />}
+
               {tab === "email_templates" && (
                 <div className="mt-6 space-y-3" data-testid="email-templates-list">
                   {emailTemplates.length === 0 ? (
@@ -3153,6 +3156,11 @@ function AdminTabsBar({
       id: "simulator",
       label: "Matching simulator",
       icon: <Activity size={14} />,
+    },
+    {
+      id: "scraper_test",
+      label: "Scraper test",
+      icon: <Search size={14} />,
     },
   ];
 
