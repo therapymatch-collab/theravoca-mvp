@@ -40,7 +40,7 @@ function ReliabilityBar({ label, value }) {
 function FeedbackCard({ entry }) {
   const [open, setOpen] = useState(false);
   const milestone = entry.milestone || "unknown";
-  const created = entry.created_at ? new Date(entry.created_at).toLocaleDateString() : "—";
+  const created = entry.created_at ? new Date(entry.created_at).toLocaleDateString() : "â";
 
   // Extract notable fields for preview
   const preview = [];
@@ -69,7 +69,7 @@ function FeedbackCard({ entry }) {
         {open ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
       </button>
       {!open && preview.length > 0 && (
-        <div className="mt-1 text-xs text-gray-400">{preview.join(" · ")}</div>
+        <div className="mt-1 text-xs text-gray-400">{preview.join(" Â· ")}</div>
       )}
       {open && (
         <div className="mt-3 space-y-1">
@@ -94,13 +94,13 @@ export default function OutcomeTrackingPanel() {
   const [toggleLoading, setToggleLoading] = useState(false);
 
   useEffect(() => {
-    client.get("/api/admin/feedback-testing").then(r => setTestingEnabled(r.data?.enabled || false)).catch(() => {});
+    client.get("/admin/feedback-testing").then(r => setTestingEnabled(r.data?.enabled || false)).catch(() => {});
   }, []);
 
   const toggleTesting = async () => {
     setToggleLoading(true);
     try {
-      const res = await client.put("/api/admin/feedback-testing", { enabled: !testingEnabled });
+      const res = await client.put("/admin/feedback-testing", { enabled: !testingEnabled });
       setTestingEnabled(res.data?.enabled || false);
       toast.success(res.data?.enabled ? "Testing mode ON" : "Testing mode OFF");
     } catch { toast.error("Failed to toggle"); }
@@ -181,7 +181,7 @@ export default function OutcomeTrackingPanel() {
             </div>
             <div className="bg-white border rounded-xl p-4 text-center">
               <div className="text-2xl font-bold text-[#2D4A3E]">
-                {summary.avg_tai != null ? summary.avg_tai : "—"}
+                {summary.avg_tai != null ? summary.avg_tai : "â"}
               </div>
               <div className="text-xs text-gray-500 mt-1">Avg TAI Score</div>
             </div>
@@ -251,7 +251,7 @@ export default function OutcomeTrackingPanel() {
           <div className="bg-white border rounded-xl p-4">
             <h3 className="font-semibold text-[#2D4A3E] mb-1">Therapeutic Alliance Index (TAI)</h3>
             <p className="text-xs text-gray-500 mb-4">
-              Composite 0–100 score from patient surveys. Bond (40%) + Tasks (30%) + Goals (30%).
+              Composite 0â100 score from patient surveys. Bond (40%) + Tasks (30%) + Goals (30%).
               Computed at 9w and 15w milestones when enough data exists.
             </p>
             {tai_scores.length === 0 ? (
@@ -263,7 +263,7 @@ export default function OutcomeTrackingPanel() {
                     <TaiGauge score={t.tai_score} />
                     <span className="text-sm text-gray-600">{t.patient_email || t.request_id}</span>
                     <span className="text-xs text-gray-400 ml-auto">
-                      {t.milestone} · {t.created_at ? new Date(t.created_at).toLocaleDateString() : ""}
+                      {t.milestone} Â· {t.created_at ? new Date(t.created_at).toLocaleDateString() : ""}
                     </span>
                   </div>
                 ))}
