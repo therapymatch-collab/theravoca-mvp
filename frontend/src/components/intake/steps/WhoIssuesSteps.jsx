@@ -185,10 +185,16 @@ export function WhoStep({ data, set, hardCapacity }) {
 
 /**
  * Step "issues" — main concerns (max 5) + severity scale (1-5) for each.
+ *
+ * SAFETY GATE: If the patient selects "Self-harm / safety concerns" we
+ * immediately show a crisis-resource banner and block further intake.
+ * TheraVoca is not equipped to handle active safety crises — we must
+ * direct them to emergency services.
  */
 export function IssuesStep({ data, set, toggleArr }) {
   const severity = data.issue_severity || {};
   const ISSUE_LABELS = Object.fromEntries(ISSUES.map((i) => [i.v, i.l]));
+  const hasSelfHarm = data.presenting_issues.includes("self_harm_safety");
 
   const setSeverity = (issueKey, level) => {
     set("issue_severity", { ...severity, [issueKey]: level });
@@ -209,7 +215,43 @@ export function IssuesStep({ data, set, toggleArr }) {
         />
       </Group>
 
-      {data.presenting_issues.length > 0 && (
+      {/* ── Safety gate ─────────────────────────── */}
+      {hasSelfHarm && (
+        <div
+          className="mt-6 rounded-2xl border-2 border-red-400 bg-red-50 p-6 text-center"
+          data-testid="safety-gate"
+        >
+          <p className="text-lg font-semibold text-red-800 mb-3">
+            If you or someone you know is in immediate danger, please get help now.
+          </p>
+          <div className="space-y-2 text-red-700 text-base">
+            <p>
+              <strong>Call 911</strong> or go to your nearest emergency room.
+            </p>
+            <p>
+              <strong>Suicide & Crisis Lifeline:</strong>{" "}
+              <a
+                href="tel:988"
+                className="underline font-semibold hover:text-red-900"
+              >
+                call or text 988
+              </a>
+            </p>
+            <p>
+              <strong>Crisis Text Line:</strong> text <strong>HOME</strong> to{" "}
+              <strong>741741</strong>
+            </p>
+          </div>
+          <p className="mt-4 text-sm text-red-600">
+            TheraVoca connects people with outpatient therapists and is not
+            equipped for safety crises. Please reach out to the resources above
+            — they are free, confidential, and available 24/7.
+          </p>
+        </div>
+      )}
+
+      {/* ── Severity scale (hidden when safety gate is active) ── */}
+      {!hasSelfHarm && data.presenting_issues.length > 0 && (
         <>
         <div className="mt-6" />
         <Group
