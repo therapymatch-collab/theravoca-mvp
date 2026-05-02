@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Lock, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { Header, Footer } from "@/components/SiteShell";
-import { api, setAdminTokenSession, clearAdminSession } from "@/lib/api";
+import { api, setAdminTokenSession, clearAdminSession, setSession } from "@/lib/api";
 import { STATUS_RATE_LIMITED } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
 
@@ -33,6 +33,7 @@ export default function AdminLogin() {
       await api.post("/admin/login", { password: pwd });
       clearAdminSession();
       sessionStorage.setItem("tv_admin_pwd", pwd);
+      setSession({ token: "admin", role: "admin", email: "admin" });
       navigate("/admin/dashboard");
     } catch (err) {
       handleErr(err);
@@ -50,6 +51,7 @@ export default function AdminLogin() {
       // JWT-based session so adminClient picks up the new token.
       clearAdminSession();
       setAdminTokenSession({ token: res.data.token, email: res.data.email, name: res.data.name });
+      setSession({ token: res.data.token, role: "admin", email: res.data.email });
       navigate("/admin/dashboard");
     } catch (err) {
       handleErr(err);

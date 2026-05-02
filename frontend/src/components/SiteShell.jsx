@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Leaf, ChevronDown, Menu, X, LogOut } from "lucide-react";
 import useSiteCopy from "@/lib/useSiteCopy";
-import { getSession, clearSession } from "@/lib/api";
+import { getSession, clearSession, clearAdminSession } from "@/lib/api";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,6 +42,7 @@ export function Header({ minimal = false }) {
 
   const handleSignOut = () => {
     clearSession();
+    clearAdminSession();
     navigate("/");
   };
 
