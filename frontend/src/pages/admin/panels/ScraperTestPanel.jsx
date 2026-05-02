@@ -163,10 +163,10 @@ export default function ScraperTestPanel({ client }) {
                       </td>
                       <td className="px-3 py-2">{c.city}{c.state ? `, ${c.state}` : ""}</td>
                       <td className="px-3 py-2">
-                        {c.phone ? (<span className="flex items-center gap-1 text-green-700"><Phone size={12} />{c.phone}</span>) : (<span className="text-[#C4C0B8]">-</span>)}
+                        {c.phone ? (<span className="flex items-center gap-1 text-green-700"><Phone size={12} />{c.phone}{c.phone_source === "website" && <span className="ml-1 px-1.5 py-0.5 bg-green-100 text-green-700 text-[10px] rounded-full font-medium">verified</span>}</span>) : (<span className="text-[#C4C0B8]">-</span>)}
                       </td>
                       <td className="px-3 py-2">
-                        {c.email ? (<span className="flex items-center gap-1 text-blue-700"><Mail size={12} />{c.email}</span>) : (<span className="text-[#C4C0B8]">-</span>)}
+                        {c.email ? (<span className="flex items-center gap-1 text-blue-700"><Mail size={12} />{c.email}{c.email_source === "website" && <span className="ml-1 px-1.5 py-0.5 bg-green-100 text-green-700 text-[10px] rounded-full font-medium">verified</span>}</span>) : (<span className="text-[#C4C0B8]">-</span>)}
                       </td>
                       <td className="px-3 py-2">
                         {c.website ? (<a href={c.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-blue-600 hover:underline"><Globe size={12} />link</a>) : (<span className="text-[#C4C0B8]">-</span>)}
