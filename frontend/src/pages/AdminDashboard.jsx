@@ -67,6 +67,8 @@ import CoverageGapPanel from "@/pages/admin/panels/CoverageGapPanel";
 import RecruitDraftsPanel from "@/pages/admin/panels/RecruitDraftsPanel";
 import PatientsByEmailPanel from "@/pages/admin/panels/PatientsByEmailPanel";
 import FeedbackPanel from "@/pages/admin/panels/FeedbackPanel";
+import OutcomeTrackingPanel from "@/pages/admin/panels/OutcomeTrackingPanel";
+import WaitlistPanel from "@/pages/admin/panels/WaitlistPanel";
 import ProviderPreviewCard from "@/pages/admin/panels/ProviderPreviewCard";
 import SimulatorPanel from "@/pages/admin/panels/SimulatorPanel";
 import { StatBox } from "@/pages/admin/panels/_panelShared";
@@ -1706,6 +1708,7 @@ export default function AdminDashboard() {
               {tab === "sms_status" && <SmsStatusPanel client={client} />}
 
               {tab === "waitlist" && <WaitlistPanel client={client} />}
+              {tab === "outcome_tracking" && <OutcomeTrackingPanel />}
 
               {tab === "how_it_works" && <HowItWorksPanel />}
 
@@ -3049,11 +3052,16 @@ function AdminTabsBar({
       icon: <Pencil size={14} />,
     },
     {
-    {
       id: "waitlist",
       label: "Waitlist",
       icon: <MapPin size={14} />,
     },
+    {
+      id: "outcome_tracking",
+      label: "Outcome tracking",
+      icon: <TrendingUp size={14} />,
+    },
+    {
       id: "settings",
       label: "Settings",
       icon: <Sliders size={14} />,

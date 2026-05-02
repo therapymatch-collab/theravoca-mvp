@@ -1550,6 +1550,51 @@ async def admin_list_feedback(_: bool = Depends(require_admin)):
     return {"feedback": docs, "total": len(docs)}
 
 
+@router.get("/admin/outcome-tracking")
+async def admin_outcome_tracking(_: bool = Depends(require_admin)):
+    """Aggregated outcome data: feedback by milestone, TAI scores, therapist reliability."""
+    # All feedback grouped by milestone
+    feedback = await db.feedback.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    by_milestone = {}
+    for f in feedback:
+        m = f.get("milestone", "unknown")
+        by_milestone.setdefault(m, []).append(f)
+
+    # TAI scores from 9w and 15w feedback
+    tai_scores = []
+    for f in feedback:
+        if f.get("tai_score") is not None and f["tai_score"] >= 0:
+            tai_scores.append({
+                "request_id": f.get("request_id"),
+                "milestone": f.get("milestone"),
+                "tai_score": f["tai_score"],
+                "created_at": f.get("created_at"),
+                "patient_email": f.get("patient_email", ""),
+            })
+
+    # Therapist reliability scores
+    therapists = await db.therapists.find(
+        {"reliability": {"$exists": True, "$ne": {}}},
+        {"_id": 0, "id": 1, "first_name": 1, "last_name": 1, "email": 1, "reliability": 1}
+    ).to_list(500)
+
+    # Summary stats
+    milestone_counts = {m: len(docs) for m, docs in by_milestone.items()}
+    avg_tai = round(sum(t["tai_score"] for t in tai_scores) / len(tai_scores), 1) if tai_scores else None
+
+    return {
+        "summary": {
+            "total_feedback": len(feedback),
+            "milestone_counts": milestone_counts,
+            "tai_scores_count": len(tai_scores),
+            "avg_tai": avg_tai,
+        },
+        "feedback_by_milestone": by_milestone,
+        "tai_scores": tai_scores,
+        "therapist_reliability": therapists,
+    }
+
+
 @router.get("/admin/patients")
 async def admin_list_patients_by_email(_: bool = Depends(require_admin)):
     """Aggregate every email that has submitted a request and how many
