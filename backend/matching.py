@@ -902,12 +902,10 @@ def _t6_to_t3_fallback(t6_picks: list[str]) -> list[str]:
 def _score_contextual_resonance(
     p3_embedding: list[float] | None,
     t5_embedding: list[float] | None,
-    t2_embedding: list[float] | None,
 ) -> float:
     """Dimension 3 — Contextual Resonance (weight 0.25 in v2 spec).
-    score = 0.7 * sim(P3, T5) + 0.3 * sim(P3, T2). Cosine sim is
-    clamped to [0,1] so weakly opposite vectors don't subtract from
-    the bonus.
+    score = sim(P3, T5). T2 was removed; its weight now goes
+    entirely to T5 (lived experience), which is the stronger signal.
     """
     from embeddings import cosine_similarity
     sim_t5 = max(0.0, cosine_similarity(p3_embedding, t5_embedding))
