@@ -3860,6 +3860,7 @@ async def scraper_test(payload: dict):
     """
     from pt_scraper import scrape_pt_candidates
     from directory_scrapers import scrape_all_backup_sources
+    from contact_enricher import enrich_batch
 
     city = (payload.get("city") or "").strip()
     state = (payload.get("state") or "ID").upper()[:2]
@@ -3906,6 +3907,12 @@ async def scraper_test(payload: dict):
         if key not in seen and key != "|":
             seen.add(key)
             unique.append(c)
+
+    # Phase 3: Enrich with real contact info from therapist websites
+    try:
+        await enrich_batch(unique, max_enrich=min(count, 50))
+    except Exception as e:
+        errors.append(f"Contact enrichment: {e}")
 
     # Sort by completeness
     def _completeness(c: dict) -> int:
