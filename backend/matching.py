@@ -33,7 +33,7 @@ MAX_EXPERIENCE = 5.0
 MAX_GENDER = 3.0
 MAX_STYLE = 2.0
 MAX_PAYMENT_FIT = 3.0  # bonus when patient accepts sliding scale AND therapist offers it
-MAX_PAYMENT_ALIGNMENT = 10.0  # penalty axis: 0 when patient asked for a specific insurance/cash path the therapist can't meet
+MAX_PAYMENT_ALIGNMENT = 20.0  # penalty axis: 0 when patient asked for a specific insurance/cash path the therapist can't meet
 MAX_MODALITY_PREF = 4.0  # bonus when patient's preferred modalities (CBT/DBT/etc.) match therapist's
 # Patient `Anything else?` free-text resonance bonus. Embedded once at
 # request creation, then cosine-compared against therapist T5/T2

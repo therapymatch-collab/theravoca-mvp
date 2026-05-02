@@ -85,7 +85,7 @@ function DeepMatchBackfillBanner({ therapist }) {
           </p>
           <div className="flex gap-3 mt-4 flex-wrap">
             <Link
-              to="/therapists/profile/edit#deep-match"
+              to="/portal/therapist/edit#deep-match"
               className="tv-btn-primary text-sm"
               data-testid="deep-match-backfill-cta"
             >

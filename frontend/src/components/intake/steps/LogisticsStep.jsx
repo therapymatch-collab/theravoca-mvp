@@ -30,7 +30,7 @@ export default function LogisticsStep({ data, set, toggleArr, hardCapacity }) {
       {data.availability_windows.length > 0 &&
         !data.availability_windows.includes("flexible") && (
           <label
-            className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer hover:border-[#2D4A3E] transition -mt-3"
+            className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer hover:border-[#2D4A3E] transition -mt-2"
             data-testid="availability-strict-row"
           >
             <Checkbox
@@ -55,7 +55,7 @@ export default function LogisticsStep({ data, set, toggleArr, hardCapacity }) {
       </Group>
       {data.urgency && data.urgency !== "flexible" && (
         <label
-          className={`flex items-start gap-3 border rounded-xl px-4 py-3 transition -mt-3 ${
+          className={`flex items-start gap-3 border rounded-xl px-4 py-3 transition -mt-2 ${
             urgencyHardDisabled
               ? "bg-[#F2EFE9] border-[#E8E5DF] cursor-not-allowed opacity-60"
               : "bg-[#FDFBF7] border-[#E8E5DF] cursor-pointer hover:border-[#2D4A3E]"
