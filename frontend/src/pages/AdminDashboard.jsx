@@ -2748,6 +2748,7 @@ export default function AdminDashboard() {
                               data-testid={`admin-app-rank-${a.id}`}
                             >
                               {Math.round(rankScore)}%
+                              <span className="text-[9px] opacity-70 ml-0.5">rank</span>
                             </span>
                             {/* Show the Step-1 match_score next to it as a
                                 small muted chip so the admin can see both
@@ -2755,9 +2756,9 @@ export default function AdminDashboard() {
                             {a.patient_rank_score != null && (
                               <span
                                 className="font-mono text-[10px] text-[#6D6A65] bg-[#F2EFE9] px-1.5 py-0.5 rounded"
-                                title={`Step-1 baseline match score (capped at 95%)`}
+                                title={`Step-1 algorithmic match score — this is what the therapist sees on their dashboard`}
                               >
-                                ↑{Math.round(a.match_score)}
+                                {Math.round(a.match_score)}% match
                               </span>
                             )}
                             {/* Apply-fit grade chip — small, muted, only

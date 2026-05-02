@@ -54,7 +54,7 @@ export default class ErrorBoundary extends Component {
               We hit an unexpected error rendering this page. Refreshing
               usually clears it. If it keeps happening, please{" "}
               <a
-                href="mailto:hello@theravoca.com"
+                href="mailto:support@theravoca.com"
                 className="underline text-[#2D4A3E]"
               >
                 let us know

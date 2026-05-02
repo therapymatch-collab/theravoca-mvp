@@ -10,6 +10,7 @@
  */
 import { useRef, useState, useEffect } from "react";
 import { Play, ChevronLeft, ChevronRight } from "lucide-react";
+import useSiteCopy from "@/lib/useSiteCopy";
 
 // Source URLs come from the user's own theravoca.com WordPress media library.
 const TESTIMONIALS = [
@@ -47,6 +48,7 @@ const TESTIMONIALS = [
 ];
 
 export default function VideoTestimonials() {
+  const t = useSiteCopy();
   const refs = useRef({});
   const trackRef = useRef(null);
   // Track whichever video is currently playing so we can pause it when
@@ -173,7 +175,7 @@ export default function VideoTestimonials() {
             className="tv-btn-primary"
             data-testid="testimonials-cta-btn"
           >
-            Get matched today
+            {t("cta.testimonials", "Get matched today")}
           </a>
         </div>
       </div>

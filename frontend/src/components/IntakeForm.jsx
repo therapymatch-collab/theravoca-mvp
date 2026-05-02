@@ -575,7 +575,7 @@ export default function IntakeForm() {
       <div className="max-w-3xl mx-auto px-5 sm:px-8">
         <div className="text-center mb-10">
           <p className="text-xs uppercase tracking-[0.2em] text-[#C87965] mb-3">
-            Get started
+            {t("intake.eyebrow", "Get started")}
           </p>
           <h2 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] leading-tight">
             Get your personalized list of <em>pre-qualified</em> therapists
@@ -680,7 +680,7 @@ export default function IntakeForm() {
             )}
 
             {currentId === "format_logistics" && (
-              <>
+              <div className="space-y-8">
                 <FormatStep
                   data={data}
                   set={set}
@@ -689,8 +689,9 @@ export default function IntakeForm() {
                   setZipError={setZipError}
                   hardCapacity={hardCapacity}
                 />
+                <div className="border-t border-[#E8E5DF] pt-6" />
                 <LogisticsStep data={data} set={set} toggleArr={toggleArr} hardCapacity={hardCapacity} />
-              </>
+              </div>
             )}
 
             {currentId === "payment" && (

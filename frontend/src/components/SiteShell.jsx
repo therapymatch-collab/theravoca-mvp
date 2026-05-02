@@ -95,27 +95,7 @@ export function Header({ minimal = false }) {
               className="hidden md:flex items-center gap-7 text-sm text-[#6D6A65]"
               data-testid="desktop-nav"
             >
-              {effectiveRole === "admin" ? (
-                <>
-                  <a href="/admin/dashboard" className="hover:text-[#2D4A3E] transition" data-testid="nav-console">
-                    Console
-                  </a>
-                </>
-              ) : effectiveRole === "patient" ? (
-                <>
-                  <a href="/portal/patient" className="hover:text-[#2D4A3E] transition" data-testid="nav-dashboard">
-                    My matches
-                  </a>
-                </>
-              ) : effectiveRole === "therapist" ? (
-                <>
-                  <a href="/portal/therapist" className="hover:text-[#2D4A3E] transition" data-testid="nav-referrals">
-                    My referrals
-                  </a>
-                </>
-              ) : (
-                <>
-                  <a href="/#how" className="hover:text-[#2D4A3E] transition" data-testid="nav-how">
+              <a href="/#how" className="hover:text-[#2D4A3E] transition" data-testid="nav-how">
                     {t("header.nav.how", "How it works")}
                   </a>
                   <a href="/#testimonials" className="hover:text-[#2D4A3E] transition" data-testid="nav-testimonials">
@@ -135,8 +115,21 @@ export function Header({ minimal = false }) {
                   >
                     {t("header.nav.therapists", "For therapists")}
                   </a>
-                </>
-              )}
+                  {effectiveRole === "admin" && (
+                    <a href="/admin/dashboard" className="font-medium text-[#2D4A3E] transition" data-testid="nav-console">
+                      Console
+                    </a>
+                  )}
+                  {effectiveRole === "patient" && (
+                    <a href="/portal/patient" className="font-medium text-[#2D4A3E] transition" data-testid="nav-dashboard">
+                      My matches
+                    </a>
+                  )}
+                  {effectiveRole === "therapist" && (
+                    <a href="/portal/therapist" className="font-medium text-[#2D4A3E] transition" data-testid="nav-referrals">
+                      My referrals
+                    </a>
+                  )}
               {(session || isAdmin) ? (
                 <button
                   onClick={handleSignOut}
@@ -229,27 +222,7 @@ export function Header({ minimal = false }) {
           data-testid="mobile-nav"
         >
           <nav className="max-w-7xl mx-auto px-5 py-5 flex flex-col gap-1 text-base text-[#2B2A29]">
-            {effectiveRole === "admin" ? (
-              <>
-                <a href="/admin/dashboard" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-console">
-                  Console
-                </a>
-              </>
-            ) : effectiveRole === "patient" ? (
-              <>
-                <a href="/portal/patient" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-dashboard">
-                  My matches
-                </a>
-              </>
-            ) : effectiveRole === "therapist" ? (
-              <>
-                <a href="/portal/therapist" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-referrals">
-                  My referrals
-                </a>
-              </>
-            ) : (
-              <>
-                <a href="/#how" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-how">
+            <a href="/#how" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-how">
                   How it works
                 </a>
                 <a href="/#testimonials" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-testimonials">
@@ -264,8 +237,21 @@ export function Header({ minimal = false }) {
                 <a href="/therapists/join" onClick={onTherapistsClick} className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-therapists">
                   For therapists
                 </a>
-              </>
-            )}
+                {effectiveRole === "admin" && (
+                  <a href="/admin/dashboard" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition font-medium text-[#2D4A3E]" data-testid="mobile-nav-console">
+                    Console
+                  </a>
+                )}
+                {effectiveRole === "patient" && (
+                  <a href="/portal/patient" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition font-medium text-[#2D4A3E]" data-testid="mobile-nav-dashboard">
+                    My matches
+                  </a>
+                )}
+                {effectiveRole === "therapist" && (
+                  <a href="/portal/therapist" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition font-medium text-[#2D4A3E]" data-testid="mobile-nav-referrals">
+                    My referrals
+                  </a>
+                )}
             <div className="border-t border-[#E8E5DF] my-2" />
             {(session || isAdmin) ? (
               <button
@@ -311,7 +297,7 @@ export function Header({ minimal = false }) {
               className="tv-btn-primary justify-center mt-3"
               data-testid="mobile-nav-cta"
             >
-              Get matched
+              {t("header.cta", "Get matched")}
             </a>
           </nav>
         </div>

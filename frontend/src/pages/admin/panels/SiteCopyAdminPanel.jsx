@@ -73,7 +73,7 @@ const SEED_KEYS = [
   // ─── LANDING — FAQ ─────────────────────────────────────────────────
   { section: "Landing — FAQ", key: "landing.faq.eyebrow", label: "Eyebrow", fallback: "FAQs", previewPath: "/#faq" },
   { section: "Landing — FAQ", key: "landing.faq.heading", label: "Heading", fallback: "Things people ask", previewPath: "/#faq" },
-  { section: "Landing — FAQ", key: "landing.faq.subhead", label: "Subhead", fallback: "Don't see your question? Email hello@theravoca.com.", previewPath: "/#faq" },
+  { section: "Landing — FAQ", key: "landing.faq.subhead", label: "Subhead", fallback: "Don't see your question? Email support@theravoca.com.", previewPath: "/#faq" },
 
   // ─── LANDING — Final CTA ───────────────────────────────────────────
   { section: "Landing — Final CTA", key: "landing.finalcta.heading", label: "Heading", fallback: "Ready to find your therapist?", previewPath: "/" },
@@ -176,6 +176,14 @@ const SEED_KEYS = [
   { section: "Buttons", key: "btn.intake.preview_edit",   label: "Intake · 'Edit answers'",    fallback: "← Edit answers", previewPath: "/#start" },
   { section: "Buttons", key: "btn.intake.preview_submit", label: "Intake · 'Confirm & submit'",fallback: "Confirm & find my matches", previewPath: "/#start" },
 
+
+  // ─── CTA BUTTONS — Per-location ────────────────────────────────────
+  { section: "CTA buttons", key: "cta.after_how",       label: "After 'How it works'",    fallback: "Get matched today", previewPath: "/#how" },
+  { section: "CTA buttons", key: "cta.after_different",  label: "After 'Why TheraVoca'",   fallback: "Get matched today", previewPath: "/#different" },
+  { section: "CTA buttons", key: "cta.after_faq",        label: "After FAQ",               fallback: "Get matched today", previewPath: "/#faq" },
+  { section: "CTA buttons", key: "cta.testimonials",     label: "After testimonials",      fallback: "Get matched today", previewPath: "/#testimonials" },
+  { section: "CTA buttons", key: "cta.default",          label: "Default CTA fallback",    fallback: "Get matched today", previewPath: "/" },
+  { section: "CTA buttons", key: "intake.eyebrow",       label: "Intake section eyebrow",  fallback: "Get started", previewPath: "/#start" },
   // ─── INTAKE — Review-modal lock warning (Iter-89) ────────────────────
   // Final reminder shown at the top of the Review modal so patients
   // know this is the last chance to change anything.

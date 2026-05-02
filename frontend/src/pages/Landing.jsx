@@ -218,9 +218,7 @@ export default function Landing() {
             ].map((s, i) => (
               <div
                 key={s.n}
-                className={`bg-white border border-[#E8E5DF] rounded-3xl p-8 hover:-translate-y-1 transition ${
-                  i === 1 ? "md:translate-y-6" : ""
-                }`}
+                className="bg-white border border-[#E8E5DF] rounded-3xl p-8 hover:-translate-y-2 hover:shadow-lg transition-all duration-200 cursor-default"
                 data-testid={`how-step-${i}`}
               >
                 <div className="font-serif-display text-5xl text-[#C87965]">{s.n}</div>
@@ -230,7 +228,7 @@ export default function Landing() {
             ))}
           </div>
 
-          <GetMatchedCTA id="how-cta" />
+          <GetMatchedCTA id="how-cta" copyKey="cta.after_how" />
         </div>
       </section>
 
@@ -347,7 +345,7 @@ export default function Landing() {
               </div>
             </div>
           </div>
-          <GetMatchedCTA id="different-cta" />
+          <GetMatchedCTA id="different-cta" copyKey="cta.after_different" />
         </div>
       </section>
 
@@ -366,7 +364,7 @@ export default function Landing() {
           <p className="text-sm text-[#6D6A65] mt-3 text-center max-w-md mx-auto">
             {t(
               "landing.faq.subhead",
-              "Don't see your question? Email hello@theravoca.com.",
+              "Don't see your question? Email support@theravoca.com.",
             )}
           </p>
           <Accordion type="single" collapsible className="mt-10" data-testid="faq">
@@ -387,7 +385,7 @@ export default function Landing() {
             ))}
           </Accordion>
 
-          <GetMatchedCTA id="faq-cta" />
+          <GetMatchedCTA id="faq-cta" copyKey="cta.after_faq" />
         </div>
       </section>
 
