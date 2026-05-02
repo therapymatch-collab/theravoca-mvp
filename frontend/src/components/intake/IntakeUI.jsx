@@ -100,7 +100,7 @@ export function PillRow({ items, selected, onSelect, testid, disabledValues, dis
                 }`}
                 data-testid={`${testid}-${it.v}-rank-${rank}`}
               >
-                {rank === 1 ? "1st" : rank === 2 ? "2nd" : "3rd"}
+                {rank === 1 ? "1st" : rank === 2 ? "2nd" : rank === 3 ? "3rd" : rank === 4 ? "4th" : "5th"}
               </span>
             )}
             {it.l}

@@ -218,7 +218,7 @@ export function IssuesStep({ data, set, toggleArr }) {
           <div className="space-y-4">
             {data.presenting_issues.map((issueKey) => (
               <div key={issueKey} className="flex items-center gap-3">
-                <span className="text-sm text-[#2B2A29] min-w-[180px] max-w-[220px] leading-snug">
+                <span className="text-sm text-[#2B2A29] w-[200px] shrink-0 leading-snug">
                   {ISSUE_LABELS[issueKey] || issueKey}
                 </span>
                 <div className="flex gap-1.5">
