@@ -56,8 +56,6 @@ function DeepMatchBackfillBanner({ therapist }) {
     missing.push("what sessions 1–3 look like with you");
   if ((therapist.t6_early_sessions_description || "").trim().length < 30)
     missing.push("a description of your early sessions");
-  if ((therapist.t2_progress_story || "").trim().length < 50)
-    missing.push("a story of a client who made progress");
   if (!therapist.t4_hard_truth)
     missing.push("how you push past comfort zones");
   if ((therapist.t5_lived_experience || "").trim().length < 30)
@@ -1243,4 +1241,4 @@ function ReferralTag({ children }) {
       {children}
     </span>
   );
-}
+}                                                                                                                           

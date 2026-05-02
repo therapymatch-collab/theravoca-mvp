@@ -121,8 +121,7 @@ export default function TherapistSignup() {
     // ── Deep-match (v2 spec, Iter-89) ──────────────────────────
     // Required at signup so the matching engine has a complete picture
     // of clinical style. T4 picks 1 of 5.
-    // T2 + T5 are open text used for embedding-based context scoring.
-    t2_progress_story: "",
+    // T5 is open text used for embedding-based context scoring.
     t4_hard_truth: "",
     t5_lived_experience: "",
     t6_session_expectations: [],
@@ -374,7 +373,6 @@ export default function TherapistSignup() {
     if (s === 8) {
       const t6Len = (data.t6_session_expectations || []).length;
       return (
-        (data.t2_progress_story || "").trim().length >= 50 &&
         !!data.t4_hard_truth &&
         (data.t5_lived_experience || "").trim().length >= 30 &&
         t6Len >= 1 && t6Len <= 2 &&
@@ -448,8 +446,6 @@ export default function TherapistSignup() {
     if (s === 7 && data.style_tags.length === 0)
       return "Pick at least one style tag.";
     if (s === 8) {
-      if ((data.t2_progress_story || "").trim().length < 50)
-        return "Tell us about a real client's progress (at least 50 characters).";
       if (!data.t4_hard_truth)
         return "Pick how you push a client past their comfort zone.";
       if ((data.t5_lived_experience || "").trim().length < 30)
@@ -1293,3 +1289,4 @@ export default function TherapistSignup() {
 // legacy arrow-based RankList that used to live below were
 // previously extracted: PillCol+RadioCol → TherapistDeepMatchStep,
 // RankList → DraggableRankList (drag-and-drop dnd-kit version).
+                                                                                                                                                                                                                                               

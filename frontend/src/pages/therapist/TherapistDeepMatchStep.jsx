@@ -12,7 +12,7 @@ import {
  *   - TherapistEditProfile.jsx in-portal edit form
  *
  * Props:
- *  - data:        { t2_progress_story, t4_hard_truth, t5_lived_experience,
+ *  - data:        { t4_hard_truth, t5_lived_experience,
  *                   t6_session_expectations, t6_early_sessions_description }
  *  - set(key, v): single-field setter
  *  - toggleArr(key, v, max): toggle slug in a multi-select array (used by T6)
@@ -60,25 +60,6 @@ export default function TherapistDeepMatchStep({
           </p>
         </div>
       )}
-
-      <Wrap
-        title="T2 — Describe a client who made real progress with you"
-        hint="What were they like when they walked in? Open text — at least 50 characters."
-      >
-        <Textarea
-          rows={4}
-          minLength={50}
-          maxLength={2000}
-          value={data.t2_progress_story}
-          onChange={(e) => set("t2_progress_story", e.target.value)}
-          placeholder="A 35-year-old new mom came in feeling like she'd lost herself. She was articulate but kept apologising for taking up space. Six months in, she'd named the pattern, set boundaries with her own mom, and was painting again."
-          className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-          data-testid={`${testidPrefix}-t2`}
-        />
-        <p className="text-[11px] text-[#6D6A65] mt-1">
-          {(data.t2_progress_story || "").length}/2000 characters
-        </p>
-      </Wrap>
 
       <Wrap
         title="T4 — When you need to push a client past their comfort zone, how do you do it?"
@@ -242,3 +223,4 @@ export function RadioCol({ items, value, onChange, testid }) {
     </div>
   );
 }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       

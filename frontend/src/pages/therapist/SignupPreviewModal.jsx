@@ -258,11 +258,6 @@ export default function PreviewModal({ data, onClose, onConfirm, submitting }) {
               span={2}
             />
             <SummaryRow
-              label="T2 — Client progress story"
-              value={data.t2_progress_story || "—"}
-              span={2}
-            />
-            <SummaryRow
               label="T5 — Lived experience / community knowledge"
               value={data.t5_lived_experience || "—"}
               span={2}
@@ -307,3 +302,4 @@ export default function PreviewModal({ data, onClose, onConfirm, submitting }) {
     </div>
   );
 }
+                                                                                                                                                                       

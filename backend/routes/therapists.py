@@ -84,28 +84,25 @@ def _verify_action_signature(
 
 
 # ─── Embedding helper for the deep-match Contextual Resonance axis ──
-# Stores T5 + T2 embeddings on the therapist doc so match-time
-# scoring is a pure numpy cosine. Called from signup + portal-edit
-# whenever T2 or T5 changes.
+# Stores T5 embedding on the therapist doc so match-time scoring is a
+# pure numpy cosine. Called from signup + portal-edit whenever T5 changes.
+# T2 (progress story) was removed — its weight shifted entirely to T5.
 async def _embed_therapist_signals(
-    therapist_id: str, t5_text: str, t2_text: str
+    therapist_id: str, t5_text: str, _t2_text: str = ""
 ) -> None:
     try:
-        vecs = await embed_texts([t5_text or "", t2_text or ""])
+        vecs = await embed_texts([t5_text or ""])
         update: dict = {}
         if vecs[0]:
             update["t5_embedding"] = vecs[0]
             update["t5_embedding_text"] = (t5_text or "").strip()[:6000]
-        if vecs[1]:
-            update["t2_embedding"] = vecs[1]
-            update["t2_embedding_text"] = (t2_text or "").strip()[:6000]
         if update:
             await db.therapists.update_one(
                 {"id": therapist_id}, {"$set": update}
             )
             logger.info(
-                "Embedded therapist %s signals (t5=%s, t2=%s)",
-                therapist_id, bool(vecs[0]), bool(vecs[1]),
+                "Embedded therapist %s T5 signal: %s",
+                therapist_id, bool(vecs[0]),
             )
     except Exception as e:  # noqa: BLE001
         logger.warning("Embedding therapist %s failed: %s", therapist_id, e)
@@ -182,11 +179,9 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
     # Pre-compute T2/T5 embeddings in the background so Contextual
     # Resonance scoring works on first match without a per-request
     # round-trip. Failures degrade gracefully — see embeddings.py.
-    if (payload.t5_lived_experience or "").strip() or (
-        payload.t2_progress_story or ""
-    ).strip():
+    if (payload.t5_lived_experience or "").strip():
         _spawn_bg(
-            _embed_therapist_signals(tid, payload.t5_lived_experience or "", payload.t2_progress_story or ""),
+            _embed_therapist_signals(tid, payload.t5_lived_experience or ""),
             name=f"embed_signup_{tid[:8]}",
         )
     logger.info(
@@ -714,3 +709,4 @@ async def therapist_get_my_license_doc(
         "size_bytes": doc.get("size_bytes"),
         "uploaded_at": doc.get("uploaded_at"),
     }
+                                                                                                                                                                                                            

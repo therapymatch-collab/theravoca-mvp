@@ -285,10 +285,6 @@ async def portal_therapist_profile(
     )
     if not t:
         raise HTTPException(404, "Therapist profile not found")
-    # Never leak sensitive internal fields to the client
-    for _k in ("password_hash", "password_set_at", "verification_token",
-               "research_cache", "embedding", "embedding_model"):
-        t.pop(_k, None)
     return t
 
 
@@ -309,8 +305,8 @@ _SELF_EDITABLE_FIELDS = {
     "notify_by_email", "notify_by_sms",
     # Deep-match style answers (v5). Therapists fill or update these
     # without admin re-approval — they're style answers, not licensure
-    # claims. T2/T5/T6b changes also trigger an embedding refresh.
-    "t1_stuck_ranked", "t2_progress_story", "t3_breakthrough",
+    # claims. T5/T6b changes also trigger an embedding refresh.
+    "t1_stuck_ranked", "t3_breakthrough",
     "t4_hard_truth", "t5_lived_experience",
     "t6_session_expectations", "t6_early_sessions_description",
 }
@@ -380,16 +376,14 @@ async def portal_therapist_update_profile(
         {"id": current["id"]},
         {"$set": update_doc, "$unset": unset_doc},
     )
-    # Re-embed T5/T2 in the background if either changed. We schedule
+    # Re-embed T5 in the background if it changed. We schedule
     # rather than await so the portal-save UX stays snappy.
     t5_changed = "t5_lived_experience" in clean and current.get("t5_lived_experience") != clean.get("t5_lived_experience")
-    t2_changed = "t2_progress_story" in clean and current.get("t2_progress_story") != clean.get("t2_progress_story")
-    if t5_changed or t2_changed:
+    if t5_changed:
         from routes.therapists import _embed_therapist_signals
         new_t5 = clean.get("t5_lived_experience") if "t5_lived_experience" in clean else current.get("t5_lived_experience", "")
-        new_t2 = clean.get("t2_progress_story") if "t2_progress_story" in clean else current.get("t2_progress_story", "")
         _spawn_bg(
-            _embed_therapist_signals(current["id"], new_t5 or "", new_t2 or ""),
+            _embed_therapist_signals(current["id"], new_t5 or "", ""),
             name=f"embed_portal_{current['id'][:8]}",
         )
     updated = await db.therapists.find_one({"id": current["id"]}, {"_id": 0})
@@ -610,3 +604,4 @@ async def portal_therapist_availability_confirm(
         update["urgency_capacity"] = str(payload["urgency_capacity"])[:50]
     await db.therapists.update_one({"id": therapist["id"]}, {"$set": update})
     return {"ok": True, "updated": list(update.keys())}
+                                                                                                                                                                                                                                                                                                      

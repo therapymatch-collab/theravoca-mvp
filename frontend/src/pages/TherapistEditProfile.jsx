@@ -107,10 +107,9 @@ export default function TherapistEditProfile() {
           // Re-approval fields (editable, but flag change)
           primary_specialties: [...(r.data.primary_specialties || [])],
           secondary_specialties: [...(r.data.secondary_specialties || [])],
-          // Deep-match v5: T6/T6b are the primary signal; T2/T4/T5 remain.
+          // Deep-match v5: T6/T6b are the primary signal; T4/T5 remain.
           t6_session_expectations: [...(r.data.t6_session_expectations || [])],
           t6_early_sessions_description: r.data.t6_early_sessions_description || "",
-          t2_progress_story: r.data.t2_progress_story || "",
           t4_hard_truth: r.data.t4_hard_truth || "",
           t5_lived_experience: r.data.t5_lived_experience || "",
         });
@@ -520,19 +519,6 @@ export default function TherapistEditProfile() {
               />
               <p className="text-[11px] text-[#6D6A65] mt-1">
                 {(draft.t6_early_sessions_description || "").length}/2000
-              </p>
-            </Field>
-            <Field label="T2 — Describe a client who made real progress with you (≥50 chars)">
-              <Textarea
-                rows={4}
-                value={draft.t2_progress_story}
-                onChange={(e) => set("t2_progress_story", e.target.value)}
-                className="bg-white border-[#E8E5DF] rounded-xl"
-                data-testid="edit-t2"
-                placeholder="What were they like when they walked in? How did they change?"
-              />
-              <p className="text-[11px] text-[#6D6A65] mt-1">
-                {(draft.t2_progress_story || "").length}/2000
               </p>
             </Field>
             <Field label="T4 — When you need to push a client past their comfort zone, how do you do it? (pick 1)">
@@ -1045,3 +1031,4 @@ function PhotoUploader({ value, onChange }) {
     </div>
   );
 }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
