@@ -62,6 +62,7 @@ export default function RequestFullBrief({ request }) {
     : (request.presenting_issues ? [request.presenting_issues] : []);
   const primaryIssue = issuesArr[0];
   const secondaryIssues = issuesArr.slice(1);
+  const issueSev = request.issue_severity || {};
 
   const availability = Array.isArray(request.availability_windows)
     ? request.availability_windows.join(", ")
@@ -272,6 +273,9 @@ export default function RequestFullBrief({ request }) {
                   1°
                 </span>
                 {primaryIssue}
+                {issueSev[issuesArr[0]] && (
+                  <span className="ml-1 text-[9px] opacity-80">({issueSev[issuesArr[0]]}/5)</span>
+                )}
               </span>
             )}
             {secondaryIssues.map((iss, i) => (
@@ -284,6 +288,9 @@ export default function RequestFullBrief({ request }) {
                   {i + 2}°
                 </span>
                 {iss}
+                {issueSev[issuesArr[i + 1]] && (
+                  <span className="ml-1 text-[9px] opacity-60">({issueSev[issuesArr[i + 1]]}/5)</span>
+                )}
               </span>
             ))}
             {!issuesArr.length && <span>—</span>}

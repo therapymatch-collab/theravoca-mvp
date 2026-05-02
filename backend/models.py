@@ -135,6 +135,8 @@ class RequestCreate(BaseModel):
     budget: Optional[int] = None
     sliding_scale_ok: bool = False
     presenting_issues: list[str] = Field(default_factory=list, max_length=5)
+    # Severity ratings per presenting issue (1-5 scale, informational only)
+    issue_severity: dict[str, int] = Field(default_factory=dict)
     other_issue: Optional[str] = ""
     availability_windows: list[str] = Field(default_factory=list)
     # Hard-requirement toggle for availability windows.

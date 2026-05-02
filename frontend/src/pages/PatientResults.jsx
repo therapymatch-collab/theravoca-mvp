@@ -356,8 +356,13 @@ function matchGaps(breakdown, request, therapist) {
 // scan their inputs side-by-side with the matches below.
 function YourReferralPanel({ request }) {
   const [open, setOpen] = useState(false);
+  const sev = request.issue_severity || {};
   const issues = (request.presenting_issues || [])
-    .map((s) => ISSUE_LABELS[s] || s.replace(/_/g, " "))
+    .map((s) => {
+      const label = ISSUE_LABELS[s] || s.replace(/_/g, " ");
+      const sv = sev[s];
+      return sv ? label + " (" + sv + "/5)" : label;
+    })
     .join(", ");
   // Insurance is rendered from `insurance_name` (the human-readable plan
   // the patient typed in). Older records sometimes carry an

@@ -92,7 +92,15 @@ export default function ReviewPreviewModal({
         data.location_zip ? `, ${data.location_zip}` : ""
       } (${data.location_state})`,
     ],
-    ["Concerns", lookupMany(ISSUES, data.presenting_issues) || issues || "—"],
+    ["Concerns", (() => {
+      const sev = data.issue_severity || {};
+      const parts = (data.presenting_issues || []).map((v) => {
+        const label = lookup(ISSUES, v);
+        const s = sev[v];
+        return s ? label + " (" + s + "/5)" : label;
+      });
+      return parts.join(", ") || "—";
+    })()],
     ["Session format", lookup(MODALITY, data.modality_preference)],
     ["Insurance", insurance],
     ["Cash budget", cash],
