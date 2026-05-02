@@ -39,21 +39,22 @@ MAX_MODALITY_PREF = 4.0  # bonus when patient's preferred modalities (CBT/DBT/et
 # request creation, then cosine-compared against therapist T5/T2
 # embeddings. Capped at 6 points so it materially differentiates the
 # top of the rank without overwhelming the structured-fit signal.
-MAX_OTHER_ISSUE_BONUS = 6.0
+MAX_OTHER_ISSUE_BONUS = 0.0  # deprecated: other_issue textarea removed from intake
 # Patient `prior_therapy_notes` free-text resonance bonus. Smaller than
 # `other_issue` because the two signals overlap conceptually and we
 # don't want to double-count when both are filled in.
 MAX_PRIOR_THERAPY_BONUS = 4.0
+
 # ─── Expectation alignment ─────────────────────────────────────────────
 # Overlap between patient session_expectations and therapist
 # t6_session_expectations. THE #1 ranking signal. Both pick up to 2
 # from 5 options (same slugs). Special handling: "not_sure" (patient)
 # and "depends" (therapist) are wildcards — they match anything.
-MAX_EXPECTATION_ALIGNMENT = 25.0
+MAX_EXPECTATION_ALIGNMENT = 30.0
 # Bonus from embedding similarity between patient free-text and
 # therapist T6 early-session description. Tie-breaker when tag
 # overlap is identical.
-MAX_EXPECTATION_EMBED_BONUS = 8.0
+MAX_EXPECTATION_EMBED_BONUS = 0.0  # deprecated: session_expectations_notes textarea removed from intake
 # ─── Therapist reliability ─────────────────────────────────────────────
 # Built from passive behavior data:
 #   response_rate:    % of referrals responded to (applied or declined)
@@ -561,10 +562,10 @@ def _priority_weights(priority_factors: list[str]) -> dict[str, float]:
     returns an all-1.0 map (default behaviour).
     """
     weights = {ax: 1.0 for ax in [
+        "expectation_alignment", "expectation_embed", "reliability",
         "issues", "availability", "modality", "urgency",
         "prior_therapy", "experience", "gender", "style",
         "payment_fit", "payment_alignment", "modality_pref",
-        "expectation_alignment", "expectation_embed", "reliability",
     ]}
     for f in priority_factors or []:
         for axis in PRIORITY_AXES.get(f, []):
@@ -719,11 +720,6 @@ def calculate_tai(feedback_data: dict) -> float:
 # the corresponding T-fields. Each axis returns a 0–1 sub-score; the
 # bonus added to the total is `weight * sub_score * DEEP_MATCH_SCALE`.
 #
-# NOTE: T1 (stuck_ranked) and T3 (breakthrough) are deprecated in the
-# new survey timeline but the scoring logic still works with existing
-# data. New therapists may not have T1/T3 answers — sub-scores will
-# be 0.0 for those axes, which is the correct neutral behavior.
-#
 # Default weights match the founder's v2 spec:
 #   relationship_style 0.40 / way_of_working 0.35 / contextual_resonance 0.25
 # Admins can override these in `app_config.deep_match_weights`. The
@@ -738,6 +734,11 @@ _DEEP_MATCH_DEFAULT_WEIGHTS = {
 }
 _DEEP_MATCH_SCALE = 30.0  # max bonus per axis ≈ weight * 30
 
+# NOTE: T1 (stuck_ranked) and T3 (breakthrough) are deprecated in the
+# new survey timeline but the scoring logic still works with existing
+# data. New therapists may not have T1/T3 answers — sub-scores will
+# be 0.0 for those axes, which is the correct neutral behavior.
+#
 # Canonical option order for P1/T1 vectors. Indices here drive the
 # 6-slot binary/rank vectors used by `_score_relationship_style`.
 _P1_T1_KEYS = (
@@ -834,18 +835,6 @@ def _score_way_of_working(p2_picks: list[str], t3_picks: list[str]) -> float:
     return overlap / 2.0
 
 
-def _score_contextual_resonance(
-    p3_embedding: list[float] | None,
-    t5_embedding: list[float] | None,
-) -> float:
-    """Dimension 3 — Contextual Resonance (weight 0.25 in v2 spec).
-    score = sim(P3, T5). T2 was removed — its 30% weight now goes
-    entirely to T5 (lived experience), which is the stronger signal.
-    """
-    from embeddings import cosine_similarity
-    sim_t5 = max(0.0, cosine_similarity(p3_embedding, t5_embedding))
-    return round(sim_t5, 4)
-
 
 def _t6_to_t1_fallback(t6_picks: list[str]) -> list[str]:
     """When a therapist has T6 but no T1, derive a plausible T1 rank
@@ -910,6 +899,21 @@ def _t6_to_t3_fallback(t6_picks: list[str]) -> list[str]:
     return seen[:2]  # T3 is pick-2
 
 
+def _score_contextual_resonance(
+    p3_embedding: list[float] | None,
+    t5_embedding: list[float] | None,
+    t2_embedding: list[float] | None,
+) -> float:
+    """Dimension 3 — Contextual Resonance (weight 0.25 in v2 spec).
+    score = 0.7 * sim(P3, T5) + 0.3 * sim(P3, T2). Cosine sim is
+    clamped to [0,1] so weakly opposite vectors don't subtract from
+    the bonus.
+    """
+    from embeddings import cosine_similarity
+    sim_t5 = max(0.0, cosine_similarity(p3_embedding, t5_embedding))
+    return round(sim_t5, 4)
+
+
 def _deep_match_bonus(
     r: dict, t: dict, *, weights: dict[str, float] | None = None
 ) -> dict[str, Any]:
@@ -921,7 +925,6 @@ def _deep_match_bonus(
     or legacy), we use it directly. Otherwise we derive pseudo-T1/T3
     from their T6 session-expectation picks.
     """
-    weights = weights or _DEEP_MATCH_DEFAULT_WEIGHTS
 
     # T1 data: use existing if present, else derive from T6
     t1_data = t.get("t1_stuck_ranked") or []
@@ -933,6 +936,7 @@ def _deep_match_bonus(
     if not t3_data:
         t3_data = _t6_to_t3_fallback(t.get("t6_session_expectations") or [])
 
+    weights = weights or _DEEP_MATCH_DEFAULT_WEIGHTS
     rel = _score_relationship_style(
         r.get("p1_communication") or [],
         t1_data,
@@ -945,6 +949,7 @@ def _deep_match_bonus(
     ctx = _score_contextual_resonance(
         r.get("p3_embedding"),
         t.get("t5_embedding"),
+
     )
     bonus = (
         weights["relationship_style"] * rel
@@ -1156,12 +1161,14 @@ def score_therapist(
         try:
             from embeddings import cosine_similarity
             sim_t5 = max(0.0, cosine_similarity(oi_vec, t.get("t5_embedding")))
-            bonus_oi = round(sim_t5 * MAX_OTHER_ISSUE_BONUS, 2)
+            blended = round(sim_t5, 4)
+            bonus_oi = round(blended * MAX_OTHER_ISSUE_BONUS, 2)
             if bonus_oi:
                 breakdown["other_issue_bonus"] = bonus_oi
                 total = round(total + bonus_oi, 2)
             other_issue_axes = {
                 "sim_t5": round(sim_t5, 4),
+                "blended": blended,
                 "bonus": bonus_oi,
             }
         except Exception:
@@ -1178,12 +1185,14 @@ def score_therapist(
         try:
             from embeddings import cosine_similarity
             sim_t5 = max(0.0, cosine_similarity(pt_vec, t.get("t5_embedding")))
-            bonus_pt = round(sim_t5 * MAX_PRIOR_THERAPY_BONUS, 2)
+            blended = round(sim_t5, 4)
+            bonus_pt = round(blended * MAX_PRIOR_THERAPY_BONUS, 2)
             if bonus_pt:
                 breakdown["prior_therapy_bonus"] = bonus_pt
                 total = round(total + bonus_pt, 2)
             prior_therapy_axes = {
                 "sim_t5": round(sim_t5, 4),
+                "blended": blended,
                 "bonus": bonus_pt,
             }
         except Exception:
@@ -1471,4 +1480,89 @@ def gap_axes(
         missing = prefs - tags
         if not missing:
             return None
-        nice = ", ".join(_humanize(s) for 
+        nice = ", ".join(_humanize(s) for s in sorted(missing))
+        return (
+            f"Patient's preferred style is {nice}, which isn't on your style tags.",
+            f"Speak to how your approach feels {nice} in practice.",
+        )
+
+    def _payment_fit() -> Optional[tuple[str, str]]:
+        if request.get("payment_type") in ("cash", "either") and request.get("sliding_scale_ok"):
+            if not therapist.get("sliding_scale"):
+                return (
+                    "Patient is open to sliding scale; you don't list it.",
+                    "If you can offer a reduced rate for this patient, name a number.",
+                )
+        return None
+
+    def _modality_pref() -> Optional[tuple[str, str]]:
+        prefs = [m for m in (request.get("modality_preferences") or []) if m]
+        if not prefs:
+            return None
+        offered = {m.lower() for m in (therapist.get("modalities") or [])}
+        missing = [m for m in prefs if m.lower() not in offered]
+        if not missing:
+            return None
+        nice = ", ".join(missing)
+        return (
+            f"Patient asked for {nice}; you don't list it as a modality.",
+            f"If you have training in {nice} or use a related approach, mention it.",
+        )
+
+    def _payment_alignment() -> Optional[tuple[str, str]]:
+        pay = (request.get("payment_type") or "either").lower()
+        if pay != "insurance":
+            return None
+        plan = (request.get("insurance_name") or "").strip()
+        if not plan or plan.lower() in ("other", "other / not listed"):
+            return None
+        accepted = [str(s).lower() for s in (therapist.get("insurance_accepted") or [])]
+        if plan.lower() in accepted:
+            return None
+        if request.get("sliding_scale_ok") and therapist.get("sliding_scale"):
+            return None
+        return (
+            f"Patient asked for {plan}; you don't list it as in-network.",
+            f"If you bill {plan} via a payer-list provider, or accept superbills, mention it.",
+        )
+
+    GENERATORS = {
+        "issues": _issues,
+        "availability": _availability,
+        "modality": _modality,
+        "urgency": _urgency,
+        "prior_therapy": _prior_therapy,
+        "experience": _experience,
+        "gender": _gender,
+        "style": _style,
+        "payment_fit": _payment_fit,
+        "payment_alignment": _payment_alignment,
+        "modality_pref": _modality_pref,
+    }
+
+    # Walk axes ordered by gap size (max - score) desc, return top_n with details
+    candidates: list[dict] = []
+    for k, (mx, label) in AXIS.items():
+        score = breakdown.get(k, 0) or 0
+        if mx <= 0 or score >= mx:
+            continue
+        gen = GENERATORS.get(k)
+        result = gen() if gen else None
+        if not result:
+            continue
+        explanation, suggestion = result
+        candidates.append({
+            "key": k,
+            "label": label,
+            "explanation": explanation,
+            "suggestion": suggestion,
+            "gap": round(mx - score, 1),  # kept for sorting; not shown to user
+        })
+    candidates.sort(key=lambda c: c["gap"], reverse=True)
+    for c in candidates:
+        c.pop("gap", None)
+    return candidates[:top_n]
+
+
+def _humanize(s: str) -> str:
+    return (s or "").replace("_", " ").strip()
