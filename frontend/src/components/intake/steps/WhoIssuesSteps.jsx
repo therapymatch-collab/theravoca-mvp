@@ -210,14 +210,15 @@ export function IssuesStep({ data, set, toggleArr }) {
       </Group>
 
       {data.presenting_issues.length > 0 && (
+        <div className="mt-6" />
         <Group
           label="How much is each concern affecting daily life?"
           hint="1 = mild, occasional · 5 = severe, daily interference"
         >
-          <div className="space-y-3">
+          <div className="space-y-4">
             {data.presenting_issues.map((issueKey) => (
               <div key={issueKey} className="flex items-center gap-3">
-                <span className="text-sm text-[#2B2A29] min-w-[160px] truncate">
+                <span className="text-sm text-[#2B2A29] min-w-[180px] max-w-[220px] leading-snug">
                   {ISSUE_LABELS[issueKey] || issueKey}
                 </span>
                 <div className="flex gap-1.5">
