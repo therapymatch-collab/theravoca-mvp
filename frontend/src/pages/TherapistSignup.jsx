@@ -320,12 +320,29 @@ export default function TherapistSignup() {
     });
   };
 
+  // Check that the name field contains a credential suffix after a comma
+  // e.g. "Sarah Lin, LCSW" — not just "Sarah Lin"
+  const KNOWN_CREDENTIALS = [
+    "LCSW","LPC","LCPC","LPCC","LMFT","LMHC","PhD","PsyD","MD",
+    "DO","LICSW","LISW","LMSW","MSW","MFT","NP","PMHNP","RN",
+    "LAMFT","LAPC","LGPC","LLPC","LSCSW","LCMHC",
+  ];
+  const nameHasCredential = (name) => {
+    const trimmed = (name || "").trim();
+    if (!trimmed.includes(",")) return false;
+    const afterComma = trimmed.split(",").slice(1).join(",").trim().toUpperCase();
+    if (!afterComma) return false;
+    // Check if any known credential appears in the text after the comma
+    return KNOWN_CREDENTIALS.some((c) => afterComma.includes(c));
+  };
+
   // Per-step validation — mirrors the required-field asterisks. Each step's
   // "Next" button is disabled until canAdvance(step) is true.
   const canAdvance = (s) => {
     if (s === 1) {
       return (
         data.name.trim().length >= 3 &&
+        nameHasCredential(data.name) &&
         data.email.includes("@") &&
         !!data.credential_type &&
         !!data.office_phone?.trim() &&
@@ -378,6 +395,8 @@ export default function TherapistSignup() {
     if (s === 1) {
       if (!data.name || data.name.trim().length < 3)
         return "Enter your full name + degree (e.g. Sarah Lin, LCSW).";
+      if (!nameHasCredential(data.name))
+        return "Include your credential after a comma (e.g. Sarah Lin, LCSW).";
       if (!data.email.includes("@")) return "Enter a valid email address.";
       if (!data.credential_type) return "Select your credential type.";
       if (!(data.phone_alert?.trim() || data.phone?.trim()))
