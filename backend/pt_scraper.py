@@ -38,10 +38,22 @@ import httpx
 logger = logging.getLogger("theravoca.pt_scraper")
 
 PT_BASE = "https://www.psychologytoday.com"
-DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-)
+
+# Rotate user agents to reduce bot-detection blocking from PT/Render IPs.
+_USER_AGENTS = [
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
+]
+DEFAULT_USER_AGENT = _USER_AGENTS[0]
+
+def _pick_ua() -> str:
+    """Round-robin user agent selection."""
+    import random
+    return random.choice(_USER_AGENTS)
+
 HEADERS = {
     "User-Agent": DEFAULT_USER_AGENT,
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -85,14 +97,26 @@ REQUEST_DELAY_SEC = float(os.environ.get("PT_REQUEST_DELAY_SEC", "0.6"))
 HTTP_TIMEOUT_SEC = 15.0
 
 
-async def _http_get(url: str, client: httpx.AsyncClient) -> Optional[str]:
-    try:
-        r = await client.get(url, headers=HEADERS, timeout=HTTP_TIMEOUT_SEC)
-        if r.status_code == 200:
-            return r.text
-        logger.warning("PT GET %s -> HTTP %d", url, r.status_code)
-    except (httpx.HTTPError, asyncio.TimeoutError) as e:
-        logger.warning("PT GET %s failed: %s", url, e)
+async def _http_get(url: str, client: httpx.AsyncClient, *, retries: int = 2) -> Optional[str]:
+    """Fetch URL with retry and user-agent rotation for bot-detection resilience."""
+    for attempt in range(retries + 1):
+        headers = {**HEADERS, "User-Agent": _pick_ua()}
+        try:
+            r = await client.get(url, headers=headers, timeout=HTTP_TIMEOUT_SEC)
+            if r.status_code == 200:
+                return r.text
+            if r.status_code in (403, 429, 503) and attempt < retries:
+                wait = (attempt + 1) * 2.0
+                logger.info("PT GET %s -> HTTP %d, retrying in %.1fs (attempt %d/%d)",
+                            url, r.status_code, wait, attempt + 1, retries)
+                await asyncio.sleep(wait)
+                continue
+            logger.warning("PT GET %s -> HTTP %d", url, r.status_code)
+        except (httpx.HTTPError, asyncio.TimeoutError) as e:
+            if attempt < retries:
+                await asyncio.sleep((attempt + 1) * 1.5)
+                continue
+            logger.warning("PT GET %s failed: %s", url, e)
     return None
 
 
