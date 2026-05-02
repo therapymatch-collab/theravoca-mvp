@@ -1196,7 +1196,7 @@ export default function AdminDashboard() {
               {/* Consistent spacing between tab links and panel content */}
               {!["requests", "therapists", "all_therapists", "invited_therapists",
                 "opt_outs", "feedback", "patients", "completion"].includes(tab) && (
-                <div className="mt-6" />
+                <div className="mt-8" />
               )}
 
               {tab === "requests" && (
@@ -3166,7 +3166,7 @@ function AdminTabsBar({
 
   return (
     <div
-      className="mt-8 border-b border-[#E8E5DF] flex flex-wrap items-end gap-x-1"
+      className="mt-10 border-b border-[#E8E5DF] flex flex-wrap items-end gap-x-1"
       data-testid="admin-tabs-bar"
     >
       {PRIMARY.map((entry) => (

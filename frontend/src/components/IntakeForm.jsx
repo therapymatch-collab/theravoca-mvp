@@ -186,7 +186,7 @@ export default function IntakeForm() {
   const [data, setData] = useState({
     client_type: "",
     age_group: "",
-    location_state: "",
+    location_state: "ID",
     location_city: "",
     location_zip: "",
     presenting_issues: [],

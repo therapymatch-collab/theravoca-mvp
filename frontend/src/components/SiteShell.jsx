@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Leaf, ChevronDown, Menu, X, LogOut } from "lucide-react";
 import useSiteCopy from "@/lib/useSiteCopy";
-import { getSession, clearSession, clearAdminSession } from "@/lib/api";
+import { getSession, clearSession, clearAdminSession, getAdminIdentity } from "@/lib/api";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +39,9 @@ export function Header({ minimal = false }) {
   const onTherapistsClick = useScrollTopNavigate("/therapists/join");
   const [mobileOpen, setMobileOpen] = useState(false);
   const session = getSession();
+  const adminId = getAdminIdentity();
+  const isAdmin = !!adminId?.token || !!adminId?.masterPwd;
+  const effectiveRole = session?.role || (isAdmin ? "admin" : null);
 
   const handleSignOut = () => {
     clearSession();
@@ -92,16 +95,22 @@ export function Header({ minimal = false }) {
               className="hidden md:flex items-center gap-7 text-sm text-[#6D6A65]"
               data-testid="desktop-nav"
             >
-              {session ? (
+              {effectiveRole === "admin" ? (
                 <>
-                  <a href="/portal/patient" className="hover:text-[#2D4A3E] transition" data-testid="nav-dashboard">
-                    Matches
-                  </a>
-                  <a href="/portal/therapist" className="hover:text-[#2D4A3E] transition" data-testid="nav-referrals">
-                    Referrals
-                  </a>
                   <a href="/admin/dashboard" className="hover:text-[#2D4A3E] transition" data-testid="nav-console">
                     Console
+                  </a>
+                </>
+              ) : effectiveRole === "patient" ? (
+                <>
+                  <a href="/portal/patient" className="hover:text-[#2D4A3E] transition" data-testid="nav-dashboard">
+                    My matches
+                  </a>
+                </>
+              ) : effectiveRole === "therapist" ? (
+                <>
+                  <a href="/portal/therapist" className="hover:text-[#2D4A3E] transition" data-testid="nav-referrals">
+                    My referrals
                   </a>
                 </>
               ) : (
@@ -128,13 +137,13 @@ export function Header({ minimal = false }) {
                   </a>
                 </>
               )}
-              {session ? (
+              {(session || isAdmin) ? (
                 <button
                   onClick={handleSignOut}
                   className="inline-flex items-center gap-1.5 hover:text-[#2D4A3E] transition"
                   data-testid="nav-signout"
                 >
-                  <LogOut size={14} /> Sign out
+                  <LogOut size={14} /> Log out
                 </button>
               ) : (
                 <DropdownMenu>
@@ -220,16 +229,22 @@ export function Header({ minimal = false }) {
           data-testid="mobile-nav"
         >
           <nav className="max-w-7xl mx-auto px-5 py-5 flex flex-col gap-1 text-base text-[#2B2A29]">
-            {session ? (
+            {effectiveRole === "admin" ? (
               <>
-                <a href="/portal/patient" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-dashboard">
-                  Matches
-                </a>
-                <a href="/portal/therapist" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-referrals">
-                  Referrals
-                </a>
                 <a href="/admin/dashboard" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-console">
                   Console
+                </a>
+              </>
+            ) : effectiveRole === "patient" ? (
+              <>
+                <a href="/portal/patient" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-dashboard">
+                  My matches
+                </a>
+              </>
+            ) : effectiveRole === "therapist" ? (
+              <>
+                <a href="/portal/therapist" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-referrals">
+                  My referrals
                 </a>
               </>
             ) : (
@@ -252,13 +267,13 @@ export function Header({ minimal = false }) {
               </>
             )}
             <div className="border-t border-[#E8E5DF] my-2" />
-            {session ? (
+            {(session || isAdmin) ? (
               <button
                 onClick={handleSignOut}
                 className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition flex items-center gap-2 w-full text-left"
                 data-testid="mobile-signout"
               >
-                <LogOut size={14} /> Sign out
+                <LogOut size={14} /> Log out
               </button>
             ) : (
               <>
