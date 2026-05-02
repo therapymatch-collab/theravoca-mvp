@@ -113,8 +113,11 @@ export function P3Step({ data, set, t }) {
         <p className="text-[11px] text-[#6D6A65] mt-2 leading-snug">
           {t(
             "intake.deep.p3.helper",
-            "20+ characters helps the matching engine score for lived-experience fit. Therapists never see this verbatim — we use it to rank for resonance.",
+            "20+ characters helps the matching engine score for lived-experience fit. Therapists who opt in to your referral will see what you share here.",
           )}
+        </p>
+        <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2 leading-snug">
+          <strong>Do not include</strong> your name, phone number, email, address, or any other personally identifiable information. This field is for describing your situation only.
         </p>
       </Field>
     </div>
