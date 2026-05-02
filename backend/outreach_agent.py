@@ -1,19 +1,22 @@
-"""LLM-powered + PT-scraped outreach agent.
+"""Multi-source outreach agent for therapist recruiting.
 
-When a patient request has `outreach_needed_count > 0` (we couldn't fill 30 quality
-matches from our directory), this module:
+When a patient request has `outreach_needed_count > 0` (we couldn't fill 30
+quality matches from our directory), this module cascades through multiple
+real data sources to find therapist candidates:
 
-1. Scrapes Psychology Today's public directory for the patient's state + city
-   to gather REAL therapist candidates (name, phone, license, specialties,
-   website). See `pt_scraper.py`.
-2. Falls back to Claude Sonnet 4.5 via the Emergent LLM key when PT yields
-   too few or fails (network blocked, geo with no listings).
-3. Sends each candidate a personalized invite — email when we can guess one
-   from their published website, else SMS via Twilio to the listed phone.
+1. **Psychology Today** — JSON-LD scrape of PT directory listings. See
+   `pt_scraper.py`. Includes retry + user-agent rotation for bot-detection.
+2. **Admin-registered external directories** — configurable URLs scraped via
+   `external_scraper.py` (JSON-LD first, LLM extraction fallback).
+3. **Backup directories** — TherapyDen, GoodTherapy (HTML scraping), and
+   Google Maps (Places API with GOOGLE_PLACES_API_KEY). These run in parallel
+   and return real names, phones, websites, and guessed emails. See
+   `directory_scrapers.py`.
+4. **LLM fallback** — Claude generates plausible candidates from training
+   data when all scrapers yield too few. Last resort only.
 
-To swap in a different scraper or add another data source (state board /
-group-practice sites), edit `pt_scraper.scrape_pt_candidates` or add a new
-function and merge results in `_find_candidates`.
+Each phase only runs when previous phases haven't filled the count.
+Candidates are deduplicated by name+city across all sources.
 """
 from __future__ import annotations
 
@@ -31,6 +34,7 @@ from deps import db
 from email_service import _get_app_url, _send, _wrap, BRAND
 from helpers import _now_iso, _safe_summary_for_therapist
 from pt_scraper import scrape_pt_candidates
+from directory_scrapers import scrape_all_backup_sources
 from sms_service import send_therapist_referral_sms
 
 logger = logging.getLogger("theravoca.outreach")
@@ -250,8 +254,8 @@ Return ONLY a JSON array. No prose, no markdown fences. Empty array `[]` is acce
 
 
 async def _find_candidates(request: dict, count: int = 30) -> list[dict]:
-    """Hybrid: PT scrape → admin-registered external directory scrape →
-    LLM fallback. Each phase only runs if we still need more candidates.
+    """Hybrid cascade: PT scrape → admin-registered external directories →
+    backup directories (TherapyDen, GoodTherapy, Google Maps) → LLM fallback. Each phase only runs if we still need more candidates.
 
     Honours the `PT_SCRAPING_ENABLED` env flag so we can disable scraping
     quickly if PT changes their HTML or starts rate-limiting us.
@@ -283,7 +287,32 @@ async def _find_candidates(request: dict, count: int = 30) -> list[dict]:
     if len(merged) >= count:
         return merged[:count]
 
-    # Top up with LLM-generated candidates so the request gets full coverage
+    # Phase 3: backup directory scrapers (TherapyDen, GoodTherapy, Google Maps).
+    # These run in parallel and return real, grounded candidates with actual
+    # contact info (emails and phones). Google Maps is the most reliable since
+    # it uses an official API — the others are HTML scraping that may break
+    # if the sites change their layout.
+    needed_backup = count - len(merged)
+    backup_results = await scrape_all_backup_sources(
+        state_code=request.get("location_state") or "ID",
+        city=request.get("location_city") or "",
+        needed=needed_backup,
+        presenting_issues=request.get("presenting_issues"),
+    )
+    logger.info("Backup scrapers returned %d candidates (needed %d more)",
+                len(backup_results), needed_backup)
+    for c in backup_results:
+        c_norm = _normalize_pt_to_outreach(c, request)
+        key = ((c_norm.get("name") or "").lower().strip(), (c_norm.get("city") or "").lower().strip())
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(c_norm)
+    if len(merged) >= count:
+        return merged[:count]
+
+    # Phase 4: LLM-generated candidates as last resort. These are plausible
+    # but unverified — real scraper data from phases 1-3 is always preferred.
     needed_extra = count - len(merged)
     llm_results = await _find_candidates_llm(request, count=needed_extra)
     logger.info("LLM fallback returned %d candidates (needed %d more)",
