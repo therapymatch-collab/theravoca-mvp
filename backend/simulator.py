@@ -256,6 +256,7 @@ def _build_synthetic_request(run_id: str, idx: int) -> dict[str, Any]:
         "client_type": client_type,
         "age_group": age_group,
         "presenting_issues": issues,
+        "issue_severity": {iss: random.randint(1, 5) for iss in issues},
         "primary_concern": primary,
         "other_issue": "",
         "location_state": "ID",

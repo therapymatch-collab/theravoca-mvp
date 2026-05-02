@@ -2335,6 +2335,31 @@ async def admin_backfill_deep_match(payload: dict = None) -> dict[str, Any]:
             )
             missing.append("t5_lived_experience")
 
+        # T6 — session expectations (pick 2-3 from slug set)
+        _T6_SLUGS = ["guide_direct", "listen_heard", "tools_fast", "explore_patterns", "depends"]
+        if len(t.get("t6_session_expectations") or []) < 2:
+            update["t6_session_expectations"] = rng.sample(_T6_SLUGS, k=rng.choice([2, 3]))
+            missing.append("t6_session_expectations")
+
+        # T6b — early sessions description (free text)
+        _T6B_TEMPLATES = [
+            "In our first few sessions, I focus on {focus1} while building a strong therapeutic relationship. I want clients to feel {feeling} and know that we have a clear plan moving forward.",
+            "Early sessions are about {focus1} and getting to know each other. I pay close attention to {focus2} and adjust my approach based on what resonates with each person.",
+            "I start by {focus1}, creating space for clients to share at their own pace. By session 3, I like to have a working understanding of {focus2} so we can set meaningful goals together.",
+        ]
+        _FOCUSES = [
+            "understanding what brought you in", "establishing safety and trust",
+            "exploring your history and patterns", "identifying concrete goals",
+            "assessing strengths and resources", "mapping out coping strategies",
+            "noticing relational dynamics", "building emotional vocabulary",
+        ]
+        _FEELINGS = ["heard and understood", "safe to be vulnerable", "hopeful about the process", "confident we can make progress"]
+        if len((t.get("t6_early_sessions_description") or "").strip()) < 30:
+            update["t6_early_sessions_description"] = rng.choice(_T6B_TEMPLATES).format(
+                focus1=rng.choice(_FOCUSES), focus2=rng.choice(_FOCUSES), feeling=rng.choice(_FEELINGS),
+            )
+            missing.append("t6_early_sessions_description")
+
         if not update:
             continue
 
