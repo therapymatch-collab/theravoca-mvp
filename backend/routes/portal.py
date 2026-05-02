@@ -604,4 +604,3 @@ async def portal_therapist_availability_confirm(
         update["urgency_capacity"] = str(payload["urgency_capacity"])[:50]
     await db.therapists.update_one({"id": therapist["id"]}, {"$set": update})
     return {"ok": True, "updated": list(update.keys())}
-                                                                                                                                                                                                                                                                                                      

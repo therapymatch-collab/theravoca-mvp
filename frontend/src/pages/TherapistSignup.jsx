@@ -1289,4 +1289,3 @@ export default function TherapistSignup() {
 // legacy arrow-based RankList that used to live below were
 // previously extracted: PillCol+RadioCol → TherapistDeepMatchStep,
 // RankList → DraggableRankList (drag-and-drop dnd-kit version).
-                                                                                                                                                                                                                                               
