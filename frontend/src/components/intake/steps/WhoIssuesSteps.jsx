@@ -210,6 +210,7 @@ export function IssuesStep({ data, set, toggleArr }) {
       </Group>
 
       {data.presenting_issues.length > 0 && (
+        <>
         <div className="mt-6" />
         <Group
           label="How much is each concern affecting daily life?"
@@ -242,6 +243,7 @@ export function IssuesStep({ data, set, toggleArr }) {
             ))}
           </div>
         </Group>
+        </>
       )}
     </div>
   );
