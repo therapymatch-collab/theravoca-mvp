@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, ExternalLink, CheckCircle2, Clock, Send, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import useAdminClient from "a/lib/useAdminClient";
+import useAdminClient from "@/lib/useAdminClient";
 import { toast } from "sonner";
 
 const MILESTONES = [
