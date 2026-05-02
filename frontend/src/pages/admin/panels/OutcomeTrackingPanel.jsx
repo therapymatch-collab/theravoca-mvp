@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import api from "../../../lib/api";
+import useAdminClient from "@/lib/useAdminClient";
 import { Loader2, TrendingUp, Users, MessageSquare, BarChart3, ChevronDown, ChevronUp } from "lucide-react";
 
 const MILESTONE_LABELS = {
@@ -87,6 +87,7 @@ function FeedbackCard({ entry }) {
 }
 
 export default function OutcomeTrackingPanel() {
+  const client = useAdminClient();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
@@ -94,7 +95,7 @@ export default function OutcomeTrackingPanel() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await api.get("/admin/outcome-tracking");
+        const res = await client.get("/admin/outcome-tracking");
         setData(res.data);
       } catch (e) {
         console.error("Failed to load outcome tracking", e);
