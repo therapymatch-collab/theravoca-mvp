@@ -3848,5 +3848,88 @@ async def auto_recruit_approve(
     return {"ok": True, "approved": approved}
 
 
+# ── Scraper Test ────────────────────────────────────────────────────────────
+
+@router.post("/admin/scraper-test", dependencies=[Depends(require_admin)])
+async def scraper_test(payload: dict):
+    """Run the full scraper cascade for a given city + state + presenting issues.
+    Returns up to `count` (default 50) therapist candidates with contact info.
+
+    Request body:
+        {city: str, state?: str (default "ID"), presenting_issues?: [str], count?: int}
+    """
+    from pt_scraper import scrape_pt_candidates
+    from directory_scrapers import scrape_all_backup_sources
+
+    city = (payload.get("city") or "").strip()
+    state = (payload.get("state") or "ID").upper()[:2]
+    issues = payload.get("presenting_issues") or []
+    count = min(int(payload.get("count") or 50), 100)
+
+    if not city:
+        raise HTTPException(400, "city is required")
+
+    results: list[dict] = []
+    sources_summary: dict[str, int] = {}
+    errors: list[str] = []
+
+    # Phase 1: Psychology Today
+    try:
+        pt = await scrape_pt_candidates(state_code=state, city=city, needed=count, max_pages=3)
+        for c in pt:
+            c["source"] = c.get("source", "psychology_today")
+        results.extend(pt)
+        sources_summary["psychology_today"] = len(pt)
+    except Exception as e:
+        errors.append(f"PT scraper: {e}")
+        sources_summary["psychology_today"] = 0
+
+    # Phase 2: Backup scrapers (TherapyDen, GoodTherapy, Google Maps)
+    needed_more = count - len(results)
+    if needed_more > 0:
+        try:
+            backup = await scrape_all_backup_sources(
+                state_code=state, city=city, needed=needed_more,
+                presenting_issues=issues if issues else None,
+            )
+            results.extend(backup)
+            for src in ("therapyden", "goodtherapy", "google_maps"):
+                sources_summary[src] = sum(1 for c in backup if c.get("source") == src)
+        except Exception as e:
+            errors.append(f"Backup scrapers: {e}")
+
+    # Deduplicate by name+city
+    seen: set[str] = set()
+    unique: list[dict] = []
+    for c in results:
+        key = f"{(c.get('name') or '').lower().strip()}|{(c.get('city') or '').lower().strip()}"
+        if key not in seen and key != "|":
+            seen.add(key)
+            unique.append(c)
+
+    # Sort by completeness
+    def _completeness(c: dict) -> int:
+        s = 0
+        if c.get("email"): s += 3
+        if c.get("phone"): s += 3
+        if c.get("website"): s += 2
+        if c.get("license_types"): s += 2
+        return s
+
+    unique.sort(key=_completeness, reverse=True)
+    final = unique[:count]
+
+    return {
+        "ok": True,
+        "city": city,
+        "state": state,
+        "presenting_issues": issues,
+        "total": len(final),
+        "sources": sources_summary,
+        "errors": errors,
+        "candidates": final,
+    }
+
+
 # Suppress unused-import warnings on logger (kept for future logging)
 void = logger
