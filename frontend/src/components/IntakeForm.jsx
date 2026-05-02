@@ -302,7 +302,7 @@ export default function IntakeForm() {
 
   const canNext = () => {
     if (currentId === "who") return data.client_type && data.age_group && data.location_state && COVERED_STATES.has(data.location_state);
-    if (currentId === "issues") return data.presenting_issues.length >= 1;
+    if (currentId === "issues") return data.presenting_issues.length >= 1 && !data.presenting_issues.includes("self_harm_safety");
     if (currentId === "format_logistics") {
       if (!data.modality_preference) return false;
       if (
@@ -486,8 +486,12 @@ export default function IntakeForm() {
       if (!data.age_group) return "Pick the client's age group.";
       return "";
     }
-    if (currentId === "issues" && data.presenting_issues.length === 0)
-      return "Pick at least one issue you'd like help with.";
+    if (currentId === "issues") {
+      if (data.presenting_issues.length === 0)
+        return "Pick at least one issue you'd like help with.";
+      if (data.presenting_issues.includes("self_harm_safety"))
+        return "Please use the crisis resources shown above. TheraVoca cannot proceed with active safety concerns.";
+    }
     if (currentId === "format_logistics") {
       if (!data.modality_preference) return "Choose how the client prefers to meet.";
       if (
