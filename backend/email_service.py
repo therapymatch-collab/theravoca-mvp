@@ -128,7 +128,6 @@ async def send_therapist_notification(
     match_score: float,
     summary: dict[str, Any],
     gaps: Optional[list[dict[str, Any]]] = None,
-    match_breakdown: Optional[dict[str, Any]] = None,
 ) -> None:
     tpl = await get_template(_db(), "therapist_notification")
     first_name = _first_name(therapist_name)
@@ -142,47 +141,6 @@ async def send_therapist_notification(
         f'<td style="padding:6px 0;color:{BRAND["text"]};font-size:14px;">{v}</td></tr>'
         for k, v in summary.items()
     )
-    # ── "Why you matched" — top positive-scoring axes ──────────────────
-    strengths_html = ""
-    if match_breakdown:
-        _axis_labels = {
-            "issues": "Specializes in your concerns",
-            "availability": "Matches your schedule",
-            "modality": "Offers your preferred format",
-            "urgency": "Can see you quickly",
-            "prior_therapy": "Right fit for your therapy history",
-            "experience": "Matches your experience preference",
-            "gender": "Matches your gender preference",
-            "style": "Aligns with your style preference",
-            "payment_fit": "Open to sliding-scale pricing",
-            "payment_alignment": "Accepts your payment method",
-            "modality_pref": "Practices your preferred therapy approach",
-            "other_issue_bonus": "Resonates with your personal note",
-            "prior_therapy_bonus": "Relates to your therapy background",
-            "research_bonus": "Deep-profile alignment",
-        }
-        top_axes = sorted(
-            (
-                (k, v, _axis_labels[k])
-                for k, v in match_breakdown.items()
-                if k in _axis_labels and isinstance(v, (int, float)) and v > 0
-            ),
-            key=lambda x: x[1],
-            reverse=True,
-        )[:3]
-        if top_axes:
-            chips = "".join(
-                f'<span style="display:inline-block;background:#ffffff;border:1px solid {BRAND["border"]};color:{BRAND["text"]};font-size:13px;padding:6px 12px;border-radius:999px;margin:3px 5px 3px 0;">{label}</span>'
-                for _, _, label in top_axes
-            )
-            strengths_html = (
-                f'<div style="background:#F0F7F4;border:1px solid #C6DDD2;border-radius:12px;'
-                f'padding:16px 20px;margin:0 0 16px;">'
-                f'<div style="font-size:13px;color:{BRAND["muted"]};text-transform:uppercase;'
-                f'letter-spacing:0.08em;margin-bottom:8px;">Why you matched</div>'
-                f'<div>{chips}</div>'
-                f'</div>'
-            )
     gaps_html = ""
     if gaps:
         rows = "".join(
@@ -230,7 +188,6 @@ async def send_therapist_notification(
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:8px 0 24px;">
       {summary_rows}
     </table>
-    {strengths_html}
     {gaps_html}
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:28px 0;">
       <tr>
@@ -557,8 +514,10 @@ _PREVIEW_VARS: dict[str, dict[str, Any]] = {
     "therapist_approved":        {"first_name": "Alex"},
     "therapist_rejected":        {"first_name": "Alex"},
     "patient_followup_48h":      {"request_id": "sample-id"},
-    "patient_followup_2w":       {"request_id": "sample-id"},
-    "patient_followup_6w":       {"request_id": "sample-id"},
+    "patient_followup_3w":       {"request_id": "sample-id"},
+    "patient_followup_9w":       {"request_id": "sample-id"},
+    "patient_followup_15w":      {"request_id": "sample-id"},
+    "therapist_weekly_pulse":    {"first_name": "Alex"},
     "therapist_followup_2w":     {"first_name": "Alex"},
     "therapist_stale_profile_nag": {"first_name": "Alex", "days_stale": 14},
     "license_expiring_therapist": {"first_name": "Alex", "expires_at": "2026-12-31"},
@@ -600,9 +559,26 @@ async def send_patient_followup_48h(to: str, request_id: str) -> None:
     await _send_simple_cta_template("patient_followup_48h", to, url, {"request_id": request_id})
 
 
-async def send_patient_followup_2w(to: str, request_id: str) -> None:
-    url = f"{_get_app_url()}/feedback/patient/{request_id}?milestone=2w"
-    await _send_simple_cta_template("patient_followup_2w", to, url, {"request_id": request_id})
+async def send_patient_followup_3w(to: str, request_id: str) -> None:
+    url = f"{_get_app_url()}/feedback/patient/{request_id}?milestone=3w"
+    await _send_simple_cta_template("patient_followup_3w", to, url, {"request_id": request_id})
+
+
+async def send_patient_followup_9w(to: str, request_id: str) -> None:
+    url = f"{_get_app_url()}/feedback/patient/{request_id}?milestone=9w"
+    await _send_simple_cta_template("patient_followup_9w", to, url, {"request_id": request_id})
+
+
+async def send_patient_followup_15w(to: str, request_id: str) -> None:
+    url = f"{_get_app_url()}/feedback/patient/{request_id}?milestone=15w"
+    await _send_simple_cta_template("patient_followup_15w", to, url, {"request_id": request_id})
+
+
+async def send_therapist_weekly_pulse(to: str, name: str, therapist_id: str) -> None:
+    url = f"{_get_app_url()}/feedback/therapist/{therapist_id}/pulse"
+    await _send_simple_cta_template(
+        "therapist_weekly_pulse", to, url, {"first_name": _first_name(name)},
+    )
 
 
 async def send_therapist_followup_2w(to: str, name: str, therapist_id: str) -> None:
@@ -695,18 +671,23 @@ async def send_license_expiring_to_admin(
 async def send_followup_survey(
     to: str, request_id: str, milestone: str
 ) -> None:
-    """48h / 2-week / 6-week post-results survey email to the patient."""
+    """48h / 3-week / 9-week / 15-week post-results survey email to the patient."""
     portal_url = f"{_get_app_url()}/followup/{request_id}/{milestone}"
     titles = {
         "48h": ("48 hours in — how's it going?", "Just a quick check-in"),
-        "2wk": ("2 weeks in — quick check-in", "How are sessions going?"),
-        "6wk": ("6 weeks in — measuring progress", "Last check-in"),
+        "3wk": ("3 weeks in — quick check-in", "How are sessions going?"),
+        "9wk": ("9 weeks in — how's therapy?", "Checking in"),
+        "15wk": ("15 weeks in — measuring progress", "Final check-in"),
     }
     subject, heading = titles.get(milestone, ("How's therapy going?", "Quick check-in"))
+    time_desc = {
+        "48h": "a few days", "3wk": "a few weeks",
+        "9wk": "a couple months", "15wk": "a few months",
+    }
     inner = f"""
     <p style="font-size:16px;line-height:1.6;">Hi there,</p>
     <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-      It's been a {('few days' if milestone == '48h' else 'couple weeks' if milestone == '2wk' else 'few weeks')}
+      It's been {time_desc.get(milestone, 'some time')}
       since we sent you matches. We'd love to know how it's going so we can keep
       improving for everyone.
     </p>

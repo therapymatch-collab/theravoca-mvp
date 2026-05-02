@@ -91,26 +91,57 @@ export function Header({ minimal = false }) {
               className="hidden md:flex items-center gap-7 text-sm text-[#6D6A65]"
               data-testid="desktop-nav"
             >
-              <a href="/#how" className="hover:text-[#2D4A3E] transition" data-testid="nav-how">
-                {t("header.nav.how", "How it works")}
-              </a>
-              <a href="/#testimonials" className="hover:text-[#2D4A3E] transition" data-testid="nav-testimonials">
-                {t("header.nav.testimonials", "Testimonials")}
-              </a>
-              <a href="/#different" className="hover:text-[#2D4A3E] transition" data-testid="nav-diff">
-                {t("header.nav.different", "Why TheraVoca")}
-              </a>
-              <a href="/#faq" className="hover:text-[#2D4A3E] transition" data-testid="nav-faq">
-                {t("header.nav.faq", "FAQs")}
-              </a>
-              <a
-                href="/therapists/join"
-                onClick={onTherapistsClick}
-                className="hover:text-[#2D4A3E] transition"
-                data-testid="nav-therapists"
-              >
-                {t("header.nav.therapists", "For therapists")}
-              </a>
+              {session && session.role === "patient" ? (
+                <>
+                  <a href="/portal/patient" className="hover:text-[#2D4A3E] transition" data-testid="nav-dashboard">
+                    My matches
+                  </a>
+                  <a href="/#how" className="hover:text-[#2D4A3E] transition" data-testid="nav-how">
+                    {t("header.nav.how", "How it works")}
+                  </a>
+                  <a href="/#faq" className="hover:text-[#2D4A3E] transition" data-testid="nav-faq">
+                    {t("header.nav.faq", "FAQs")}
+                  </a>
+                </>
+              ) : session && session.role === "therapist" ? (
+                <>
+                  <a href="/portal/therapist" className="hover:text-[#2D4A3E] transition" data-testid="nav-referrals">
+                    My referrals
+                  </a>
+                  <a href="/portal/therapist/edit" className="hover:text-[#2D4A3E] transition" data-testid="nav-edit-profile">
+                    Edit profile
+                  </a>
+                </>
+              ) : session && session.role === "admin" ? (
+                <>
+                  <a href="/admin" className="hover:text-[#2D4A3E] transition" data-testid="nav-console">
+                    Console
+                  </a>
+                </>
+              ) : (
+                <>
+                  <a href="/#how" className="hover:text-[#2D4A3E] transition" data-testid="nav-how">
+                    {t("header.nav.how", "How it works")}
+                  </a>
+                  <a href="/#testimonials" className="hover:text-[#2D4A3E] transition" data-testid="nav-testimonials">
+                    {t("header.nav.testimonials", "Testimonials")}
+                  </a>
+                  <a href="/#different" className="hover:text-[#2D4A3E] transition" data-testid="nav-diff">
+                    {t("header.nav.different", "Why TheraVoca")}
+                  </a>
+                  <a href="/#faq" className="hover:text-[#2D4A3E] transition" data-testid="nav-faq">
+                    {t("header.nav.faq", "FAQs")}
+                  </a>
+                  <a
+                    href="/therapists/join"
+                    onClick={onTherapistsClick}
+                    className="hover:text-[#2D4A3E] transition"
+                    data-testid="nav-therapists"
+                  >
+                    {t("header.nav.therapists", "For therapists")}
+                  </a>
+                </>
+              )}
               {session ? (
                 <button
                   onClick={handleSignOut}
@@ -203,42 +234,52 @@ export function Header({ minimal = false }) {
           data-testid="mobile-nav"
         >
           <nav className="max-w-7xl mx-auto px-5 py-5 flex flex-col gap-1 text-base text-[#2B2A29]">
-            <a
-              href="/#how"
-              className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition"
-              data-testid="mobile-nav-how"
-            >
-              How it works
-            </a>
-            <a
-              href="/#testimonials"
-              className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition"
-              data-testid="mobile-nav-testimonials"
-            >
-              Testimonials
-            </a>
-            <a
-              href="/#different"
-              className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition"
-              data-testid="mobile-nav-diff"
-            >
-              Why TheraVoca
-            </a>
-            <a
-              href="/#faq"
-              className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition"
-              data-testid="mobile-nav-faq"
-            >
-              FAQs
-            </a>
-            <a
-              href="/therapists/join"
-              onClick={onTherapistsClick}
-              className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition"
-              data-testid="mobile-nav-therapists"
-            >
-              For therapists
-            </a>
+            {session && session.role === "patient" ? (
+              <>
+                <a href="/portal/patient" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-dashboard">
+                  My matches
+                </a>
+                <a href="/#how" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-how">
+                  How it works
+                </a>
+                <a href="/#faq" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-faq">
+                  FAQs
+                </a>
+              </>
+            ) : session && session.role === "therapist" ? (
+              <>
+                <a href="/portal/therapist" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-referrals">
+                  My referrals
+                </a>
+                <a href="/portal/therapist/edit" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-edit">
+                  Edit profile
+                </a>
+              </>
+            ) : session && session.role === "admin" ? (
+              <>
+                <a href="/admin" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-console">
+                  Console
+                </a>
+              </>
+            ) : (
+              <>
+                <a href="/#how" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-how">
+                  How it works
+                </a>
+                <a href="/#testimonials" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-testimonials">
+                  Testimonials
+                </a>
+                <a href="/#different" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-diff">
+                  Why TheraVoca
+                </a>
+                <a href="/#faq" className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-faq">
+                  FAQs
+                </a>
+                <a href="/therapists/join" onClick={onTherapistsClick} className="py-3 px-2 rounded-lg hover:bg-[#E8E5DF]/40 transition" data-testid="mobile-nav-therapists">
+                  For therapists
+                </a>
+              </>
+            )}
             <div className="border-t border-[#E8E5DF] my-2" />
             {session ? (
               <button

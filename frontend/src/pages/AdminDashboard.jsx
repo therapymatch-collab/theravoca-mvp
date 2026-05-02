@@ -69,8 +69,6 @@ import PatientsByEmailPanel from "@/pages/admin/panels/PatientsByEmailPanel";
 import FeedbackPanel from "@/pages/admin/panels/FeedbackPanel";
 import ProviderPreviewCard from "@/pages/admin/panels/ProviderPreviewCard";
 import SimulatorPanel from "@/pages/admin/panels/SimulatorPanel";
-import NetworkHealthPanel from "@/pages/admin/panels/NetworkHealthPanel";
-import WaitlistPanel from "@/pages/admin/panels/WaitlistPanel";
 import { StatBox } from "@/pages/admin/panels/_panelShared";
 
 // ─── Editor option lists (mirrors TherapistSignup) ───
@@ -556,8 +554,10 @@ export default function AdminDashboard() {
   };
 
   const sendTestSms = async () => {
+    const phone = prompt("Enter phone number for test SMS (e.g. +12085551234):");
+    if (!phone?.trim()) return;
     try {
-      const res = await client.post("/admin/test-sms", {});
+      const res = await client.post("/admin/test-sms", { to: phone.trim() });
       if (res.data?.ok && res.data?.final_status === "delivered") {
         toast.success(`SMS delivered ✓ — sid ${res.data.sid?.slice(0, 12)}…`);
       } else if (res.data?.error_code) {
@@ -1027,61 +1027,68 @@ export default function AdminDashboard() {
                 Operations
               </h1>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                className="tv-btn-secondary !py-2 !px-4 text-sm"
-                onClick={runBackfill}
-                data-testid="backfill-btn"
-                title="Complete every therapist profile with realistic fake data"
-              >
-                Backfill profiles
-              </button>
-              <button
-                className="!py-2 !px-4 text-sm rounded-md border border-[#D45D5D] text-[#D45D5D] bg-white hover:bg-[#D45D5D] hover:text-white transition"
-                onClick={stripBackfill}
-                data-testid="strip-backfill-btn"
-                title="Pre-launch reversal: restore real emails + remove all fields backfill added. User-edited fields are preserved."
-              >
-                Strip backfilled data
-              </button>
-              <button
-                className="!py-2 !px-4 text-sm rounded-md border border-[#D45D5D] text-[#D45D5D] bg-white hover:bg-[#D45D5D] hover:text-white transition"
-                onClick={openWipeDialog}
-                data-testid="wipe-test-data-btn"
-                title="Pre-launch: delete every request, application, simulator run, and non-seeded therapist. Keeps the seeded therapist directory + all admin/site config."
-              >
-                <Trash2 size={14} className="inline mr-1.5" />
-                Wipe test data
-              </button>
-              <button
-                className="tv-btn-secondary !py-2 !px-4 text-sm disabled:opacity-60"
-                onClick={runReviewResearch}
-                disabled={researchingReviews}
-                data-testid="research-reviews-btn"
-                title="LLM-research public reviews for therapists (folds into match score)"
-              >
-                {researchingReviews ? (
-                  <Loader2 size={14} className="inline mr-1.5 animate-spin" />
-                ) : (
-                  <Star size={14} className="inline mr-1.5" />
-                )}
-                Research reviews
-              </button>
-              <button
-                className="tv-btn-secondary !py-2 !px-4 text-sm"
-                onClick={sendTestSms}
-                data-testid="test-sms-btn"
-                title="Send a test SMS to the configured Twilio dev override number"
-              >
-                <MessageSquare size={14} className="inline mr-1.5" /> Test SMS
-              </button>
-              <button
-                className="tv-btn-secondary !py-2 !px-4 text-sm"
-                onClick={refresh}
-                data-testid="refresh-btn"
-              >
-                <RotateCw size={14} className="inline mr-1.5" /> Refresh
-              </button>
+            <div className="flex flex-col gap-3">
+              {/* ── Actions ── */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  className="tv-btn-secondary !py-2 !px-4 text-sm"
+                  onClick={runBackfill}
+                  data-testid="backfill-btn"
+                  title="Complete every therapist profile with realistic fake data"
+                >
+                  Backfill profiles
+                </button>
+                <button
+                  className="tv-btn-secondary !py-2 !px-4 text-sm disabled:opacity-60"
+                  onClick={runReviewResearch}
+                  disabled={researchingReviews}
+                  data-testid="research-reviews-btn"
+                  title="LLM-research public reviews for therapists (folds into match score)"
+                >
+                  {researchingReviews ? (
+                    <Loader2 size={14} className="inline mr-1.5 animate-spin" />
+                  ) : (
+                    <Star size={14} className="inline mr-1.5" />
+                  )}
+                  Research reviews
+                </button>
+                <button
+                  className="tv-btn-secondary !py-2 !px-4 text-sm"
+                  onClick={sendTestSms}
+                  data-testid="test-sms-btn"
+                  title="Send a test SMS to the configured Twilio dev override number"
+                >
+                  <MessageSquare size={14} className="inline mr-1.5" /> Test SMS
+                </button>
+                <button
+                  className="tv-btn-secondary !py-2 !px-4 text-sm"
+                  onClick={refresh}
+                  data-testid="refresh-btn"
+                >
+                  <RotateCw size={14} className="inline mr-1.5" /> Refresh
+                </button>
+              </div>
+              {/* ── Destructive (pre-launch) ── */}
+              <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-gray-200">
+                <span className="text-xs text-gray-400 uppercase tracking-wide mr-1">Pre-launch</span>
+                <button
+                  className="!py-2 !px-4 text-sm rounded-md border border-[#D45D5D] text-[#D45D5D] bg-white hover:bg-[#D45D5D] hover:text-white transition"
+                  onClick={stripBackfill}
+                  data-testid="strip-backfill-btn"
+                  title="Pre-launch reversal: restore real emails + remove all fields backfill added. User-edited fields are preserved."
+                >
+                  Strip backfilled data
+                </button>
+                <button
+                  className="!py-2 !px-4 text-sm rounded-md border border-[#D45D5D] text-[#D45D5D] bg-white hover:bg-[#D45D5D] hover:text-white transition"
+                  onClick={openWipeDialog}
+                  data-testid="wipe-test-data-btn"
+                  title="Pre-launch: delete every request, application, simulator run, and non-seeded therapist. Keeps the seeded therapist directory + all admin/site config."
+                >
+                  <Trash2 size={14} className="inline mr-1.5" />
+                  Wipe test data
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1697,10 +1704,6 @@ export default function AdminDashboard() {
               {tab === "scrape_sources" && <ScrapeSourcesPanel client={client} />}
 
               {tab === "sms_status" && <SmsStatusPanel client={client} />}
-
-              {tab === "network_health" && (
-                <NetworkHealthPanel client={client} />
-              )}
 
               {tab === "waitlist" && <WaitlistPanel client={client} />}
 
@@ -2962,11 +2965,6 @@ function AdminTabsBar({
       label: "Master Query",
       icon: <Sparkles size={14} />,
     },
-    {
-      id: "network_health",
-      label: "Network Health",
-      icon: <Activity size={14} />,
-    },
   ];
 
   const SECONDARY = [
@@ -2992,7 +2990,16 @@ function AdminTabsBar({
       count: outreach?.total ?? null,
       onClick: onLoadOutreach,
     },
-
+    {
+      id: "coverage_gap",
+      label: "Coverage gaps",
+      icon: <AlertTriangle size={14} />,
+      count:
+        (coverageGap?.summary?.critical_gaps || 0) +
+        (coverageGap?.summary?.warning_gaps || 0) || null,
+      highlight: (coverageGap?.summary?.critical_gaps || 0) > 0,
+      onClick: onLoadCoverageGap,
+    },
     {
       id: "opt_outs",
       label: "Opt-outs",
@@ -3051,7 +3058,11 @@ function AdminTabsBar({
       label: "Settings",
       icon: <Sliders size={14} />,
     },
-
+    {
+      id: "scrape_sources",
+      label: "Scrape sources",
+      icon: <ExternalLink size={14} />,
+    },
     {
       id: "sms_status",
       label: "SMS",
@@ -3069,7 +3080,11 @@ function AdminTabsBar({
       label: "How it works",
       icon: <Brain size={14} />,
     },
-
+    {
+      id: "simulator",
+      label: "Matching simulator",
+      icon: <Activity size={14} />,
+    },
   ];
 
   const [moreOpen, setMoreOpen] = useState(false);

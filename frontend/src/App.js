@@ -20,6 +20,8 @@ import PrivacyNotice from "@/pages/PrivacyNotice";
 import BlogList from "@/pages/BlogList";
 import BlogPost from "@/pages/BlogPost";
 import FeedbackForm from "@/pages/FeedbackForm";
+import FeedbackSurvey from "@/pages/FeedbackSurvey";
+import TherapistPulse from "@/pages/TherapistPulse";
 import FeedbackWidget from "@/components/FeedbackWidget";
 import PreviewBanner from "@/components/PreviewBanner";
 import ScrollManager from "@/components/ScrollManager";
@@ -70,6 +72,11 @@ function App() {
             <Route path="/blog" element={<BlogList />} />
             <Route path="/blog/:slug" element={<BlogPost />} />
             <Route path="/preview/promise" element={<PromisePreview />} />
+            <Route
+              path="/feedback/:requestId/:milestone"
+              element={<FeedbackSurvey />}
+            />
+            <Route path="/therapist/pulse" element={<TherapistPulse />} />
             <Route
               path="/feedback/patient/:requestId"
               element={<FeedbackForm kind="patient" />}

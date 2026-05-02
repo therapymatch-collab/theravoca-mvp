@@ -263,13 +263,30 @@ function matchGaps(breakdown, request, therapist) {
   // rate above budget) are computed explicitly below from request +
   // therapist fields rather than from the breakdown axis, because the
   // axis can't tell us whether the patient actually gave a budget.
+  const genderSpecified =
+    request.gender_preference && request.gender_preference !== "no_pref";
+  const modalityPrefSpecified =
+    Array.isArray(request.modality_preferences)
+      ? request.modality_preferences.length > 0
+      : !!request.modality_preferences;
+  const styleSpecified =
+    Array.isArray(request.style_preference)
+      ? request.style_preference.length > 0
+      : !!request.style_preference;
+
   const axisGapLabels = {
     availability: "Schedule may be limited compared to what you need",
     modality: "Doesn't fully cover your preferred session format",
     urgency: "May not be able to start as quickly as you'd like",
-    modality_pref: "Doesn't primarily practice your preferred therapy approach",
-    gender: "Different gender than you preferred",
-    style: "Different working style than you preferred",
+    modality_pref: modalityPrefSpecified
+      ? "Doesn't primarily practice your preferred therapy approach"
+      : "Uses a different therapy approach — you didn't specify a preference",
+    gender: genderSpecified
+      ? "Different gender than you preferred"
+      : "Different gender — you didn't specify a preference",
+    style: styleSpecified
+      ? "Different working style than you preferred"
+      : "Different working style — you didn't specify a preference",
   };
   Object.entries(breakdown).forEach(([k, v]) => {
     const meta = AXIS_META[k];
@@ -359,7 +376,15 @@ function YourReferralPanel({ request }) {
   // Modality / session-format display. The DB stores it under
   // `modality_preference` (telehealth_only / in_person_only / hybrid);
   // older records may use `session_format`.
-  const sessionFormat = request.modality_preference || request.session_format;
+  const sessionFormatRaw = request.modality_preference || request.session_format;
+  const SESSION_FORMAT_LABELS = {
+    telehealth_only: "Telehealth only",
+    in_person_only: "In-person only",
+    hybrid: "Hybrid / either",
+    prefer_inperson: "Prefer in-person",
+    prefer_telehealth: "Prefer telehealth",
+  };
+  const sessionFormat = SESSION_FORMAT_LABELS[sessionFormatRaw] || (sessionFormatRaw || "").replace(/_/g, " ");
   // Cash budget. Newer field name is `budget`; older records used
   // `budget_per_session`.
   const cashBudget = request.budget || request.budget_per_session;
@@ -486,12 +511,16 @@ function YourReferralPanel({ request }) {
                 <RefDetail label="Therapy history" value={therapyHistory} />
                 <RefDetail
                   label="Urgency"
-                  value={request.urgency}
+                  value={(request.urgency || "").replace(/_/g, " ") || "—"}
                   hard={!!request.urgency_strict}
                 />
                 <RefDetail
                   label="Preferred gender"
-                  value={request.gender_preference || "Any"}
+                  value={
+                    request.gender_preference && request.gender_preference !== "no_pref"
+                      ? request.gender_preference.replace(/_/g, " ")
+                      : "No preference"
+                  }
                   hard={isGenderHard}
                 />
                 <RefDetail

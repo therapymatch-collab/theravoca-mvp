@@ -108,7 +108,7 @@ export function getAdminIdentity() {
 }
 
 export function sessionClient() {
-  const token = localStorage.getItem("tv_session_token");
+  const token = sessionStorage.getItem("tv_session_token");
   return _installErrorNormaliser(
     axios.create({
       baseURL: API,
@@ -118,20 +118,20 @@ export function sessionClient() {
 }
 
 export function getSession() {
-  const token = localStorage.getItem("tv_session_token");
-  const role = localStorage.getItem("tv_session_role");
-  const email = localStorage.getItem("tv_session_email");
+  const token = sessionStorage.getItem("tv_session_token");
+  const role = sessionStorage.getItem("tv_session_role");
+  const email = sessionStorage.getItem("tv_session_email");
   return token ? { token, role, email } : null;
 }
 
 export function setSession({ token, role, email }) {
-  localStorage.setItem("tv_session_token", token);
-  localStorage.setItem("tv_session_role", role);
-  localStorage.setItem("tv_session_email", email);
+  sessionStorage.setItem("tv_session_token", token);
+  sessionStorage.setItem("tv_session_role", role);
+  sessionStorage.setItem("tv_session_email", email);
 }
 
 export function clearSession() {
-  localStorage.removeItem("tv_session_token");
-  localStorage.removeItem("tv_session_role");
-  localStorage.removeItem("tv_session_email");
+  sessionStorage.removeItem("tv_session_token");
+  sessionStorage.removeItem("tv_session_role");
+  sessionStorage.removeItem("tv_session_email");
 }

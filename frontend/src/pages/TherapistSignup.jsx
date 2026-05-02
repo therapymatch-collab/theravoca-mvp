@@ -6,7 +6,6 @@ import { Header, Footer } from "@/components/SiteShell";
 import useFaqs from "@/lib/useFaqs";
 import useSiteCopy from "@/lib/useSiteCopy";
 import { api } from "@/lib/api";
-import { DEFAULT_T1_ORDER } from "@/pages/therapist/deepMatchOptions";
 import TherapistDeepMatchStep from "@/pages/therapist/TherapistDeepMatchStep";
 import PreviewModal from "@/pages/therapist/SignupPreviewModal";
 import { Group } from "@/pages/therapist/TherapistSignupUI";
@@ -31,7 +30,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 // `@/pages/therapist/steps/signupOptions.js` — imported by the Step{1..7}
 // components rather than this orchestration file.
 //
-// Deep-match T1/T3/T4 options live in
+// Deep-match T4/T6 options live in
 // `@/pages/therapist/deepMatchOptions` so this file + the portal-edit
 // page share one source of truth.
 
@@ -119,16 +118,15 @@ export default function TherapistSignup() {
     credential_type: "",
     notify_email: true,
     notify_sms: true,
-    // ── Deep-match T1–T5 (v2 spec, Iter-89) ──────────────────────────
+    // ── Deep-match (v2 spec, Iter-89) ──────────────────────────
     // Required at signup so the matching engine has a complete picture
-    // of clinical style. T1 is a drag-orderable list (we store as an
-    // array of slugs in rank order). T3 picks 2 of 6, T4 picks 1 of 5.
+    // of clinical style. T4 picks 1 of 5.
     // T2 + T5 are open text used for embedding-based context scoring.
-    t1_stuck_ranked: [...DEFAULT_T1_ORDER],
     t2_progress_story: "",
-    t3_breakthrough: [],
     t4_hard_truth: "",
     t5_lived_experience: "",
+    t6_session_expectations: [],
+    t6_early_sessions_description: "",
   });
   const [office, setOffice] = useState("");
   const [officeAddress, setOfficeAddress] = useState("");
@@ -356,15 +354,14 @@ export default function TherapistSignup() {
       );
     if (s === 6) return data.cash_rate > 0 && data.years_experience >= 0;
     if (s === 7) return data.style_tags.length >= 1;
-    // Deep-match required answers (Iter-89 v2). T1 has a default rank
-    // order on mount, so we just gate on T2/T3/T4/T5 actually being
-    // filled. Open-text minimums match the v2 spec.
     if (s === 8) {
+      const t6Len = (data.t6_session_expectations || []).length;
       return (
         (data.t2_progress_story || "").trim().length >= 50 &&
-        data.t3_breakthrough.length === 2 &&
         !!data.t4_hard_truth &&
-        (data.t5_lived_experience || "").trim().length >= 30
+        (data.t5_lived_experience || "").trim().length >= 30 &&
+        t6Len >= 1 && t6Len <= 2 &&
+        (data.t6_early_sessions_description || "").trim().length >= 30
       );
     }
     if (s === 9) return true; // notifications optional
@@ -434,12 +431,14 @@ export default function TherapistSignup() {
     if (s === 8) {
       if ((data.t2_progress_story || "").trim().length < 50)
         return "Tell us about a real client's progress (at least 50 characters).";
-      if (data.t3_breakthrough.length !== 2)
-        return "Pick exactly 2 ways your best work unfolds.";
       if (!data.t4_hard_truth)
         return "Pick how you push a client past their comfort zone.";
       if ((data.t5_lived_experience || "").trim().length < 30)
         return "Share at least 30 characters of lived experience or community knowledge.";
+      const t6Len = (data.t6_session_expectations || []).length;
+      if (t6Len < 1) return "Pick at least one session expectation.";
+      if ((data.t6_early_sessions_description || "").trim().length < 30)
+        return "Describe your early sessions (at least 30 characters).";
       return "";
     }
     return "";
@@ -552,6 +551,10 @@ export default function TherapistSignup() {
       // clicked the entries already merged into `languages_spoken`.
       // Strip it so the backend model doesn't see an unknown key.
       delete payload.languages_spoken_other;
+      // T1/T3 removed from the deep-match flow — strip from payload
+      // in case stale state lingers.
+      delete payload.t1_stuck_ranked;
+      delete payload.t3_breakthrough;
       const res = await api.post("/therapists/signup", payload);
       setTherapistId(res.data?.id);
       setSubmitted(true);
@@ -1124,7 +1127,7 @@ export default function TherapistSignup() {
                   <Step7Style data={data} set={set} toggleArr={toggleArr} />
                 )}
 
-                {/* ── Deep-match T1–T5 (v2 spec, Iter-89) ────────────
+                {/* ── Deep-match T2/T4/T5/T6/T6b ────────────
                     All step content lives in `TherapistDeepMatchStep`
                     so the in-portal edit form and signup form stay
                     in sync. */}

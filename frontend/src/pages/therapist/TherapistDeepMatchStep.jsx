@@ -1,27 +1,21 @@
 import { Textarea } from "@/components/ui/textarea";
-import DraggableRankList from "@/components/intake/DraggableRankList";
 import {
-  T1_OPTIONS,
-  T3_OPTIONS,
   T4_OPTIONS,
+  T6_OPTIONS,
 } from "@/pages/therapist/deepMatchOptions";
 
 /**
  * TherapistDeepMatchStep
  *
- * Shared T1–T5 deep-match question block used by:
+ * Shared deep-match question block (T2, T4, T5, T6, T6b) used by:
  *   - TherapistSignup.jsx step 8 ("Style fit")
  *   - TherapistEditProfile.jsx in-portal edit form
  *
- * Both surfaces previously inlined 100+ lines of nearly-identical JSX;
- * extracting it here removes the duplication and guarantees the two
- * forms stay 1:1 with the matching engine slugs (P1/P2 ↔ T1/T3).
- *
  * Props:
- *  - data:        { t1_stuck_ranked, t2_progress_story, t3_breakthrough,
- *                   t4_hard_truth, t5_lived_experience }
+ *  - data:        { t2_progress_story, t4_hard_truth, t5_lived_experience,
+ *                   t6_session_expectations, t6_early_sessions_description }
  *  - set(key, v): single-field setter
- *  - toggleArr(key, v, max): toggle slug in a multi-select array (used by T3)
+ *  - toggleArr(key, v, max): toggle slug in a multi-select array (used by T6)
  *  - testidPrefix: "signup" | "edit" — keeps existing test selectors stable
  *  - layout:      "card" (signup steps wrap each question in a Group card)
  *                 or "field" (edit profile uses inline Field labels)
@@ -52,7 +46,7 @@ export default function TherapistDeepMatchStep({
             ✦ Style fit · how you actually work
           </p>
           <p className="text-sm text-[#2B2A29]/85 leading-relaxed">
-            These five questions power our deep-match scoring. Patients
+            These questions power our deep-match scoring. Patients
             who opt into the deeper intake get matched to therapists
             whose style genuinely fits theirs — not just whoever takes
             their insurance.
@@ -66,18 +60,6 @@ export default function TherapistDeepMatchStep({
           </p>
         </div>
       )}
-
-      <Wrap
-        title="T1 — How do you typically show up in session?"
-        hint="Drag the handle to reorder. Most instinctive at the top."
-      >
-        <DraggableRankList
-          items={T1_OPTIONS}
-          order={data.t1_stuck_ranked}
-          onChange={(o) => set("t1_stuck_ranked", o)}
-          testid={`${testidPrefix}-t1`}
-        />
-      </Wrap>
 
       <Wrap
         title="T2 — Describe a client who made real progress with you"
@@ -95,21 +77,6 @@ export default function TherapistDeepMatchStep({
         />
         <p className="text-[11px] text-[#6D6A65] mt-1">
           {(data.t2_progress_story || "").length}/2000 characters
-        </p>
-      </Wrap>
-
-      <Wrap
-        title="T3 — How does your best work typically unfold?"
-        hint="Pick exactly 2."
-      >
-        <PillCol
-          items={T3_OPTIONS}
-          selected={data.t3_breakthrough}
-          onSelect={(v) => toggleArr("t3_breakthrough", v, 2)}
-          testid={`${testidPrefix}-t3`}
-        />
-        <p className="text-[11px] text-[#6D6A65] mt-2">
-          {(data.t3_breakthrough || []).length}/2 selected
         </p>
       </Wrap>
 
@@ -141,6 +108,52 @@ export default function TherapistDeepMatchStep({
         />
         <p className="text-[11px] text-[#6D6A65] mt-1">
           {(data.t5_lived_experience || "").length}/2000 characters
+        </p>
+      </Wrap>
+
+      <Wrap
+        title="T6 — What do sessions 1-3 typically look like with you?"
+        hint="Choose up to 2. Patients answer the same question — we match on overlap."
+      >
+        <PillCol
+          items={T6_OPTIONS}
+          selected={data.t6_session_expectations || []}
+          onSelect={(v) => {
+            // "depends" is mutually exclusive with concrete picks
+            if (v === "depends") {
+              set("t6_session_expectations", ["depends"]);
+              return;
+            }
+            const cur = (data.t6_session_expectations || []).filter((x) => x !== "depends");
+            if (cur.includes(v)) {
+              toggleArr("t6_session_expectations", v, 2);
+            } else if (cur.length < 2) {
+              set("t6_session_expectations", [...cur, v]);
+            }
+          }}
+          testid={`${testidPrefix}-t6`}
+        />
+        <p className="text-[11px] text-[#6D6A65] mt-2">
+          {(data.t6_session_expectations || []).length}/2 selected
+        </p>
+      </Wrap>
+
+      <Wrap
+        title="T6b — Describe how you typically run early sessions"
+        hint="2-3 sentences. This gets embedded and compared against patient expectations for tie-breaking."
+      >
+        <Textarea
+          rows={3}
+          minLength={30}
+          maxLength={500}
+          value={data.t6_early_sessions_description || ""}
+          onChange={(e) => set("t6_early_sessions_description", e.target.value)}
+          placeholder="e.g. I usually spend the first session getting a full picture — what brought them in, what they've tried, and what they actually want to change. I don't push homework until session 2 or 3, after we've built some trust."
+          className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+          data-testid={`${testidPrefix}-t6b`}
+        />
+        <p className="text-[11px] text-[#6D6A65] mt-1">
+          {(data.t6_early_sessions_description || "").length}/500 characters
         </p>
       </Wrap>
     </>
@@ -176,7 +189,7 @@ function DefaultField({ title, hint, children }) {
   );
 }
 
-// Vertical pick-list used for T3 (pick 2 of 6) — full-width rows for
+// Vertical pick-list used for T6 (pick up to 2) — full-width rows for
 // readability of the long labels. Exported so the in-portal edit form
 // can reuse it without re-implementing.
 export function PillCol({ items, selected, onSelect, testid }) {

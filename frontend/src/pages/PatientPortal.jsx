@@ -16,6 +16,17 @@ import SetPasswordPrompt from "@/components/SetPasswordPrompt";
 import useSiteCopy from "@/lib/useSiteCopy";
 import { sessionClient, getSession, clearSession } from "@/lib/api";
 
+const SESSION_FORMAT_LABELS = {
+  telehealth_only: "Telehealth only",
+  in_person_only: "In-person only",
+  hybrid: "Hybrid / either",
+  prefer_inperson: "Prefer in-person",
+  prefer_telehealth: "Prefer telehealth",
+};
+function formatSessionType(v) {
+  return SESSION_FORMAT_LABELS[v] || (v || "—").replace(/_/g, " ");
+}
+
 export default function PatientPortal() {
   const navigate = useNavigate();
   const t = useSiteCopy();
@@ -81,13 +92,6 @@ export default function PatientPortal() {
                 </p>
               )}
             </div>
-            <button
-              onClick={signOut}
-              className="text-sm text-[#6D6A65] hover:text-[#2D4A3E] inline-flex items-center gap-1.5"
-              data-testid="patient-signout"
-            >
-              <LogOut size={14} /> Sign out
-            </button>
           </div>
 
           {requests === null && (
@@ -140,12 +144,14 @@ export default function PatientPortal() {
                         </span>
                       </div>
                       <p className="text-[#2B2A29] mt-3 leading-relaxed line-clamp-2 break-words">
-                        {r.presenting_issues}
+                        {Array.isArray(r.presenting_issues)
+                          ? r.presenting_issues.map((i) => i.replace(/_/g, " ")).join(", ")
+                          : (r.presenting_issues || "").replace(/_/g, " ")}
                       </p>
                       <div className="text-xs text-[#6D6A65] mt-3 flex flex-wrap gap-x-4 gap-y-1 break-words">
                         <span>Age {r.client_age}</span>
                         <span>{r.location_state}</span>
-                        <span>{r.session_format}</span>
+                        <span>{formatSessionType(r.session_format || r.modality_preference)}</span>
                       </div>
                     </div>
                     <ChevronRight className="text-[#6D6A65] mt-1" size={18} />

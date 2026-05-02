@@ -97,9 +97,19 @@ export default function RequestFullBrief({ request }) {
     { label: "Age group", value: request.age_group || "—", key: "age_group" },
     {
       label: "Session format",
-      value:
-        request.session_format || request.modality_preference || "—",
+      value: (() => {
+        const m = request.session_format || request.modality_preference || "";
+        const labels = {
+          telehealth_only: "Telehealth only",
+          in_person_only: "In-person only",
+          hybrid: "Hybrid / either",
+          prefer_inperson: "Prefer in-person",
+          prefer_telehealth: "Prefer telehealth",
+        };
+        return labels[m] || m || "—";
+      })(),
       key: "modality_preference",
+      hard: request.modality_preference === "in_person_only",
     },
     { label: "Urgency", value: request.urgency || "—", key: "urgency" },
     {
@@ -320,6 +330,32 @@ export default function RequestFullBrief({ request }) {
           </FieldLabel>
           <div className="mt-1 leading-relaxed whitespace-pre-wrap rounded-lg px-3 py-2 bg-[#F8F4EB] text-[#2B2A29]">
             {request.prior_therapy_notes}
+          </div>
+        </div>
+      )}
+
+      {request.content_flags && request.content_flags.length > 0 && (
+        <div
+          className="border-t border-[#E8E5DF] pt-3 text-sm"
+          data-testid="content-flags"
+        >
+          <FieldLabel hint="Automated scan detected PHI or off-topic content in free-text fields.">
+            Content flags
+          </FieldLabel>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {request.content_flags.map((f, i) => (
+              <span
+                key={i}
+                className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full border ${
+                  f.type === "phi"
+                    ? "bg-[#FCEEEC] text-[#7B2D2D] border-[#E8C8C5]"
+                    : "bg-[#FFF3E0] text-[#8B6914] border-[#E8D9B5]"
+                }`}
+                title={`Field: ${f.field} · Match: "${f.match}"`}
+              >
+                {f.type === "phi" ? "PHI" : "Off-topic"}: {f.label}
+              </span>
+            ))}
           </div>
         </div>
       )}

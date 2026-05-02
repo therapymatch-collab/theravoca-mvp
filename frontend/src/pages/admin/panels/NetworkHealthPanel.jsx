@@ -114,18 +114,23 @@ export default function NetworkHealthPanel({ client: clientProp }) {
     }
   };
 
-  const sendPreview = async (id) => {
+  const sendPreview = async () => {
     try {
-      await client.post("/admin/gap-recruit/send-preview", { draft_id: id });
-      toast.success("Preview sent to admin email");
+      const r = await client.post("/admin/gap-recruit/send-preview", { limit: 3 });
+      const sent = r.data?.sent || 0;
+      toast.success(`Sent ${sent} preview email${sent === 1 ? "" : "s"} to your inbox`);
+      await loadDrafts();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Preview failed");
     }
   };
 
+  // Waitlist demand
+  const [waitlistData, setWaitlistData] = useState(null);
   useEffect(() => {
     loadGaps();
     loadDrafts();
+    client.get("/admin/waitlist").then((r) => setWaitlistData(r.data)).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -172,6 +177,15 @@ export default function NetworkHealthPanel({ client: clientProp }) {
               therapists · <strong className="text-[#D45D5D]">{gapSummary.critical || 0}</strong> critical
               gaps · <strong className="text-[#C87965]">{gapSummary.warning || 0}</strong> warnings
               · <strong className="text-[#2D4A3E]">{draftsTotal}</strong> recruit drafts
+              {waitlistData?.total > 0 && (
+                <span>
+                  {" "}· <strong className="text-[#7C6FD4]">{waitlistData.total}</strong> waitlisted
+                  <span className="text-[#6D6A65]">
+                    {" "}({(waitlistData.by_state || []).slice(0, 3).map(([s, n]) => `${s}: ${n}`).join(", ")}
+                    {(waitlistData.by_state || []).length > 3 ? ` +${waitlistData.by_state.length - 3} more` : ""})
+                  </span>
+                </span>
+              )}
             </p>
           </div>
           <button

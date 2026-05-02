@@ -1,9 +1,8 @@
 import { ArrowRight, X } from "lucide-react";
 import credentialLabel from "@/lib/credentialLabel";
 import {
-  T1_OPTIONS,
-  T3_OPTIONS,
   T4_OPTIONS,
+  T6_OPTIONS,
 } from "@/pages/therapist/deepMatchOptions";
 import { SummaryRow } from "@/pages/therapist/TherapistSignupUI";
 
@@ -15,8 +14,8 @@ import { SummaryRow } from "@/pages/therapist/TherapistSignupUI";
  * into three visual sections:
  *   1. Card header (avatar + name + credential + experience headline)
  *   2. Public profile summary (everything patients will see)
- *   3. Deep-match answers (T1–T5, with the "private — patients never
- *      see these" reassurance and an "edit later in your portal" pill)
+ *   3. Deep-match answers (T6/T6b/T2/T4/T5, with the "private — patients
+ *      never see these" reassurance and an "edit later in your portal" pill)
  *
  * Extracted from TherapistSignup.jsx to keep that file focused on
  * orchestration. Visual + copy unchanged.
@@ -31,9 +30,8 @@ export default function PreviewModal({ data, onClose, onConfirm, submitting }) {
   // shows exactly what the therapist selected (not snake_case slugs).
   const labelFromList = (list, slug) =>
     list.find((o) => o.v === slug)?.l || slug;
-  const t1Label = (slug) => labelFromList(T1_OPTIONS, slug);
-  const t3Label = (slug) => labelFromList(T3_OPTIONS, slug);
   const t4Label = (slug) => labelFromList(T4_OPTIONS, slug);
+  const t6Label = (slug) => labelFromList(T6_OPTIONS, slug);
   const tier = (issue) => {
     if (data.primary_specialties.includes(issue)) return "Primary";
     if (data.secondary_specialties.includes(issue)) return "Secondary";
@@ -241,21 +239,17 @@ export default function PreviewModal({ data, onClose, onConfirm, submitting }) {
           </div>
           <div className="mt-3 grid sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
             <SummaryRow
-              label="T1 — Show up in session (rank order)"
+              label="T6 — What sessions 1–3 look like"
               value={
-                (data.t1_stuck_ranked || [])
-                  .map((s, i) => `${i + 1}. ${t1Label(s)}`)
+                (data.t6_session_expectations || [])
+                  .map((s) => t6Label(s))
                   .join("  ·  ") || "—"
               }
               span={2}
             />
             <SummaryRow
-              label="T3 — Best work unfolds via"
-              value={
-                (data.t3_breakthrough || [])
-                  .map((s) => t3Label(s))
-                  .join("  ·  ") || "—"
-              }
+              label="T6b — Early sessions in your own words"
+              value={data.t6_early_sessions_description || "—"}
               span={2}
             />
             <SummaryRow

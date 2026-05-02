@@ -90,13 +90,9 @@ async def lifespan(_app: FastAPI):
         await db.site_copy.create_index("key", unique=True)
     except Exception as _idx_err:  # noqa: BLE001
         logger.warning("Index setup encountered an error: %s", _idx_err)
-    # Allow disabling background cron to save memory on staging (512MB).
-    if os.environ.get("DISABLE_CRON", "").lower() in ("1", "true", "yes"):
-        logger.info("DISABLE_CRON is set — skipping background sweep/daily tasks")
-    else:
-        sweep_interval = int(os.environ.get("SWEEP_INTERVAL_SECONDS", "300"))
-        _sweep_task = asyncio.create_task(_sweep_loop(sweep_interval))
-        _daily_task = asyncio.create_task(_daily_loop())
+    sweep_interval = int(os.environ.get("SWEEP_INTERVAL_SECONDS", "300"))
+    _sweep_task = asyncio.create_task(_sweep_loop(sweep_interval))
+    _daily_task = asyncio.create_task(_daily_loop())
     # Reset any "running" flags that were left orphaned by a previous
     # supervisorctl restart. Background tasks (deep-research warmup,
     # outreach jobs) live in asyncio tasks that die on restart, but their

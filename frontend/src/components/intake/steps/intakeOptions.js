@@ -8,6 +8,28 @@
  * edit for copy tweaks.
  */
 
+export const COVERED_STATES = new Set(["ID"]);
+
+export const US_STATES = [
+  { v: "AL", l: "Alabama" }, { v: "AK", l: "Alaska" }, { v: "AZ", l: "Arizona" },
+  { v: "AR", l: "Arkansas" }, { v: "CA", l: "California" }, { v: "CO", l: "Colorado" },
+  { v: "CT", l: "Connecticut" }, { v: "DE", l: "Delaware" }, { v: "FL", l: "Florida" },
+  { v: "GA", l: "Georgia" }, { v: "HI", l: "Hawaii" }, { v: "ID", l: "Idaho" },
+  { v: "IL", l: "Illinois" }, { v: "IN", l: "Indiana" }, { v: "IA", l: "Iowa" },
+  { v: "KS", l: "Kansas" }, { v: "KY", l: "Kentucky" }, { v: "LA", l: "Louisiana" },
+  { v: "ME", l: "Maine" }, { v: "MD", l: "Maryland" }, { v: "MA", l: "Massachusetts" },
+  { v: "MI", l: "Michigan" }, { v: "MN", l: "Minnesota" }, { v: "MS", l: "Mississippi" },
+  { v: "MO", l: "Missouri" }, { v: "MT", l: "Montana" }, { v: "NE", l: "Nebraska" },
+  { v: "NV", l: "Nevada" }, { v: "NH", l: "New Hampshire" }, { v: "NJ", l: "New Jersey" },
+  { v: "NM", l: "New Mexico" }, { v: "NY", l: "New York" }, { v: "NC", l: "North Carolina" },
+  { v: "ND", l: "North Dakota" }, { v: "OH", l: "Ohio" }, { v: "OK", l: "Oklahoma" },
+  { v: "OR", l: "Oregon" }, { v: "PA", l: "Pennsylvania" }, { v: "RI", l: "Rhode Island" },
+  { v: "SC", l: "South Carolina" }, { v: "SD", l: "South Dakota" }, { v: "TN", l: "Tennessee" },
+  { v: "TX", l: "Texas" }, { v: "UT", l: "Utah" }, { v: "VT", l: "Vermont" },
+  { v: "VA", l: "Virginia" }, { v: "WA", l: "Washington" }, { v: "WV", l: "West Virginia" },
+  { v: "WI", l: "Wisconsin" }, { v: "WY", l: "Wyoming" }, { v: "DC", l: "Washington D.C." },
+];
+
 export const CLIENT_TYPES = [
   { v: "individual", l: "Individual" },
   { v: "couples", l: "Couples" },
@@ -104,6 +126,18 @@ export const STYLES = [
 export const MODALITY_PREFS = [
   "CBT", "DBT", "EMDR", "Mindfulness-Based", "Psychodynamic", "ACT",
   "Solution-Focused", "Gottman", "IFS", "Somatic Experiencing", "Person-Centered",
+];
+
+// ── Expectation alignment ─────────────────────────────────────────────
+// Patient: "What do you want the first few sessions to feel like?"
+// Pick up to 2. Slugs are 1:1 with therapist T6 options (same concept,
+// therapist-worded). Scoring = overlap. This is the #1 ranking signal.
+export const EXPECTATION_OPTIONS = [
+  { v: "guide_direct",     l: "I want the therapist to guide and give direction" },
+  { v: "listen_heard",     l: "I want space to talk and be heard" },
+  { v: "tools_fast",       l: "I want practical tools or strategies quickly" },
+  { v: "explore_patterns", l: "I want to explore and understand patterns over time" },
+  { v: "not_sure",         l: "I'm not sure yet" },
 ];
 
 // Soft axes only — the "always hard" ones (state, type of therapy,

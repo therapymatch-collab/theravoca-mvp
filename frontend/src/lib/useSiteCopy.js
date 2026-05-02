@@ -11,16 +11,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
-// Seed the cache from the server-injected site_copy (avoids FOUC).
-// _start.py injects <script>window.__SITE_COPY__={...}</script> into
-// index.html so the overrides are available synchronously on first render.
-const _serverInjected =
-  typeof window !== "undefined" && window.__SITE_COPY__
-    ? window.__SITE_COPY__
-    : null;
-let _cache = _serverInjected
-  ? { fetched_at: Date.now(), map: _serverInjected }
-  : null;
+let _cache = null; // { fetched_at: number, map: {} }
 const TTL_MS = 60_000;
 const _listeners = new Set();
 

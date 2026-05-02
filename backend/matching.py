@@ -1,13 +1,23 @@
-"""TheraVoca matching engine v2 — per the MVP spec.
+# v5 — Expectation alignment first, reliability=25pts, TAI tracking
+# Survey timeline: 48h soft touch → 3w selection → 9w retention → 15w outcome
+"""TheraVoca matching engine v5 — Expectation alignment first, reliability=25pts, TAI tracking.
 
-Total max = 100 across 8 weighted axes:
-  Presenting issues 35, Availability 20, Modality 15, Urgency 10,
-  Prior therapy 10, Experience 5, Gender 3, Style 2.
+Ranking priority:
+  1. Expectation alignment  25  (patient + therapist session expectations overlap)
+  2. Availability           20
+  3. Therapist reliability  25  (passive behavior: response rate, selection, retention)
+  4. Presenting issues      35  (clinical fit)
+  5. Modality               15
+  6. Everything else: urgency 10, prior therapy 10, experience 5, gender 3, style 2
+
+Plus deep-match bonus (up to 30 when patient opts in).
 
 Hard filters (return total=-1):
   state license, client type, age group, payment fit,
   modality (when patient says telehealth-only or in-person-only),
   gender (when patient marks gender preference as required).
+
+Survey timeline: 48h soft touch → 3w selection → 9w retention → 15w outcome
 """
 from __future__ import annotations
 
@@ -34,6 +44,25 @@ MAX_OTHER_ISSUE_BONUS = 6.0
 # `other_issue` because the two signals overlap conceptually and we
 # don't want to double-count when both are filled in.
 MAX_PRIOR_THERAPY_BONUS = 4.0
+
+# ─── Expectation alignment ─────────────────────────────────────────────
+# Overlap between patient session_expectations and therapist
+# t6_session_expectations. THE #1 ranking signal. Both pick up to 2
+# from 5 options (same slugs). Special handling: "not_sure" (patient)
+# and "depends" (therapist) are wildcards — they match anything.
+MAX_EXPECTATION_ALIGNMENT = 25.0
+# Bonus from embedding similarity between patient free-text and
+# therapist T6 early-session description. Tie-breaker when tag
+# overlap is identical.
+MAX_EXPECTATION_EMBED_BONUS = 8.0
+# ─── Therapist reliability ─────────────────────────────────────────────
+# Built from passive behavior data:
+#   response_rate:    % of referrals responded to (applied or declined)
+#   selection_rate:   % of times patients chose them
+#   retention_9w:     % of matches that continued past 9 weeks
+#   retention_15w:    % of matches that continued past 15 weeks
+#   expectation_accuracy: % of patients whose expectations were met (48h survey)
+MAX_RELIABILITY = 25.0
 
 # Maps experience preference label -> (lo, hi) years
 EXPERIENCE_RANGES = {
@@ -533,6 +562,7 @@ def _priority_weights(priority_factors: list[str]) -> dict[str, float]:
     returns an all-1.0 map (default behaviour).
     """
     weights = {ax: 1.0 for ax in [
+        "expectation_alignment", "expectation_embed", "reliability",
         "issues", "availability", "modality", "urgency",
         "prior_therapy", "experience", "gender", "style",
         "payment_fit", "payment_alignment", "modality_pref",
@@ -569,6 +599,121 @@ def _patient_expressed_axis(r: dict, axis: str) -> bool:
     return False
 
 
+# ─── Expectation alignment scoring ───────────────────────────────────────
+# Patient picks 2-3 from EXPECTATION_OPTIONS (session_expectations),
+# therapist picks 2-3 from the same set (t6_session_expectations).
+# Score = overlap / max(len(patient), len(therapist)) * MAX_EXPECTATION_ALIGNMENT
+# This is the #1 ranking signal in the new scoring priority.
+
+def _score_expectation_alignment(t: dict, r: dict) -> float:
+    """Score expectation alignment between patient and therapist.
+
+    Special wildcards:
+      - Patient picks "not_sure" → matches ANY therapist (neutral, doesn't
+        boost or penalize). Returns 50% of max.
+      - Therapist picks "depends" → matches ANY patient (same logic).
+      - Both wildcards → 50% of max.
+
+    Normal case: overlap / max(len(patient), len(therapist)) * MAX.
+    """
+    patient_exp = [e.lower() for e in (r.get("session_expectations") or [])]
+    therapist_exp = [e.lower() for e in (t.get("t6_session_expectations") or [])]
+    if not patient_exp or not therapist_exp:
+        return 0.0
+    # Wildcard handling
+    p_wild = "not_sure" in patient_exp
+    t_wild = "depends" in therapist_exp
+    if p_wild or t_wild:
+        return round(MAX_EXPECTATION_ALIGNMENT * 0.5, 2)
+    # Normal overlap scoring
+    overlap = len(set(patient_exp) & set(therapist_exp))
+    denom = max(len(patient_exp), len(therapist_exp))
+    return round((overlap / denom) * MAX_EXPECTATION_ALIGNMENT, 2)
+
+
+def _score_expectation_embed_bonus(t: dict, r: dict) -> float:
+    """Embedding-based tie-breaker: patient's free-text session notes vs
+    therapist's T6 early-session description. Only fires when both exist."""
+    p_emb = r.get("session_expectations_notes_embedding")
+    t_emb = t.get("t6_early_sessions_embedding")
+    if not p_emb or not t_emb:
+        return 0.0
+    from embeddings import cosine_similarity
+    sim = max(0.0, cosine_similarity(p_emb, t_emb))
+    return round(sim * MAX_EXPECTATION_EMBED_BONUS, 2)
+
+
+# ─── Therapist reliability scoring ────────────────────────────────────────
+
+_RELIABILITY_WEIGHTS = {
+    "response_rate": 0.25,
+    "expectation_accuracy": 0.20,
+    "retention_9w": 0.20,
+    "retention_15w": 0.20,
+    "selection_rate": 0.15,
+}
+
+def _score_reliability(t: dict) -> float:
+    """Score therapist reliability from passive behavior data.
+    New therapists get neutral (50% of max) — not penalized, not boosted.
+    Each component defaults to 0.5 if not yet measured."""
+    rel = t.get("reliability") or {}
+    if not rel:
+        return round(MAX_RELIABILITY * 0.5, 2)
+    score = 0.0
+    for key, weight in _RELIABILITY_WEIGHTS.items():
+        val = float(rel.get(key, 0.5))
+        score += val * weight
+    return round(score * MAX_RELIABILITY, 2)
+
+
+def calculate_tai(feedback_data: dict) -> float:
+    """
+    Therapeutic Alliance Index (TAI) — 0-100 composite score.
+
+    Derived from patient survey data across the feedback arc:
+      Bond (40%):  3w confidence (0-100) + 9w "feel understood" (1-5 → 0-100)
+      Tasks (30%): 3w expectation match (Yes=100, Somewhat=50, No=0)
+      Goals (30%): 9w "same page" (1-5 → 0-100) + 15w progress (1-10 → 0-100)
+
+    Returns 0-100 float. Returns -1 if insufficient data.
+    """
+    bond_signals = []
+    tasks_signals = []
+    goals_signals = []
+
+    # Bond signals
+    if "confidence_3w" in feedback_data:
+        bond_signals.append(feedback_data["confidence_3w"])  # already 0-100
+    if "feel_understood_9w" in feedback_data:
+        bond_signals.append((feedback_data["feel_understood_9w"] - 1) * 25)  # 1-5 → 0-100
+    if "still_seeing_9w" in feedback_data:
+        bond_signals.append(100.0 if feedback_data["still_seeing_9w"] == "yes" else 0.0)
+    if "still_seeing_15w" in feedback_data:
+        bond_signals.append(100.0 if feedback_data["still_seeing_15w"] == "yes" else 0.0)
+
+    # Tasks signals
+    if "expectation_match_3w" in feedback_data:
+        mapping = {"yes": 100.0, "somewhat": 50.0, "no": 0.0}
+        tasks_signals.append(mapping.get(feedback_data["expectation_match_3w"], 50.0))
+
+    # Goals signals
+    if "same_page_9w" in feedback_data:
+        goals_signals.append((feedback_data["same_page_9w"] - 1) * 25)  # 1-5 → 0-100
+    if "progress_15w" in feedback_data:
+        goals_signals.append((feedback_data["progress_15w"] - 1) * 100 / 9)  # 1-10 → 0-100
+
+    # Need at least one signal in each pillar for a meaningful score
+    if not bond_signals or not tasks_signals or not goals_signals:
+        return -1.0
+
+    bond = sum(bond_signals) / len(bond_signals)
+    tasks = sum(tasks_signals) / len(tasks_signals)
+    goals = sum(goals_signals) / len(goals_signals)
+
+    return round(bond * 0.40 + tasks * 0.30 + goals * 0.30, 1)
+
+
 # ─── Deep-match scoring (Iter-89 v2) ───────────────────────────────────
 # Three axes activated only when the patient opted into the deep flow
 # (request.deep_match_opt_in is True) AND the therapist has answered
@@ -589,6 +734,11 @@ _DEEP_MATCH_DEFAULT_WEIGHTS = {
 }
 _DEEP_MATCH_SCALE = 30.0  # max bonus per axis ≈ weight * 30
 
+# NOTE: T1 (stuck_ranked) and T3 (breakthrough) are deprecated in the
+# new survey timeline but the scoring logic still works with existing
+# data. New therapists may not have T1/T3 answers — sub-scores will
+# be 0.0 for those axes, which is the correct neutral behavior.
+#
 # Canonical option order for P1/T1 vectors. Indices here drive the
 # 6-slot binary/rank vectors used by `_score_relationship_style`.
 _P1_T1_KEYS = (
@@ -685,6 +835,70 @@ def _score_way_of_working(p2_picks: list[str], t3_picks: list[str]) -> float:
     return overlap / 2.0
 
 
+
+def _t6_to_t1_fallback(t6_picks: list[str]) -> list[str]:
+    """When a therapist has T6 but no T1, derive a plausible T1 rank
+    order from their T6 session-expectation picks. This keeps the
+    P1-vs-T1 deep-match bonus scoring for new therapists who never
+    answered the (now deprecated) T1 drag-rank question.
+
+    Mapping rationale (T6 → T1 equivalents):
+      guide_direct     → leads_structured, direct_honest
+      listen_heard     → follows_lead, warm_first
+      tools_fast       → leads_structured, challenges
+      explore_patterns → guides_questions, follows_lead
+      depends          → warm_first, guides_questions
+    """
+    _T6_TO_T1 = {
+        "guide_direct":     ["leads_structured", "direct_honest"],
+        "listen_heard":     ["follows_lead", "warm_first"],
+        "tools_fast":       ["leads_structured", "challenges"],
+        "explore_patterns": ["guides_questions", "follows_lead"],
+        "depends":          ["warm_first", "guides_questions"],
+    }
+    seen = []
+    for slug in (t6_picks or []):
+        for t1 in _T6_TO_T1.get(slug, []):
+            if t1 not in seen:
+                seen.append(t1)
+    # Fill remaining slots with defaults so the rank vector is complete
+    for k in _P1_T1_KEYS:
+        if k not in seen:
+            seen.append(k)
+    return seen
+
+
+# P2/T3 slug set (6 items, shared between patient P2 and therapist T3).
+_P2_T3_KEYS = (
+    "deep_emotional", "practical_tools", "explore_past",
+    "focus_forward", "build_insight", "shift_relationships",
+)
+
+def _t6_to_t3_fallback(t6_picks: list[str]) -> list[str]:
+    """When a therapist has T6 but no T3, derive plausible T3 picks
+    from their T6 session-expectation selections.
+
+    Mapping rationale (T6 → T3 equivalents):
+      guide_direct     → practical_tools
+      listen_heard     → deep_emotional
+      tools_fast       → practical_tools, focus_forward
+      explore_patterns → explore_past, build_insight
+      depends          → (neutral — no strong T3 signal)
+    """
+    _T6_TO_T3 = {
+        "guide_direct":     ["practical_tools"],
+        "listen_heard":     ["deep_emotional"],
+        "tools_fast":       ["practical_tools", "focus_forward"],
+        "explore_patterns": ["explore_past", "build_insight"],
+    }
+    seen = []
+    for slug in (t6_picks or []):
+        for t3 in _T6_TO_T3.get(slug, []):
+            if t3 not in seen:
+                seen.append(t3)
+    return seen[:2]  # T3 is pick-2
+
+
 def _score_contextual_resonance(
     p3_embedding: list[float] | None,
     t5_embedding: list[float] | None,
@@ -707,16 +921,31 @@ def _deep_match_bonus(
     """Compute the three v2 sub-scores + the total bonus. Returns the
     breakdown so the admin debug view can show patients WHY a therapist
     scored higher (e.g., "your style picks aligned with their top-2 instincts").
+
+    v5: T1/T3 are deprecated. If a therapist has T1/T3 data (backfilled
+    or legacy), we use it directly. Otherwise we derive pseudo-T1/T3
+    from their T6 session-expectation picks.
     """
+
+    # T1 data: use existing if present, else derive from T6
+    t1_data = t.get("t1_stuck_ranked") or []
+    if not t1_data:
+        t1_data = _t6_to_t1_fallback(t.get("t6_session_expectations") or [])
+
+    # T3 data: use existing if present, else derive from T6
+    t3_data = t.get("t3_breakthrough") or []
+    if not t3_data:
+        t3_data = _t6_to_t3_fallback(t.get("t6_session_expectations") or [])
+
     weights = weights or _DEEP_MATCH_DEFAULT_WEIGHTS
     rel = _score_relationship_style(
         r.get("p1_communication") or [],
-        t.get("t1_stuck_ranked") or [],
+        t1_data,
         t.get("t4_hard_truth"),
     )
     work = _score_way_of_working(
         r.get("p2_change") or [],
-        t.get("t3_breakthrough") or [],
+        t3_data,
     )
     ctx = _score_contextual_resonance(
         r.get("p3_embedding"),
@@ -782,6 +1011,8 @@ def score_therapist(
         return {"total": -1, "filter_failed": "language", "filtered": True}
 
     raw = {
+        "expectation_alignment": _score_expectation_alignment(t, r),
+        "expectation_embed": _score_expectation_embed_bonus(t, r),
         "issues": _score_issues(t, r),
         "availability": _score_availability(t, r),
         "modality": _score_modality(t, r),
@@ -793,6 +1024,7 @@ def score_therapist(
         "payment_fit": _score_payment_fit(t, r),
         "payment_alignment": _score_payment_alignment(t, r),
         "modality_pref": _score_modality_pref(t, r),
+        "reliability": _score_reliability(t),
     }
 
     # Strict mode: patient said "don't show me anyone who scores zero on

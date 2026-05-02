@@ -36,7 +36,7 @@ async def admin_login(payload: dict, request: Request):
             status_code=429,
             detail=f"Too many failed attempts. Try again in {remaining // 60 + 1} minutes.",
         )
-    if not ADMIN_PASSWORD or payload.get("password") != ADMIN_PASSWORD:
+    if payload.get("password") != ADMIN_PASSWORD:
         _record_failure(ip)
         rec = _login_attempts.get(ip, {})
         attempts_left = max(0, LOGIN_MAX_FAILURES - rec.get("failures", 0))
@@ -744,7 +744,7 @@ async def _attach_value_tags(pending_rows: list[dict]) -> None:
 @router.post("/admin/therapists/{therapist_id}/approve")
 async def admin_approve_therapist(therapist_id: str, _: bool = Depends(require_admin)):
     import asyncio
-    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0})
+    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0, "password_hash": 0, "password_set_at": 0})
     if not t:
         raise HTTPException(404)
     await db.therapists.update_one(
@@ -761,7 +761,7 @@ async def admin_approve_therapist(therapist_id: str, _: bool = Depends(require_a
 @router.post("/admin/therapists/{therapist_id}/reject")
 async def admin_reject_therapist(therapist_id: str, _: bool = Depends(require_admin)):
     import asyncio
-    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0})
+    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0, "password_hash": 0, "password_set_at": 0})
     if not t:
         raise HTTPException(404)
     await db.therapists.update_one(
@@ -851,7 +851,7 @@ async def admin_clear_reapproval(
     """Admin has reviewed the therapist's specialty/license self-edit and
     blessed it — clear the pending_reapproval flag so the updated profile
     starts being used by the matching engine."""
-    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0})
+    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0, "password_hash": 0, "password_set_at": 0})
     if not t:
         raise HTTPException(404)
     await db.therapists.update_one(
@@ -1403,7 +1403,7 @@ async def admin_run_daily_tasks(_: bool = Depends(require_admin)):
 async def admin_list_followups(_: bool = Depends(require_admin)):
     """All follow-up survey responses across all milestones."""
     docs = await db.followups.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
-    counts = {"48h": 0, "2wk": 0, "6wk": 0}
+    counts = {"48h": 0, "3wk": 0, "9wk": 0, "15wk": 0, "2wk": 0, "6wk": 0}
     helpful_scores: list[int] = []
     contacted = 0
     for d in docs:
@@ -1481,6 +1481,38 @@ async def admin_export_therapists_csv(_: bool = Depends(require_admin)):
         headers={"Content-Disposition": "attachment; filename=theravoca_therapists.csv"},
     )
 
+
+@router.get("/admin/waitlist")
+async def admin_waitlist(_: bool = Depends(require_admin)):
+    """Waitlist entries aggregated by state for demand-signal visibility."""
+    entries = await db.waitlist.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    by_state: dict[str, int] = {}
+    for e in entries:
+        s = e.get("state", "??")
+        by_state[s] = by_state.get(s, 0) + 1
+    ranked = sorted(by_state.items(), key=lambda x: x[1], reverse=True)
+    return {
+        "total": len(entries),
+        "by_state": ranked,
+        "entries": entries[:200],  # most recent 200
+    }
+
+
+
+@router.get("/admin/therapist-waitlist")
+async def admin_therapist_waitlist(_: bool = Depends(require_admin)):
+    """Therapist waitlist — out-of-state providers interested in joining."""
+    entries = await db.therapist_waitlist.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    by_state: dict[str, int] = {}
+    for e in entries:
+        s = e.get("state", "??")
+        by_state[s] = by_state.get(s, 0) + 1
+    ranked = sorted(by_state.items(), key=lambda x: x[1], reverse=True)
+    return {
+        "total": len(entries),
+        "by_state": ranked,
+        "entries": entries[:200],
+    }
 
 @router.post("/admin/outreach/run/{request_id}")
 async def admin_run_outreach(request_id: str, _: bool = Depends(require_admin)):
@@ -2682,7 +2714,7 @@ async def admin_deep_research_therapist(therapist_id: str) -> dict[str, Any]:
     Costs more than the standard refresh (~30s + 2-3x tokens) so it's
     opt-in per therapist rather than running on every match."""
     from research_enrichment import get_or_build_research
-    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0})
+    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0, "password_hash": 0, "password_set_at": 0})
     if not t:
         raise HTTPException(404, "Therapist not found")
     res = await get_or_build_research(t, force=True, deep=True)
@@ -3659,37 +3691,86 @@ async def simulator_delete_run(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Waitlist — out-of-state patients + therapists
+# Auto-recruit — closed-loop recruiter (Simulator + Coverage Gaps +
+# Gap Recruiter). Pre-launch: dry-run + admin-approval-gated. See
+# backend/auto_recruit.py for the orchestration logic.
 # ──────────────────────────────────────────────────────────────────────
 
 
-@router.get("/admin/waitlist")
-async def admin_waitlist(_: bool = Depends(require_admin)):
-    """Patient waitlist entries aggregated by state for demand-signal visibility."""
-    entries = await db.waitlist.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
-    by_state: dict[str, int] = {}
-    for e in entries:
-        s = e.get("state", "??")
-        by_state[s] = by_state.get(s, 0) + 1
-    ranked = sorted(by_state.items(), key=lambda x: x[1], reverse=True)
+@router.get("/admin/auto-recruit/status")
+async def auto_recruit_status(_: None = Depends(require_admin)):
+    """Returns current policy, last cycle, and pending-approval count.
+    Used by the admin panel header to render the live status card."""
+    import auto_recruit
+    cfg = await auto_recruit.get_config(db)
+    last_id = cfg.get("last_cycle_id")
+    last_cycle = None
+    if last_id:
+        last_cycle = await db.auto_recruit_cycles.find_one(
+            {"id": last_id}, {"_id": 0},
+        )
+    pending = await auto_recruit.count_pending_approval(db)
     return {
-        "total": len(entries),
-        "by_state": ranked,
-        "entries": entries[:200],
+        "config": cfg,
+        "last_cycle": last_cycle,
+        "pending_approval_count": pending,
     }
 
 
-@router.get("/admin/therapist-waitlist")
-async def admin_therapist_waitlist(_: bool = Depends(require_admin)):
-    """Therapist waitlist — out-of-state providers interested in joining."""
-    entries = await db.therapist_waitlist.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
-    by_state: dict[str, int] = {}
-    for e in entries:
-        s = e.get("state", "??")
-        by_state[s] = by_state.get(s, 0) + 1
-    ranked = sorted(by_state.items(), key=lambda x: x[1], reverse=True)
-    return {
-        "total": len(entries),
-        "by_state": ranked,
-        "entries": entries[:200],
-    }
+@router.put("/admin/auto-recruit/config")
+async def auto_recruit_update_config(
+    payload: dict, _: None = Depends(require_admin),
+):
+    """Merge-patch the singleton config. Only known keys are accepted."""
+    import auto_recruit
+    cfg = await auto_recruit.update_config(db, payload)
+    return {"ok": True, "config": cfg}
+
+
+@router.post("/admin/auto-recruit/plan")
+async def auto_recruit_plan(_: None = Depends(require_admin)):
+    """Preview the plan WITHOUT creating drafts — runs a fresh simulator
+    + coverage-gap analysis and returns the would-be recruit targets."""
+    import auto_recruit
+    return await auto_recruit.compute_plan_preview(db)
+
+
+@router.post("/admin/auto-recruit/run")
+async def auto_recruit_run(_: None = Depends(require_admin)):
+    """Execute one full cycle — runs sim, builds plan, calls gap
+    recruiter, stamps new drafts with cycle id + needs_approval=True.
+    Never sends real email (dry_run enforced by config)."""
+    import auto_recruit
+    cycle = await auto_recruit.run_cycle(db, manual_trigger=True)
+    return cycle
+
+
+@router.get("/admin/auto-recruit/cycles")
+async def auto_recruit_list_cycles(
+    _: None = Depends(require_admin), limit: int = 30,
+):
+    """Recent cycles history (lightweight — omits per-draft detail)."""
+    import auto_recruit
+    return {"items": await auto_recruit.list_cycles(db, limit=limit)}
+
+
+@router.post("/admin/auto-recruit/approve")
+async def auto_recruit_approve(
+    payload: dict, _: None = Depends(require_admin),
+):
+    """Clear `needs_approval` on a batch of drafts. Accepts either
+    `{cycle_id}` to approve an entire cycle's drafts, or `{draft_ids: [...]}`
+    for a targeted approval. Returns count approved."""
+    import auto_recruit
+    cycle_id = payload.get("cycle_id")
+    draft_ids = payload.get("draft_ids") or None
+    if not cycle_id and not draft_ids:
+        raise HTTPException(400, "cycle_id or draft_ids required")
+    approved = await auto_recruit.approve_batch(
+        db, cycle_id=cycle_id, draft_ids=draft_ids,
+    )
+    return {"ok": True, "approved": approved}
+
+
+# Suppress unused-import warnings on logger (kept for future logging)
+void = logger

@@ -42,9 +42,9 @@ const URGENCY = [
 
 // ─── Deep-match back-fill banner (Iter-90) ─────────────────────────
 // Shown at the top of the portal when an existing therapist hasn't
-// answered the v2 T1–T5 style-fit questions yet. Soft, dismissible
-// per-session. No backend changes — we just check for empty fields
-// on the therapist doc the portal already loads.
+// v5: checks T6/T6b (primary matching signal) + T2/T4/T5 style-fit
+// questions. Soft, dismissible per-session. No backend changes — we
+// just check for empty fields on the therapist doc the portal loads.
 function DeepMatchBackfillBanner({ therapist }) {
   const [dismissed, setDismissed] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -52,12 +52,12 @@ function DeepMatchBackfillBanner({ therapist }) {
   });
   if (!therapist || dismissed) return null;
   const missing = [];
-  if (!therapist.t1_stuck_ranked || therapist.t1_stuck_ranked.length !== 6)
-    missing.push("how you show up in session");
+  if (!therapist.t6_session_expectations || therapist.t6_session_expectations.length < 1)
+    missing.push("what sessions 1–3 look like with you");
+  if ((therapist.t6_early_sessions_description || "").trim().length < 30)
+    missing.push("a description of your early sessions");
   if ((therapist.t2_progress_story || "").trim().length < 50)
     missing.push("a story of a client who made progress");
-  if (!therapist.t3_breakthrough || therapist.t3_breakthrough.length !== 2)
-    missing.push("how your best work unfolds");
   if (!therapist.t4_hard_truth)
     missing.push("how you push past comfort zones");
   if ((therapist.t5_lived_experience || "").trim().length < 30)
@@ -512,13 +512,34 @@ export default function TherapistPortal() {
               area is the first thing the eye lands on after critical
               alerts are handled. */}
           {!isPending && data?.referrals?.length === 0 && (
-            <div className="mt-6 bg-white border border-[#E8E5DF] rounded-3xl p-10 text-center" data-testid="therapist-referrals-empty">
-              <Inbox className="mx-auto text-[#C87965] mb-3" size={28} strokeWidth={1.5} />
-              <h2 className="font-serif-display text-xl text-[#2D4A3E]">No referrals yet</h2>
-              <p className="text-sm text-[#6D6A65] mt-1.5 max-w-md mx-auto">
-                When a patient request matches your profile (70%+), it will appear here and we'll
-                send you an email.
-              </p>
+            <div className="mt-6 bg-white border border-[#E8E5DF] rounded-3xl p-8 sm:p-10" data-testid="therapist-referrals-empty">
+              <div className="text-center">
+                <Sparkles className="mx-auto text-[#C87965] mb-3" size={28} strokeWidth={1.5} />
+                <h2 className="font-serif-display text-xl text-[#2D4A3E]">You're all set — referrals are on the way</h2>
+                <p className="text-sm text-[#6D6A65] mt-1.5 max-w-lg mx-auto leading-relaxed">
+                  Your profile is live and matched against every new patient request. When a patient
+                  matches your specialties and location (70%+), it shows up here and we email you.
+                </p>
+              </div>
+              <div className="mt-8 grid sm:grid-cols-3 gap-4 text-center">
+                <div className="bg-[#FDFBF7] rounded-xl p-4">
+                  <CheckCircle2 className="mx-auto text-[#4A6B5D] mb-2" size={20} />
+                  <p className="text-xs font-semibold text-[#2B2A29] uppercase tracking-wider">Profile live</p>
+                  <p className="text-xs text-[#6D6A65] mt-1">Patients can find you now</p>
+                </div>
+                <div className="bg-[#FDFBF7] rounded-xl p-4">
+                  <Clock className="mx-auto text-[#C87965] mb-2" size={20} />
+                  <p className="text-xs font-semibold text-[#2B2A29] uppercase tracking-wider">Auto-matching</p>
+                  <p className="text-xs text-[#6D6A65] mt-1">We scan requests for you 24/7</p>
+                </div>
+                <div className="bg-[#FDFBF7] rounded-xl p-4">
+                  <Calendar className="mx-auto text-[#2D4A3E] mb-2" size={20} />
+                  <p className="text-xs font-semibold text-[#2B2A29] uppercase tracking-wider">Stay current</p>
+                  <p className="text-xs text-[#6D6A65] mt-1">
+                    <Link to="/portal/therapist/edit" className="text-[#2D4A3E] underline">Update availability</Link> anytime
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 

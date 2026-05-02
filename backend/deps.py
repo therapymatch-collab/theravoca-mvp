@@ -24,10 +24,7 @@ db = mongo_client[os.environ["DB_NAME"]]
 
 
 # ─── Env-driven constants ────────────────────────────────────────────────────
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
-if not ADMIN_PASSWORD:
-    import warnings
-    warnings.warn("ADMIN_PASSWORD env var not set — admin login disabled until configured", stacklevel=1)
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123!")
 DEFAULT_THRESHOLD = float(os.environ.get("DEFAULT_MATCH_THRESHOLD", "70"))
 MIN_TARGET_MATCHES = int(os.environ.get("MIN_TARGET_MATCHES", "30"))
 AUTO_DELAY_HOURS = float(os.environ.get("AUTO_RESULTS_DELAY_HOURS", "24"))
@@ -96,7 +93,7 @@ def require_admin(
       • a Bearer JWT with role=admin (issued by /admin/login-with-email when
         a team member signs in with email + password).
     """
-    if x_admin_password and ADMIN_PASSWORD and x_admin_password == ADMIN_PASSWORD:
+    if x_admin_password and x_admin_password == ADMIN_PASSWORD:
         return True
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()

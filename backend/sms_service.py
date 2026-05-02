@@ -136,7 +136,7 @@ async def _get_template(key: str) -> str:
         from db import db  # late import to avoid circular deps
         doc = await db.site_copy.find_one({"key": key})
         if doc and doc.get("value"):
-                    return doc["value"]
+            return doc["value"]
     except Exception:
         pass
     return SMS_TEMPLATE_DEFAULTS.get(key, "")

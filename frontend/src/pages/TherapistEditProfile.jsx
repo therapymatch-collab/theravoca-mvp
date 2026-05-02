@@ -25,15 +25,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { sessionClient, getSession } from "@/lib/api";
 import credentialLabel from "@/lib/credentialLabel";
-import DraggableRankList from "@/components/intake/DraggableRankList";
 import {
   PillCol as DeepMatchPickList,
   RadioCol as DeepMatchRadio,
 } from "@/pages/therapist/TherapistDeepMatchStep";
 import {
-  T1_OPTIONS,
-  T3_OPTIONS,
   T4_OPTIONS,
+  T6_OPTIONS,
 } from "@/pages/therapist/deepMatchOptions";
 
 const AGE_GROUP_OPTIONS = [
@@ -109,15 +107,10 @@ export default function TherapistEditProfile() {
           // Re-approval fields (editable, but flag change)
           primary_specialties: [...(r.data.primary_specialties || [])],
           secondary_specialties: [...(r.data.secondary_specialties || [])],
-          // Deep-match T1–T5 (Iter-89 v2). Default T1 to canonical
-          // order so existing therapists don't see an empty list.
-          t1_stuck_ranked:
-            (r.data.t1_stuck_ranked || []).length === 6
-              ? [...r.data.t1_stuck_ranked]
-              : ["leads_structured", "follows_lead", "challenges",
-                 "warm_first", "direct_honest", "guides_questions"],
+          // Deep-match v5: T6/T6b are the primary signal; T2/T4/T5 remain.
+          t6_session_expectations: [...(r.data.t6_session_expectations || [])],
+          t6_early_sessions_description: r.data.t6_early_sessions_description || "",
           t2_progress_story: r.data.t2_progress_story || "",
-          t3_breakthrough: [...(r.data.t3_breakthrough || [])],
           t4_hard_truth: r.data.t4_hard_truth || "",
           t5_lived_experience: r.data.t5_lived_experience || "",
         });
@@ -493,8 +486,8 @@ export default function TherapistEditProfile() {
           </h2>
           <p className="text-sm text-[#2B2A29]/85 mt-1.5 leading-relaxed">
             Patients who opt into our deeper intake get scored against
-            your answers here. Until all 5 are filled, those patients
-            won't see you in deep-match results.
+            your answers here. The session expectations question (T6) is
+            our #1 matching signal — make sure it reflects how you actually work.
           </p>
           <p
             className="mt-2 text-xs text-[#2D4A3E] bg-white/70 border border-[#F4C7BE] rounded-md px-2.5 py-1.5 inline-block"
@@ -505,13 +498,29 @@ export default function TherapistEditProfile() {
           </p>
 
           <div className="mt-6 space-y-6">
-            <Field label="T1 — How do you typically show up in session? (drag the handle to reorder, most instinctive at top)">
-              <DraggableRankList
-                items={T1_OPTIONS}
-                order={draft.t1_stuck_ranked}
-                onChange={(o) => set("t1_stuck_ranked", o)}
-                testid="edit-t1"
+            <Field label="T6 — What do sessions 1–3 typically look like with you? (pick 1–2)">
+              <DeepMatchPickList
+                items={T6_OPTIONS}
+                selected={draft.t6_session_expectations}
+                onSelect={(v) => toggleList("t6_session_expectations", v, 2)}
+                testid="edit-t6"
               />
+              <p className="text-[11px] text-[#6D6A65] mt-2">
+                {(draft.t6_session_expectations || []).length}/2 selected
+              </p>
+            </Field>
+            <Field label="T6b — Describe what your first few sessions look like in your own words (≥30 chars)">
+              <Textarea
+                rows={4}
+                value={draft.t6_early_sessions_description}
+                onChange={(e) => set("t6_early_sessions_description", e.target.value)}
+                className="bg-white border-[#E8E5DF] rounded-xl"
+                data-testid="edit-t6b"
+                placeholder="What should a new patient expect? How do you structure early sessions? What do you typically focus on first?"
+              />
+              <p className="text-[11px] text-[#6D6A65] mt-1">
+                {(draft.t6_early_sessions_description || "").length}/2000
+              </p>
             </Field>
             <Field label="T2 — Describe a client who made real progress with you (≥50 chars)">
               <Textarea
@@ -524,17 +533,6 @@ export default function TherapistEditProfile() {
               />
               <p className="text-[11px] text-[#6D6A65] mt-1">
                 {(draft.t2_progress_story || "").length}/2000
-              </p>
-            </Field>
-            <Field label="T3 — How does your best work typically unfold? (pick exactly 2)">
-              <DeepMatchPickList
-                items={T3_OPTIONS}
-                selected={draft.t3_breakthrough}
-                onSelect={(v) => toggleList("t3_breakthrough", v, 2)}
-                testid="edit-t3"
-              />
-              <p className="text-[11px] text-[#6D6A65] mt-2">
-                {(draft.t3_breakthrough || []).length}/2 selected
               </p>
             </Field>
             <Field label="T4 — When you need to push a client past their comfort zone, how do you do it? (pick 1)">

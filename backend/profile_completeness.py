@@ -77,9 +77,10 @@ ENHANCING_FIELDS = [
     # Deep match T-fields — needed for advanced matching. Backfilled
     # records are flagged with _deep_match_backfilled=True and should
     # be treated as "incomplete" until the therapist fills them in.
-    ("t1_stuck_ranked", "Deep match: session style ranking (T1)", _nonempty_list(5)),
+    # T1/T3 deprecated in v5 — replaced by T6/T6b as primary signal.
+    ("t6_session_expectations", "Deep match: session expectations (T6)", _nonempty_list(1)),
+    ("t6_early_sessions_description", "Deep match: early sessions description (T6b)", _nonempty_str(30)),
     ("t2_progress_story", "Deep match: client progress story (T2)", _nonempty_str(50)),
-    ("t3_breakthrough", "Deep match: breakthrough approach (T3)", _nonempty_list(2)),
     ("t4_hard_truth", "Deep match: hard truth delivery style (T4)", _nonempty_str(1)),
     ("t5_lived_experience", "Deep match: lived experience (T5)", _nonempty_str(30)),
 ]

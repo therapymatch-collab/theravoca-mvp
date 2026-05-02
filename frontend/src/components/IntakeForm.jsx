@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowRight, Check } from "lucide-react";
 import { api } from "@/lib/api";
+import { scanIntakeData, buildWarningMessage } from "@/lib/contentGuard";
 import useSiteCopy from "@/lib/useSiteCopy";
 import useHardCapacity from "@/lib/useHardCapacity";
 import {
@@ -12,22 +13,22 @@ import {
 } from "@/components/intake/DeepMatchSteps";
 import ReviewPreviewModal from "@/components/intake/ReviewPreviewModal";
 import { WhoStep, IssuesStep } from "@/components/intake/steps/WhoIssuesSteps";
+import { COVERED_STATES } from "@/components/intake/steps/intakeOptions";
 import FormatStep from "@/components/intake/steps/FormatStep";
 import PaymentStep from "@/components/intake/steps/PaymentStep";
 import LogisticsStep from "@/components/intake/steps/LogisticsStep";
 import PrefsStep from "@/components/intake/steps/PrefsStep";
-import PriorityStep from "@/components/intake/steps/PriorityStep";
+import ExpectationsStep from "@/components/intake/steps/ExpectationsStep";
 import ContactStep from "@/components/intake/steps/ContactStep";
 import { Progress } from "@/components/ui/progress";
 
 const STEPS_DEFAULTS = [
   "Who is this for?",
   "What's going on?",
-  "Format & location",
+  "First sessions",
+  "Format & logistics",
   "Payment",
-  "Logistics",
   "Therapist preferences",
-  "What matters most?",
   "Where to reach you",
 ];
 
@@ -61,6 +62,7 @@ export default function IntakeForm() {
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [contentWarningAcked, setContentWarningAcked] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [confirmAdult, setConfirmAdult] = useState(false);
   const [confirmNotEmergency, setConfirmNotEmergency] = useState(false);
@@ -184,7 +186,7 @@ export default function IntakeForm() {
   const [data, setData] = useState({
     client_type: "",
     age_group: "",
-    location_state: "ID",
+    location_state: "",
     location_city: "",
     location_zip: "",
     presenting_issues: [],
@@ -214,6 +216,8 @@ export default function IntakeForm() {
     email: "",
     phone: "",
     sms_opt_in: false,
+    session_expectations: [],   // pick up to 2 from EXPECTATION_OPTIONS
+    session_expectations_notes: "",  // optional free-text for matching
     priority_factors: [],
     strict_priorities: false,
     // ── Deep-match opt-in fields (P1/P2/P3 — only collected when the
@@ -298,9 +302,9 @@ export default function IntakeForm() {
   };
 
   const canNext = () => {
-    if (currentId === "who") return data.client_type && data.age_group && data.location_state;
+    if (currentId === "who") return data.client_type && data.age_group && data.location_state && COVERED_STATES.has(data.location_state);
     if (currentId === "issues") return data.presenting_issues.length >= 1;
-    if (currentId === "format") {
+    if (currentId === "format_logistics") {
       if (!data.modality_preference) return false;
       if (
         ["in_person_only", "prefer_inperson", "hybrid"].includes(
@@ -311,9 +315,10 @@ export default function IntakeForm() {
         if (data.location_zip && !zipMatchesState(data.location_zip, data.location_state)) {
           return false;
         }
-        return true;
       }
-      return true;
+      return (
+        data.availability_windows.length >= 1 && data.urgency && data.prior_therapy
+      );
     }
     if (currentId === "payment") {
       if (!data.payment_type) return false;
@@ -327,12 +332,11 @@ export default function IntakeForm() {
       if (data.payment_type === "either") return insOk && !!data.budget;
       return true;
     }
-    if (currentId === "logistics")
-      return (
-        data.availability_windows.length >= 1 && data.urgency && data.prior_therapy
-      );
     if (currentId === "prefs") return true;
-    if (currentId === "priority") return true; // priority factors are optional
+    if (currentId === "expectations") {
+      const len = (data.session_expectations || []).length;
+      return len >= 1 && len <= 2;  // pick 1 or 2 (including "not_sure")
+    }
     if (currentId === "p1") return data.p1_communication.length === 2;
     if (currentId === "p2") return data.p2_change.length === 2;
     if (currentId === "p3") return true; // open-text — optional
@@ -477,14 +481,15 @@ export default function IntakeForm() {
 
   const stepBlockReason = () => {
     if (currentId === "who") {
+      if (!data.location_state) return "Pick a state.";
+      if (!COVERED_STATES.has(data.location_state)) return "We're not in that state yet — join the waitlist above!";
       if (!data.client_type) return "Pick who this referral is for.";
       if (!data.age_group) return "Pick the client's age group.";
-      if (!data.location_state) return "Pick a state.";
       return "";
     }
     if (currentId === "issues" && data.presenting_issues.length === 0)
       return "Pick at least one issue you'd like help with.";
-    if (currentId === "format") {
+    if (currentId === "format_logistics") {
       if (!data.modality_preference) return "Choose how the client prefers to meet.";
       if (
         ["in_person_only", "prefer_inperson", "hybrid"].includes(
@@ -499,6 +504,10 @@ export default function IntakeForm() {
         )
           return `ZIP ${data.location_zip} doesn't appear to be in ${data.location_state}.`;
       }
+      if (data.availability_windows.length === 0)
+        return "Pick at least one availability window.";
+      if (!data.urgency) return "Pick how urgent this is.";
+      if (!data.prior_therapy) return "Tell us about prior therapy experience.";
       return "";
     }
     if (currentId === "payment") {
@@ -520,11 +529,9 @@ export default function IntakeForm() {
       }
       return "";
     }
-    if (currentId === "logistics") {
-      if (data.availability_windows.length === 0)
-        return "Pick at least one availability window.";
-      if (!data.urgency) return "Pick how urgent this is.";
-      if (!data.prior_therapy) return "Tell us about prior therapy experience.";
+    if (currentId === "expectations") {
+      const len = (data.session_expectations || []).length;
+      if (len < 1) return "Pick at least one.";
       return "";
     }
     if (currentId === "p1" && data.p1_communication.length !== 2)
@@ -550,12 +557,12 @@ export default function IntakeForm() {
   // enabled). `currentId` is the active step's ID — used in place of
   // literal `step === N` checks below.
   const isDeep = data.deep_match_opt_in === true;
-  const BASE_IDS = ["who", "issues", "format", "payment", "logistics", "prefs", "priority", "contact"];
+  const BASE_IDS = ["who", "issues", "expectations", "format_logistics", "payment", "prefs", "contact"];
   const STEP_IDS = isDeep
-    ? ["who", "issues", "format", "payment", "logistics", "prefs", "priority", "p1", "p2", "p3", "contact"]
+    ? ["who", "issues", "expectations", "format_logistics", "payment", "prefs", "p1", "p2", "p3", "contact"]
     : BASE_IDS;
   const STEP_LABELS = isDeep
-    ? [...STEPS_DEFAULTS.slice(0, 7), ...DEEP_MATCH_STEPS, STEPS_DEFAULTS[7]]
+    ? [...STEPS_DEFAULTS.slice(0, 6), ...DEEP_MATCH_STEPS, STEPS_DEFAULTS[6]]
     : STEPS_DEFAULTS;
   const STEPS = STEP_LABELS.map((d, i) => t(`intake.step.${STEP_IDS[i]}`, d));
   const currentId = STEP_IDS[step] || BASE_IDS[step];
@@ -674,36 +681,30 @@ export default function IntakeForm() {
               <IssuesStep data={data} set={set} toggleArr={toggleArr} />
             )}
 
-            {currentId === "format" && (
-              <FormatStep
-                data={data}
-                set={set}
-                zipMatchesState={zipMatchesState}
-                zipError={zipError}
-                setZipError={setZipError}
-                hardCapacity={hardCapacity}
-              />
+            {currentId === "format_logistics" && (
+              <>
+                <FormatStep
+                  data={data}
+                  set={set}
+                  zipMatchesState={zipMatchesState}
+                  zipError={zipError}
+                  setZipError={setZipError}
+                  hardCapacity={hardCapacity}
+                />
+                <LogisticsStep data={data} set={set} toggleArr={toggleArr} hardCapacity={hardCapacity} />
+              </>
             )}
 
             {currentId === "payment" && (
               <PaymentStep data={data} set={set} hardCapacity={hardCapacity} />
             )}
 
-            {currentId === "logistics" && (
-              <LogisticsStep data={data} set={set} toggleArr={toggleArr} hardCapacity={hardCapacity} />
-            )}
-
             {currentId === "prefs" && (
               <PrefsStep data={data} set={set} toggleArr={toggleArr} hardCapacity={hardCapacity} />
             )}
 
-            {currentId === "priority" && (
-              <PriorityStep
-                data={data}
-                set={set}
-                toggleArr={toggleArr}
-                t={t}
-              />
+            {currentId === "expectations" && (
+              <ExpectationsStep data={data} set={set} toggleArr={toggleArr} t={t} />
             )}
 
 
@@ -776,7 +777,19 @@ export default function IntakeForm() {
               <button
                 type="button"
                 disabled={!canNext() || submitting}
-                onClick={() => setShowPreview(true)}
+                onClick={() => {
+                  if (!contentWarningAcked) {
+                    const scan = scanIntakeData(data);
+                    const msg = buildWarningMessage(scan.findings);
+                    if (msg) {
+                      toast.warning(msg, { duration: 10000 });
+                      setContentWarningAcked(true);
+                      // Don't block — they can click again to proceed.
+                      return;
+                    }
+                  }
+                  setShowPreview(true);
+                }}
                 className="tv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 data-testid="intake-submit-btn"
               >

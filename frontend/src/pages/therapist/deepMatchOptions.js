@@ -1,33 +1,20 @@
 /**
  * therapist/deepMatchOptions.js
  *
- * Single source of truth for the v2 T1/T3/T4 option lists used by:
+ * Single source of truth for the v5 T4/T6 option lists used by:
  *   - therapist signup form (step 8 "Style fit")
  *   - therapist self-edit profile (deep-match section)
+ *   - signup preview modal
  *   - any future analytics/admin debug views
  *
  * Slugs are 1:1 with the matching engine (`backend/matching.py`) and
- * the patient P1/P2 questions (where applicable). Wording is
- * therapist-facing.
+ * the patient expectation questions. Wording is therapist-facing.
+ *
+ * NOTE: T1 (drag-rank) and T3 (pick-2 breakthrough) were deprecated
+ * in v5 — their signal is now captured by T6/T6b (session expectations).
+ * The backend still reads legacy T1/T3 data for backfilled therapists
+ * and derives T1/T3 approximations from T6 for new therapists.
  */
-
-export const T1_OPTIONS = [
-  { v: "leads_structured", l: "I lead with structure and a clear plan" },
-  { v: "follows_lead", l: "I follow the client's lead" },
-  { v: "challenges", l: "I challenge patterns, even when it creates tension" },
-  { v: "warm_first", l: "I prioritize warmth and safety first" },
-  { v: "direct_honest", l: "I'm direct — I name what I see" },
-  { v: "guides_questions", l: "I guide through questions, letting them arrive at insight" },
-];
-
-export const T3_OPTIONS = [
-  { v: "deep_emotional", l: "Deep emotional processing — the client lets themselves feel" },
-  { v: "practical_tools", l: "Practical skill-building — the client applies tools between sessions" },
-  { v: "explore_past", l: "Exploring the past — understanding the origin of patterns" },
-  { v: "focus_forward", l: "Present and future-focused — what's happening now and next" },
-  { v: "build_insight", l: "Building insight — the client finally sees their patterns" },
-  { v: "shift_relationships", l: "Relational shift — the client's key relationships change" },
-];
 
 export const T4_OPTIONS = [
   { v: "direct", l: "Head-on — I name it directly and trust the alliance" },
@@ -37,6 +24,13 @@ export const T4_OPTIONS = [
   { v: "wait", l: "I wait for the right moment, then gently name it" },
 ];
 
-// Default rank order used to seed both signup and edit-profile state
-// when a therapist hasn't ranked T1 yet.
-export const DEFAULT_T1_ORDER = T1_OPTIONS.map((o) => o.v);
+// T6 — "What do sessions 1-3 typically look like with you?"
+// Slugs match patient EXPECTATION_OPTIONS 1:1. Scoring = overlap.
+// This is the #1 ranking signal in the matching engine.
+export const T6_OPTIONS = [
+  { v: "guide_direct",     l: "I tend to guide sessions and offer direction early" },
+  { v: "listen_heard",     l: "I focus on listening and understanding before offering input" },
+  { v: "tools_fast",       l: "I introduce tools/strategies early" },
+  { v: "explore_patterns", l: "I move at a slower, exploratory pace" },
+  { v: "depends",          l: "It depends on the patient" },
+];

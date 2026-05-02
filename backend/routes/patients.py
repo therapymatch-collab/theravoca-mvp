@@ -350,6 +350,14 @@ async def create_request(payload: RequestCreate, request: Request):
     doc.pop("fax_number", None)
     doc.pop("form_started_at_ms", None)
     doc.pop("turnstile_token", None)
+
+    # ─── Content guard: PHI / inappropriate content scan ──────────────
+    # Doesn't block submission — only tags the request for admin review.
+    from content_guard import scan_request as _scan_request
+    content_flags = _scan_request(doc)
+    if content_flags:
+        doc["content_flags"] = content_flags
+
     await db.requests.insert_one(doc.copy())
     # If the patient ticked "Send me a copy" in the Review modal, fire
     # off a read-only receipt email with the same fields they just
@@ -498,7 +506,7 @@ async def public_request_view(request_id: str):
 async def followup_view(request_id: str, milestone: str):
     """Surface enough context for the follow-up form: list of therapist
     applications the patient saw, plus any previously submitted response."""
-    if milestone not in ("48h", "2wk", "6wk"):
+    if milestone not in ("48h", "3wk", "9wk", "15wk", "2wk", "6wk"):
         raise HTTPException(400, "Invalid milestone")
     req = await db.requests.find_one(
         {"id": request_id},
@@ -526,7 +534,7 @@ async def followup_submit(
     request_id: str, milestone: str, payload: FollowupResponse,
 ):
     """Patient submits the follow-up survey. Idempotent — last write wins."""
-    if milestone not in ("48h", "2wk", "6wk"):
+    if milestone not in ("48h", "3wk", "9wk", "15wk", "2wk", "6wk"):
         raise HTTPException(400, "Invalid milestone")
     req = await db.requests.find_one({"id": request_id}, {"_id": 0, "id": 1, "email": 1})
     if not req:
@@ -762,8 +770,6 @@ async def join_waitlist(payload: dict):
         logger.warning("Waitlist confirmation email failed: %s", e)
 
     return {"ok": True, "already_joined": False}
-
-
 # ─── Therapist waitlist for out-of-state providers ──────────────────────
 
 
