@@ -475,9 +475,26 @@ async def verify_request(token: str):
 
 @router.get("/requests/{request_id}/public", response_model=dict)
 async def public_request_view(request_id: str):
-    req = await db.requests.find_one(
-        {"id": request_id}, {"_id": 0, "verification_token": 0}
-    )
+    # Whitelist safe fields — never leak email, phone, or clinical data
+    _PUBLIC_PROJECTION = {
+        "_id": 0,
+        "id": 1,
+        "state": 1,
+        "client_type": 1,
+        "age_group": 1,
+        "primary_concerns": 1,
+        "payment_type": 1,
+        "insurance_carrier": 1,
+        "format_preference": 1,
+        "modality_preference": 1,
+        "urgency": 1,
+        "availability_windows": 1,
+        "prior_therapy": 1,
+        "status": 1,
+        "created_at": 1,
+        "results_sent_at": 1,
+    }
+    req = await db.requests.find_one({"id": request_id}, _PUBLIC_PROJECTION)
     if not req:
         raise HTTPException(404)
     return req

@@ -285,6 +285,10 @@ async def portal_therapist_profile(
     )
     if not t:
         raise HTTPException(404, "Therapist profile not found")
+    # Never leak sensitive internal fields to the client
+    for _k in ("password_hash", "password_set_at", "verification_token",
+               "research_cache", "embedding", "embedding_model"):
+        t.pop(_k, None)
     return t
 
 
