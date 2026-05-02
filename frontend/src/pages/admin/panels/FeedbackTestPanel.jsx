@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Loader2, ExternalLink, CheckCircle2, Clock, Send, AlertTriangle } from "lucide-react";
+import { Loader2, ExternalLink, CheckCircle2, Clock, Send } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import useAdminClient from "@/lib/useAdminClient";
 import { toast } from "sonner";
@@ -18,12 +18,9 @@ export default function FeedbackTestPanel() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [sending, setSending] = useState({});
-  const [testingEnabled, setTestingEnabled] = useState(false);
-  const [toggleLoading, setToggleLoading] = useState(false);
 
   useEffect(() => {
     loadData();
-    loadToggleState();
   }, []);
 
   const loadData = async () => {
@@ -41,32 +38,7 @@ export default function FeedbackTestPanel() {
     setLoading(false);
   };
 
-  const loadToggleState = async () => {
-    try {
-      const res = await client.get("/admin/feedback-testing");
-      setTestingEnabled(res.data?.enabled || false);
-    } catch {
-      /* ignore */
-    }
-  };
 
-  const toggleTesting = async () => {
-    setToggleLoading(true);
-    try {
-      const res = await client.put("/admin/feedback-testing", {
-        enabled: !testingEnabled,
-      });
-      setTestingEnabled(res.data?.enabled || false);
-      toast.success(
-        res.data?.enabled
-          ? "Testing mode ON"
-          : "Testing mode OFF"
-      );
-    } catch {
-      toast.error("Failed to toggle testing mode");
-    }
-    setToggleLoading(false);
-  };
 
   const getFeedback = async (requestId) => {
     try {
@@ -113,41 +85,6 @@ export default function FeedbackTestPanel() {
 
   return (
     <div className="mt-6 space-y-4" data-testid="feedback-test-panel">
-      <div className="bg-white border border-[#E8E5DF] rounded-2xl p-5">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h3 className="font-serif-display text-lg text-[#2D4A3E] font-medium">
-              Feedback testing mode
-            </h3>
-            <p className="text-sm text-[#6D6A65] mt-1">
-              When ON, new requests auto-trigger all 4 milestone emails immediately.
-            </p>
-          </div>
-          <button
-            onClick={toggleTesting}
-            disabled={toggleLoading}
-            className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-              testingEnabled ? "bg-[#2D4A3E]" : "bg-[#D3D1C7]"
-            }`}
-            data-testid="feedback-testing-toggle"
-          >
-            <span
-              className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                testingEnabled ? "translate-x-5" : "translate-x-0"
-              }`}
-            />
-          </button>
-        </div>
-        {testingEnabled && (
-          <div className="mt-3 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
-            <AlertTriangle size={16} className="text-amber-600 mt-0.5 shrink-0" />
-            <p className="text-sm text-amber-800">
-              <strong>Testing mode is active.</strong> Turn off before launch.
-            </p>
-          </div>
-        )}
-      </div>
-
       <div className="flex items-center gap-3">
         <Input
           placeholder="Search by email or request ID..."
