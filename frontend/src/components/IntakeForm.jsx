@@ -190,7 +190,6 @@ export default function IntakeForm() {
     location_city: "",
     location_zip: "",
     presenting_issues: [],
-    other_issue: "",
     modality_preference: "",
     modality_preferences: [],
     payment_type: "",
@@ -217,7 +216,6 @@ export default function IntakeForm() {
     phone: "",
     sms_opt_in: false,
     session_expectations: [],   // pick up to 2 from EXPECTATION_OPTIONS
-    session_expectations_notes: "",  // optional free-text for matching
     priority_factors: [],
     strict_priorities: false,
     // ── Deep-match opt-in fields (P1/P2/P3 — only collected when the

@@ -1,4 +1,3 @@
-import { Textarea } from "@/components/ui/textarea";
 import { Group, PillCol } from "@/components/intake/IntakeUI";
 import { EXPECTATION_OPTIONS } from "./intakeOptions";
 
@@ -8,10 +7,6 @@ import { EXPECTATION_OPTIONS } from "./intakeOptions";
  * "What do you want the first few sessions to feel like?"
  * Patient picks up to 2 from EXPECTATION_OPTIONS. These are matched
  * against the therapist's T6 picks (same slugs, therapist-worded).
- *
- * Also includes an optional free-text: "Anything else you want your
- * therapist to know about how you like to work?" — embedded and
- * compared against the therapist's T6 free-text for tie-breaking.
  *
  * This step appears early in the intake (step 3) because expectation
  * alignment is the #1 ranking factor — not a nice-to-have.
@@ -60,26 +55,6 @@ export default function ExpectationsStep({ data, set, toggleArr, t }) {
         <p className="text-[11px] text-[#6D6A65] mt-2">
           {(data.session_expectations || []).length}/2 selected
         </p>
-      </Group>
-      <Group
-        label={t(
-          "intake.expectations.freetext_label",
-          "Anything else you want your therapist to know about how you like to work?",
-        )}
-        hint={t("intake.expectations.freetext_hint", "Optional — but helps us match more precisely.")}
-      >
-        <Textarea
-          rows={3}
-          maxLength={500}
-          value={data.session_expectations_notes || ""}
-          onChange={(e) => set("session_expectations_notes", e.target.value)}
-          placeholder={t(
-            "intake.expectations.freetext_placeholder",
-            "e.g. I need someone patient. I shut down when I feel pushed. I've done therapy before and I know what I don't want.",
-          )}
-          className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-          data-testid="expectations-notes"
-        />
       </Group>
     </div>
   );

@@ -120,8 +120,6 @@ export function scanText(text) {
  */
 export function scanIntakeData(data) {
   const TEXT_FIELDS = [
-    { key: "other_issue", label: "Anything else" },
-    { key: "session_expectations_notes", label: "Session expectations notes" },
     { key: "insurance_name_other", label: "Insurance (other)" },
     { key: "referral_source_other", label: "Referral source (other)" },
   ];

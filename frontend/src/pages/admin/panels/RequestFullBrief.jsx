@@ -307,7 +307,7 @@ export default function RequestFullBrief({ request }) {
           looks lower than expected. */}
       <div className="border-t border-[#E8E5DF] pt-3 text-sm">
         <FieldLabel
-          hint="Patient's free-text response to 'Anything else?'. Currently used by the apply-fit grader; not yet folded into the initial ranking score."
+          hint="Legacy field — removed from intake. Shown here for historical requests that included it."
         >
           Patient note (free text)
         </FieldLabel>

@@ -109,8 +109,6 @@ _INAPPROPRIATE_RULES: list[dict[str, Any]] = [
 # ── Text fields to scan in a patient request ─────────────────────────────────
 
 _TEXT_FIELDS = [
-    ("other_issue", "Anything else"),
-    ("session_expectations_notes", "Session expectations notes"),
     ("insurance_name", "Insurance name"),
     ("referral_source", "Referral source"),
 ]

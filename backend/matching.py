@@ -39,7 +39,7 @@ MAX_MODALITY_PREF = 4.0  # bonus when patient's preferred modalities (CBT/DBT/et
 # request creation, then cosine-compared against therapist T5/T2
 # embeddings. Capped at 6 points so it materially differentiates the
 # top of the rank without overwhelming the structured-fit signal.
-MAX_OTHER_ISSUE_BONUS = 6.0
+MAX_OTHER_ISSUE_BONUS = 0.0  # deprecated: other_issue textarea removed from intake
 # Patient `prior_therapy_notes` free-text resonance bonus. Smaller than
 # `other_issue` because the two signals overlap conceptually and we
 # don't want to double-count when both are filled in.
@@ -50,11 +50,11 @@ MAX_PRIOR_THERAPY_BONUS = 4.0
 # t6_session_expectations. THE #1 ranking signal. Both pick up to 2
 # from 5 options (same slugs). Special handling: "not_sure" (patient)
 # and "depends" (therapist) are wildcards — they match anything.
-MAX_EXPECTATION_ALIGNMENT = 25.0
+MAX_EXPECTATION_ALIGNMENT = 30.0
 # Bonus from embedding similarity between patient free-text and
 # therapist T6 early-session description. Tie-breaker when tag
 # overlap is identical.
-MAX_EXPECTATION_EMBED_BONUS = 8.0
+MAX_EXPECTATION_EMBED_BONUS = 0.0  # deprecated: session_expectations_notes textarea removed from intake
 # ─── Therapist reliability ─────────────────────────────────────────────
 # Built from passive behavior data:
 #   response_rate:    % of referrals responded to (applied or declined)

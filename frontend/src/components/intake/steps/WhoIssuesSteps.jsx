@@ -1,5 +1,3 @@
-import { useState } from "react";
-import { Textarea } from "@/components/ui/textarea";
 import { Group, PillRow } from "@/components/intake/IntakeUI";
 import { CLIENT_TYPES, AGE_GROUPS, ISSUES } from "./intakeOptions";
 import { api } from "@/lib/api";
@@ -185,7 +183,7 @@ export function WhoStep({ data, set, hardCapacity }) {
 }
 
 /**
- * Step "issues" — main concerns (max 3) + optional free-text "anything else".
+ * Step "issues" — main concerns (max 3).
  */
 export function IssuesStep({ data, set, toggleArr }) {
   return (
@@ -202,19 +200,7 @@ export function IssuesStep({ data, set, toggleArr }) {
           showRank
         />
       </Group>
-      <div className="mt-6">
-        <label className="block text-xs font-semibold text-[#6D6A65] uppercase tracking-wider mb-2">
-          Anything else? (optional — no contact or personally identifiable info)
-        </label>
-        <Textarea
-          rows={3}
-          value={data.other_issue}
-          onChange={(e) => set("other_issue", e.target.value)}
-          placeholder="e.g. recent loss, perinatal, prefer culturally-responsive provider"
-          className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-          data-testid="other-issue"
-        />
-      </div>
+
     </div>
   );
 }

@@ -36,7 +36,6 @@ const AXIS_META = {
   differentiator: { max: 5, label: "Offers something you specifically asked for" },
   research_bonus: { max: 25, label: "Strong evidence in their public practice" },
   deep_match: { max: 15, label: "Resonates with how you described yourself" },
-  other_issue_bonus: { max: 6, label: "Resonates with your written context" },
   prior_therapy_bonus: { max: 4, label: "Aligned with what you wanted from past therapy" },
 };
 
@@ -539,20 +538,8 @@ function YourReferralPanel({ request }) {
                   span={2}
                 />
                 <RefDetail label="Concerns" value={issues || "—"} hard span={2} />
-                {/* Patient's free-text "Anything else?" + "What did/didn't
-                    work in prior therapy?" notes — these were captured
-                    on intake but previously not rendered back to the
-                    patient. Both feed the matching engine (other_issue
-                    embedding + soft-bonus) and the apply-fit grader, so
-                    surfacing them here closes the loop on what the
-                    patient actually shared. */}
-                {(request.other_issue || "").trim() && (
-                  <RefDetail
-                    label="Anything else"
-                    value={request.other_issue}
-                    span={2}
-                  />
-                )}
+                {/* Patient's "What did/didn't work in prior therapy?"
+                    notes — surfaced so the patient can see what they shared. */}
                 {(request.prior_therapy_notes || "").trim() && (
                   <RefDetail
                     label="Therapy notes"
