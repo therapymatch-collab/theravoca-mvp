@@ -134,7 +134,7 @@ class RequestCreate(BaseModel):
     insurance_strict: bool = False
     budget: Optional[int] = None
     sliding_scale_ok: bool = False
-    presenting_issues: list[str] = Field(default_factory=list, max_length=3)
+    presenting_issues: list[str] = Field(default_factory=list, max_length=5)
     other_issue: Optional[str] = ""
     availability_windows: list[str] = Field(default_factory=list)
     # Hard-requirement toggle for availability windows.
