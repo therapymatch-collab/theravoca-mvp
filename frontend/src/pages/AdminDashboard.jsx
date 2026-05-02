@@ -72,6 +72,7 @@ import WaitlistPanel from "@/pages/admin/panels/WaitlistPanel";
 import ProviderPreviewCard from "@/pages/admin/panels/ProviderPreviewCard";
 import SimulatorPanel from "@/pages/admin/panels/SimulatorPanel";
 import ScraperTestPanel from "@/pages/admin/panels/ScraperTestPanel";
+import FeedbackTestPanel from "@/pages/admin/panels/FeedbackTestPanel";
 import { StatBox } from "@/pages/admin/panels/_panelShared";
 
 // ─── Editor option lists (mirrors TherapistSignup) ───
@@ -1725,6 +1726,7 @@ export default function AdminDashboard() {
               {tab === "simulator" && <SimulatorPanel client={client} setTab={setTab} />}
 
               {tab === "scraper_test" && <ScraperTestPanel client={client} />}
+          {tab === "feedback_test" && <FeedbackTestPanel client={client} />}
 
               {tab === "email_templates" && (
                 <div className="mt-6 space-y-3" data-testid="email-templates-list">
