@@ -3850,31 +3850,20 @@ async def auto_recruit_approve(
 
 # ── Scraper Test ────────────────────────────────────────────────────────────
 
-@router.post("/admin/scraper-test", dependencies=[Depends(require_admin)])
-async def scraper_test(payload: dict):
-    """Run the full scraper cascade for a given city + state + presenting issues.
-    Returns up to `count` (default 50) therapist candidates with contact info.
+# ── Scraper background job system ──────────────────────────────────
 
-    Request body:
-        {city: str, state?: str (default "ID"), presenting_issues?: [str], count?: int}
-    """
+async def _run_scraper_job(job_id: str, city: str, state: str, issues: list, count: int):
+    """Background task: Phase 1 = PT scrape, Phase 2 = contact enrichment."""
     from pt_scraper import scrape_pt_candidates
     from directory_scrapers import scrape_all_backup_sources
-    from contact_enricher import enrich_batch
+    from contact_enricher import enrich_one
+    import httpx
 
-    city = (payload.get("city") or "").strip()
-    state = (payload.get("state") or "ID").upper()[:2]
-    issues = payload.get("presenting_issues") or []
-    count = min(int(payload.get("count") or 50), 100)
+    results = []
+    sources_summary = {}
+    errors = []
 
-    if not city:
-        raise HTTPException(400, "city is required")
-
-    results: list[dict] = []
-    sources_summary: dict[str, int] = {}
-    errors: list[str] = []
-
-    # Phase 1: Psychology Today
+    # Phase 1: PT scrape
     try:
         pt = await scrape_pt_candidates(state_code=state, city=city, needed=count, max_pages=3)
         for c in pt:
@@ -3885,7 +3874,7 @@ async def scraper_test(payload: dict):
         errors.append(f"PT scraper: {e}")
         sources_summary["psychology_today"] = 0
 
-    # Phase 2: Backup scrapers (TherapyDen, GoodTherapy, Google Maps)
+    # Phase 1b: Backup scrapers
     needed_more = count - len(results)
     if needed_more > 0:
         try:
@@ -3900,42 +3889,159 @@ async def scraper_test(payload: dict):
             errors.append(f"Backup scrapers: {e}")
 
     # Deduplicate by name+city
-    seen: set[str] = set()
-    unique: list[dict] = []
+    seen = set()
+    unique = []
     for c in results:
         key = f"{(c.get('name') or '').lower().strip()}|{(c.get('city') or '').lower().strip()}"
         if key not in seen and key != "|":
             seen.add(key)
             unique.append(c)
+    candidates = unique[:count]
 
-    # Phase 3: Enrich with real contact info from therapist websites
-    try:
-        await enrich_batch(unique, max_enrich=min(count, 50))
-    except Exception as e:
-        errors.append(f"Contact enrichment: {e}")
+    # Save Phase 1 results
+    await db.scraper_jobs.update_one(
+        {"id": job_id},
+        {"$set": {
+            "phase": "enriching",
+            "total": len(candidates),
+            "sources": sources_summary,
+            "errors": errors,
+            "candidates": candidates,
+            "enriched_count": 0,
+        }},
+    )
+
+    # Phase 2: Enrich with real contact info from websites
+    import asyncio
+    enriched = 0
+    async with httpx.AsyncClient(follow_redirects=True) as client:
+        for i, c in enumerate(candidates):
+            if c.get("website"):
+                try:
+                    await enrich_one(c, client)
+                    enriched += 1
+                except Exception:
+                    pass
+                # Update progress every candidate
+                await db.scraper_jobs.update_one(
+                    {"id": job_id},
+                    {"$set": {
+                        "candidates": candidates,
+                        "enriched_count": enriched,
+                    }},
+                )
+                await asyncio.sleep(0.4)
 
     # Sort by completeness
-    def _completeness(c: dict) -> int:
+    def _completeness(c):
         s = 0
         if c.get("email"): s += 3
         if c.get("phone"): s += 3
         if c.get("website"): s += 2
         if c.get("license_types"): s += 2
         return s
+    candidates.sort(key=_completeness, reverse=True)
 
-    unique.sort(key=_completeness, reverse=True)
-    final = unique[:count]
+    await db.scraper_jobs.update_one(
+        {"id": job_id},
+        {"$set": {
+            "phase": "done",
+            "candidates": candidates,
+            "enriched_count": enriched,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
 
-    return {
-        "ok": True,
+
+@router.post("/admin/scraper-test", dependencies=[Depends(require_admin)])
+async def scraper_test(payload: dict):
+    """Start a background scraper job. Returns job_id for polling."""
+    import asyncio
+    city = (payload.get("city") or "").strip()
+    state = (payload.get("state") or "ID").upper()[:2]
+    issues = payload.get("presenting_issues") or []
+    count = min(int(payload.get("count") or 50), 100)
+    if not city:
+        raise HTTPException(400, "city is required")
+
+    job_id = str(uuid.uuid4())
+    await db.scraper_jobs.insert_one({
+        "id": job_id,
         "city": city,
         "state": state,
         "presenting_issues": issues,
-        "total": len(final),
-        "sources": sources_summary,
-        "errors": errors,
-        "candidates": final,
+        "count": count,
+        "phase": "scraping",
+        "total": 0,
+        "sources": {},
+        "errors": [],
+        "candidates": [],
+        "enriched_count": 0,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": None,
+    })
+
+    # Fire and forget — runs in background
+    asyncio.create_task(_run_scraper_job(job_id, city, state, issues, count))
+
+    return {"ok": True, "job_id": job_id}
+
+
+@router.get("/admin/scraper-jobs/{job_id}", dependencies=[Depends(require_admin)])
+async def get_scraper_job(job_id: str):
+    """Poll a scraper job for status and results."""
+    job = await db.scraper_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(404, "Job not found")
+    return job
+
+
+@router.get("/admin/scraper-jobs", dependencies=[Depends(require_admin)])
+async def list_scraper_jobs():
+    """List recent scraper jobs."""
+    cursor = db.scraper_jobs.find({}, {"_id": 0}).sort("created_at", -1).limit(10)
+    jobs = []
+    async for j in cursor:
+        # Return summary without full candidates list for the list view
+        jobs.append({
+            "id": j["id"],
+            "city": j.get("city"),
+            "state": j.get("state"),
+            "phase": j.get("phase"),
+            "total": j.get("total", 0),
+            "enriched_count": j.get("enriched_count", 0),
+            "sources": j.get("sources", {}),
+            "created_at": j.get("created_at"),
+            "completed_at": j.get("completed_at"),
+        })
+    return {"jobs": jobs}
+
+
+@router.post("/admin/trigger-feedback-email", dependencies=[Depends(require_admin)])
+async def trigger_feedback_email(payload: dict):
+    """Manually trigger a feedback survey email for testing."""
+    from email_service import (
+        send_patient_followup_48h, send_patient_followup_3w,
+        send_patient_followup_9w, send_patient_followup_15w,
+    )
+    request_id = payload.get("request_id")
+    milestone = payload.get("milestone")
+    if not request_id or not milestone:
+        raise HTTPException(400, "request_id and milestone required")
+    req = await db.requests.find_one({"id": request_id}, {"_id": 0, "email": 1})
+    if not req:
+        raise HTTPException(404, "Request not found")
+    senders = {
+        "48h": send_patient_followup_48h,
+        "3w": send_patient_followup_3w,
+        "9w": send_patient_followup_9w,
+        "15w": send_patient_followup_15w,
     }
+    sender = senders.get(milestone)
+    if not sender:
+        raise HTTPException(400, f"Invalid milestone: {milestone}")
+    await sender(req["email"], request_id)
+    return {"ok": True, "sent_to": req["email"], "milestone": milestone}
 
 
 # Suppress unused-import warnings on logger (kept for future logging)
