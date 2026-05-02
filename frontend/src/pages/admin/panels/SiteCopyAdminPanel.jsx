@@ -296,7 +296,8 @@ export default function SiteCopyAdminPanel({ client }) {
     SEED_KEYS.forEach((seed) => {
       if (showOnlyOverridden && !(overrides && overrides[seed.key])) return;
       if (q) {
-        const hay = `${seed.label} ${seed.key} ${seed.fallback}`.toLowerCase();
+        const overrideVal = overrides?.[seed.key]?.value || "";
+        const hay = `${seed.label} ${seed.key} ${seed.fallback} ${seed.section} ${overrideVal}`.toLowerCase();
         if (!hay.includes(q)) return;
       }
       if (!out.has(seed.section)) out.set(seed.section, []);
