@@ -39,6 +39,17 @@ SKIP_EMAIL_DOMAINS = {
     "simplepractice.com", "therapynotes.com", "headway.co",
 }
 
+# Known fake/placeholder phone numbers to filter out
+_FAKE_PHONES = {
+    "2147483647", "12147483647", "2147483648",
+    "0000000000", "1111111111", "1234567890", "9999999999",
+}
+
+def _is_fake_phone(raw: str) -> bool:
+    digits = re.sub(r"[^\d]", "", raw)
+    return digits in _FAKE_PHONES or digits[-10:] in _FAKE_PHONES
+
+
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -76,7 +87,7 @@ def _extract_emails(html: str) -> list[str]:
     filtered = []
     for email, pri in sorted(emails.items(), key=lambda x: x[1]):
         domain = email.split("@")[1] if "@" in email else ""
-        if domain in SKIP_EMAIL_DOMAINS:
+        if any(domain == sd or domain.endswith("." + sd) for sd in SKIP_EMAIL_DOMAINS):
             continue
         if domain.endswith((".png", ".jpg", ".gif", ".svg", ".css", ".js")):
             continue
@@ -160,7 +171,7 @@ async def enrich_one(candidate: dict, client: httpx.AsyncClient) -> dict:
         candidate["email_source"] = "website"
 
     # Extract real phones
-    phones = _extract_phones(html)
+    phones = [p for p in _extract_phones(html) if not _is_fake_phone(p)]
     if phones:
         candidate["phone"] = _format_phone(phones[0])
         candidate["phone_source"] = "website"

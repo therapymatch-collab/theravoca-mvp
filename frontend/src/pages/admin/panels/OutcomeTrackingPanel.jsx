@@ -90,6 +90,23 @@ export default function OutcomeTrackingPanel() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
+  const [testingEnabled, setTestingEnabled] = useState(false);
+  const [toggleLoading, setToggleLoading] = useState(false);
+
+  useEffect(() => {
+    client.get("/api/admin/feedback-testing").then(r => setTestingEnabled(r.data?.enabled || false)).catch(() => {});
+  }, []);
+
+  const toggleTesting = async () => {
+    setToggleLoading(true);
+    try {
+      const res = await client.put("/api/admin/feedback-testing", { enabled: !testingEnabled });
+      setTestingEnabled(res.data?.enabled || false);
+      toast.success(res.data?.enabled ? "Testing mode ON" : "Testing mode OFF");
+    } catch { toast.error("Failed to toggle"); }
+    setToggleLoading(false);
+  };
+
 
   useEffect(() => {
     (async () => {
@@ -137,6 +154,17 @@ export default function OutcomeTrackingPanel() {
             )}
           </button>
         ))}
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-xs text-[#6D6A65]">Testing</span>
+            <button
+              onClick={toggleTesting}
+              disabled={toggleLoading}
+              className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${testingEnabled ? "bg-[#2D4A3E]" : "bg-[#D3D1C7]"}`}
+              data-testid="feedback-testing-toggle"
+            >
+              <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${testingEnabled ? "translate-x-5" : "translate-x-0"}`} />
+            </button>
+          </div>
       </div>
 
       {/* Overview */}

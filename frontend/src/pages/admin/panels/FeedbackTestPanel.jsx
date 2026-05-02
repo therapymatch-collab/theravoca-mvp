@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, ExternalLink, CheckCircle2, Clock, Send, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import axios from "axios";
+import useAdminClient from "a/lib/useAdminClient";
 import { toast } from "sonner";
 
 const MILESTONES = [
@@ -12,6 +12,7 @@ const MILESTONES = [
 ];
 
 export default function FeedbackTestPanel() {
+  const client = useAdminClient();
   const [requests, setRequests] = useState([]);
   const [feedback, setFeedback] = useState({});
   const [loading, setLoading] = useState(true);
@@ -28,7 +29,7 @@ export default function FeedbackTestPanel() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await axios.get("/api/admin/requests");
+      const res = await client.get("/api/admin/requests");
       const reqs = (res.data?.requests || []).filter((r) => r.results_sent_at);
       setRequests(reqs);
       for (const r of reqs.slice(0, 20)) {
@@ -42,7 +43,7 @@ export default function FeedbackTestPanel() {
 
   const loadToggleState = async () => {
     try {
-      const res = await axios.get("/api/admin/feedback-testing");
+      const res = await client.get("/api/admin/feedback-testing");
       setTestingEnabled(res.data?.enabled || false);
     } catch {
       /* ignore */
@@ -52,7 +53,7 @@ export default function FeedbackTestPanel() {
   const toggleTesting = async () => {
     setToggleLoading(true);
     try {
-      const res = await axios.put("/api/admin/feedback-testing", {
+      const res = await client.put("/api/admin/feedback-testing", {
         enabled: !testingEnabled,
       });
       setTestingEnabled(res.data?.enabled || false);
@@ -69,7 +70,7 @@ export default function FeedbackTestPanel() {
 
   const getFeedback = async (requestId) => {
     try {
-      const res = await axios.get(`/api/feedback/responses/${requestId}`);
+      const res = await client.get(`/api/feedback/responses/${requestId}`);
       setFeedback((prev) => ({ ...prev, [requestId]: res.data?.responses || [] }));
     } catch {
       /* no feedback yet */
@@ -80,7 +81,7 @@ export default function FeedbackTestPanel() {
     const key = `${requestId}-${milestone}`;
     setSending((prev) => ({ ...prev, [key]: true }));
     try {
-      await axios.post("/api/admin/feedback-testing/trigger", {
+      await client.post("/api/admin/feedback-testing/trigger", {
         request_id: requestId,
         milestone,
       });
