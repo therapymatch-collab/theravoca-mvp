@@ -3766,6 +3766,52 @@ async def simulator_delete_run(
     return {"ok": True, "deleted": deleted}
 
 
+
+#  Feedback testing toggle 
+
+@router.get("/admin/feedback-testing", dependencies=[Depends(require_admin)])
+async def admin_get_feedback_testing() -> dict[str, Any]:
+    doc = await db.app_config.find_one({"key": "feedback_testing"}, {"_id": 0})
+    return {"enabled": bool((doc or {}).get("enabled", False))}
+
+@router.put("/admin/feedback-testing", dependencies=[Depends(require_admin)])
+async def admin_set_feedback_testing(payload: dict) -> dict[str, Any]:
+    enabled = bool(payload.get("enabled", False))
+    await db.app_config.update_one(
+        {"key": "feedback_testing"},
+        {"$set": {"key": "feedback_testing", "enabled": enabled}},
+        upsert=True,
+    )
+    return {"enabled": enabled}
+
+@router.post("/admin/feedback-testing/trigger", dependencies=[Depends(require_admin)])
+async def admin_trigger_test_feedback(payload: dict) -> dict[str, Any]:
+    """Manually trigger a specific milestone email for a request."""
+    from email_service import (
+        send_patient_followup_48h, send_patient_followup_3w,
+        send_patient_followup_9w, send_patient_followup_15w,
+    )
+    request_id = payload.get("request_id")
+    milestone = payload.get("milestone")
+    if not request_id or not milestone:
+        raise HTTPException(400, "request_id and milestone required")
+    req = await db.requests.find_one(
+        {"id": request_id}, {"_id": 0, "email": 1, "id": 1},
+    )
+    if not req or not req.get("email"):
+        raise HTTPException(404, "Request not found or missing email")
+    senders = {
+        "48h": send_patient_followup_48h,
+        "3w": send_patient_followup_3w,
+        "9w": send_patient_followup_9w,
+        "15w": send_patient_followup_15w,
+    }
+    sender = senders.get(milestone)
+    if not sender:
+        raise HTTPException(400, f"Invalid milestone: {milestone}")
+    await sender(req["email"], req["id"])
+    return {"ok": True, "milestone": milestone, "request_id": request_id}
+
 # Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 # Auto-recruit Ã¢ÂÂ closed-loop recruiter (Simulator + Coverage Gaps +
 # Gap Recruiter). Pre-launch: dry-run + admin-approval-gated. See

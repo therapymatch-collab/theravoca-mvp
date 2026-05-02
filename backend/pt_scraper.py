@@ -264,6 +264,80 @@ async def _fetch_profile_details(
     }
 
 
+
+#  Fake-phone detection 
+_FAKE_PHONES: set[str] = {
+    "2147483647", "12147483647",  # max-int32 placeholder
+    "2147483648", "0000000000", "1111111111",
+    "1234567890", "9999999999",
+}
+
+def _is_fake_phone(raw: str) -> bool:
+    digits = re.sub(r"\D", "", raw or "")
+    return digits in _FAKE_PHONES or digits.lstrip("1") in _FAKE_PHONES
+
+
+#  Website contact extraction (Claude Haiku) 
+
+async def _fetch_website_text_for_contacts(
+    url: str, client: httpx.AsyncClient,
+) -> str:
+    """Fetch a therapist website and return cleaned text (max 15 000 chars)."""
+    try:
+        r = await client.get(
+            url, follow_redirects=True, timeout=12,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; Theravoca/1.0)"},
+        )
+        r.raise_for_status()
+        html = r.text
+    except Exception:
+        return ""
+    # Strip tags crudely
+    text = re.sub(r"<script[^>]*>[\s\S]*?</script>", "", html, flags=re.I)
+    text = re.sub(r"<style[^>]*>[\s\S]*?</style>", "", text, flags=re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:15_000]
+
+
+async def _extract_contacts_from_website(
+    url: str, name: str, client: httpx.AsyncClient,
+) -> dict[str, str]:
+    """Use Claude Haiku to pull real phone + email from a therapist website."""
+    text = await _fetch_website_text_for_contacts(url, client)
+    if len(text) < 50:
+        return {}
+    try:
+        import anthropic as _anth
+        ac = _anth.AsyncAnthropic()
+        msg = await ac.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=200,
+            messages=[{"role": "user", "content": (
+                f"Extract the real phone number and email address for {name} "
+                f"from this website text. Return ONLY a JSON object with keys "
+                f'"phone" and "email". If not found, use empty string.\n\n'
+                f"{text}"
+            )}],
+        )
+        import json as _json
+        raw = msg.content[0].text.strip()
+        # find JSON object in response
+        start = raw.index("{")
+        end = raw.rindex("}") + 1
+        data = _json.loads(raw[start:end])
+        phone = re.sub(r"\D", "", data.get("phone", ""))
+        email = (data.get("email") or "").strip().lower()
+        result: dict[str, str] = {}
+        if phone and len(phone) >= 10 and not _is_fake_phone(phone):
+            result["phone"] = phone
+        if email and "@" in email and "." in email.split("@")[-1]:
+            result["email"] = email
+        return result
+    except Exception:
+        return {}
+
+
 async def scrape_pt_candidates(
     state_code: str,
     city: Optional[str],
@@ -306,7 +380,28 @@ async def scrape_pt_candidates(
             for c in to_fetch:
                 detail = await _fetch_profile_details(c["profile_url"], client)
                 c.update(detail)
-                c["email"] = ""  # Real emails extracted by contact_enricher.enrich_batch
+
+                # Phase 2b: visit the therapist's REAL website to extract
+                # actual phone + email (not the PT placeholder).
+                website = detail.get("website") or ""
+                if website:
+                    contacts = await _extract_contacts_from_website(
+                        website, c["name"], client,
+                    )
+                    if contacts.get("phone"):
+                        c["phone"] = contacts["phone"]
+                        c["phone_source"] = "website"
+                    if contacts.get("email"):
+                        c["email"] = contacts["email"]
+                        c["email_source"] = "website"
+                # Clear fake PT phone if we didn't find a real one
+                if _is_fake_phone(c.get("phone", "")):
+                    c["phone"] = ""
+                # Fall back to guessed email if LLM found nothing
+                if not c.get("email"):
+                    c["email"] = _guess_email_from_website(website, c["name"]) or ""
+                    if c["email"]:
+                        c["email_source"] = "guessed"
                 await asyncio.sleep(REQUEST_DELAY_SEC)
 
     logger.info(

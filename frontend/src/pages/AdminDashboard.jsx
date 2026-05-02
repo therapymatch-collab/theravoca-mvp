@@ -1719,7 +1719,7 @@ export default function AdminDashboard() {
               {tab === "sms_status" && <SmsStatusPanel client={client} />}
 
               {tab === "waitlist" && <WaitlistPanel client={client} />}
-              {tab === "outcome_tracking" && <OutcomeTrackingPanel />}
+              {tab === "outcome_tracking" && <><OutcomeTrackingPanel /><FeedbackTestPanel /></>}
 
               {tab === "how_it_works" && <HowItWorksPanel />}
 

@@ -98,6 +98,10 @@ def _now_local() -> datetime:
 
 async def _run_daily_billing_charges() -> dict[str, int]:
     now = datetime.now(timezone.utc)
+
+    # Check if feedback testing mode is active
+    testing_doc = await db.app_config.find_one({"key": "feedback_testing"}, {"_id": 0})
+    testing_mode = bool((testing_doc or {}).get("enabled", False))
     cur = db.therapists.find(
         {
             "subscription_status": {"$in": ["trialing", "active"]},
@@ -238,7 +242,8 @@ async def _run_followup_surveys() -> dict[str, int]:
     ]
     sent: dict[str, int] = {}
     for code, days, flag in milestones:
-        cutoff = (now - timedelta(days=days)).isoformat()
+        effective_days = 0 if testing_mode else days
+        cutoff = (now - timedelta(days=effective_days)).isoformat()
         cur = db.requests.find(
             {
                 "results_sent_at": {"$ne": None, "$lte": cutoff},
