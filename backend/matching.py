@@ -1103,18 +1103,12 @@ def score_therapist(
         breakdown["language"] = 4 if pl in spoken else 0
 
     raw_total = sum(breakdown.values())
-    # Proportional scale-down (only when boosted) so we don't squash
-    # everyone to 100. Threshold filtering still uses the displayed
-    # `total`, but because we scale BEFORE truncation, a therapist
-    # who originally scored 70 (no boost) doesn't get penalised — the
-    # scaling only kicks in when raw_total > 100.
-    if raw_total > 100.0 and raw_total > 0:
-        scale = 100.0 / raw_total
-        for ax in list(breakdown.keys()):
-            breakdown[ax] = round(breakdown[ax] * scale, 2)
-        total = 100.0
-    else:
-        total = round(raw_total, 2)
+    # Keep raw_total as the true signal for the display curve. The old
+    # proportional scale-down (dividing by raw_total when >100) destroyed
+    # differentiation by mapping every decent therapist to exactly 100.
+    # Now we just carry raw_total forward and apply a soft curve at the
+    # end to produce a human-friendly 0-97 display score.
+    total = round(raw_total, 2)
 
     # ── Research-cache bonus (folded directly into the live score) ────
     # When the therapist has a warm pre-warm cache, we project it through
@@ -1208,19 +1202,25 @@ def score_therapist(
             }
         except Exception:
             prior_therapy_axes = {}
-    # Cap displayed match-score at 95: no match is ever truly perfect,
-    # and a 100% chip on the patient UI sets an expectation we can't
-    # meet (every therapist falls short of "perfect" on something —
-    # personality fit, life experience, the small things we can't
-    # measure). 95 still communicates "exceptional fit" while leaving
-    # head-room for honesty. Filtering / -1 sentinels are NOT capped.
+    # Display-score normalization: raw totals routinely exceed 100
+    # (axis maxes sum to ~185). We normalize to a 0-97 display range
+    # using a soft curve so (a) the patient never sees 100% (no match
+    # is truly perfect) and (b) therapists who score differently in raw
+    # points still show different percentages on the UI — the old
+    # hard-cap at 95 crushed all top-tier therapists to the same number.
+    #
+    # Formula: display = 97 * (raw / (raw + 30))
+    #   raw=50  → 61%   |  raw=80  → 70%   |  raw=100 → 75%
+    #   raw=120 → 78%   |  raw=150 → 81%   |  raw=200 → 84%
+    # Deep-match + research can push above 100 raw, which maps to 75-85.
+    # The +30 denominator controls the curve's steepness.
     if isinstance(total, (int, float)) and total > 0:
-        total = min(95.0, total)
+        total = round(97.0 * (total / (total + 30.0)))
         # Round to a whole number so every UI surface (patient results,
         # therapist portal, admin dashboard, simulator) renders the
         # same integer without each callsite needing its own
         # Math.round / toFixed(0). Filter sentinels (-1) skip this.
-        total = int(round(total))
+        total = int(total)
     return {
         "total": total,
         "breakdown": breakdown,
