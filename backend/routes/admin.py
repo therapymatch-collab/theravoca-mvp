@@ -3654,4 +3654,42 @@ async def simulator_delete_run(
 ):
     """Delete one run + all its synthetic requests."""
     import simulator
-    deleted = await simulator.de
+    deleted = await simulator.delete_run(db, run_id)
+    return {"ok": True, "deleted": deleted}
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Waitlist — out-of-state patients + therapists
+# ──────────────────────────────────────────────────────────────────────
+
+
+@router.get("/admin/waitlist")
+async def admin_waitlist(_: bool = Depends(require_admin)):
+    """Patient waitlist entries aggregated by state for demand-signal visibility."""
+    entries = await db.waitlist.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    by_state: dict[str, int] = {}
+    for e in entries:
+        s = e.get("state", "??")
+        by_state[s] = by_state.get(s, 0) + 1
+    ranked = sorted(by_state.items(), key=lambda x: x[1], reverse=True)
+    return {
+        "total": len(entries),
+        "by_state": ranked,
+        "entries": entries[:200],
+    }
+
+
+@router.get("/admin/therapist-waitlist")
+async def admin_therapist_waitlist(_: bool = Depends(require_admin)):
+    """Therapist waitlist — out-of-state providers interested in joining."""
+    entries = await db.therapist_waitlist.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    by_state: dict[str, int] = {}
+    for e in entries:
+        s = e.get("state", "??")
+        by_state[s] = by_state.get(s, 0) + 1
+    ranked = sorted(by_state.items(), key=lambda x: x[1], reverse=True)
+    return {
+        "total": len(entries),
+        "by_state": ranked,
+        "entries": entries[:200],
+    }

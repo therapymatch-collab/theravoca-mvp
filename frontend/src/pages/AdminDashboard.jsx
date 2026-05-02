@@ -34,6 +34,7 @@ import {
   Brain,
   MessageSquareWarning,
   Activity,
+  MapPin,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
@@ -69,6 +70,7 @@ import FeedbackPanel from "@/pages/admin/panels/FeedbackPanel";
 import ProviderPreviewCard from "@/pages/admin/panels/ProviderPreviewCard";
 import SimulatorPanel from "@/pages/admin/panels/SimulatorPanel";
 import NetworkHealthPanel from "@/pages/admin/panels/NetworkHealthPanel";
+import WaitlistPanel from "@/pages/admin/panels/WaitlistPanel";
 import { StatBox } from "@/pages/admin/panels/_panelShared";
 
 // ─── Editor option lists (mirrors TherapistSignup) ───
@@ -1700,6 +1702,8 @@ export default function AdminDashboard() {
                 <NetworkHealthPanel client={client} />
               )}
 
+              {tab === "waitlist" && <WaitlistPanel client={client} />}
+
               {tab === "how_it_works" && <HowItWorksPanel />}
 
               {tab === "simulator" && <SimulatorPanel client={client} setTab={setTab} />}
@@ -3038,6 +3042,11 @@ function AdminTabsBar({
       icon: <Pencil size={14} />,
     },
     {
+    {
+      id: "waitlist",
+      label: "Waitlist",
+      icon: <MapPin size={14} />,
+    },
       id: "settings",
       label: "Settings",
       icon: <Sliders size={14} />,

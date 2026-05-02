@@ -54,6 +54,9 @@ _PUBLIC_PREFIXES = (
     "/api/portal/",
     # Backend API — feedback (public, patient-facing)
     "/api/feedback",
+    # Backend API — waitlist (out-of-state signup, no auth needed)
+    "/api/waitlist",
+    "/api/therapist-waitlist",
     # Health check
     "/health",
     # Static assets (JS, CSS, images, fonts)

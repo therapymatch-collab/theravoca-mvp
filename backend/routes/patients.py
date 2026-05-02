@@ -703,3 +703,117 @@ async def public_request_results(
         "hold_ends_at": hold_ends_at_iso,
         "applications_pending_count": len(apps_raw) if hold_active else 0,
     }
+
+
+# ─── Waitlist for out-of-state users ────────────────────────────────────
+
+COVERED_STATES = {"ID"}  # expand this set as we launch in new states
+
+
+@router.get("/waitlist/covered-states")
+async def get_covered_states():
+    """Return the set of states we currently serve."""
+    return {"states": sorted(COVERED_STATES)}
+
+
+@router.post("/waitlist")
+async def join_waitlist(payload: dict):
+    """Add an email + state to the waitlist. Idempotent per email+state."""
+    email = (payload.get("email") or "").strip().lower()
+    state = (payload.get("state") or "").strip().upper()
+    if not email or not state:
+        raise HTTPException(400, "email and state are required")
+    if not email_is_plausible(email):
+        raise HTTPException(400, "Invalid email address")
+    if is_disposable_email(email):
+        raise HTTPException(400, "Please use a non-disposable email address")
+
+    existing = await db.waitlist.find_one(
+        {"email": email, "state": state}, {"_id": 0, "id": 1}
+    )
+    if existing:
+        return {"ok": True, "already_joined": True}
+
+    doc = {
+        "id": str(uuid.uuid4()),
+        "email": email,
+        "state": state,
+        "created_at": _now_iso(),
+    }
+    await db.waitlist.insert_one(doc)
+    logger.info("Waitlist signup: %s for state %s", email, state)
+
+    # Send confirmation email
+    try:
+        from email_service import _send, _wrap, BRAND
+        inner = f"""
+        <p style="font-size:16px;line-height:1.6;">Hi there,</p>
+        <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+          You're on the list! We'll email you as soon as TheraVoca launches in
+          <strong>{state}</strong>. In the meantime, we're actively recruiting
+          licensed therapists in your area.
+        </p>
+        <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">
+          No action needed — we'll reach out when we're ready.
+        </p>
+        """
+        await _send(email, "You're on the TheraVoca waitlist", _wrap("You're on the list", inner))
+    except Exception as e:
+        logger.warning("Waitlist confirmation email failed: %s", e)
+
+    return {"ok": True, "already_joined": False}
+
+
+# ─── Therapist waitlist for out-of-state providers ──────────────────────
+
+
+@router.post("/therapist-waitlist")
+async def join_therapist_waitlist(payload: dict):
+    """Out-of-state therapist signs up for notification when we expand."""
+    name = (payload.get("name") or "").strip()
+    email = (payload.get("email") or "").strip().lower()
+    state = (payload.get("state") or "").strip().upper()
+    credential_type = (payload.get("credential_type") or "").strip()
+    if not email or not state or not name:
+        raise HTTPException(400, "name, email, and state are required")
+    if not email_is_plausible(email):
+        raise HTTPException(400, "Invalid email address")
+    if is_disposable_email(email):
+        raise HTTPException(400, "Please use a non-disposable email address")
+
+    existing = await db.therapist_waitlist.find_one(
+        {"email": email, "state": state}, {"_id": 0, "id": 1}
+    )
+    if existing:
+        return {"ok": True, "already_joined": True}
+
+    doc = {
+        "id": str(uuid.uuid4()),
+        "name": name,
+        "email": email,
+        "state": state,
+        "credential_type": credential_type,
+        "created_at": _now_iso(),
+    }
+    await db.therapist_waitlist.insert_one(doc)
+    logger.info("Therapist waitlist signup: %s (%s) for state %s", name, email, state)
+
+    # Send confirmation email
+    try:
+        from email_service import _send, _wrap, BRAND
+        inner = f"""
+        <p style="font-size:16px;line-height:1.6;">Hi {name.split()[0] if name else 'there'},</p>
+        <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+          Thanks for your interest in joining TheraVoca! We're currently operating
+          in <strong>Idaho</strong> only, but we're expanding. We'll reach out as
+          soon as we launch in <strong>{state}</strong>.
+        </p>
+        <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">
+          No action needed — we'll be in touch.
+        </p>
+        """
+        await _send(email, "You're on the TheraVoca provider waitlist", _wrap("You're on the list", inner))
+    except Exception as e:
+        logger.warning("Therapist waitlist confirmation email failed: %s", e)
+
+    return {"ok": True, "already_joined": False}
