@@ -48,7 +48,7 @@ async def admin_login(payload: dict, request: Request):
     return {"ok": True}
 
 
-# ─── Admin team management ───────────────────────────────────────────────────
+# âââ Admin team management âââââââââââââââââââââââââââââââââââââââââââââââââââ
 import bcrypt as _bcrypt  # noqa: E402
 import uuid as _uuid  # noqa: E402
 
@@ -175,7 +175,7 @@ async def admin_reset_team_password(
     return {"ok": True}
 
 
-# ─── Profile-completeness / claim-campaign ───────────────────────────────────
+# âââ Profile-completeness / claim-campaign âââââââââââââââââââââââââââââââââââ
 from profile_completeness import evaluate as _evaluate_profile  # noqa: E402
 from email_service import send_claim_profile_email as _send_claim_email  # noqa: E402
 from helpers import _spawn_bg as _bg_spawn  # noqa: E402
@@ -232,10 +232,10 @@ async def admin_send_claim_campaign(
     Body:
       - mode: "all_incomplete" (default) | "selected"
       - therapist_ids: list[str] (only when mode=="selected")
-      - dry_run: bool (default False) — when True, returns the recipient
+      - dry_run: bool (default False) â when True, returns the recipient
         list WITHOUT actually sending. Useful for sanity-checking the
         campaign on staging.
-      - resend: bool (default False) — when False (default) we skip
+      - resend: bool (default False) â when False (default) we skip
         therapists who already have `claim_email_sent_at` set so a single
         admin can hammer the button safely.
     """
@@ -364,7 +364,7 @@ async def admin_request_detail(request_id: str, _: bool = Depends(require_admin)
     from helpers import compute_patient_rank_score
     for a in apps:
         a.update(compute_patient_rank_score(a, req))
-    # Sort by the new Step-2 rank (high → low) so admin's view matches
+    # Sort by the new Step-2 rank (high â low) so admin's view matches
     # the patient's. Falls back to match_score on legacy applications
     # that pre-date the field (None ranks last).
     apps.sort(
@@ -419,7 +419,7 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
             "severity": sev,
         }
 
-    # ── State (geo) ────────────────────────────────────────────────
+    # ââ State (geo) ââââââââââââââââââââââââââââââââââââââââââââââââ
     state = req.get("location_state")
     if state:
         in_state = await db.therapists.count_documents({
@@ -427,7 +427,7 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
         })
         axes.append(_axis(f"Therapists licensed in {state}", in_state, target))
 
-    # ── Format ─────────────────────────────────────────────────────
+    # ââ Format âââââââââââââââââââââââââââââââââââââââââââââââââââââ
     # Patient enum values are `telehealth_only`, `in_person_only`,
     # `hybrid`, `prefer_inperson`, `prefer_telehealth`. We only treat
     # the two `*_only` variants as HARD (the others are soft prefs).
@@ -451,7 +451,7 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
         })
         axes.append(_axis("Offer telehealth", cnt, target))
 
-    # ── Age group ──────────────────────────────────────────────────
+    # ââ Age group ââââââââââââââââââââââââââââââââââââââââââââââââââ
     age = req.get("age_group")
     if age:
         cnt = await db.therapists.count_documents({
@@ -459,7 +459,7 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
         })
         axes.append(_axis(f"See {age.replace('_', ' ')} clients", cnt, max(8, target // 4)))
 
-    # ── Top presenting issue ───────────────────────────────────────
+    # ââ Top presenting issue âââââââââââââââââââââââââââââââââââââââ
     issues = req.get("presenting_issues") or []
     for issue in issues[:3]:
         cnt = await db.therapists.count_documents({
@@ -472,7 +472,7 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
         })
         axes.append(_axis(f"Treat {issue.replace('_', ' ')}", cnt, max(10, target // 3)))
 
-    # ── Modality preference (treatment style) ──────────────────────
+    # ââ Modality preference (treatment style) ââââââââââââââââââââââ
     pref_mods = req.get("modality_preferences") or []
     for mod in pref_mods[:2]:
         cnt = await db.therapists.count_documents({
@@ -480,7 +480,7 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
         })
         axes.append(_axis(f"Practice {mod}", cnt, max(8, target // 4)))
 
-    # ── Insurance ──────────────────────────────────────────────────
+    # ââ Insurance ââââââââââââââââââââââââââââââââââââââââââââââââââ
     # Only surface this axis as a HARD filter when the patient
     # explicitly ticked "Hard requirement: only show therapists who
     # accept this insurance". Otherwise it's a soft preference that
@@ -497,7 +497,7 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
         hard_suffix = " (HARD)" if req.get("insurance_strict") else ""
         axes.append(_axis(f"Accept {ins}{hard_suffix}", cnt, max(8, target // 3)))
 
-    # ── Cash budget ────────────────────────────────────────────────
+    # ââ Cash budget ââââââââââââââââââââââââââââââââââââââââââââââââ
     if req.get("payment_type") in ("cash", "either") and req.get("budget"):
         budget = int(req["budget"])
         cnt = await db.therapists.count_documents({
@@ -508,11 +508,11 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
             ],
         })
         axes.append(_axis(
-            f"Cash rate ≤ ${budget} (or sliding scale)",
+            f"Cash rate â¤ ${budget} (or sliding scale)",
             cnt, max(15, target // 2),
         ))
 
-    # ── Gender preference (only when patient required it) ──────────
+    # ââ Gender preference (only when patient required it) ââââââââââ
     if req.get("gender_required") and req.get("gender_preference"):
         gp = req["gender_preference"]
         cnt = await db.therapists.count_documents({
@@ -520,7 +520,7 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
         })
         axes.append(_axis(f"Identify as {gp} (HARD)", cnt, max(8, target // 4)))
 
-    # ── Preferred language (only when patient required it) ─────────
+    # ââ Preferred language (only when patient required it) âââââââââ
     # This was the missing axis that made the Mandarin-HARD request look
     # unexplained in the admin "why 0 matches" dialog. When the pool
     # collapses because nobody speaks the requested language, the admin
@@ -534,7 +534,7 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
         })
         axes.append(_axis(f"Speak {lang} (HARD)", cnt, max(5, target // 6)))
 
-    # ── Availability windows (only when patient required it) ───────
+    # ââ Availability windows (only when patient required it) âââââââ
     avail = req.get("availability_windows") or []
     if req.get("availability_strict") and avail and "flexible" not in avail:
         cnt = await db.therapists.count_documents({
@@ -544,7 +544,7 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
         pretty = ", ".join(w.replace("_", " ") for w in avail[:3])
         axes.append(_axis(f"Available {pretty} (HARD)", cnt, max(8, target // 4)))
 
-    # ── Urgency window (only when patient required it) ─────────────
+    # ââ Urgency window (only when patient required it) âââââââââââââ
     urg = req.get("urgency")
     if req.get("urgency_strict") and urg and urg != "flexible":
         # Therapists signal capacity via `urgency_capacity`. For
@@ -567,18 +567,18 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
         ))
 
     summary = (
-        f"Only {notified_count} therapist(s) were notified — target was "
+        f"Only {notified_count} therapist(s) were notified â target was "
         f"{target}. Active directory size: {total_active}. The axes below "
         f"show which filter cut the pool down."
     )
     # If the patient hasn't yet clicked the verification link, the matching
-    # job never ran — so a low notified_count says nothing about the
+    # job never ran â so a low notified_count says nothing about the
     # provider directory, and the admin should be told that explicitly
     # before drawing any conclusions about coverage gaps.
     verified = bool(req.get("verified"))
     if not verified:
         summary = (
-            "Patient hasn't verified their email yet — matching only runs "
+            "Patient hasn't verified their email yet â matching only runs "
             "after verification, so 0 therapists have been notified. The "
             "axes below show what the directory could match if/when they "
             "verify; the actual notify count will fill in once they "
@@ -636,15 +636,15 @@ async def admin_list_therapists(
         t["license_verify_url"] = dopl_verification_url(t.get("license_number"))
 
     # For pending therapists, attach "value tags" telling the admin which
-    # patient-demand gaps this applicant would fill — and flag duplicates
-    # (axes where we already have ≥5 active providers like them) so the
+    # patient-demand gaps this applicant would fill â and flag duplicates
+    # (axes where we already have â¥5 active providers like them) so the
     # admin can decide whether the marginal slot is worth approving.
     if pending is True and rows:
         await _attach_value_tags(rows)
     return rows
 
 
-_DUP_THRESHOLD = 5  # axes with ≥5 active matches are "duplicates"
+_DUP_THRESHOLD = 5  # axes with â¥5 active matches are "duplicates"
 
 
 async def _attach_value_tags(pending_rows: list[dict]) -> None:
@@ -682,7 +682,7 @@ async def _attach_value_tags(pending_rows: list[dict]) -> None:
                 }
             )
 
-        # Primary specialties — highest demand axis
+        # Primary specialties â highest demand axis
         for s in (t.get("primary_specialties") or [])[:5]:
             cnt = await count({"primary_specialties": s})
             await add(f"Treats {s.replace('_', ' ')}", "specialty", cnt)
@@ -720,7 +720,7 @@ async def _attach_value_tags(pending_rows: list[dict]) -> None:
                 })
                 await add(f"In-person in {city}", "geo_city", cnt)
 
-        # Sliding scale / free consult — affordability axes
+        # Sliding scale / free consult â affordability axes
         if t.get("sliding_scale"):
             cnt = await count({"sliding_scale": True})
             await add("Offers sliding scale", "affordability", cnt)
@@ -780,7 +780,7 @@ async def admin_auto_decline_duplicates(
     payload: dict | None = None, _: bool = Depends(require_admin),
 ):
     """Bulk-rejects every pending therapist whose value tags only contain
-    "duplicate" axes (i.e. `value_summary.is_duplicate_only == True`) —
+    "duplicate" axes (i.e. `value_summary.is_duplicate_only == True`) â
     the admin no longer has to click reject one at a time. Pass
     `{"dry_run": true}` to preview without sending emails."""
     import asyncio
@@ -849,7 +849,7 @@ async def admin_clear_reapproval(
     therapist_id: str, _: bool = Depends(require_admin),
 ):
     """Admin has reviewed the therapist's specialty/license self-edit and
-    blessed it — clear the pending_reapproval flag so the updated profile
+    blessed it â clear the pending_reapproval flag so the updated profile
     starts being used by the matching engine."""
     t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0, "password_hash": 0, "password_set_at": 0})
     if not t:
@@ -890,13 +890,13 @@ async def admin_update_therapist(
     update = {k: v for k, v in (payload or {}).items() if k in allowed}
     if not update:
         raise HTTPException(400, "No editable fields provided")
-    # Enforce the 3-age-group cap on ALL saves (admin + self-edit) — same
+    # Enforce the 3-age-group cap on ALL saves (admin + self-edit) â same
     # rule applied at the model layer for new signups.
     if "age_groups" in update and isinstance(update["age_groups"], list):
         update["age_groups"] = update["age_groups"][:3]
     update["updated_at"] = _now_iso()
     # When the admin saves the profile, treat that as an implicit
-    # re-approval — clear the pending flag so the row stops surfacing
+    # re-approval â clear the pending flag so the row stops surfacing
     # the orange "needs re-review" badge. Mirrors the dedicated
     # /clear-reapproval route. Logged via `reapproved_at` for audit.
     unset = {}
@@ -943,7 +943,7 @@ async def admin_archive_therapist(therapist_id: str) -> dict[str, Any]:
     dependencies=[Depends(require_admin)],
 )
 async def admin_restore_therapist(therapist_id: str) -> dict[str, Any]:
-    """Reverse of /archive — bring an archived therapist back online."""
+    """Reverse of /archive â bring an archived therapist back online."""
     res = await db.therapists.update_one(
         {"id": therapist_id},
         {"$set": {"is_active": True, "updated_at": _now_iso()},
@@ -959,7 +959,7 @@ async def admin_restore_therapist(therapist_id: str) -> dict[str, Any]:
     dependencies=[Depends(require_admin)],
 )
 async def admin_delete_therapist(therapist_id: str) -> dict[str, Any]:
-    """Hard delete — only allowed when there are NO applications and NO
+    """Hard delete â only allowed when there are NO applications and NO
     active patient requests referencing this therapist. Otherwise the
     admin must archive instead so historical records stay intact."""
     has_apps = await db.applications.count_documents({"therapist_id": therapist_id})
@@ -1000,9 +1000,9 @@ async def admin_test_sms(payload: dict, _: bool = Depends(require_admin)):
         except (KeyError, IndexError):
             body = template  # show raw template if formatting fails
     else:
-        body = (payload or {}).get("body") or "TheraVoca: SMS smoke test — your Twilio integration is wired up."
+        body = (payload or {}).get("body") or "TheraVoca: SMS smoke test â your Twilio integration is wired up."
 
-    # force=True bypasses TWILIO_ENABLED check — admin explicitly chose to test
+    # force=True bypasses TWILIO_ENABLED check â admin explicitly chose to test
     result = await send_sms(to, body, force=True)
     if not result:
         return {"ok": False, "detail": "SMS send returned no result (check TWILIO_ENABLED + creds + logs)"}
@@ -1041,7 +1041,7 @@ async def admin_test_sms(payload: dict, _: bool = Depends(require_admin)):
         hint = (
             "A2P 10DLC registration required. US carriers block unregistered "
             "numbers from sending SMS. Register at "
-            "twilio.com/console/sms/a2p-messaging — or switch to a "
+            "twilio.com/console/sms/a2p-messaging â or switch to a "
             "verified toll-free number."
         )
     elif error_code == 21610:
@@ -1095,7 +1095,7 @@ async def admin_preview_email_template(
     """Render the template against realistic sample data and return
     `{subject, html}` so the admin can see what the email will look
     like before sending. The `draft` body fields (if supplied) are
-    rendered IN-MEMORY ONLY — they're not persisted, so the admin can
+    rendered IN-MEMORY ONLY â they're not persisted, so the admin can
     iterate on copy without polluting the saved override."""
     if key not in EMAIL_TEMPLATE_DEFAULTS:
         raise HTTPException(404, f"Unknown template key: {key}")
@@ -1125,7 +1125,7 @@ async def admin_backfill_therapists(_: bool = Depends(require_admin)):
         if set_fields:
             audit = build_audit_record(t, set_fields)
             if audit:
-                # Preserve the original audit if one already exists — re-runs
+                # Preserve the original audit if one already exists â re-runs
                 # of backfill should NOT reset `original_email` to a fake one.
                 existing_audit = t.get("_backfill_audit") or {}
                 if existing_audit.get("original_email"):
@@ -1150,7 +1150,7 @@ async def admin_strip_backfill(_: bool = Depends(require_admin)):
     """Reverse the most-recent backfill: restore each therapist's original
     email (saved in `_backfill_audit.original_email`) and $unset every
     field that backfill itself populated. User-edited values (which were
-    NEVER touched by backfill — backfill only fills empty fields) are
+    NEVER touched by backfill â backfill only fills empty fields) are
     preserved verbatim.
 
     This is the pre-launch sanity step: run backfill to flesh out fake
@@ -1168,7 +1168,7 @@ async def admin_strip_backfill(_: bool = Depends(require_admin)):
         original_email = (audit.get("original_email") or "").strip()
         fields_added = audit.get("fields_added") or []
         # If we have nothing real to fall back to (the original email was
-        # blank or already a therapymatch+ placeholder), DO NOT strip —
+        # blank or already a therapymatch+ placeholder), DO NOT strip â
         # we'd leave the doc with no email at all. Flag for manual review.
         is_placeholder = (
             not original_email
@@ -1201,7 +1201,7 @@ async def admin_strip_backfill(_: bool = Depends(require_admin)):
 
 @router.get("/admin/backfill-status")
 async def admin_backfill_status(_: bool = Depends(require_admin)):
-    """Snapshot of backfill state — used by the admin UI to confirm
+    """Snapshot of backfill state â used by the admin UI to confirm
     whether a strip operation is needed before going live."""
     total = await db.therapists.count_documents({})
     backfilled = await db.therapists.count_documents(
@@ -1225,13 +1225,13 @@ async def admin_backfill_status(_: bool = Depends(require_admin)):
     }
 
 
-# ── Pre-launch test-data wipe ────────────────────────────────────────────
+# ââ Pre-launch test-data wipe ââââââââââââââââââââââââââââââââââââââââââââ
 # A blunt-but-guarded button that clears every collection containing
 # patient/operational test data (requests, applications, simulator runs,
 # auto-recruit cycles, outreach invites, magic codes, etc.) and removes
 # any therapists that aren't part of the original imported-xlsx seed pool.
 #
-# The canonical seed distinguisher is `source == "imported_xlsx"` — the
+# The canonical seed distinguisher is `source == "imported_xlsx"` â the
 # 122 therapists imported from the original Idaho directory spreadsheet.
 # Test-flow signups (source="signup") + gap-recruit auto-creations
 # (source="gap_recruit_signup") are wiped, even when their email also
@@ -1291,7 +1291,7 @@ async def admin_export_therapists(_: bool = Depends(require_admin)):
 @router.get("/admin/wipe-test-data/preview")
 async def admin_wipe_test_data_preview(_: bool = Depends(require_admin)):
     """Show counts of what `POST /admin/wipe-test-data` would delete.
-    Read-only — no side effects. Used by the admin UI to populate the
+    Read-only â no side effects. Used by the admin UI to populate the
     confirmation dialog with concrete numbers."""
     counts: dict[str, int] = {}
     for col in _WIPE_COLLECTIONS:
@@ -1391,7 +1391,7 @@ async def admin_stats(_: bool = Depends(require_admin)):
 
 @router.post("/admin/run-daily-tasks")
 async def admin_run_daily_tasks(_: bool = Depends(require_admin)):
-    """Manual trigger for the daily cron — useful for testing without waiting until 2am MT."""
+    """Manual trigger for the daily cron â useful for testing without waiting until 2am MT."""
     bill = await _run_daily_billing_charges()
     lic = await _run_license_expiry_alerts()
     avail = await _run_availability_prompts()
@@ -1501,7 +1501,7 @@ async def admin_waitlist(_: bool = Depends(require_admin)):
 
 @router.get("/admin/therapist-waitlist")
 async def admin_therapist_waitlist(_: bool = Depends(require_admin)):
-    """Therapist waitlist — out-of-state providers interested in joining."""
+    """Therapist waitlist â out-of-state providers interested in joining."""
     entries = await db.therapist_waitlist.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
     by_state: dict[str, int] = {}
     for e in entries:
@@ -1655,7 +1655,7 @@ async def admin_convert_outreach_invite(
 ):
     """Convert an LLM-invited candidate (`outreach_invites`) into a draft
     therapist profile (`therapists`). Carries over name/email/license/city/state
-    /specialties/modalities. The new therapist starts in an `invited` state —
+    /specialties/modalities. The new therapist starts in an `invited` state â
     invisible to matching, awaiting therapist completion + admin approval.
     The original `outreach_invites` row is kept and flagged as `converted` for
     audit trail, with `converted_therapist_id` pointing to the new profile."""
@@ -1685,7 +1685,7 @@ async def admin_convert_outreach_invite(
             f"A therapist with email {email} already exists (id={existing['id']}).",
         )
 
-    # Map LLM credential abbreviation → our credential_type values.
+    # Map LLM credential abbreviation â our credential_type values.
     license_type = (candidate.get("license_type") or "").upper().strip()
     credential_type = license_type if license_type else "Other"
 
@@ -1900,15 +1900,15 @@ async def admin_set_referral_source_options(payload: dict) -> dict[str, Any]:
     return {"options": cleaned}
 
 
-# ─── Patient intake rate limit (admin-tunable) ──────────────────────────
+# âââ Patient intake rate limit (admin-tunable) ââââââââââââââââââââââââââ
 # Throttles how many requests one email can submit per rolling window.
-# Default: 1 request per 60 minutes — keeps junk down while we're still
+# Default: 1 request per 60 minutes â keeps junk down while we're still
 # learning real user patterns. Stored in `app_config.intake_rate_limit`.
 _DEFAULT_INTAKE_RATE = {
     "max_requests_per_window": 1,
     "window_minutes": 60,
     # IP-level cap (separate axis from per-email): how many intake submissions
-    # we accept from a single IP per rolling hour. Default 8 — high enough
+    # we accept from a single IP per rolling hour. Default 8 â high enough
     # for clinic / family wifi yet low enough to stop scripted spam.
     "max_per_ip_per_hour": 8,
 }
@@ -1940,7 +1940,7 @@ async def admin_get_deep_match_weights() -> dict[str, Any]:
 @router.put("/admin/deep-match-weights", dependencies=[Depends(require_admin)])
 async def admin_set_deep_match_weights(payload: dict) -> dict[str, Any]:
     """Validate + persist deep-match weights. Each weight must be in
-    [0.05, 0.6] — same guardrail bounds as the v2 spec's auto-tuning
+    [0.05, 0.6] â same guardrail bounds as the v2 spec's auto-tuning
     regression. The three weights are renormalised to sum to 1.0
     before saving so admins don't have to do the math."""
     try:
@@ -2026,7 +2026,7 @@ async def admin_set_intake_rate_limit(payload: dict) -> dict[str, Any]:
         raise HTTPException(
             400, "max_requests_per_window and window_minutes must be integers"
         )
-    # Optional — only validated/persisted when the admin actually sent it.
+    # Optional â only validated/persisted when the admin actually sent it.
     # Keeps backwards compat with older clients that only know the per-email
     # axis.
     ip_per_hour_raw = payload.get("max_per_ip_per_hour")
@@ -2068,10 +2068,10 @@ async def admin_set_intake_rate_limit(payload: dict) -> dict[str, Any]:
     }
 
 
-# ─── Test mode (admin-only, time-boxed rate-limit bypass) ─────────────────
+# âââ Test mode (admin-only, time-boxed rate-limit bypass) âââââââââââââââââ
 # When enabled, /api/requests skips both the per-IP and per-email rate
 # limits for the configured duration. Bot defenses (honeypot, timing
-# heuristic, Turnstile) remain ON — test mode only relaxes the throttle
+# heuristic, Turnstile) remain ON â test mode only relaxes the throttle
 # so the same admin can run end-to-end intake tests without tripping
 # their own anti-spam guards.
 @router.post(
@@ -2102,7 +2102,7 @@ async def admin_enable_test_mode(payload: dict) -> dict[str, Any]:
         upsert=True,
     )
     # Also flush the IP log so the very next intake from this admin's IP
-    # starts fresh — otherwise the >=cap check still fires from prior
+    # starts fresh â otherwise the >=cap check still fires from prior
     # entries until the rolling hour expires.
     await db.intake_ip_log.delete_many({})
     return {
@@ -2123,11 +2123,11 @@ async def admin_disable_test_mode() -> dict[str, Any]:
     return {"test_mode_until": None}
 
 
-# ─── Availability prompt schedule (admin-tunable) ─────────────────────
+# âââ Availability prompt schedule (admin-tunable) âââââââââââââââââââââ
 # Which days of the week therapists get the "is your availability still
 # current?" email/SMS. Stored in app_config.availability_prompt as
 # {days: [0], email_template_key: "availability_prompt"}.
-# Day numbering: 0=Monday … 6=Sunday.
+# Day numbering: 0=Monday â¦ 6=Sunday.
 
 _DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
@@ -2179,11 +2179,11 @@ async def admin_set_availability_prompt(payload: dict) -> dict[str, Any]:
     }
 
 
-# ─── Data backfill endpoints (admin-only) ─────────────────────────────
+# âââ Data backfill endpoints (admin-only) âââââââââââââââââââââââââââââ
 
 @router.post("/admin/backfill/deep-match", dependencies=[Depends(require_admin)])
 async def admin_backfill_deep_match(payload: dict = None) -> dict[str, Any]:
-    """Backfill deep-match T1–T5 fields for seed therapists missing them.
+    """Backfill deep-match T1âT5 fields for seed therapists missing them.
     Pass {"dry_run": true} to preview without writing. Default: applies."""
     import hashlib
     import random as _random
@@ -2231,10 +2231,10 @@ async def admin_backfill_deep_match(payload: dict = None) -> dict[str, Any]:
 
     _T2_TEMPLATES = [
         "I worked with a client dealing with {issue} who had been in therapy before without real progress. Through {approach}, we built trust and self-awareness over about {months} months. The turning point came when they started applying insights to daily life. By the end, they reported feeling more confident and connected than they had in years.",
-        "One client stands out — someone overwhelmed by {issue}. They were skeptical. Using {approach}, we focused on practical tools between sessions. Week by week, small shifts added up. After {months} months, they told me they finally felt like themselves again.",
+        "One client stands out â someone overwhelmed by {issue}. They were skeptical. Using {approach}, we focused on practical tools between sessions. Week by week, small shifts added up. After {months} months, they told me they finally felt like themselves again.",
     ]
     _T5_TEMPLATES = [
-        "I understand {exp1} from the inside — it shaped how I show up in the therapy room. I also bring personal experience with {exp2}, which helps me connect with clients navigating similar challenges without judgment.",
+        "I understand {exp1} from the inside â it shaped how I show up in the therapy room. I also bring personal experience with {exp2}, which helps me connect with clients navigating similar challenges without judgment.",
         "My own journey through {exp1} gives me depth beyond clinical training. I've also navigated {exp2} personally, which informs how I hold space for clients going through the same.",
     ]
     _EXPERIENCES = [
@@ -2335,13 +2335,13 @@ async def admin_backfill_deep_match(payload: dict = None) -> dict[str, Any]:
             )
             missing.append("t5_lived_experience")
 
-        # T6 — session expectations (pick 2-3 from slug set)
+        # T6 â session expectations (pick 2-3 from slug set)
         _T6_SLUGS = ["guide_direct", "listen_heard", "tools_fast", "explore_patterns", "depends"]
         if len(t.get("t6_session_expectations") or []) < 2:
             update["t6_session_expectations"] = rng.sample(_T6_SLUGS, k=rng.choice([2, 3]))
             missing.append("t6_session_expectations")
 
-        # T6b — early sessions description (free text)
+        # T6b â early sessions description (free text)
         _T6B_TEMPLATES = [
             "In our first few sessions, I focus on {focus1} while building a strong therapeutic relationship. I want clients to feel {feeling} and know that we have a clear plan moving forward.",
             "Early sessions are about {focus1} and getting to know each other. I pay close attention to {focus2} and adjust my approach based on what resonates with each person.",
@@ -2461,7 +2461,7 @@ async def admin_backfill_office_geos(payload: dict = None) -> dict[str, Any]:
     }
 
 
-# ─── Email templates (admin-viewable) ──────────────────────────────────
+# âââ Email templates (admin-viewable) ââââââââââââââââââââââââââââââââââ
 
 @router.get("/admin/email-templates", dependencies=[Depends(require_admin)])
 async def admin_get_email_templates() -> dict[str, Any]:
@@ -2477,42 +2477,42 @@ async def admin_get_email_templates() -> dict[str, Any]:
             "key": "availability_prompt",
             "name": "Availability Check-in",
             "description": "Weekly Monday morning email asking therapists to confirm their availability",
-            "subject": "Quick check — is your TheraVoca availability still current?",
+            "subject": "Quick check â is your TheraVoca availability still current?",
             "trigger": "Cron job, configurable days via /admin/availability-prompt",
         },
         {
             "key": "verification",
             "name": "Email Verification",
             "description": "Sent to patient after request submission to verify their email",
-            "subject": "Verify your email — TheraVoca",
+            "subject": "Verify your email â TheraVoca",
             "trigger": "After patient submits intake form",
         },
         {
             "key": "results",
             "name": "Results Delivery",
             "description": "Sent to patient when their matched therapist results are ready",
-            "subject": "Your therapist matches are ready — TheraVoca",
+            "subject": "Your therapist matches are ready â TheraVoca",
             "trigger": "After matching completes or auto-delay expires",
         },
         {
             "key": "therapist_notification",
             "name": "New Referral Match",
             "description": "Sent to therapist when a new patient matches their profile",
-            "subject": "New referral match ({match_score}%) — TheraVoca",
+            "subject": "New referral match ({match_score}%) â TheraVoca",
             "trigger": "During matching when therapist scores above threshold",
         },
         {
             "key": "claim_profile",
             "name": "Claim Profile",
             "description": "One-time go-live outreach asking existing therapists to claim their profile",
-            "subject": "Your TheraVoca profile is ready — complete it now",
+            "subject": "Your TheraVoca profile is ready â complete it now",
             "trigger": "Manual admin action",
         },
     ]
     return {"templates": templates}
 
 
-# ─── External scrape-source registry (admin-tunable) ────────────────────
+# âââ External scrape-source registry (admin-tunable) ââââââââââââââââââââ
 # Admin can paste in extra directory URLs (ID Counseling Association,
 # group-practice rosters, county clinic listings, etc.) that the
 # outreach LLM and gap recruiter should consult ON TOP of Psychology
@@ -2620,7 +2620,7 @@ async def admin_sms_status() -> dict[str, Any]:
     )
     last_status = last.get("final_status")
     last_error = last.get("error_code")
-    # Deliverability verdict — pessimistic by design.
+    # Deliverability verdict â pessimistic by design.
     if not has_creds:
         verdict = "missing_credentials"
     elif not enabled:
@@ -2669,7 +2669,7 @@ async def admin_set_a2p(payload: dict) -> dict[str, Any]:
     return cfg
 
 
-# ─── SMS templates (editable via site_copy) ────────────────────────────────
+# âââ SMS templates (editable via site_copy) ââââââââââââââââââââââââââââââââ
 @router.get("/admin/sms-templates", dependencies=[Depends(require_admin)])
 async def admin_list_sms_templates() -> dict[str, Any]:
     """Return all SMS templates with current values (from site_copy) and defaults."""
@@ -2702,7 +2702,7 @@ async def admin_update_sms_template(payload: dict) -> dict[str, Any]:
     if key not in SMS_TEMPLATE_DEFAULTS:
         raise HTTPException(400, f"Unknown template key: {key}")
     if not value:
-        # Reset to default — delete the override
+        # Reset to default â delete the override
         await db.site_copy.delete_one({"key": key})
         return {"key": key, "value": SMS_TEMPLATE_DEFAULTS[key], "reset": True}
     # Validate placeholders won't break at render time
@@ -2722,7 +2722,7 @@ async def admin_update_sms_template(payload: dict) -> dict[str, Any]:
     return {"key": key, "value": value, "reset": False}
 
 
-# ─── Research enrichment toggle + manual triggers ──────────────────────────
+# âââ Research enrichment toggle + manual triggers ââââââââââââââââââââââââââ
 @router.get("/admin/research-enrichment", dependencies=[Depends(require_admin)])
 async def admin_get_research_enrichment() -> dict[str, Any]:
     from research_enrichment import is_enabled
@@ -2760,7 +2760,7 @@ async def admin_run_research_enrichment(request_id: str) -> dict[str, Any]:
     """Manual trigger so the admin can enrich an already-matched request
     after flipping the toggle (or after a therapist updates their site)."""
     from research_enrichment import enrich_matches_for_request, set_enabled, is_enabled
-    # Allow one-off run even if globally disabled — temporarily enable, run,
+    # Allow one-off run even if globally disabled â temporarily enable, run,
     # restore. Cleaner UX than telling admin "you must enable first".
     was_enabled = await is_enabled()
     if not was_enabled:
@@ -2778,7 +2778,7 @@ async def admin_run_research_enrichment(request_id: str) -> dict[str, Any]:
     dependencies=[Depends(require_admin)],
 )
 async def admin_deep_research_therapist(therapist_id: str) -> dict[str, Any]:
-    """Run deep web-research on ONE therapist — DuckDuckGo search +
+    """Run deep web-research on ONE therapist â DuckDuckGo search +
     fetch up to 5 extra pages (PT profile, podcasts, blogs, papers)
     + LLM evidence extraction. Caches result on the therapist doc.
     Costs more than the standard refresh (~30s + 2-3x tokens) so it's
@@ -2942,7 +2942,7 @@ async def admin_cancel_warmup() -> dict[str, Any]:
     return {"ok": True, "matched": res.matched_count}
 
 
-# Public endpoint — patient intake calls this to populate its dropdown.
+# Public endpoint â patient intake calls this to populate its dropdown.
 public_router = APIRouter()
 
 
@@ -2958,7 +2958,7 @@ async def public_referral_source_options() -> dict[str, Any]:
 @public_router.get("/config/turnstile")
 async def public_turnstile_config() -> dict[str, Any]:
     """Public endpoint the React app calls on mount to decide whether
-    to render the Turnstile widget. Returns `{enabled: bool}` —
+    to render the Turnstile widget. Returns `{enabled: bool}` â
     `enabled=False` when either (a) the admin has flipped the
     runtime-disable toggle (used during AI-driven E2E testing) or
     (b) the `TURNSTILE_SITE_KEY` env isn't configured.
@@ -2975,12 +2975,12 @@ async def public_turnstile_config() -> dict[str, Any]:
 async def public_hard_capacity() -> dict[str, Any]:
     """Returns which HARD intake options should be greyed out because
     there aren't enough therapists in the directory passing them.
-    Lightweight aggregate — used by the intake form on mount.
+    Lightweight aggregate â used by the intake form on mount.
     (Admins see the same data + full protection reasons via
     /api/admin/hard-capacity)."""
     import hard_capacity
     result = await hard_capacity.compute_capacity(db)
-    # Lean payload for public consumers — omit raw counts to keep
+    # Lean payload for public consumers â omit raw counts to keep
     # directory breakdown private. We only need the disabled flags +
     # the short protections blurbs for the UI tooltip.
     return {
@@ -2993,7 +2993,7 @@ async def public_hard_capacity() -> dict[str, Any]:
 
 @router.get("/admin/hard-capacity", dependencies=[Depends(require_admin)])
 async def admin_hard_capacity() -> dict[str, Any]:
-    """Admin view — full capacity snapshot with raw counts per variant."""
+    """Admin view â full capacity snapshot with raw counts per variant."""
     import hard_capacity
     return await hard_capacity.compute_capacity(db)
 
@@ -3018,7 +3018,7 @@ async def admin_get_turnstile_settings() -> dict[str, Any]:
 async def admin_set_turnstile_settings(payload: dict) -> dict[str, Any]:
     """Flip the runtime disable toggle. `{disabled: true, reason?: str}`.
     When disabled, BOTH backend verification and the frontend widget
-    short-circuit — so automated tests don't need a real Turnstile token."""
+    short-circuit â so automated tests don't need a real Turnstile token."""
     disabled = bool(payload.get("disabled"))
     reason = (payload.get("reason") or "").strip()[:240]
     update = {"disabled": disabled}
@@ -3036,10 +3036,10 @@ async def admin_set_turnstile_settings(payload: dict) -> dict[str, Any]:
     return {"ok": True, "disabled": disabled}
 
 
-# ─── Outreach opt-out — public, no auth ─────────────────────────────────
+# âââ Outreach opt-out â public, no auth âââââââââââââââââââââââââââââââââ
 def _render_opt_out_page(*, success: bool, email: str | None, phone: str | None,
                         already: bool = False) -> str:
-    """Tiny self-contained HTML confirmation page. No React dependency — this
+    """Tiny self-contained HTML confirmation page. No React dependency â this
     link is clicked by people who aren't users yet, and we want the response
     to be instant + robust."""
     headline = "You're unsubscribed" if success else "We couldn't process that link"
@@ -3058,13 +3058,13 @@ def _render_opt_out_page(*, success: bool, email: str | None, phone: str | None,
         )
     already_line = (
         '<p style="color:#6D6A65;font-size:13px;margin:10px 0 0;">'
-        '(You were already opted out — no action needed.)</p>'
+        '(You were already opted out â no action needed.)</p>'
         if already else ""
     )
     return f"""<!doctype html>
 <html><head>
 <meta charset="utf-8">
-<title>TheraVoca — {headline}</title>
+<title>TheraVoca â {headline}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   body {{ margin:0; padding:48px 20px; background:#FDFBF7; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif; color:#2B2A29; }}
@@ -3089,7 +3089,7 @@ def _render_opt_out_page(*, success: bool, email: str | None, phone: str | None,
 @public_router.get("/outreach/opt-out/{invite_id}")
 async def outreach_opt_out(invite_id: str, reason: str | None = None):
     """One-click opt-out link embedded in every outreach email & SMS. No auth,
-    no CSRF — the invite_id (UUID4) is the unguessable token."""
+    no CSRF â the invite_id (UUID4) is the unguessable token."""
     from fastapi.responses import HTMLResponse
     from outreach_optout import record_opt_out, is_opted_out
 
@@ -3202,7 +3202,7 @@ async def _compute_coverage_gap_analysis() -> dict:
     """Auth-free helper used by both the admin endpoint and the daily cron."""
     from collections import Counter
 
-    # Demand priors — weighted by what a typical Idaho mental-health intake
+    # Demand priors â weighted by what a typical Idaho mental-health intake
     # population looks like (rough, but better than uniform).
     SPECIALTY_DEMAND = {
         "anxiety": "very_high", "depression": "very_high",
@@ -3221,7 +3221,7 @@ async def _compute_coverage_gap_analysis() -> dict:
     ]
     AGE_GROUPS = ["child", "teen", "young_adult", "adult", "older_adult"]
     AGE_GROUP_TARGETS = {
-        "child": 8,         # historically thinnest — bump target so we recruit more
+        "child": 8,         # historically thinnest â bump target so we recruit more
         "teen": 8,
         "young_adult": 5,
         "adult": 5,
@@ -3246,7 +3246,7 @@ async def _compute_coverage_gap_analysis() -> dict:
     ).to_list(length=2000)
     total = len(therapists)
 
-    # ── Per-dimension counts ──
+    # ââ Per-dimension counts ââ
     spec_counts: Counter = Counter()
     modality_counts: Counter = Counter()
     age_counts: Counter = Counter()
@@ -3307,7 +3307,7 @@ async def _compute_coverage_gap_analysis() -> dict:
             else:
                 rate_buckets["250+"] += 1
 
-    # ── Build recommendations ──
+    # ââ Build recommendations ââ
     gaps: list[dict] = []
 
     for slug, demand in SPECIALTY_DEMAND.items():
@@ -3323,7 +3323,7 @@ async def _compute_coverage_gap_analysis() -> dict:
                 "severity": "critical" if have < target / 2 else "warning",
                 "recommendation": (
                     f"Recruit {target - have} more therapist(s) specializing in "
-                    f"`{slug.replace('_', ' ')}` — patient demand is {demand}."
+                    f"`{slug.replace('_', ' ')}` â patient demand is {demand}."
                 ),
             })
     for m in MODALITIES_CORE:
@@ -3338,7 +3338,7 @@ async def _compute_coverage_gap_analysis() -> dict:
                 "severity": "critical" if have < 3 else "warning",
                 "recommendation": (
                     f"Recruit {target - have} more therapist(s) trained in "
-                    f"{m} — common patient request."
+                    f"{m} â common patient request."
                 ),
             })
     for ag in AGE_GROUPS:
@@ -3353,7 +3353,7 @@ async def _compute_coverage_gap_analysis() -> dict:
                 "severity": "critical" if have < target / 2 or have == 0 else "warning",
                 "recommendation": (
                     f"Recruit {target - have} more therapist(s) serving "
-                    f"`{ag}` — age group is a HARD filter in matching, "
+                    f"`{ag}` â age group is a HARD filter in matching, "
                     "patients in this bucket will see weak or zero matches."
                 ),
             })
@@ -3412,13 +3412,13 @@ async def _compute_coverage_gap_analysis() -> dict:
             "severity": "warning",
             "recommendation": (
                 f"Only {can_take_quick} therapist(s) flagged with ASAP / "
-                "2–3-week capacity. Patients marking `urgency=asap` will see "
-                "weak matches — prioritize confirming availability with your "
+                "2â3-week capacity. Patients marking `urgency=asap` will see "
+                "weak matches â prioritize confirming availability with your "
                 "current network."
             ),
         })
 
-    # Geographic coverage — per-city in-person targets outside Boise.
+    # Geographic coverage â per-city in-person targets outside Boise.
     # Case-insensitive city match so "Coeur D'Alene" / "coeur d'alene" all match.
     in_person_lower = {k.lower(): v for k, v in in_person_by_city.items()}
     for city in OUTSIDE_BOISE_CITIES:
@@ -3462,7 +3462,7 @@ async def _compute_coverage_gap_analysis() -> dict:
             "severity": "warning",
             "recommendation": (
                 f"Only {sliding_scale} therapist(s) offer a sliding scale. "
-                "We tell patients we have flexible-fee options — verify."
+                "We tell patients we have flexible-fee options â verify."
             ),
         })
 
@@ -3545,7 +3545,7 @@ async def admin_referral_analytics(_: bool = Depends(require_admin)):
     """
     from collections import Counter
 
-    # Patient → patient referrals
+    # Patient â patient referrals
     patient_chains: Counter = Counter()
     patient_codes_seen: dict[str, dict] = {}
     async for r in db.requests.find(
@@ -3566,7 +3566,7 @@ async def admin_referral_analytics(_: bool = Depends(require_admin)):
         meta = patient_codes_seen.get(code) or {}
         top_patient_referrers.append({
             "code": code,
-            "inviter_email": meta.get("email") or "—",
+            "inviter_email": meta.get("email") or "â",
             "invited_count": n,
         })
 
@@ -3590,8 +3590,8 @@ async def admin_referral_analytics(_: bool = Depends(require_admin)):
         meta = therapist_codes.get(code) or {}
         top_therapist_referrers.append({
             "code": code,
-            "inviter_name": meta.get("name") or "—",
-            "inviter_email": meta.get("email") or "—",
+            "inviter_name": meta.get("name") or "â",
+            "inviter_email": meta.get("email") or "â",
             "invited_count": n,
         })
 
@@ -3656,7 +3656,7 @@ async def admin_send_gap_preview(
     admin can see what the actual recruit email looks like in their inbox.
 
     Sends ALWAYS to the draft's fake `therapymatch+recruitNNN@gmail.com`
-    address — the user controls `therapymatch@gmail.com`, so the email lands
+    address â the user controls `therapymatch@gmail.com`, so the email lands
     in their own inbox via Gmail's plus-aliasing trick.
 
     Body: `{"limit": 3, "draft_ids": [...]}`. If `draft_ids` is empty, picks
@@ -3671,7 +3671,7 @@ async def admin_send_gap_preview(
 
 @router.post("/admin/seed/reset")
 async def admin_seed_reset(_: bool = Depends(require_admin)):
-    """DESTRUCTIVE — clears requests/applications/declines/therapists/magic_codes
+    """DESTRUCTIVE â clears requests/applications/declines/therapists/magic_codes
     and re-seeds 100 fresh therapists (v3 schema). Also kicks off office geocoding."""
     cleared = {
         "requests": (await db.requests.delete_many({})).deleted_count,
@@ -3690,10 +3690,10 @@ async def admin_seed_reset(_: bool = Depends(require_admin)):
     return {"ok": True, "cleared": cleared, "seeded": len(therapists)}
 
 
-# ──────────────────────────────────────────────────────────────────────
+# ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 # Matching-Outcome Simulator (admin-only)
-# ──────────────────────────────────────────────────────────────────────
-# Routes delegate to `backend/simulator.py` — this keeps admin.py from
+# ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# Routes delegate to `backend/simulator.py` â this keeps admin.py from
 # growing further while giving ops a single surface to kick off a run,
 # list prior runs, fetch a specific report, and clean up synthetic
 # data. See simulator.py for the algorithmic detail + rationale.
@@ -3715,15 +3715,21 @@ async def simulator_run(
     random_seed = payload.get("random_seed")
     if not (10 <= num_requests <= 200):
         raise HTTPException(400, "num_requests must be between 10 and 200.")
-    report = await simulator.run_simulation(
-        db,
-        num_requests=num_requests,
-        notify_top_n=notify_top_n,
-        min_applications=min_applications,
-        max_applications=max_applications,
-        random_seed=random_seed,
-    )
-    return report
+    try:
+        report = await simulator.run_simulation(
+            db,
+            num_requests=num_requests,
+            notify_top_n=notify_top_n,
+            min_applications=min_applications,
+            max_applications=max_applications,
+            random_seed=random_seed,
+        )
+        return report
+    except Exception as exc:
+        import traceback
+        tb = traceback.format_exc()
+        logger.error("Simulator crash: %s\n%s", exc, tb)
+        raise HTTPException(500, detail=f"Simulator error: {exc}\n{tb}")
 
 
 @router.get("/admin/simulator/runs")
@@ -3731,7 +3737,7 @@ async def simulator_list_runs(
     _: None = Depends(require_admin),
     limit: int = 30,
 ):
-    """List recent simulator runs — lightweight summary only."""
+    """List recent simulator runs â lightweight summary only."""
     import simulator
     return {"items": await simulator.list_runs(db, limit=limit)}
 
@@ -3760,11 +3766,11 @@ async def simulator_delete_run(
     return {"ok": True, "deleted": deleted}
 
 
-# ──────────────────────────────────────────────────────────────────────
-# Auto-recruit — closed-loop recruiter (Simulator + Coverage Gaps +
+# ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# Auto-recruit â closed-loop recruiter (Simulator + Coverage Gaps +
 # Gap Recruiter). Pre-launch: dry-run + admin-approval-gated. See
 # backend/auto_recruit.py for the orchestration logic.
-# ──────────────────────────────────────────────────────────────────────
+# ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 
 @router.get("/admin/auto-recruit/status")
@@ -3799,7 +3805,7 @@ async def auto_recruit_update_config(
 
 @router.post("/admin/auto-recruit/plan")
 async def auto_recruit_plan(_: None = Depends(require_admin)):
-    """Preview the plan WITHOUT creating drafts — runs a fresh simulator
+    """Preview the plan WITHOUT creating drafts â runs a fresh simulator
     + coverage-gap analysis and returns the would-be recruit targets."""
     import auto_recruit
     return await auto_recruit.compute_plan_preview(db)
@@ -3807,7 +3813,7 @@ async def auto_recruit_plan(_: None = Depends(require_admin)):
 
 @router.post("/admin/auto-recruit/run")
 async def auto_recruit_run(_: None = Depends(require_admin)):
-    """Execute one full cycle — runs sim, builds plan, calls gap
+    """Execute one full cycle â runs sim, builds plan, calls gap
     recruiter, stamps new drafts with cycle id + needs_approval=True.
     Never sends real email (dry_run enforced by config)."""
     import auto_recruit
@@ -3819,7 +3825,7 @@ async def auto_recruit_run(_: None = Depends(require_admin)):
 async def auto_recruit_list_cycles(
     _: None = Depends(require_admin), limit: int = 30,
 ):
-    """Recent cycles history (lightweight — omits per-draft detail)."""
+    """Recent cycles history (lightweight â omits per-draft detail)."""
     import auto_recruit
     return {"items": await auto_recruit.list_cycles(db, limit=limit)}
 
