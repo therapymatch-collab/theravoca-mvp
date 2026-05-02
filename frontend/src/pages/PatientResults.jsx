@@ -399,7 +399,8 @@ function YourReferralPanel({ request }) {
   const therapyHistory = (() => {
     const pt = request.prior_therapy;
     if (typeof pt === "string") {
-      if (pt === "yes") return "Has prior therapy";
+      if (pt === "yes" || pt === "yes_helped") return "Yes, and it helped";
+      if (pt === "yes_not_helped") return "Yes, but it didn't help";
       if (pt === "no") return "First-time";
       if (pt === "not_sure") return "Not sure";
     }
