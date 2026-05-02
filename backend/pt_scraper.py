@@ -7,13 +7,13 @@ Approach (pragmatic, single-process, no proxy stack):
 1. Fetch the PT search results page for the patient's state + city. PT
    embeds a `<script type="application/ld+json">` block listing each
    therapist as a Schema.org Person with name, profile URL, phone, and
-   address. We parse that JSON-LD — no fragile CSS selectors, no JS
+   address. We parse that JSON-LD â no fragile CSS selectors, no JS
    rendering required.
 2. For each candidate profile, fetch the profile page and scrape:
      - License credentials (LCSW / LMFT / LCPC / LPC / PsyD / PhD)
      - Specialties
      - External website URL (if any)
-   PT does NOT expose therapist emails publicly — they gate them behind a
+   PT does NOT expose therapist emails publicly â they gate them behind a
    contact form. So we record the phone (always present in JSON-LD) and
    best-guess an email from the website domain when one is published.
 3. The outreach agent (`outreach_agent.run_outreach_for_request`) then uses
@@ -66,7 +66,7 @@ LICENSE_SUFFIXES = (
     "PsyD", "PhD", "MD", "LMSW", "MA", "MEd", "MSW", "EdSP",
 )
 
-# Specialty keyword → internal slug
+# Specialty keyword â internal slug
 SPECIALTY_KEYWORDS = {
     "anxiety": "anxiety",
     "depression": "depression",
@@ -90,7 +90,7 @@ SPECIALTY_KEYWORDS = {
     "grief": "life_transitions",
 }
 
-# Maximum profile detail fetches per outreach run — keeps PT happy and
+# Maximum profile detail fetches per outreach run â keeps PT happy and
 # request-handler latency bounded.
 MAX_PROFILE_FETCHES = int(os.environ.get("PT_MAX_PROFILE_FETCHES", "30"))
 REQUEST_DELAY_SEC = float(os.environ.get("PT_REQUEST_DELAY_SEC", "0.6"))
@@ -121,7 +121,7 @@ async def _http_get(url: str, client: httpx.AsyncClient, *, retries: int = 2) ->
 
 
 def _city_slug(city: str) -> str:
-    """'Idaho Falls' → 'idaho-falls'. Matches PT URL slug convention."""
+    """'Idaho Falls' â 'idaho-falls'. Matches PT URL slug convention."""
     return re.sub(r"[^a-z0-9\-]+", "-", (city or "").lower().strip()).strip("-")
 
 
@@ -214,7 +214,7 @@ def _parse_specialties(html: str) -> list[str]:
 def _parse_external_website(html: str) -> Optional[str]:
     """Find a non-PT external link that looks like the therapist's own site."""
     matches = re.findall(
-        r'href="(https?://(?!(?:www\.)?psychologytoday\.com|directory-resources\.psychologytoday\.com|sussexdirectories\.com|docs\.psychologytoday\.com|schema\.org)[^"]+)"',
+        r'href="(https?://(?!(?:[a-z0-9-]+\.)?psychologytoday\.com|sussexdirectories\.com|schema\.org)[^"]+)"',
         html,
     )
     for url in matches:
@@ -232,7 +232,7 @@ def _parse_external_website(html: str) -> Optional[str]:
 def _guess_email_from_website(website: str, name: str) -> Optional[str]:
     """Best-effort email guess. We do NOT call the website (avoid noisy crawls
     + privacy risk); we just synthesize a plausible address from the domain.
-    The outreach agent treats this as low-confidence — bounce-back tracking
+    The outreach agent treats this as low-confidence â bounce-back tracking
     in Resend handles invalid sends gracefully."""
     if not website:
         return None
@@ -242,7 +242,13 @@ def _guess_email_from_website(website: str, name: str) -> Optional[str]:
     domain = m.group(1).lower().lstrip("www.")
     if not domain or "." not in domain:
         return None
-    # Use a generic mailbox — most solo-practice sites route info@ + contact@
+    # Never guess emails for directory domains — these are shared mailboxes
+    SKIP_DOMAINS = (
+        "psychologytoday.com", "therapyden.com", "goodtherapy.org",
+        "healthgrades.com", "zocdoc.com", "betterhelp.com",
+    )
+    if any(domain.endswith(d) for d in SKIP_DOMAINS):
+        return None
     return f"info@{domain}"
 
 
@@ -405,7 +411,7 @@ async def scrape_pt_candidates(
                 await asyncio.sleep(REQUEST_DELAY_SEC)
 
     logger.info(
-        "PT scrape: state=%s city=%s pages<=%d → %d candidates (enriched=%d)",
+        "PT scrape: state=%s city=%s pages<=%d â %d candidates (enriched=%d)",
         state_code, city, max_pages, len(out),
         sum(1 for c in out if c.get("license_types")),
     )
