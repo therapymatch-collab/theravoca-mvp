@@ -1,32 +1,12 @@
 import { useState } from "react";
 import { Group, PillRow } from "@/components/intake/IntakeUI";
-import { CLIENT_TYPES, AGE_GROUPS, ISSUES } from "./intakeOptions";
+import { CLIENT_TYPES, AGE_GROUPS, ISSUES, US_STATES, COVERED_STATES } from "./intakeOptions";
 import { api } from "@/lib/api";
 
-const US_STATES = [
-  { v: "AL", l: "Alabama" }, { v: "AK", l: "Alaska" }, { v: "AZ", l: "Arizona" },
-  { v: "AR", l: "Arkansas" }, { v: "CA", l: "California" }, { v: "CO", l: "Colorado" },
-  { v: "CT", l: "Connecticut" }, { v: "DE", l: "Delaware" }, { v: "FL", l: "Florida" },
-  { v: "GA", l: "Georgia" }, { v: "HI", l: "Hawaii" }, { v: "IL", l: "Illinois" },
-  { v: "IN", l: "Indiana" }, { v: "IA", l: "Iowa" }, { v: "KS", l: "Kansas" },
-  { v: "KY", l: "Kentucky" }, { v: "LA", l: "Louisiana" }, { v: "ME", l: "Maine" },
-  { v: "MD", l: "Maryland" }, { v: "MA", l: "Massachusetts" }, { v: "MI", l: "Michigan" },
-  { v: "MN", l: "Minnesota" }, { v: "MS", l: "Mississippi" }, { v: "MO", l: "Missouri" },
-  { v: "MT", l: "Montana" }, { v: "NE", l: "Nebraska" }, { v: "NV", l: "Nevada" },
-  { v: "NH", l: "New Hampshire" }, { v: "NJ", l: "New Jersey" }, { v: "NM", l: "New Mexico" },
-  { v: "NY", l: "New York" }, { v: "NC", l: "North Carolina" }, { v: "ND", l: "North Dakota" },
-  { v: "OH", l: "Ohio" }, { v: "OK", l: "Oklahoma" }, { v: "OR", l: "Oregon" },
-  { v: "PA", l: "Pennsylvania" }, { v: "RI", l: "Rhode Island" }, { v: "SC", l: "South Carolina" },
-  { v: "SD", l: "South Dakota" }, { v: "TN", l: "Tennessee" }, { v: "TX", l: "Texas" },
-  { v: "UT", l: "Utah" }, { v: "VT", l: "Vermont" }, { v: "VA", l: "Virginia" },
-  { v: "WA", l: "Washington" }, { v: "WV", l: "West Virginia" }, { v: "WI", l: "Wisconsin" },
-  { v: "WY", l: "Wyoming" }, { v: "DC", l: "Washington D.C." },
-];
-
 /**
- * Step "who" — state confirmation, therapy type + age group.
- * If the patient is not in Idaho, show a waitlist signup panel
- * instead of letting them continue the intake.
+ * Step "who" — what type of therapy + age group + state of the client.
+ * If the user picks a state we don't serve yet, we show a waitlist
+ * signup instead of letting them continue the intake.
  */
 export function WhoStep({ data, set, hardCapacity }) {
   const hc = hardCapacity || {};
@@ -51,22 +31,19 @@ export function WhoStep({ data, set, hardCapacity }) {
       ? `${agDisabled.length} option${agDisabled.length === 1 ? "" : "s"} unavailable — we're recruiting more therapists for those age groups`
       : "";
 
-  // State choice: "ID" or "other"
-  const [stateChoice, setStateChoice] = useState(
-    data.location_state === "ID" ? "ID" : (data.location_state ? "other" : "ID")
-  );
+  const isCovered = COVERED_STATES.has(data.location_state);
   const [waitlistEmail, setWaitlistEmail] = useState("");
-  const [waitlistState, setWaitlistState] = useState("");
   const [waitlistSubmitted, setWaitlistSubmitted] = useState(false);
   const [waitlistLoading, setWaitlistLoading] = useState(false);
 
   const handleWaitlist = async () => {
-    if (!waitlistEmail || !waitlistState) return;
+    if (!waitlistEmail) return;
     setWaitlistLoading(true);
     try {
-      await api.post("/waitlist", { email: waitlistEmail, state: waitlistState });
+      await api.post("/waitlist", { email: waitlistEmail, state: data.location_state });
       setWaitlistSubmitted(true);
     } catch {
+      // still show success — don't leak validation to bots
       setWaitlistSubmitted(true);
     } finally {
       setWaitlistLoading(false);
@@ -75,66 +52,52 @@ export function WhoStep({ data, set, hardCapacity }) {
 
   return (
     <div className="space-y-6">
-      <Group label="Where is the client located?">
+      <Group label="What state is the client located in?">
         <select
-          value={stateChoice}
+          value={data.location_state}
           onChange={(e) => {
-            const v = e.target.value;
-            setStateChoice(v);
-            if (v === "ID") {
-              set("location_state", "ID");
-            } else {
-              set("location_state", "");
-            }
+            set("location_state", e.target.value);
             setWaitlistSubmitted(false);
           }}
           className="w-full bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 text-sm text-[#2B2A29] focus:outline-none focus:ring-2 focus:ring-[#C87965]/30"
           data-testid="state-select"
         >
-          <option value="ID">Idaho</option>
-          <option value="other">Not in Idaho</option>
+          <option value="" disabled>Select a state...</option>
+          {US_STATES.map((s) => (
+            <option key={s.v} value={s.v}>{s.l}</option>
+          ))}
         </select>
       </Group>
 
-      {stateChoice === "other" && (
+      {!isCovered && (
         <div className="bg-white border border-[#E8E5DF] rounded-2xl p-6" data-testid="waitlist-panel">
           {waitlistSubmitted ? (
-            <div className="text-center py-2">
+            <div className="text-center">
               <p className="text-[#2D4A3E] font-serif-display text-lg">You're on the list!</p>
               <p className="text-sm text-[#6D6A65] mt-2">
-                We'll email you as soon as TheraVoca launches in your state.
+                We'll email you as soon as TheraVoca launches in{" "}
+                <strong>{US_STATES.find((s) => s.v === data.location_state)?.l || data.location_state}</strong>.
               </p>
             </div>
           ) : (
             <>
               <p className="text-sm text-[#2B2A29] leading-relaxed">
-                We're currently matching patients in <strong>Idaho</strong> only. We're expanding —
-                join our waitlist and we'll notify you when we launch in your state.
+                We're currently matching patients in <strong>Idaho</strong> only. We're expanding — join our waitlist and we'll notify you when we launch in{" "}
+                <strong>{US_STATES.find((s) => s.v === data.location_state)?.l || data.location_state}</strong>.
               </p>
-              <div className="mt-4 space-y-3">
-                <select
-                  value={waitlistState}
-                  onChange={(e) => setWaitlistState(e.target.value)}
-                  className="w-full bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C87965]/30"
-                  data-testid="waitlist-state"
-                >
-                  <option value="" disabled>Select your state...</option>
-                  {US_STATES.map((s) => (
-                    <option key={s.v} value={s.v}>{s.l}</option>
-                  ))}
-                </select>
+              <div className="mt-4 flex gap-2">
                 <input
                   type="email"
                   value={waitlistEmail}
                   onChange={(e) => setWaitlistEmail(e.target.value)}
                   placeholder="your@email.com"
-                  className="w-full bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C87965]/30"
+                  className="flex-1 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C87965]/30"
                   data-testid="waitlist-email"
                 />
                 <button
                   onClick={handleWaitlist}
-                  disabled={!waitlistEmail || !waitlistState || waitlistLoading}
-                  className="tv-btn-primary text-sm w-full py-2.5 disabled:opacity-50"
+                  disabled={!waitlistEmail || waitlistLoading}
+                  className="tv-btn-primary text-sm px-5 py-2.5 disabled:opacity-50"
                   data-testid="waitlist-submit"
                 >
                   {waitlistLoading ? "Joining..." : "Notify me"}
@@ -145,7 +108,7 @@ export function WhoStep({ data, set, hardCapacity }) {
         </div>
       )}
 
-      {stateChoice === "ID" && (
+      {isCovered && (
         <>
           <Group label="What type of therapy is needed?">
             <PillRow
@@ -184,24 +147,37 @@ export function WhoStep({ data, set, hardCapacity }) {
 }
 
 /**
- * Step "issues" — main concerns (max 3).
+ * Step "issues" — main concerns (max 5) + severity scale (1-5) for each.
  */
 export function IssuesStep({ data, set, toggleArr }) {
+  const severity = data.issue_severity || {};
+  const ISSUE_LABELS = Object.fromEntries(ISSUES.map((i) => [i.v, i.l]));
+
+  const setSeverity = (issueKey, level) => {
+    set("issue_severity", { ...severity, [issueKey]: level });
+  };
+
   return (
     <div>
       <Group
         label="Main concerns the client wants help with"
-        hint={`Pick up to 3, in priority order — your 1st pick is the primary concern (used as a hard filter to find specialists). 2nd & 3rd add bonus weight to the ranking. (${data.presenting_issues.length}/3)`}
+        hint={`Pick up to 5, in priority order — your 1st pick is the primary concern (used as a hard filter to find specialists). 2nd & 3rd add bonus weight to the ranking. (${data.presenting_issues.length}/5)`}
       >
         <PillRow
           items={ISSUES}
           selected={data.presenting_issues}
-          onSelect={(v) => toggleArr("presenting_issues", v, 3)}
+          onSelect={(v) => toggleArr("presenting_issues", v, 5)}
           testid="issue"
           showRank
         />
       </Group>
 
-    </div>
-  );
-}
+      {data.presenting_issues.length > 0 && (
+        <Group
+          label="How much is each concern affecting daily life?"
+          hint="1 = mild, occasional · 5 = severe, daily interference"
+        >
+          <div className="space-y-3">
+            {data.presenting_issues.map((issueKey) => (
+              <div key={issueKey} className="flex items-center gap-3">
+                <span className="text-sm text-

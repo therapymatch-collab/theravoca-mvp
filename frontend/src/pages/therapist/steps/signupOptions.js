@@ -35,6 +35,12 @@ export const ISSUES = [
   { v: "eating_concerns", l: "Eating concerns" },
   { v: "autism_neurodivergence", l: "Autism / neurodivergence" },
   { v: "school_academic_stress", l: "School / academic stress" },
+  { v: "personality_concerns", l: "Personality concerns" },
+  { v: "anger_emotional_regulation", l: "Anger / emotional regulation" },
+  { v: "psychosis_reality_testing", l: "Psychosis / reality testing" },
+  { v: "self_harm_safety", l: "Self-harm / safety concerns" },
+  { v: "grief_loss", l: "Grief / loss" },
+  { v: "bipolar_mood_instability", l: "Bipolar / mood instability" },
 ];
 
 export const MODALITIES = [
@@ -86,15 +92,4 @@ export const MODALITY_OFFERINGS = [
 
 export const GENDERS = [
   { v: "female", l: "Female" },
-  { v: "male", l: "Male" },
-  { v: "nonbinary", l: "Nonbinary" },
-];
-
-// Specialty tier styling — used by Step4Specialties to render the
-// 4 tier buttons. Tuple shape: [tier-slug-or-null, label, accent].
-export const SPECIALTY_TIERS = [
-  ["primary", "Primary", "#2D4A3E"],
-  ["secondary", "Secondary", "#3A5E50"],
-  ["general", "General", "#6D6A65"],
-  [null, "—", "#E8E5DF"],
-];
+  { v

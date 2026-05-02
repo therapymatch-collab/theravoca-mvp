@@ -187,8 +187,18 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
         location_bits.append(req["location_zip"])
     location_str = ", ".join(location_bits) or "—"
     issues = req.get("presenting_issues") or []
+    severity = req.get("issue_severity") or {}
     if isinstance(issues, list):
-        issues_display = ", ".join(i.replace("_", " ").title() for i in issues if i)
+        parts = []
+        for i in issues:
+            if not i:
+                continue
+            label = i.replace("_", " ").title()
+            sev = severity.get(i)
+            if sev:
+                label += f" ({sev}/5)"
+            parts.append(label)
+        issues_display = ", ".join(parts)
     else:
         issues_display = str(issues)
     payment_type_raw = (req.get("payment_type") or "either").lower()
@@ -253,57 +263,6 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
         "Prior therapy": (req.get("prior_therapy") or "").replace("_", " ").title(),
         "Style preference": style_display,
     }
-    # ─── Deep match answers (P1/P2/P3) ─────────────────────────────────
-    if req.get("deep_match_opt_in"):
-        p1 = req.get("p1_communication") or []
-        p2 = req.get("p2_change") or []
-        p3 = (req.get("p3_resonance") or "").strip()
-        _P1_LABELS = {
-            "leads_structured": "Someone who leads with structure and direction",
-            "follows_lead": "Someone who follows my lead and lets me set the pace",
-            "challenges": "Someone who challenges me, even when it's uncomfortable",
-            "warm_first": "Someone who's warm and encouraging above all",
-            "direct_honest": "Someone who's direct and tells it like it is",
-            "guides_questions": "Someone who asks the right questions so I get there myself",
-        }
-        _P2_LABELS = {
-            "deep_emotional": "Go deep into emotions",
-            "practical_tools": "Stay practical — give me tools",
-            "explore_past": "Look back — understand patterns",
-            "focus_forward": "Look forward — focus on who I'm becoming",
-            "build_insight": "Help me understand myself",
-            "shift_relationships": "Change how I show up in relationships",
-        }
-        if p1:
-            summary["Relationship style (deep match)"] = ", ".join(
-                _P1_LABELS.get(v, v.replace("_", " ").title()) for v in p1
-            )
-        if p2:
-            summary["Way of working (deep match)"] = ", ".join(
-                _P2_LABELS.get(v, v.replace("_", " ").title()) for v in p2
-            )
-        if p3:
-            summary["What therapist should already get (deep match)"] = p3[:1500]
-
-    # ─── Gender & experience preferences ──────────────────────────────
-    gender_pref = req.get("gender_preference") or "no_pref"
-    if gender_pref and gender_pref != "no_pref":
-        summary["Gender preference"] = gender_pref.replace("_", " ").title()
-    exp_pref = req.get("experience_preference") or []
-    if isinstance(exp_pref, str):
-        exp_pref = [exp_pref] if exp_pref else []
-    if exp_pref:
-        summary["Experience preference"] = ", ".join(
-            e.replace("_", " ").title() for e in exp_pref if e
-        )
-
-    # ─── Priority factors ─────────────────────────────────────────────
-    pf = req.get("priority_factors") or []
-    if pf:
-        summary["Priority factors"] = ", ".join(
-            p.replace("_", " ").title() for p in pf if p
-        )
-
     # Always surface the patient's free-text prior-therapy notes when
     # present, regardless of whether they said "yes_helped" or
     # "yes_not_helped". Previously the notes were ONLY shown when the
@@ -691,8 +650,4 @@ async def _backfill_therapist_geo() -> None:
     )
     count = 0
     async for doc in cursor:
-        geos = await geocode_offices(db, doc.get("office_locations") or [], "ID")
-        await db.therapists.update_one({"id": doc["id"]}, {"$set": {"office_geos": geos}})
-        count += 1
-    if count:
-        logger.info("Backfilled office_geos for %d therapists", count)
+        g

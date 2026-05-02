@@ -58,6 +58,12 @@ export const ISSUES = [
   { v: "eating_concerns", l: "Eating concerns" },
   { v: "autism_neurodivergence", l: "Autism / neurodivergence" },
   { v: "school_academic_stress", l: "School / academic stress" },
+  { v: "personality_concerns", l: "Personality concerns" },
+  { v: "anger_emotional_regulation", l: "Anger / emotional regulation" },
+  { v: "psychosis_reality_testing", l: "Psychosis / reality testing" },
+  { v: "self_harm_safety", l: "Self-harm / safety concerns" },
+  { v: "grief_loss", l: "Grief / loss" },
+  { v: "bipolar_mood_instability", l: "Bipolar / mood instability" },
 ];
 
 export const MODALITY = [
@@ -144,9 +150,4 @@ export const EXPECTATION_OPTIONS = [
 // main concern, age group) and the patient-toggleable hards
 // (insurance, availability, urgency, gender, format/distance) are
 // enforced earlier in the form. Priority factors here let the patient
-// nudge ranking on the remaining SOFT axes.
-export const PRIORITY_FACTORS = [
-  { v: "modality",   l: "Therapy approach",      d: "CBT / EMDR / IFS preference (soft — boosted in ranking)" },
-  { v: "experience", l: "Therapist experience",  d: "Years in practice (soft — boosted in ranking)" },
-  { v: "identity",   l: "Therapist style & gender", d: "Communication style + therapist gender preference (soft)" },
-];
+// nudge ranking on the remaining SOFT
