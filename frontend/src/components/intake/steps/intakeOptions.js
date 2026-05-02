@@ -150,4 +150,9 @@ export const EXPECTATION_OPTIONS = [
 // main concern, age group) and the patient-toggleable hards
 // (insurance, availability, urgency, gender, format/distance) are
 // enforced earlier in the form. Priority factors here let the patient
-// nudge ranking on the remaining SOFT
+// nudge ranking on the remaining SOFT axes.
+export const PRIORITY_FACTORS = [
+  { v: "modality",   l: "Therapy approach",      d: "CBT / EMDR / IFS preference (soft — boosted in ranking)" },
+  { v: "experience", l: "Therapist experience",  d: "Years in practice (soft — boosted in ranking)" },
+  { v: "identity",   l: "Therapist style & gender", d: "Communication style + therapist gender preference (soft)" },
+];

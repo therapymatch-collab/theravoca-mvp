@@ -92,4 +92,15 @@ export const MODALITY_OFFERINGS = [
 
 export const GENDERS = [
   { v: "female", l: "Female" },
-  { v
+  { v: "male", l: "Male" },
+  { v: "nonbinary", l: "Nonbinary" },
+];
+
+// Specialty tier styling — used by Step4Specialties to render the
+// 4 tier buttons. Tuple shape: [tier-slug-or-null, label, accent].
+export const SPECIALTY_TIERS = [
+  ["primary", "Primary", "#2D4A3E"],
+  ["secondary", "Secondary", "#3A5E50"],
+  ["general", "General", "#6D6A65"],
+  [null, "—", "#E8E5DF"],
+];

@@ -186,12 +186,11 @@ export default function IntakeForm() {
   const [data, setData] = useState({
     client_type: "",
     age_group: "",
-    location_state: "",
+    location_state: "ID",
     location_city: "",
     location_zip: "",
     presenting_issues: [],
     issue_severity: {},
-    other_issue: "",
     modality_preference: "",
     modality_preferences: [],
     payment_type: "",
@@ -218,7 +217,6 @@ export default function IntakeForm() {
     phone: "",
     sms_opt_in: false,
     session_expectations: [],   // pick up to 2 from EXPECTATION_OPTIONS
-    session_expectations_notes: "",  // optional free-text for matching
     priority_factors: [],
     strict_priorities: false,
     // ── Deep-match opt-in fields (P1/P2/P3 — only collected when the
@@ -578,7 +576,7 @@ export default function IntakeForm() {
       <div className="max-w-3xl mx-auto px-5 sm:px-8">
         <div className="text-center mb-10">
           <p className="text-xs uppercase tracking-[0.2em] text-[#C87965] mb-3">
-            Get started
+            {t("intake.eyebrow", "Get started")}
           </p>
           <h2 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] leading-tight">
             Get your personalized list of <em>pre-qualified</em> therapists
@@ -683,7 +681,7 @@ export default function IntakeForm() {
             )}
 
             {currentId === "format_logistics" && (
-              <>
+              <div className="space-y-8">
                 <FormatStep
                   data={data}
                   set={set}
@@ -692,8 +690,9 @@ export default function IntakeForm() {
                   setZipError={setZipError}
                   hardCapacity={hardCapacity}
                 />
+                <div className="border-t border-[#E8E5DF] pt-6" />
                 <LogisticsStep data={data} set={set} toggleArr={toggleArr} hardCapacity={hardCapacity} />
-              </>
+              </div>
             )}
 
             {currentId === "payment" && (
@@ -855,4 +854,6 @@ export default function IntakeForm() {
 // Note: Group / Field / PillRow / PillCol / CheckRow used to live
 // here. They were extracted to `components/intake/IntakeUI.jsx` so
 // the per-step renderers in `components/intake/DeepMatchSteps.jsx`
-// (and the planned per-step files) can import them without c
+// (and the planned per-step files) can import them without circular
+// references.
+
