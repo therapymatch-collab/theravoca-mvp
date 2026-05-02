@@ -1162,8 +1162,10 @@ export default function AdminDashboard() {
                 }}
               />
 
-              {/* Per-tab search — applies a substring filter to whichever list is open */}
-              <div className="mt-4 flex items-center gap-2 max-w-md" data-testid="admin-search-wrap">
+              {/* Per-tab search — only for tabs with filterable lists */}
+              {["requests", "therapists", "all_therapists", "invited_therapists",
+                "opt_outs", "feedback", "patients", "completion"].includes(tab) && (
+              <div className="mt-6 flex items-center gap-2 max-w-md" data-testid="admin-search-wrap">
                 <div className="relative flex-1">
                   <Search
                     size={14}
@@ -1189,6 +1191,7 @@ export default function AdminDashboard() {
                   </button>
                 )}
               </div>
+              )}
 
               {tab === "requests" && (
                 <RequestsPanel

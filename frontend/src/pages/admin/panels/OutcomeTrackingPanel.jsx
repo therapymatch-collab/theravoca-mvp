@@ -5,12 +5,11 @@ import { Loader2, TrendingUp, Users, MessageSquare, BarChart3, ChevronDown, Chev
 const MILESTONE_LABELS = {
   "48h": "48-Hour Check-in",
   "3w": "3-Week Selection",
-  "5w": "5-Week Follow-up",
   "9w": "9-Week Retention",
   "15w": "15-Week Outcome",
 };
 
-const MILESTONE_ORDER = ["48h", "3w", "5w", "9w", "15w"];
+const MILESTONE_ORDER = ["48h", "3w", "9w", "15w"];
 
 function TaiGauge({ score }) {
   const color = score >= 75 ? "#2D8B5E" : score >= 50 ? "#D4A843" : "#D45D5D";
