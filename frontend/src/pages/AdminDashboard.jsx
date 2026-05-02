@@ -1193,6 +1193,12 @@ export default function AdminDashboard() {
               </div>
               )}
 
+              {/* Consistent spacing between tab links and panel content */}
+              {!["requests", "therapists", "all_therapists", "invited_therapists",
+                "opt_outs", "feedback", "patients", "completion"].includes(tab) && (
+                <div className="mt-6" />
+              )}
+
               {tab === "requests" && (
                 <RequestsPanel
                   requests={requests}

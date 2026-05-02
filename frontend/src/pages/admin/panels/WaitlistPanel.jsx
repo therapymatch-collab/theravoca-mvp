@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Users, MapPin, Mail, Clock, Briefcase } from "lucide-react";
+import { Users, MapPin, Mail, Briefcase } from "lucide-react";
 
 /**
  * WaitlistPanel — admin view of patient + therapist waitlist signups.
@@ -101,14 +101,10 @@ export default function WaitlistPanel({ client }) {
             ) : (
               <div className="divide-y divide-[#E8E5DF]">
                 {patientData.entries.map((e) => (
-                  <div key={e.id} className="py-2 flex items-center justify-between text-sm">
-                    <div>
-                      <span className="text-[#2B2A29]">{e.email}</span>
-                      <span className="ml-2 text-xs bg-[#FDFBF7] border border-[#E8E5DF] rounded-full px-2 py-0.5 text-[#6D6A65]">{e.state}</span>
-                    </div>
-                    <span className="text-xs text-[#6D6A65] flex items-center gap-1">
-                      <Clock size={12} /> {new Date(e.created_at).toLocaleDateString()}
-                    </span>
+                  <div key={e.id} className="py-2 flex items-center gap-4 text-sm">
+                    <span className="text-xs text-[#6D6A65] whitespace-nowrap">{new Date(e.created_at).toLocaleDateString()}</span>
+                    <span className="text-[#2B2A29] flex-1 truncate">{e.email}</span>
+                    <span className="text-xs bg-[#FDFBF7] border border-[#E8E5DF] rounded-full px-2 py-0.5 text-[#6D6A65] whitespace-nowrap">{e.state}</span>
                   </div>
                 ))}
               </div>
@@ -146,22 +142,10 @@ export default function WaitlistPanel({ client }) {
             ) : (
               <div className="divide-y divide-[#E8E5DF]">
                 {therapistData.entries.map((e) => (
-                  <div key={e.id} className="py-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="text-[#2B2A29] font-medium">{e.name}</span>
-                        <span className="ml-2 text-[#6D6A65]">{e.email}</span>
-                      </div>
-                      <span className="text-xs text-[#6D6A65] flex items-center gap-1">
-                        <Clock size={12} /> {new Date(e.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <div className="mt-1 flex gap-2">
-                      <span className="text-xs bg-[#FDFBF7] border border-[#E8E5DF] rounded-full px-2 py-0.5 text-[#6D6A65]">{e.state}</span>
-                      {e.credential_type && (
-                        <span className="text-xs bg-[#FDFBF7] border border-[#E8E5DF] rounded-full px-2 py-0.5 text-[#6D6A65]">{e.credential_type}</span>
-                      )}
-                    </div>
+                  <div key={e.id} className="py-2 flex items-center gap-4 text-sm">
+                    <span className="text-xs text-[#6D6A65] whitespace-nowrap">{new Date(e.created_at).toLocaleDateString()}</span>
+                    <span className="text-[#2B2A29] flex-1 truncate">{e.email}</span>
+                    <span className="text-xs bg-[#FDFBF7] border border-[#E8E5DF] rounded-full px-2 py-0.5 text-[#6D6A65] whitespace-nowrap">{e.state}</span>
                   </div>
                 ))}
               </div>
