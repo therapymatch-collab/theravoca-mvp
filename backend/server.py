@@ -125,6 +125,20 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="TheraVoca API", lifespan=lifespan)
 app.include_router(api_router)
+
+# ── Build version endpoint ──────────────────────────────────────────
+_SERVER_START = __import__("datetime").datetime.utcnow().isoformat() + "Z"
+
+@app.get("/api/version")
+async def get_version():
+    """Return build info so admins can verify what's actually deployed."""
+    return {
+        "commit": os.environ.get("RENDER_GIT_COMMIT", "unknown"),
+        "service": os.environ.get("RENDER_SERVICE_NAME", "local"),
+        "branch": os.environ.get("RENDER_GIT_BRANCH", "unknown"),
+        "started_at": _SERVER_START,
+    }
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
