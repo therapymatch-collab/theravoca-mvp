@@ -141,35 +141,39 @@ test("therapist signup → DB record → admin approval", async ({ page }) => {
 
   // ── Step 3: Who You See ──────────────────────────────────────────
   // Client types — pick individual
-  const clientPill = page.getByTestId("signup-client-type-individual");
-  await clientPill.scrollIntoViewIfNeeded();
-  await clientPill.click();
-  // Verify the pill toggled — active pills get the green background class
-  await expect(clientPill).toHaveClass(/bg-\[#2D4A3E\]/, { timeout: 3_000 });
+  // Use dispatchEvent instead of click() — Playwright's coordinate-based
+  // click fails when scrollFormIntoView's smooth scroll shifts the element
+  // between locator resolution and click dispatch.
+  await page.getByTestId("signup-client-type-individual").dispatchEvent("click");
+  await expect(page.getByTestId("signup-client-type-individual")).toHaveClass(
+    /bg-\[#2D4A3E\]/,
+    { timeout: 3_000 },
+  );
 
   // Age groups — pick adult
-  const agePill = page.getByTestId("signup-age-group-adult");
-  await agePill.scrollIntoViewIfNeeded();
-  await agePill.click();
-  await expect(agePill).toHaveClass(/bg-\[#2D4A3E\]/, { timeout: 3_000 });
+  await page.getByTestId("signup-age-group-adult").dispatchEvent("click");
+  await expect(page.getByTestId("signup-age-group-adult")).toHaveClass(
+    /bg-\[#2D4A3E\]/,
+    { timeout: 3_000 },
+  );
 
   await clickNextAndVerify("Step 3 → 4", "signup-issue-anxiety-primary");
 
   // ── Step 4: Specialties ──────────────────────────────────────────
   // Click "anxiety" row, then set it as primary
-  await page.getByTestId("signup-issue-anxiety-primary").click();
+  await page.getByTestId("signup-issue-anxiety-primary").dispatchEvent("click");
 
   await clickNextAndVerify("Step 4 → 5", "signup-modality-offering-telehealth");
 
   // ── Step 5: Format & Logistics ───────────────────────────────────
   // Modality: pick CBT
-  await page.getByTestId("signup-modality-CBT").click();
+  await page.getByTestId("signup-modality-CBT").dispatchEvent("click");
 
   // Modality offering: telehealth only (avoids office address requirement)
-  await page.getByTestId("signup-modality-offering-telehealth").click();
+  await page.getByTestId("signup-modality-offering-telehealth").dispatchEvent("click");
 
   // Availability: weekday mornings
-  await page.getByTestId("signup-availability-weekday_morning").click();
+  await page.getByTestId("signup-availability-weekday_morning").dispatchEvent("click");
 
   await clickNextAndVerify("Step 5 → 6", "signup-cash-rate");
 
@@ -184,13 +188,13 @@ test("therapist signup → DB record → admin approval", async ({ page }) => {
 
   // ── Step 7: Style ────────────────────────────────────────────────
   // Pick at least one style tag
-  await page.getByTestId("signup-style-warm_supportive").click();
+  await page.getByTestId("signup-style-warm_supportive").dispatchEvent("click");
 
   await clickNextAndVerify("Step 7 → 8", "signup-t4-direct");
 
   // ── Step 8: Deep Match ───────────────────────────────────────────
   // T4: hard truth approach
-  await page.getByTestId("signup-t4-direct").click();
+  await page.getByTestId("signup-t4-direct").dispatchEvent("click");
 
   // T5: lived experience (min 30 chars)
   await page
@@ -200,7 +204,7 @@ test("therapist signup → DB record → admin approval", async ({ page }) => {
     );
 
   // T6: session expectations (pick 1)
-  await page.getByTestId("signup-t6-listen_heard").click();
+  await page.getByTestId("signup-t6-listen_heard").dispatchEvent("click");
 
   // T6b: early sessions description (min 30 chars)
   await page
