@@ -59,7 +59,7 @@ test("patient intake → verify → results", async ({ page }) => {
   await page.waitForSelector('[data-testid="intake-section"]', { timeout: 10_000 });
 
   // ── Step 1: Who ────────────────────────────────────────────────
-  await expect(page.getByTestId("step-label")).toContainText("Step 1");
+  await expect(page.getByTestId("step-label")).toContainText("Step 99"); // INTENTIONAL BREAK
 
   // State defaults to Idaho — leave it
   await expect(page.getByTestId("state-select")).toHaveValue("ID");
