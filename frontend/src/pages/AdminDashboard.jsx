@@ -2658,14 +2658,13 @@ export default function AdminDashboard() {
                 <button
                   className="tv-btn-primary !py-2 !px-4 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                   onClick={() => triggerResults(detail.request.id)}
-                  disabled={!!detail.request.results_sent_at}
                   data-testid="trigger-results-btn"
                   title={detail.request.results_sent_at
-                    ? `Results delivered at ${detail.request.results_sent_at}`
+                    ? `Results delivered at ${detail.request.results_sent_at} \u2014 click to re-send`
                     : "Re-run matching, email therapist invites, and release the 24h hold so the patient sees results immediately"}
                 >
                   <Send size={14} className="inline mr-1.5" />
-                  {detail.request.results_sent_at ? "Matches sent to patient" : "Send matches now"}
+                  {detail.request.results_sent_at ? "Re-send matches to patient" : "Send matches now"}
                 </button>
                 <button
                   className="tv-btn-secondary !py-2 !px-4 text-sm"
