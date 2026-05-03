@@ -7,13 +7,13 @@ Approach (pragmatic, single-process, no proxy stack):
 1. Fetch the PT search results page for the patient's state + city. PT
    embeds a `<script type="application/ld+json">` block listing each
    therapist as a Schema.org Person with name, profile URL, phone, and
-   address. We parse that JSON-LD â no fragile CSS selectors, no JS
+   address. We parse that JSON-LD Ã¢ÂÂ no fragile CSS selectors, no JS
    rendering required.
 2. For each candidate profile, fetch the profile page and scrape:
      - License credentials (LCSW / LMFT / LCPC / LPC / PsyD / PhD)
      - Specialties
      - External website URL (if any)
-   PT does NOT expose therapist emails publicly â they gate them behind a
+   PT does NOT expose therapist emails publicly Ã¢ÂÂ they gate them behind a
    contact form. So we record the phone (always present in JSON-LD) and
    best-guess an email from the website domain when one is published.
 3. The outreach agent (`outreach_agent.run_outreach_for_request`) then uses
@@ -66,7 +66,7 @@ LICENSE_SUFFIXES = (
     "PsyD", "PhD", "MD", "LMSW", "MA", "MEd", "MSW", "EdSP",
 )
 
-# Specialty keyword â internal slug
+# Specialty keyword Ã¢ÂÂ internal slug
 SPECIALTY_KEYWORDS = {
     "anxiety": "anxiety",
     "depression": "depression",
@@ -90,7 +90,7 @@ SPECIALTY_KEYWORDS = {
     "grief": "life_transitions",
 }
 
-# Maximum profile detail fetches per outreach run â keeps PT happy and
+# Maximum profile detail fetches per outreach run Ã¢ÂÂ keeps PT happy and
 # request-handler latency bounded.
 MAX_PROFILE_FETCHES = int(os.environ.get("PT_MAX_PROFILE_FETCHES", "30"))
 REQUEST_DELAY_SEC = float(os.environ.get("PT_REQUEST_DELAY_SEC", "0.6"))
@@ -121,7 +121,7 @@ async def _http_get(url: str, client: httpx.AsyncClient, *, retries: int = 2) ->
 
 
 def _city_slug(city: str) -> str:
-    """'Idaho Falls' â 'idaho-falls'. Matches PT URL slug convention."""
+    """'Idaho Falls' Ã¢ÂÂ 'idaho-falls'. Matches PT URL slug convention."""
     return re.sub(r"[^a-z0-9\-]+", "-", (city or "").lower().strip()).strip("-")
 
 
@@ -232,7 +232,7 @@ def _parse_external_website(html: str) -> Optional[str]:
 def _guess_email_from_website(website: str, name: str) -> Optional[str]:
     """Best-effort email guess. We do NOT call the website (avoid noisy crawls
     + privacy risk); we just synthesize a plausible address from the domain.
-    The outreach agent treats this as low-confidence â bounce-back tracking
+    The outreach agent treats this as low-confidence Ã¢ÂÂ bounce-back tracking
     in Resend handles invalid sends gracefully."""
     if not website:
         return None
@@ -242,7 +242,7 @@ def _guess_email_from_website(website: str, name: str) -> Optional[str]:
     domain = m.group(1).lower().lstrip("www.")
     if not domain or "." not in domain:
         return None
-    # Never guess emails for directory domains — these are shared mailboxes
+    # Never guess emails for directory domains â these are shared mailboxes
     SKIP_DOMAINS = (
         "psychologytoday.com", "therapyden.com", "goodtherapy.org",
         "healthgrades.com", "zocdoc.com", "betterhelp.com",
@@ -287,24 +287,44 @@ def _is_fake_phone(raw: str) -> bool:
 
 async def _fetch_website_text_for_contacts(
     url: str, client: httpx.AsyncClient,
-) -> str:
-    """Fetch a therapist website and return cleaned text (max 15 000 chars)."""
+) -> Optional[str]:
+    """Fetch a therapist's personal website and return cleaned text for
+    contact extraction.  Extracts mailto: links and visible email addresses
+    from the raw HTML before stripping tags, so the LLM can see them."""
+    if not url:
+        return None
     try:
-        r = await client.get(
-            url, follow_redirects=True, timeout=12,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; Theravoca/1.0)"},
+        html = await _http_get(url, client)
+        if not html:
+            return None
+        # ---- pull emails out of the raw HTML BEFORE stripping tags ----
+        # 1) mailto: links
+        mailto_emails = re.findall(r'mailto:([\w.+\-]+@[\w\-]+\.[\w.\-]+)', html, re.I)
+        # 2) any email-shaped string in href / text
+        raw_emails = re.findall(r'[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}', html)
+        # combine, de-dup, drop directory emails
+        found_emails = list(dict.fromkeys(mailto_emails + raw_emails))
+        found_emails = [
+            e for e in found_emails
+            if not any(e.lower().endswith(d) for d in (
+                "psychologytoday.com", "therapyden.com", "goodtherapy.org",
+                "sentry.io", "googleusercontent.com", "w3.org",
+            ))
+        ]
+        # ---- strip scripts / styles / tags ----
+        no_script = re.sub(
+            r"<(script|style)[^>]*>.*?</\1>", " ", html,
+            flags=re.DOTALL | re.I,
         )
-        r.raise_for_status()
-        html = r.text
-    except Exception:
-        return ""
-    # Strip tags crudely
-    text = re.sub(r"<script[^>]*>[\s\S]*?</script>", "", html, flags=re.I)
-    text = re.sub(r"<style[^>]*>[\s\S]*?</style>", "", text, flags=re.I)
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text[:15_000]
-
+        text = re.sub(r"<[^>]+>", " ", no_script)
+        text = re.sub(r"\s+", " ", text).strip()[:14_000]
+        # append extracted emails so the LLM always has them
+        if found_emails:
+            text += " CONTACT EMAILS FOUND ON PAGE: " + ", ".join(found_emails)
+        return text
+    except Exception as e:
+        logger.warning("Failed to fetch website %s: %s", url, e)
+        return None
 
 async def _extract_contacts_from_website(
     url: str, name: str, client: httpx.AsyncClient,
@@ -403,15 +423,11 @@ async def scrape_pt_candidates(
                 # Clear fake PT phone if we didn't find a real one
                 if _is_fake_phone(c.get("phone", "")):
                     c["phone"] = ""
-                # Fall back to guessed email if LLM found nothing
-                if not c.get("email"):
-                    c["email"] = _guess_email_from_website(website, c["name"]) or ""
-                    if c["email"]:
-                        c["email_source"] = "guessed"
+
                 await asyncio.sleep(REQUEST_DELAY_SEC)
 
     logger.info(
-        "PT scrape: state=%s city=%s pages<=%d â %d candidates (enriched=%d)",
+        "PT scrape: state=%s city=%s pages<=%d Ã¢ÂÂ %d candidates (enriched=%d)",
         state_code, city, max_pages, len(out),
         sum(1 for c in out if c.get("license_types")),
     )
