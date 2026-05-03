@@ -152,9 +152,9 @@ test("therapist apply → DB record", async ({ page }) => {
   });
 
   // ── Verify match data loaded ────────────────────────────────────
-  // The page should show the match score
+  // The page should show the match score (87.5 rounds to 88%)
   const pageText = await page.textContent("body");
-  expect(pageText).toContain("87");
+  expect(pageText).toContain("88%");
 
   // ── Fill the message ────────────────────────────────────────────
   await page.getByTestId("therapist-message").fill(
