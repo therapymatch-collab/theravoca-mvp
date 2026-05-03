@@ -49,13 +49,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
 
       - name: Build frontend
         working-directory: frontend
         run: |
-          npm ci
+          npm install
           CI=false npx craco build
           # Copy build output to where _start.py expects it
           cp -r build ../backend/static_build
@@ -64,7 +62,7 @@ jobs:
       - name: Install E2E deps
         working-directory: tests/e2e
         run: |
-          npm ci
+          npm install
           npx playwright install --with-deps chromium
 
       # ── Start backend ──────────────────────────────────────
