@@ -54,7 +54,7 @@ jobs:
         working-directory: frontend
         run: |
           npm install --legacy-peer-deps
-          CI=false npx craco build
+          REACT_APP_BACKEND_URL=http://localhost:10000 CI=false npx craco build
           # Copy build output to where _start.py expects it
           cp -r build ../backend/static_build
 
