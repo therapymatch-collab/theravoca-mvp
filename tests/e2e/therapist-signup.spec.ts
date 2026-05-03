@@ -141,17 +141,19 @@ test("therapist signup → DB record → admin approval", async ({ page }) => {
 
   // ── Step 3: Who You See ──────────────────────────────────────────
   // Client types — pick individual
-  // Use dispatchEvent instead of click() — Playwright's coordinate-based
-  // click fails when scrollFormIntoView's smooth scroll shifts the element
-  // between locator resolution and click dispatch.
-  await page.getByTestId("signup-client-type-individual").dispatchEvent("click");
+  // Use evaluate(el => el.click()) — Playwright's coordinate-based click()
+  // fails when scrollFormIntoView's smooth scroll shifts the element, and
+  // dispatchEvent("click") creates a synthetic event that React's event
+  // delegation ignores.  The native HTMLElement.click() method dispatches
+  // a properly-routed event that React processes.
+  await page.getByTestId("signup-client-type-individual").evaluate(el => (el as HTMLElement).click());
   await expect(page.getByTestId("signup-client-type-individual")).toHaveClass(
     /bg-\[#2D4A3E\]/,
     { timeout: 3_000 },
   );
 
   // Age groups — pick adult
-  await page.getByTestId("signup-age-group-adult").dispatchEvent("click");
+  await page.getByTestId("signup-age-group-adult").evaluate(el => (el as HTMLElement).click());
   await expect(page.getByTestId("signup-age-group-adult")).toHaveClass(
     /bg-\[#2D4A3E\]/,
     { timeout: 3_000 },
@@ -161,19 +163,19 @@ test("therapist signup → DB record → admin approval", async ({ page }) => {
 
   // ── Step 4: Specialties ──────────────────────────────────────────
   // Click "anxiety" row, then set it as primary
-  await page.getByTestId("signup-issue-anxiety-primary").dispatchEvent("click");
+  await page.getByTestId("signup-issue-anxiety-primary").evaluate(el => (el as HTMLElement).click());
 
   await clickNextAndVerify("Step 4 → 5", "signup-modality-offering-telehealth");
 
   // ── Step 5: Format & Logistics ───────────────────────────────────
   // Modality: pick CBT
-  await page.getByTestId("signup-modality-CBT").dispatchEvent("click");
+  await page.getByTestId("signup-modality-CBT").evaluate(el => (el as HTMLElement).click());
 
   // Modality offering: telehealth only (avoids office address requirement)
-  await page.getByTestId("signup-modality-offering-telehealth").dispatchEvent("click");
+  await page.getByTestId("signup-modality-offering-telehealth").evaluate(el => (el as HTMLElement).click());
 
   // Availability: weekday mornings
-  await page.getByTestId("signup-availability-weekday_morning").dispatchEvent("click");
+  await page.getByTestId("signup-availability-weekday_morning").evaluate(el => (el as HTMLElement).click());
 
   await clickNextAndVerify("Step 5 → 6", "signup-cash-rate");
 
@@ -188,13 +190,13 @@ test("therapist signup → DB record → admin approval", async ({ page }) => {
 
   // ── Step 7: Style ────────────────────────────────────────────────
   // Pick at least one style tag
-  await page.getByTestId("signup-style-warm_supportive").dispatchEvent("click");
+  await page.getByTestId("signup-style-warm_supportive").evaluate(el => (el as HTMLElement).click());
 
   await clickNextAndVerify("Step 7 → 8", "signup-t4-direct");
 
   // ── Step 8: Deep Match ───────────────────────────────────────────
   // T4: hard truth approach
-  await page.getByTestId("signup-t4-direct").dispatchEvent("click");
+  await page.getByTestId("signup-t4-direct").evaluate(el => (el as HTMLElement).click());
 
   // T5: lived experience (min 30 chars)
   await page
@@ -204,7 +206,7 @@ test("therapist signup → DB record → admin approval", async ({ page }) => {
     );
 
   // T6: session expectations (pick 1)
-  await page.getByTestId("signup-t6-listen_heard").dispatchEvent("click");
+  await page.getByTestId("signup-t6-listen_heard").evaluate(el => (el as HTMLElement).click());
 
   // T6b: early sessions description (min 30 chars)
   await page
