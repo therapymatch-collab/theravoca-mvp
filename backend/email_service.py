@@ -555,34 +555,46 @@ async def render_template_preview(
 
 
 async def send_patient_followup_48h(to: str, request_id: str) -> None:
-    url = f"{_get_app_url()}/feedback/patient/{request_id}?milestone=48h"
+    from routes.feedback import generate_feedback_token
+    token = generate_feedback_token(request_id, "patient")
+    url = f"{_get_app_url()}/feedback/patient/{request_id}?milestone=48h&token={token}"
     await _send_simple_cta_template("patient_followup_48h", to, url, {"request_id": request_id})
 
 
 async def send_patient_followup_3w(to: str, request_id: str) -> None:
-    url = f"{_get_app_url()}/feedback/patient/{request_id}?milestone=3w"
+    from routes.feedback import generate_feedback_token
+    token = generate_feedback_token(request_id, "patient")
+    url = f"{_get_app_url()}/feedback/patient/{request_id}?milestone=3w&token={token}"
     await _send_simple_cta_template("patient_followup_3w", to, url, {"request_id": request_id})
 
 
 async def send_patient_followup_9w(to: str, request_id: str) -> None:
-    url = f"{_get_app_url()}/feedback/patient/{request_id}?milestone=9w"
+    from routes.feedback import generate_feedback_token
+    token = generate_feedback_token(request_id, "patient")
+    url = f"{_get_app_url()}/feedback/patient/{request_id}?milestone=9w&token={token}"
     await _send_simple_cta_template("patient_followup_9w", to, url, {"request_id": request_id})
 
 
 async def send_patient_followup_15w(to: str, request_id: str) -> None:
-    url = f"{_get_app_url()}/feedback/patient/{request_id}?milestone=15w"
+    from routes.feedback import generate_feedback_token
+    token = generate_feedback_token(request_id, "patient")
+    url = f"{_get_app_url()}/feedback/patient/{request_id}?milestone=15w&token={token}"
     await _send_simple_cta_template("patient_followup_15w", to, url, {"request_id": request_id})
 
 
 async def send_therapist_weekly_pulse(to: str, name: str, therapist_id: str) -> None:
-    url = f"{_get_app_url()}/feedback/therapist/{therapist_id}/pulse"
+    from routes.feedback import generate_feedback_token
+    token = generate_feedback_token(therapist_id, "therapist")
+    url = f"{_get_app_url()}/therapist/pulse?token={token}"
     await _send_simple_cta_template(
         "therapist_weekly_pulse", to, url, {"first_name": _first_name(name)},
     )
 
 
 async def send_therapist_followup_2w(to: str, name: str, therapist_id: str) -> None:
-    url = f"{_get_app_url()}/feedback/therapist/{therapist_id}?milestone=2w"
+    from routes.feedback import generate_feedback_token
+    token = generate_feedback_token(therapist_id, "therapist")
+    url = f"{_get_app_url()}/feedback/therapist/{therapist_id}?milestone=2w&token={token}"
     await _send_simple_cta_template(
         "therapist_followup_2w", to, url, {"first_name": _first_name(name)},
     )

@@ -12,26 +12,29 @@ Timeline:
   15w   Outcome (progress, referral, what changed)
   Weekly Therapist pulse (general satisfaction, never about specific patients)
 
-Public endpoints (token-authenticated via request_id/therapist_id):
+Authenticated endpoints (HMAC token via ?token= OR Bearer session JWT):
   POST /api/feedback/patient/{request_id}/48h
   POST /api/feedback/patient/{request_id}/3w
   POST /api/feedback/patient/{request_id}/9w
   POST /api/feedback/patient/{request_id}/15w
   POST /api/feedback/therapist/{therapist_id}/pulse
+Unauthenticated (general contact form, protected by Turnstile CAPTCHA):
   POST /api/feedback/widget
 """
 from __future__ import annotations
 
+import hashlib
+import hmac as _hmac
 import logging
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, EmailStr, Field
 
-from deps import db
+from deps import db, JWT_SECRET, _decode_session_from_authorization
 from email_service import _send
 
 logger = logging.getLogger("theravoca.feedback")
@@ -43,6 +46,64 @@ FEEDBACK_INBOX = os.environ.get("FEEDBACK_INBOX_EMAIL", "theravoca@gmail.com")
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# FEEDBACK TOKEN AUTH (HMAC-signed, expiring)
+# ═══════════════════════════════════════════════════════════════════════
+
+FEEDBACK_TOKEN_TTL_HOURS = int(os.environ.get("FEEDBACK_TOKEN_TTL_HOURS", "168"))  # 7 days
+
+
+def generate_feedback_token(entity_id: str, entity_type: str = "patient") -> str:
+    """Create an HMAC-SHA256 token for a feedback email link.
+    Token format: {signature}.{expires_unix}
+    where signature = HMAC(entity_id:entity_type:expires_unix)[:32]
+    Using unix timestamp avoids colon-in-ISO issues with URL params.
+    """
+    expires_unix = int(
+        (datetime.now(timezone.utc) + timedelta(hours=FEEDBACK_TOKEN_TTL_HOURS)).timestamp()
+    )
+    msg = f"{entity_id}:{entity_type}:{expires_unix}"
+    sig = _hmac.new(
+        JWT_SECRET.encode(), msg.encode(), hashlib.sha256,
+    ).hexdigest()[:32]
+    return f"{sig}.{expires_unix}"
+
+
+def _verify_feedback_token(
+    entity_id: str,
+    token: Optional[str],
+    entity_type: str = "patient",
+    authorization: Optional[str] = None,
+) -> None:
+    """Verify a feedback token OR a valid session Bearer JWT.
+    Raises 401 on failure."""
+    # Allow session-authenticated users (logged into portal)
+    if not token and authorization:
+        session = _decode_session_from_authorization(authorization)
+        if session:
+            return  # Valid session — allow through
+    if not token:
+        raise HTTPException(401, "Missing feedback token — use the link from your email.")
+    parts = token.split(".", 1)
+    if len(parts) != 2:
+        raise HTTPException(401, "Invalid feedback token format.")
+    sig, expires_str = parts
+    # Check expiry
+    try:
+        expires_unix = int(expires_str)
+        if datetime.fromtimestamp(expires_unix, tz=timezone.utc) < datetime.now(timezone.utc):
+            raise HTTPException(401, "This feedback link has expired. Please sign in to your portal instead.")
+    except (ValueError, OSError):
+        raise HTTPException(401, "Invalid token expiration.")
+    # Check signature
+    msg = f"{entity_id}:{entity_type}:{expires_unix}"
+    expected = _hmac.new(
+        JWT_SECRET.encode(), msg.encode(), hashlib.sha256,
+    ).hexdigest()[:32]
+    if not _hmac.compare_digest(sig, expected):
+        raise HTTPException(401, "Invalid feedback token.")
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -111,8 +172,12 @@ class WidgetFeedback(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 
 @router.post("/feedback/patient/{request_id}/48h")
-async def submit_patient_48h(request_id: str, payload: PatientFeedback48h):
+async def submit_patient_48h(
+    request_id: str, payload: PatientFeedback48h,
+    token: Optional[str] = Query(None), authorization: Optional[str] = Header(None),
+):
     """48h soft touch — process feedback only, no reliability updates."""
+    _verify_feedback_token(request_id, token, "patient", authorization)
     req = await db.requests.find_one({"id": request_id}, {"_id": 0, "email": 1})
     if not req:
         raise HTTPException(404, "Request not found")
@@ -131,8 +196,12 @@ async def submit_patient_48h(request_id: str, payload: PatientFeedback48h):
 
 
 @router.post("/feedback/patient/{request_id}/3w")
-async def submit_patient_3w(request_id: str, payload: PatientFeedback3w):
+async def submit_patient_3w(
+    request_id: str, payload: PatientFeedback3w,
+    token: Optional[str] = Query(None), authorization: Optional[str] = Header(None),
+):
     """3-week selection + first impressions."""
+    _verify_feedback_token(request_id, token, "patient", authorization)
     req = await db.requests.find_one(
         {"id": request_id},
         {"_id": 0, "email": 1, "notified_therapist_ids": 1},
@@ -189,8 +258,12 @@ async def submit_patient_3w(request_id: str, payload: PatientFeedback3w):
 
 
 @router.post("/feedback/patient/{request_id}/9w")
-async def submit_patient_9w(request_id: str, payload: PatientFeedback9w):
+async def submit_patient_9w(
+    request_id: str, payload: PatientFeedback9w,
+    token: Optional[str] = Query(None), authorization: Optional[str] = Header(None),
+):
     """9-week retention + TAI questions."""
+    _verify_feedback_token(request_id, token, "patient", authorization)
     req = await db.requests.find_one({"id": request_id}, {"_id": 0, "email": 1})
     if not req:
         raise HTTPException(404, "Request not found")
@@ -226,8 +299,12 @@ async def submit_patient_9w(request_id: str, payload: PatientFeedback9w):
 
 
 @router.post("/feedback/patient/{request_id}/15w")
-async def submit_patient_15w(request_id: str, payload: PatientFeedback15w):
+async def submit_patient_15w(
+    request_id: str, payload: PatientFeedback15w,
+    token: Optional[str] = Query(None), authorization: Optional[str] = Header(None),
+):
     """15-week outcome survey."""
+    _verify_feedback_token(request_id, token, "patient", authorization)
     req = await db.requests.find_one({"id": request_id}, {"_id": 0, "email": 1})
     if not req:
         raise HTTPException(404, "Request not found")
@@ -266,8 +343,12 @@ async def submit_patient_15w(request_id: str, payload: PatientFeedback15w):
 # ═══════════════════════════════════════════════════════════════════════
 
 @router.post("/feedback/therapist/{therapist_id}/pulse")
-async def submit_therapist_pulse(therapist_id: str, payload: TherapistWeeklyPulse):
+async def submit_therapist_pulse(
+    therapist_id: str, payload: TherapistWeeklyPulse,
+    token: Optional[str] = Query(None), authorization: Optional[str] = Header(None),
+):
     """Weekly therapist pulse — general satisfaction, never about specific patients."""
+    _verify_feedback_token(therapist_id, token, "therapist", authorization)
     t = await db.therapists.find_one(
         {"id": therapist_id}, {"_id": 0, "email": 1, "name": 1}
     )
@@ -312,8 +393,12 @@ async def submit_therapist_pulse(therapist_id: str, payload: TherapistWeeklyPuls
 
 # Legacy endpoint — keep backward compat with old email links
 @router.post("/feedback/patient/{request_id}")
-async def submit_patient_feedback_legacy(request_id: str, payload: dict):
+async def submit_patient_feedback_legacy(
+    request_id: str, payload: dict,
+    token: Optional[str] = Query(None), authorization: Optional[str] = Header(None),
+):
     """Backward-compatible: old email links hit this. Store as-is."""
+    _verify_feedback_token(request_id, token, "patient", authorization)
     milestone = (payload or {}).get("milestone", "48h")
     req = await db.requests.find_one({"id": request_id}, {"_id": 0, "email": 1})
     if not req:
@@ -331,8 +416,12 @@ async def submit_patient_feedback_legacy(request_id: str, payload: dict):
 
 # Legacy therapist regular endpoint
 @router.post("/feedback/therapist/{therapist_id}")
-async def submit_therapist_feedback_legacy(therapist_id: str, payload: dict):
+async def submit_therapist_feedback_legacy(
+    therapist_id: str, payload: dict,
+    token: Optional[str] = Query(None), authorization: Optional[str] = Header(None),
+):
     """Backward-compatible: old therapist feedback links."""
+    _verify_feedback_token(therapist_id, token, "therapist", authorization)
     t = await db.therapists.find_one(
         {"id": therapist_id}, {"_id": 0, "email": 1, "name": 1}
     )
@@ -351,8 +440,12 @@ async def submit_therapist_feedback_legacy(therapist_id: str, payload: dict):
 
 # Legacy therapist exception endpoint
 @router.post("/feedback/therapist/{therapist_id}/exception")
-async def submit_therapist_exception_legacy(therapist_id: str, payload: dict):
+async def submit_therapist_exception_legacy(
+    therapist_id: str, payload: dict,
+    token: Optional[str] = Query(None), authorization: Optional[str] = Header(None),
+):
     """Backward-compatible: old exception-based feedback."""
+    _verify_feedback_token(therapist_id, token, "therapist", authorization)
     t = await db.therapists.find_one(
         {"id": therapist_id}, {"_id": 0, "email": 1, "name": 1}
     )
