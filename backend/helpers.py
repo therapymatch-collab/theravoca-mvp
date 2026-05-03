@@ -54,7 +54,7 @@ def compute_patient_rank_score(application: dict, request: dict) -> dict:
       - apply_fit_bonus(0-10)  apply_fit (LLM grade 0-5) * 2
       - commit_bonus   (0-9)   +3 each for confirms_availability/urgency/payment
     Total max raw = 118. Rescaled to 0-99 (raw / 1.18) so the realistic
-    top is ~91 and ceiling is 99 — never display 100% (mirrors the 95%
+    top is ~91 and ceiling is 99 â never display 100% (mirrors the 95%
     Step-1 cap philosophy: no relationship is perfect on paper).
     """
     ms = float(application.get("match_score") or 0)
@@ -130,7 +130,7 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-# ── Background task registry ────────────────────────────────────────────────
+# ââ Background task registry ââââââââââââââââââââââââââââââââââââââââââââââââ
 # `asyncio.create_task()` only holds a weak reference to the resulting task,
 # so a fire-and-forget task can be garbage-collected mid-execution. We keep a
 # strong reference here so background outreach + email + SMS dispatches always
@@ -185,7 +185,7 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
         location_bits.append(req["location_city"])
     if req.get("location_zip"):
         location_bits.append(req["location_zip"])
-    location_str = ", ".join(location_bits) or "—"
+    location_str = ", ".join(location_bits) or "â"
     issues = req.get("presenting_issues") or []
     severity = req.get("issue_severity") or {}
     if isinstance(issues, list):
@@ -215,15 +215,15 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
 
     if payment_type_raw == "insurance":
         if insurance_name:
-            payment_label = f"Insurance — {insurance_name}"
+            payment_label = f"Insurance â {insurance_name}"
         else:
-            payment_label = "Insurance — carrier not specified"
+            payment_label = "Insurance â carrier not specified"
     elif payment_type_raw == "cash":
         b = _budget_str(budget)
         if b:
-            payment_label = f"Cash — up to {b}"
+            payment_label = f"Cash â up to {b}"
         else:
-            payment_label = "Cash — amount not specified"
+            payment_label = "Cash â amount not specified"
         if sliding:
             payment_label += " (open to sliding scale)"
     elif payment_type_raw == "either":
@@ -239,15 +239,15 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
             bits.append("Cash: amount not specified")
         if sliding:
             bits.append("open to sliding scale")
-        payment_label = "Either — " + " · ".join(bits)
+        payment_label = "Either â " + " Â· ".join(bits)
     else:
         payment_label = payment_type_raw.title() or "Not specified"
     avail = req.get("availability_windows") or []
-    avail_display = ", ".join(a.replace("_", " ") for a in avail) or "—"
+    avail_display = ", ".join(a.replace("_", " ") for a in avail) or "â"
     style = req.get("style_preference") or []
-    style_display = ", ".join(s.replace("_", " ") for s in style if s and s != "no_pref") or "—"
+    style_display = ", ".join(s.replace("_", " ") for s in style if s and s != "no_pref") or "â"
     modality_prefs = req.get("modality_preferences") or []
-    modality_prefs_display = ", ".join(modality_prefs) if modality_prefs else "—"
+    modality_prefs_display = ", ".join(modality_prefs) if modality_prefs else "â"
 
     summary = {
         "Client type": (req.get("client_type") or "").title(),
@@ -256,14 +256,14 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
         "Location": location_str,
         "Session format": (req.get("modality_preference") or "").replace("_", " ").title(),
         "Payment": payment_label,
-        "Presenting issues": issues_display or "—",
+        "Presenting issues": issues_display or "â",
         "Preferred therapy approach": modality_prefs_display,
         "Availability": avail_display,
         "Urgency": (req.get("urgency") or "flexible").replace("_", " ").title(),
         "Prior therapy": (req.get("prior_therapy") or "").replace("_", " ").title(),
         "Style preference": style_display,
     }
-    # ─── Deep match answers (P1/P2/P3) ─────────────────────────────────
+    # âââ Deep match answers (P1/P2/P3) âââââââââââââââââââââââââââââââââ
     if req.get("deep_match_opt_in"):
         p1 = req.get("p1_communication") or []
         p2 = req.get("p2_change") or []
@@ -278,9 +278,9 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
         }
         _P2_LABELS = {
             "deep_emotional": "Go deep into emotions",
-            "practical_tools": "Stay practical — give me tools",
-            "explore_past": "Look back — understand patterns",
-            "focus_forward": "Look forward — focus on who I'm becoming",
+            "practical_tools": "Stay practical â give me tools",
+            "explore_past": "Look back â understand patterns",
+            "focus_forward": "Look forward â focus on who I'm becoming",
             "build_insight": "Help me understand myself",
             "shift_relationships": "Change how I show up in relationships",
         }
@@ -295,7 +295,7 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
         if p3:
             summary["What therapist should already get (deep match)"] = p3[:1500]
 
-    # ─── Gender & experience preferences ──────────────────────────────
+    # âââ Gender & experience preferences ââââââââââââââââââââââââââââââ
     gender_pref = req.get("gender_preference") or "no_pref"
     if gender_pref and gender_pref != "no_pref":
         summary["Gender preference"] = gender_pref.replace("_", " ").title()
@@ -307,7 +307,7 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
             e.replace("_", " ").title() for e in exp_pref if e
         )
 
-    # ─── Priority factors ─────────────────────────────────────────────
+    # âââ Priority factors âââââââââââââââââââââââââââââââââââââââââââââ
     pf = req.get("priority_factors") or []
     if pf:
         summary["Priority factors"] = ", ".join(
@@ -317,7 +317,7 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
     # Always surface the patient's free-text prior-therapy notes when
     # present, regardless of whether they said "yes_helped" or
     # "yes_not_helped". Previously the notes were ONLY shown when the
-    # patient said therapy didn't help — but a patient who DID benefit
+    # patient said therapy didn't help â but a patient who DID benefit
     # often writes the most actionable signal ("liked her style, took
     # time to get to know us"), and the therapist needs that to write
     # a relevant reply (which the apply-fit grader rewards). The label
@@ -334,27 +334,27 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
         summary[label] = notes
     # `other_issue` (the *Anything else?* textarea) is the patient's own
     # free-text framing of what they're looking for. Was previously not
-    # surfaced to the therapist at all — same fix as above. Truncated
+    # surfaced to the therapist at all â same fix as above. Truncated
     # to 1500 chars in the unlikely event of a wall of text.
     other = (req.get("other_issue") or "").strip()
     if other:
         summary["Anything else (patient note)"] = other[:1500]
 
-    # Deep match answers (P1/P2/P3) — only when patient opted in.
+    # Deep match answers (P1/P2/P3) â only when patient opted in.
     if req.get("deep_match_opt_in"):
         _P1 = {
             "leads_structured": "Someone who leads with structure and direction",
             "follows_lead": "Someone who follows my lead and lets me set the pace",
-            "challenges": "Someone who challenges me, even when it’s uncomfortable",
-            "warm_first": "Someone who’s warm and encouraging above all",
-            "direct_honest": "Someone who’s direct and tells it like it is",
+            "challenges": "Someone who challenges me, even when itâs uncomfortable",
+            "warm_first": "Someone whoâs warm and encouraging above all",
+            "direct_honest": "Someone whoâs direct and tells it like it is",
             "guides_questions": "Someone who asks the right questions so I get there myself",
         }
         _P2 = {
-            "deep_emotional": "Go deep into emotions — feel what I’ve been avoiding",
-            "practical_tools": "Stay practical — give me tools I can use this week",
-            "explore_past": "Look back — understand where my patterns started",
-            "focus_forward": "Look forward — focus on who I’m becoming",
+            "deep_emotional": "Go deep into emotions â feel what Iâve been avoiding",
+            "practical_tools": "Stay practical â give me tools I can use this week",
+            "explore_past": "Look back â understand where my patterns started",
+            "focus_forward": "Look forward â focus on who Iâm becoming",
             "build_insight": "Help me understand myself and why I do what I do",
             "shift_relationships": "Help me change how I show up in my relationships",
         }
@@ -385,7 +385,7 @@ async def _build_decline_history(
 
     This is used by `rank_therapists` to apply a soft 10pt penalty so
     we stop routing the same kind of referral to providers who routinely
-    say no to it. It's not a hard filter — capacity may have changed —
+    say no to it. It's not a hard filter â capacity may have changed â
     but it should improve our acceptance rate over time.
     """
     if not therapist_ids:
@@ -402,7 +402,7 @@ async def _build_decline_history(
     ).isoformat()
     history: dict[str, dict] = {}
     # Pull every recent decline for these therapists in ONE query then
-    # join against requests in a second batch query — cheaper than per-
+    # join against requests in a second batch query â cheaper than per-
     # therapist round-trips.
     decline_cursor = db.declines.find(
         {
@@ -527,7 +527,7 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
     notified_breakdowns.update({m["id"]: m.get("match_breakdown") or {} for m in new_matches})
     # Persist the research axes per match (rationale + chips) so the
     # patient results endpoint can read them directly. Folded into the
-    # SAME pass as scoring — no separate enrichment step needed.
+    # SAME pass as scoring â no separate enrichment step needed.
     research_scores: dict[str, dict] = req.get("research_scores") or {}
     for m in new_matches:
         axes = m.get("research_axes") or {}
@@ -628,7 +628,7 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
         except Exception as e:
             logger.warning("Could not schedule outreach for %s: %s", request_id, e)
 
-    # Spawn cold-cache warmup in background — non-blocking. Any therapist
+    # Spawn cold-cache warmup in background â non-blocking. Any therapist
     # who scored without the research bonus this round (cache was missing
     # at match time) gets their cache built now so the NEXT patient's
     # match call has the bonus available. The warmup is itself a
@@ -638,7 +638,7 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
             from research_enrichment import get_or_build_research
 
             async def _warmup_cold_caches():
-                # Cap parallelism to 4 — same as the previous enrichment
+                # Cap parallelism to 4 â same as the previous enrichment
                 # path. Each one needs a website fetch + LLM call.
                 import asyncio as _asyncio
                 sem = _asyncio.Semaphore(4)
@@ -683,7 +683,7 @@ async def _deliver_results(request_id: str) -> dict[str, Any]:
         raise HTTPException(404, "Request not found")
     apps = await db.applications.find({"request_id": request_id}, {"_id": 0}).to_list(50)
     research_scores = req.get("research_scores") or {}
-    # Single source of truth — same formula the patient + admin views use.
+    # Single source of truth â same formula the patient + admin views use.
     # Keeps email ordering consistent with what the patient sees on the
     # results page when they click through.
     for a in apps:
@@ -722,6 +722,34 @@ async def _deliver_results(request_id: str) -> dict[str, Any]:
             "status": "completed",
         }},
     )
+
+    # In testing mode, fire all 4 milestone survey emails immediately
+    # so the admin doesn't have to wait for the daily cron cycle.
+    testing_doc = await db.app_config.find_one({"key": "feedback_testing"}, {"_id": 0})
+    if (testing_doc or {}).get("enabled"):
+        from email_service import (
+            send_patient_followup_48h, send_patient_followup_3w,
+            send_patient_followup_9w, send_patient_followup_15w,
+        )
+        email = req["email"]
+        milestones_sent = []
+        for code, sender in [
+            ("48h", send_patient_followup_48h),
+            ("3w", send_patient_followup_3w),
+            ("9w", send_patient_followup_9w),
+            ("15w", send_patient_followup_15w),
+        ]:
+            flag = f"structured_followup_{code}_sent_at"
+            try:
+                await sender(email, request_id)
+                await db.requests.update_one(
+                    {"id": request_id},
+                    {"$set": {flag: now_iso}},
+                )
+                milestones_sent.append(code)
+            except Exception:
+                pass  # logged by email_service
+
     return {"sent_to": req["email"], "count": len(enriched)}
 
 
