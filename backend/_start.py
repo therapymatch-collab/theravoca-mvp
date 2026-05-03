@@ -26,12 +26,11 @@ STAGING_PASSWORD = os.environ.get("STAGING_PASSWORD", "")
 # or are public-facing endpoints patients/therapists hit from
 # unauthenticated contexts (email links, intake form, etc.).
 _PUBLIC_PREFIXES = (
-    # Frontend SPA routes that patients access from email links
-    "/verify/",
-    "/sign-in",
-    "/results/",
-    "/therapist/apply/",
-    "/feedback/",
+    # NOTE: No frontend SPA routes here!  In staging every HTML page
+    # must go through Basic Auth.  Patients should never hit staging;
+    # email links point to the production domain.  Only API endpoints
+    # that carry their own authentication are exempted below.
+    #
     # Backend API — auth endpoints (login, magic codes, passwords)
     "/api/auth/",
     # Backend API — patient request endpoints (intake form, verification)
