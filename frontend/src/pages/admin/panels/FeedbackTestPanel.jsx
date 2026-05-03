@@ -27,7 +27,7 @@ export default function FeedbackTestPanel() {
     setLoading(true);
     try {
       const res = await client.get("/admin/requests");
-      const reqs = (res.data?.requests || []).filter((r) => r.results_sent_at);
+      const reqs = (Array.isArray(res.data) ? res.data : res.data?.requests || []).filter((r) => r.results_sent_at);
       setRequests(reqs);
       for (const r of reqs.slice(0, 20)) {
         getFeedback(r.id);
