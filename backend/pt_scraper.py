@@ -289,38 +289,44 @@ async def _fetch_website_text_for_contacts(
     url: str, client: httpx.AsyncClient,
 ) -> Optional[str]:
     """Fetch a therapist's personal website and return cleaned text for
-    contact extraction.  Extracts mailto: links and visible email addresses
-    from the raw HTML before stripping tags, so the LLM can see them."""
+    contact extraction.  Extracts mailto: links and email patterns from
+    the raw HTML *before* stripping tags so the LLM can always see them."""
     if not url:
         return None
     try:
         html = await _http_get(url, client)
         if not html:
             return None
-        # ---- pull emails out of the raw HTML BEFORE stripping tags ----
-        # 1) mailto: links
-        mailto_emails = re.findall(r'mailto:([\w.+\-]+@[\w\-]+\.[\w.\-]+)', html, re.I)
-        # 2) any email-shaped string in href / text
-        raw_emails = re.findall(r'[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}', html)
-        # combine, de-dup, drop directory emails
-        found_emails = list(dict.fromkeys(mailto_emails + raw_emails))
-        found_emails = [
-            e for e in found_emails
-            if not any(e.lower().endswith(d) for d in (
-                "psychologytoday.com", "therapyden.com", "goodtherapy.org",
-                "sentry.io", "googleusercontent.com", "w3.org",
-            ))
-        ]
-        # ---- strip scripts / styles / tags ----
+
+        # ── Extract emails from raw HTML before we lose href attributes ──
+        mailto_emails = set(re.findall(r'mailto:([^\"\'?\s]+)', html, re.I))
+        html_emails = set(re.findall(
+            r'[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}', html,
+        ))
+        all_emails = mailto_emails | html_emails
+        # Filter out directory / tracking domain emails
+        SKIP_EMAIL_DOMAINS = (
+            "psychologytoday.com", "sentry.io", "sussexdirectories.com",
+            "googletagmanager.com", "google-analytics.com", "facebook.com",
+            "twitter.com", "example.com", "wixpress.com",
+        )
+        real_emails = sorted(
+            e for e in all_emails
+            if not any(e.lower().endswith(d) for d in SKIP_EMAIL_DOMAINS)
+        )
+
+        # ── Strip scripts/styles, then tags ──
         no_script = re.sub(
             r"<(script|style)[^>]*>.*?</\1>", " ", html,
             flags=re.DOTALL | re.I,
         )
         text = re.sub(r"<[^>]+>", " ", no_script)
-        text = re.sub(r"\s+", " ", text).strip()[:14_000]
-        # append extracted emails so the LLM always has them
-        if found_emails:
-            text += " CONTACT EMAILS FOUND ON PAGE: " + ", ".join(found_emails)
+        text = re.sub(r"\s+", " ", text).strip()[:13_000]
+
+        # Append extracted emails so LLM always sees them
+        if real_emails:
+            text += "\n\nCONTACT EMAILS FOUND ON PAGE: " + ", ".join(real_emails)
+
         return text
     except Exception as e:
         logger.warning("Failed to fetch website %s: %s", url, e)
@@ -417,12 +423,23 @@ async def scrape_pt_candidates(
                     if contacts.get("phone"):
                         c["phone"] = contacts["phone"]
                         c["phone_source"] = "website"
+                    else:
+                        c["phone_source"] = "not found on website"
                     if contacts.get("email"):
                         c["email"] = contacts["email"]
                         c["email_source"] = "website"
+                    else:
+                        c["email_source"] = "not found on website"
+                else:
+                    # No external website listed on PT profile
+                    c["phone_source"] = "no website listed"
+                    c["email_source"] = "no website listed"
+
                 # Clear fake PT phone if we didn't find a real one
                 if _is_fake_phone(c.get("phone", "")):
                     c["phone"] = ""
+                    if c.get("phone_source") != "no website listed":
+                        c["phone_source"] = "not found on website"
 
                 await asyncio.sleep(REQUEST_DELAY_SEC)
 
