@@ -53,6 +53,8 @@ _PUBLIC_PREFIXES = (
     "/api/portal/",
     # Backend API — feedback (public, patient-facing)
     "/api/feedback",
+    # Backend API — build version (public, read-only)
+    "/api/version",
     # Health check
     "/health",
     # Static assets (JS, CSS, images, fonts)
