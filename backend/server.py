@@ -4,6 +4,8 @@ Routes live in /app/backend/routes/.
 Cron loops live in /app/backend/cron.py.
 Helpers + matching/results delivery live in /app/backend/helpers.py.
 Auth + db + env constants live in /app/backend/deps.py.
+
+Deploy pipeline verification: 2026-05-03 06:50 EDT
 """
 from __future__ import annotations
 
