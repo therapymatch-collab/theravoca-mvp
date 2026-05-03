@@ -144,9 +144,12 @@ test("patient intake → verify → results", async ({ page }) => {
   await page.getByTestId("phone-input").fill("2085551234");
 
   // Referral source — required field, options seeded in beforeAll.
-  // Radix UI Select portals options to document.body; use text selector.
+  // Radix UI Select portals options to document.body via <Portal>.
+  // Must wait for portal content to render before clicking the option.
   await page.getByTestId("referral-source-trigger").click();
-  await page.getByRole("option", { name: "Google Search" }).click();
+  const googleOpt = page.locator('[data-testid="referral-source-google-search"]');
+  await googleOpt.waitFor({ state: "visible", timeout: 10_000 });
+  await googleOpt.click();
 
   // Checkboxes
   await page.getByTestId("agree-terms").click();
