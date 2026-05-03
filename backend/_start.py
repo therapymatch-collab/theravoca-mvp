@@ -127,6 +127,26 @@ _INDEX_HTML = os.path.join(_STATIC_DIR, "index.html")
 _HAS_STATIC = os.path.isdir(_STATIC_DIR) and os.path.isfile(_INDEX_HTML)
 
 
+def _check_basic_auth(scope: Scope) -> bool:
+    """Return True if the request has valid Basic Auth credentials,
+    or if no STAGING_PASSWORD is configured (auth disabled)."""
+    if not STAGING_PASSWORD:
+        return True
+    headers = dict(scope.get("headers", []))
+    auth_header = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
+    if auth_header.startswith("Basic "):
+        try:
+            decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+            user, pwd = decoded.split(":", 1)
+            if secrets.compare_digest(user, STAGING_USER) and secrets.compare_digest(
+                pwd, STAGING_PASSWORD
+            ):
+                return True
+        except Exception:
+            pass
+    return False
+
+
 class _SPAApp:
     """ASGI app that serves the React SPA for non-API routes and delegates
     API/health routes to the FastAPI backend (with basic auth)."""
@@ -153,10 +173,30 @@ class _SPAApp:
             await response(scope, receive, send)
             return
 
-        # API routes → FastAPI backend
+        # API routes → FastAPI backend (auth middleware handles these)
         if path.startswith("/api/") or path == "/health":
             await self.api_app(scope, receive, send)
             return
+
+        # ── Frontend routes: enforce Basic Auth before serving SPA ──
+        # Static assets (JS/CSS/images/fonts) are exempted so the
+        # browser can load them after the user authenticates on the
+        # HTML page. Everything else (HTML pages) requires auth.
+        is_static_asset = any(path.startswith(p) for p in (
+            "/static/", "/favicon", "/manifest", "/asset-manifest", "/logo",
+        ))
+
+        if not is_static_asset and not any(
+            path.startswith(p) for p in _PUBLIC_PREFIXES
+        ):
+            if not _check_basic_auth(scope):
+                response = PlainTextResponse(
+                    "Authentication required",
+                    status_code=401,
+                    headers={"WWW-Authenticate": 'Basic realm="TheraVoca Staging"'},
+                )
+                await response(scope, receive, send)
+                return
 
         # Try to serve static file
         if _HAS_STATIC:
