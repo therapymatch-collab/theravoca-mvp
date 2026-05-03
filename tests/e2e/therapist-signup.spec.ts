@@ -44,6 +44,35 @@ test.afterAll(async () => {
 });
 
 test("therapist signup → DB record → admin approval", async ({ page }) => {
+  // Helper: click Next and verify we advanced to expected step by waiting
+  // for a step-specific element. If Next is disabled, log the block reason.
+  async function clickNextAndVerify(
+    stepName: string,
+    nextStepLocator: string,
+    timeout = 10_000,
+  ) {
+    // Check if Next is disabled and capture the reason
+    const nextBtn = page.getByTestId("signup-next-btn");
+    const isDisabled = await nextBtn.isDisabled();
+    if (isDisabled) {
+      const blockReason = await page
+        .getByTestId("signup-step-error")
+        .textContent()
+        .catch(() => "(no error message visible)");
+      console.error(
+        `[DIAG] Next disabled at ${stepName}. Reason: ${blockReason}`,
+      );
+      // Capture the page HTML for debugging
+      const html = await page.content();
+      console.error(`[DIAG] Page snippet: ${html.slice(0, 2000)}`);
+    }
+    await nextBtn.click({ timeout });
+    // Wait for the next step's content to render
+    await page.waitForSelector(`[data-testid="${nextStepLocator}"]`, {
+      timeout,
+    });
+  }
+
   // ── Navigate to signup page ──────────────────────────────────────
   await page.goto("/therapists/join");
   await page.waitForSelector('[data-testid="signup-next-btn"]', {
@@ -54,6 +83,11 @@ test("therapist signup → DB record → admin approval", async ({ page }) => {
   // Profile photo (optional but exercising the upload path)
   const photoInput = page.locator('[data-testid="signup-photo-input"]');
   await photoInput.setInputFiles(FIXTURE_IMAGE);
+
+  // Wait for the image to be processed (converted to data URL)
+  await expect(page.getByTestId("signup-photo-preview")).toBeVisible({
+    timeout: 5_000,
+  });
 
   // Name — must include credential suffix
   await page.getByTestId("signup-name").fill("E2E Test Therapist, LCSW");
@@ -74,7 +108,7 @@ test("therapist signup → DB record → admin approval", async ({ page }) => {
   // Gender
   await page.getByTestId("signup-gender-female").click();
 
-  await page.getByTestId("signup-next-btn").click();
+  await clickNextAndVerify("Step 1 → 2", "signup-license-state");
 
   // ── Step 2: License ──────────────────────────────────────────────
   // State defaults to Idaho — leave it
@@ -90,7 +124,12 @@ test("therapist signup → DB record → admin approval", async ({ page }) => {
   const licenseInput = page.locator('[data-testid="signup-license-input"]');
   await licenseInput.setInputFiles(FIXTURE_IMAGE);
 
-  await page.getByTestId("signup-next-btn").click();
+  // Wait for license image to be processed
+  await expect(page.getByTestId("signup-license-preview")).toBeVisible({
+    timeout: 5_000,
+  });
+
+  await clickNextAndVerify("Step 2 → 3", "signup-client-type-individual");
 
   // ── Step 3: Who You See ──────────────────────────────────────────
   // Client types — pick individual
@@ -99,13 +138,13 @@ test("therapist signup → DB record → admin approval", async ({ page }) => {
   // Age groups — pick adult
   await page.getByTestId("signup-age-group-adult").click();
 
-  await page.getByTestId("signup-next-btn").click();
+  await clickNextAndVerify("Step 3 → 4", "signup-issue-anxiety-primary");
 
   // ── Step 4: Specialties ──────────────────────────────────────────
   // Click "anxiety" row, then set it as primary
   await page.getByTestId("signup-issue-anxiety-primary").click();
 
-  await page.getByTestId("signup-next-btn").click();
+  await clickNextAndVerify("Step 4 → 5", "signup-modality-offering-telehealth");
 
   // ── Step 5: Format & Logistics ───────────────────────────────────
   // Modality: pick CBT
@@ -117,7 +156,7 @@ test("therapist signup → DB record → admin approval", async ({ page }) => {
   // Availability: weekday mornings
   await page.getByTestId("signup-availability-weekday_morning").click();
 
-  await page.getByTestId("signup-next-btn").click();
+  await clickNextAndVerify("Step 5 → 6", "signup-cash-rate");
 
   // ── Step 6: Insurance & Rates ────────────────────────────────────
   // Cash rate (required, > 0)
@@ -126,13 +165,13 @@ test("therapist signup → DB record → admin approval", async ({ page }) => {
   // Years experience (required, >= 0)
   await page.getByTestId("signup-years").fill("5");
 
-  await page.getByTestId("signup-next-btn").click();
+  await clickNextAndVerify("Step 6 → 7", "signup-style-warm_supportive");
 
   // ── Step 7: Style ────────────────────────────────────────────────
   // Pick at least one style tag
   await page.getByTestId("signup-style-warm_supportive").click();
 
-  await page.getByTestId("signup-next-btn").click();
+  await clickNextAndVerify("Step 7 → 8", "signup-t4-direct");
 
   // ── Step 8: Deep Match ───────────────────────────────────────────
   // T4: hard truth approach
@@ -155,7 +194,7 @@ test("therapist signup → DB record → admin approval", async ({ page }) => {
       "In our first sessions, I focus on understanding your story and building a safe therapeutic relationship."
     );
 
-  await page.getByTestId("signup-next-btn").click();
+  await clickNextAndVerify("Step 8 → 9", "signup-preview");
 
   // ── Step 9: Notifications ────────────────────────────────────────
   // Defaults are fine (both on) — just proceed to preview
