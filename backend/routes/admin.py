@@ -913,7 +913,10 @@ async def admin_update_therapist(
     res = await db.therapists.update_one({"id": therapist_id}, mongo_op)
     if res.matched_count == 0:
         raise HTTPException(404, "Therapist not found")
-    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0, "password_hash": 0, "password_set_at": 0})
+    t = await db.therapists.find_one({"id": therapist_id}, {
+        "_id": 0, "password_hash": 0, "password_set_at": 0,
+        "t5_embedding": 0, "t6b_embedding": 0,
+    })
     return {"ok": True, "therapist": t}
 
 

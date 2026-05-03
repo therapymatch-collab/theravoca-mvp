@@ -200,8 +200,15 @@ class _SPAApp:
         # Try to serve static file
         if _HAS_STATIC:
             # Check if it's a real static file (JS, CSS, image, etc.)
-            file_path = os.path.join(_STATIC_DIR, path.lstrip("/"))
-            if os.path.isfile(file_path) and not path == "/":
+            file_path = os.path.realpath(
+                os.path.join(_STATIC_DIR, path.lstrip("/"))
+            )
+            # Path traversal guard: resolved path must stay inside _STATIC_DIR
+            if (
+                file_path.startswith(os.path.realpath(_STATIC_DIR) + os.sep)
+                and os.path.isfile(file_path)
+                and path != "/"
+            ):
                 response = FileResponse(file_path)
                 await response(scope, receive, send)
                 return

@@ -281,7 +281,8 @@ async def portal_therapist_profile(
     caches) but keeps everything they're allowed to edit."""
     t = await db.therapists.find_one(
         {"email": {"$regex": f"^{re.escape(session['email'])}$", "$options": "i"}},
-        {"_id": 0},
+        {"_id": 0, "password_hash": 0, "password_set_at": 0,
+         "t5_embedding": 0, "t6b_embedding": 0},
     )
     if not t:
         raise HTTPException(404, "Therapist profile not found")
