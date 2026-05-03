@@ -26,12 +26,26 @@ let mongo: MongoClient;
 test.beforeAll(async () => {
   mongo = new MongoClient(MONGO_URI);
   await mongo.connect();
+
+  // Seed referral source options (admin-managed, empty in CI)
+  const db = mongo.db(MONGO_DB);
+  await db.collection("app_config").updateOne(
+    { key: "referral_source_options" },
+    {
+      $set: {
+        key: "referral_source_options",
+        options: ["Google Search", "Instagram", "Friend / family", "Other"],
+      },
+    },
+    { upsert: true }
+  );
 });
 
 test.afterAll(async () => {
   // Clean up test data
   const db = mongo.db(MONGO_DB);
   await db.collection("requests").deleteMany({ email: { $regex: /^e2e-intake-/ } });
+  await db.collection("app_config").deleteOne({ key: "referral_source_options" });
   await mongo.close();
 });
 
@@ -129,8 +143,10 @@ test("patient intake → verify → results", async ({ page }) => {
   // Phone (optional but let's fill it)
   await page.getByTestId("phone-input").fill("2085551234");
 
-  // Referral source — optional field, admin-managed options loaded from API.
-  // In CI the DB starts empty so there are no options to select. Skip it.
+  // Referral source — required field, options seeded in beforeAll.
+  // Radix UI Select portals options to document.body; use text selector.
+  await page.getByTestId("referral-source-trigger").click();
+  await page.getByRole("option", { name: "Google Search" }).click();
 
   // Checkboxes
   await page.getByTestId("agree-terms").click();
