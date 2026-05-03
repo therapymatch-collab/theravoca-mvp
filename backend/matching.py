@@ -1524,7 +1524,7 @@ def gap_axes(
             f"If you bill {plan} via a payer-list provider, or accept superbills, mention it.",
         )
 
-    GENERATORS = {
+    generators = {
         "issues": _issues,
         "availability": _availability,
         "modality": _modality,
@@ -1541,11 +1541,14 @@ def gap_axes(
     # Walk axes ordered by gap size (max - score) desc, return top_n with details
     candidates: list[dict] = []
     for k, (mx, label) in AXIS.items():
-        score = breakdown.get(k, 0) or 0
-        if mx <= 0 or score >= mx:
+        score = breakdown.get(k, mx)
+        gap = mx - score
+        if gap <= 0:
             continue
-        gen = GENERATORS.get(k)
-        result = gen() if gen else None
+        gen = generators.get(k)
+        if not gen:
+            continue
+        result = gen()
         if not result:
             continue
         explanation, suggestion = result
@@ -1554,11 +1557,11 @@ def gap_axes(
             "label": label,
             "explanation": explanation,
             "suggestion": suggestion,
-            "gap": round(mx - score, 1),  # kept for sorting; not shown to user
+            "gap": gap,; not shown to user
         })
     candidates.sort(key=lambda c: c["gap"], reverse=True)
     for c in candidates:
-        c.pop("gap", None)
+        del c["gap"]
     return candidates[:top_n]
 
 
