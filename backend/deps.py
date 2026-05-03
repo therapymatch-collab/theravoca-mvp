@@ -44,7 +44,20 @@ AVAILABILITY_PROMPT_DAYS = tuple(int(d.strip()) for d in _avail_days_env.split("
 DAILY_TASK_HOUR_LOCAL = int(os.environ.get("DAILY_TASK_HOUR", "2"))
 DAILY_TASK_TZ_OFFSET_HOURS = int(os.environ.get("DAILY_TASK_TZ_OFFSET", "-7"))
 
-JWT_SECRET = os.environ.get("JWT_SECRET", "") or secrets.token_urlsafe(48)
+_ENV = os.environ.get("ENV", "development").lower()
+_jwt_secret_raw = os.environ.get("JWT_SECRET", "")
+if not _jwt_secret_raw and _ENV == "production":
+    raise RuntimeError(
+        "FATAL: JWT_SECRET environment variable is not set. "
+        "Sessions will not persist across deploys. Refusing to start."
+    )
+if not _jwt_secret_raw:
+    _jwt_secret_raw = secrets.token_urlsafe(48)
+    logger.warning(
+        "JWT_SECRET not set — using random ephemeral secret. "
+        "All sessions will be lost on next restart. Set JWT_SECRET env var to fix."
+    )
+JWT_SECRET = _jwt_secret_raw
 JWT_ALGO = "HS256"
 SESSION_TTL_DAYS = int(os.environ.get("SESSION_TTL_DAYS", "30"))
 MAGIC_CODE_TTL_MINUTES = int(os.environ.get("MAGIC_CODE_TTL_MINUTES", "30"))
