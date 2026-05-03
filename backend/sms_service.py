@@ -133,12 +133,15 @@ SMS_TEMPLATE_DEFAULTS: dict[str, str] = {
 async def _get_template(key: str) -> str:
     """Load an SMS template from site_copy, falling back to the hardcoded default."""
     try:
-        from db import db  # late import to avoid circular deps
+        from deps import db  # late import to avoid circular deps
         doc = await db.site_copy.find_one({"key": key})
         if doc and doc.get("value"):
+            logger.debug("SMS template '%s' loaded from MongoDB", key)
             return doc["value"]
-    except Exception:
-        pass
+    except ImportError:
+        logger.error("Failed to import db from deps — SMS templates will use hardcoded defaults")
+    except Exception as e:
+        logger.warning("Failed to load SMS template '%s' from MongoDB: %s", key, e)
     return SMS_TEMPLATE_DEFAULTS.get(key, "")
 
 
