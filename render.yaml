@@ -1,0 +1,116 @@
+services:
+  # ── Staging ───────────────────────────────────────────────────────
+  - type: web
+    name: theravoca-staging
+    runtime: python
+    region: oregon
+    plan: starter
+    branch: staging
+    buildCommand: |
+      pip install -r backend/requirements.txt
+      cd frontend && npm install --legacy-peer-deps
+      REACT_APP_BACKEND_URL= CI=false npx craco build
+      cp -r build ../backend/static_build
+    startCommand: cd backend && uvicorn _start:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/version
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: NODE_VERSION
+        value: "20"
+      - key: MONGO_URL
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: SENDER_EMAIL
+        sync: false
+      - key: PUBLIC_APP_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: STAGING_PASSWORD
+        sync: false
+      - key: STAGING_USER
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_NUMBER
+        sync: false
+      - key: TWILIO_ENABLED
+        sync: false
+      - key: STRIPE_API_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: REACT_APP_TURNSTILE_SITE_KEY
+        sync: false
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+      - key: ENV
+        value: staging
+
+  # ── Production ────────────────────────────────────────────────────
+  - type: web
+    name: theravoca
+    runtime: python
+    region: oregon
+    plan: starter
+    branch: main
+    buildCommand: |
+      pip install -r backend/requirements.txt
+      cd frontend && npm install --legacy-peer-deps
+      REACT_APP_BACKEND_URL= CI=false npx craco build
+      cp -r build ../backend/static_build
+    startCommand: cd backend && uvicorn _start:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/version
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: NODE_VERSION
+        value: "20"
+      - key: MONGO_URL
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: SENDER_EMAIL
+        sync: false
+      - key: PUBLIC_APP_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_NUMBER
+        sync: false
+      - key: TWILIO_ENABLED
+        sync: false
+      - key: STRIPE_API_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: REACT_APP_TURNSTILE_SITE_KEY
+        sync: false
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+      - key: ENV
+        value: production
