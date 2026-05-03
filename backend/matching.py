@@ -1,6 +1,6 @@
-# v5 — Expectation alignment first, reliability=25pts, TAI tracking
-# Survey timeline: 48h soft touch → 3w selection → 9w retention → 15w outcome
-"""TheraVoca matching engine v5 — Expectation alignment first, reliability=25pts, TAI tracking.
+# v5 â Expectation alignment first, reliability=25pts, TAI tracking
+# Survey timeline: 48h soft touch â 3w selection â 9w retention â 15w outcome
+"""TheraVoca matching engine v5 â Expectation alignment first, reliability=25pts, TAI tracking.
 
 Ranking priority:
   1. Expectation alignment  25  (patient + therapist session expectations overlap)
@@ -17,13 +17,13 @@ Hard filters (return total=-1):
   modality (when patient says telehealth-only or in-person-only),
   gender (when patient marks gender preference as required).
 
-Survey timeline: 48h soft touch → 3w selection → 9w retention → 15w outcome
+Survey timeline: 48h soft touch â 3w selection â 9w retention â 15w outcome
 """
 from __future__ import annotations
 
 from typing import Any, Optional
 
-# ─── Constants ────────────────────────────────────────────────────────────────
+# âââ Constants ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 MAX_ISSUES = 35.0
 MAX_AVAILABILITY = 20.0
 MAX_MODALITY = 15.0
@@ -45,17 +45,17 @@ MAX_OTHER_ISSUE_BONUS = 0.0  # deprecated: other_issue textarea removed from int
 # don't want to double-count when both are filled in.
 MAX_PRIOR_THERAPY_BONUS = 4.0
 
-# ─── Expectation alignment ─────────────────────────────────────────────
+# âââ Expectation alignment âââââââââââââââââââââââââââââââââââââââââââââ
 # Overlap between patient session_expectations and therapist
 # t6_session_expectations. THE #1 ranking signal. Both pick up to 2
 # from 5 options (same slugs). Special handling: "not_sure" (patient)
-# and "depends" (therapist) are wildcards — they match anything.
+# and "depends" (therapist) are wildcards â they match anything.
 MAX_EXPECTATION_ALIGNMENT = 30.0
 # Bonus from embedding similarity between patient free-text and
 # therapist T6 early-session description. Tie-breaker when tag
 # overlap is identical.
 MAX_EXPECTATION_EMBED_BONUS = 0.0  # deprecated: session_expectations_notes textarea removed from intake
-# ─── Therapist reliability ─────────────────────────────────────────────
+# âââ Therapist reliability âââââââââââââââââââââââââââââââââââââââââââââ
 # Built from passive behavior data:
 #   response_rate:    % of referrals responded to (applied or declined)
 #   selection_rate:   % of times patients chose them
@@ -76,7 +76,7 @@ URGENCY_ORDER = ["asap", "within_2_3_weeks", "within_month", "flexible"]
 THERAPIST_URGENCY_ORDER = ["asap", "within_2_3_weeks", "within_month", "full"]
 
 
-# ─── Hard filter helpers ──────────────────────────────────────────────────────
+# âââ Hard filter helpers ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 def _state_pass(t: dict, r: dict) -> bool:
     licensed = [s.upper() for s in t.get("licensed_states") or []]
@@ -101,7 +101,7 @@ def _age_group_pass(t: dict, r: dict) -> bool:
 
 def _primary_concern_pass(t: dict, r: dict) -> bool:
     """Hard filter: therapist must list the patient's primary concern in
-    primary, secondary, OR general specialties — anywhere they treat it
+    primary, secondary, OR general specialties â anywhere they treat it
     counts. The patient's primary concern is the first (top-priority)
     item in `presenting_issues`. If the patient picked nothing or only
     "other", we don't filter (the matcher will fall back to soft scoring).
@@ -123,7 +123,7 @@ def _primary_concern_pass(t: dict, r: dict) -> bool:
 
 def _payment_pass(t: dict, r: dict) -> bool:
     """Payment compatibility. Hard by default, but the patient can soften
-    it by leaving `insurance_strict` False — in which case insurance-only
+    it by leaving `insurance_strict` False â in which case insurance-only
     plans that don't match still pass (they pay out-of-pocket later).
     """
     pay = (r.get("payment_type") or "either").lower()
@@ -132,7 +132,7 @@ def _payment_pass(t: dict, r: dict) -> bool:
     # mismatches but don't filter them out entirely).
     strict = bool(r.get("insurance_strict"))
     if pay == "either":
-        # "Either" is permissive by definition — only filter if the
+        # "Either" is permissive by definition â only filter if the
         # therapist truly accepts neither.
         return _insurance_match(t, r) or _cash_match(t, r)
     if pay == "insurance":
@@ -160,7 +160,7 @@ def _availability_pass(t: dict, r: dict) -> bool:
         return True
     therapist = {w for w in (t.get("availability_windows") or []) if w}
     if not therapist:
-        # Therapist hasn't published a schedule — fail closed in strict mode.
+        # Therapist hasn't published a schedule â fail closed in strict mode.
         return False
     return bool(patient & therapist)
 
@@ -180,14 +180,14 @@ def _urgency_pass(t: dict, r: dict) -> bool:
         return tu in ("asap", "within_2_3_weeks", "within_month")
     if pu == "within_month":
         return tu in ("asap", "within_2_3_weeks", "within_month")
-    # 'flexible' or empty — never filters.
+    # 'flexible' or empty â never filters.
     return True
 
 
 def _language_pass(t: dict, r: dict) -> bool:
     """Language hard-filter when patient has ticked `language_strict`.
     Skipped entirely when patient's preferred_language is empty/English
-    (English is the implicit default — no filter needed). Skipped when
+    (English is the implicit default â no filter needed). Skipped when
     `language_strict=False` (soft scoring axis handles preference).
     """
     pl = (r.get("preferred_language") or "").strip().lower()
@@ -204,7 +204,7 @@ def _language_pass(t: dict, r: dict) -> bool:
 
 def _insurance_match(t: dict, r: dict) -> bool:
     plan = (r.get("insurance_name") or "").lower().strip()
-    # "Other / not listed" = patient doesn't know exact carrier — skip the filter entirely
+    # "Other / not listed" = patient doesn't know exact carrier â skip the filter entirely
     if plan in ("other", "other / not listed"):
         return True
     accepted = [i.lower() for i in t.get("insurance_accepted") or []]
@@ -242,7 +242,7 @@ def _modality_pass(t: dict, r: dict) -> bool:
         # 30-mile distance filter for in-person seekers
         return _distance_within(t, r, miles=30.0)
     if pref == "prefer_inperson":
-        # Soft preference — only filter out true in-person at >30mi distance.
+        # Soft preference â only filter out true in-person at >30mi distance.
         if offering == "in_person":
             return _distance_within(t, r, miles=30.0)
         return True
@@ -252,7 +252,7 @@ def _modality_pass(t: dict, r: dict) -> bool:
 def _distance_within(t: dict, r: dict, miles: float) -> bool:
     """Return True if any of the therapist's offices is within `miles` of the
     patient. If we don't have geo data on either side, default to True (don't
-    block the match — let the patient + therapist sort it out)."""
+    block the match â let the patient + therapist sort it out)."""
     import logging
     _log = logging.getLogger(__name__)
     p = r.get("patient_geo") or {}
@@ -260,14 +260,14 @@ def _distance_within(t: dict, r: dict, miles: float) -> bool:
     if plat is None or plng is None:
         _log.warning(
             "GEO_MISSING: Patient request %s has no geocoded location "
-            "(city=%s, zip=%s) — distance filter bypassed",
+            "(city=%s, zip=%s) â distance filter bypassed",
             r.get("id", "?"), r.get("location_city", ""), r.get("location_zip", ""),
         )
         return True
     offices = t.get("office_geos") or []
     if not offices:
         _log.warning(
-            "GEO_MISSING: Therapist %s (%s) has no office_geos — "
+            "GEO_MISSING: Therapist %s (%s) has no office_geos â "
             "distance filter bypassed",
             t.get("id", "?"), t.get("name", "?"),
         )
@@ -296,7 +296,7 @@ def _gender_pass(t: dict, r: dict) -> bool:
     return (t.get("gender") or "").lower() == pref
 
 
-# ─── Weighted scoring helpers ─────────────────────────────────────────────────
+# âââ Weighted scoring helpers âââââââââââââââââââââââââââââââââââââââââââââââââ
 
 def _score_issue_one(t: dict, issue: str) -> float:
     issue = issue.lower()
@@ -402,7 +402,7 @@ def _score_prior_therapy(t: dict, r: dict) -> float:
     if prior == "yes_helped":
         return 6.0
     if prior == "yes_not_helped":
-        # Patient wants something different — favor experienced therapists with deeper specialty
+        # Patient wants something different â favor experienced therapists with deeper specialty
         if years >= 7 and len(t.get("primary_specialties") or []) >= 1:
             return MAX_PRIOR
         return 6.0
@@ -473,19 +473,19 @@ def _score_payment_alignment(t: dict, r: dict) -> float:
     insurance / cash-budget path and the therapist can't meet any of
     them. Without this axis a soft-insurance mismatch shows ~96% match
     even when the therapist doesn't take the patient's plan and the
-    patient gave no cash budget — misleading the patient.
+    patient gave no cash budget â misleading the patient.
 
     Logic:
-      * `payment_type = either` → full credit (no specific demand).
+      * `payment_type = either` â full credit (no specific demand).
       * `payment_type = insurance` with a specific plan:
-          - therapist accepts it → full
-          - patient OK'd sliding-scale + therapist offers it → full
-          - patient gave a cash budget that fits → full
-          - none of the above → 0
+          - therapist accepts it â full
+          - patient OK'd sliding-scale + therapist offers it â full
+          - patient gave a cash budget that fits â full
+          - none of the above â 0
       * `payment_type = cash`:
-          - no budget given → full (not enough info to penalize)
-          - budget fits therapist's rate (≤ 1.2× or ≤ 2× w/ sliding) → full
-          - rate exceeds budget → 0
+          - no budget given â full (not enough info to penalize)
+          - budget fits therapist's rate (â¤ 1.2Ã or â¤ 2Ã w/ sliding) â full
+          - rate exceeds budget â 0
     """
     pay = (r.get("payment_type") or "either").lower()
     if pay == "either":
@@ -494,7 +494,7 @@ def _score_payment_alignment(t: dict, r: dict) -> float:
     # Insurance path.
     if pay == "insurance":
         plan = (r.get("insurance_name") or "").strip()
-        # No specific plan supplied — can't penalize; full credit.
+        # No specific plan supplied â can't penalize; full credit.
         if not plan or plan.lower() in ("other", "other / not listed"):
             return MAX_PAYMENT_ALIGNMENT
         if _insurance_match(t, r):
@@ -531,7 +531,7 @@ def _score_modality_pref(t: dict, r: dict) -> float:
     return MAX_MODALITY_PREF * 0.6
 
 
-# ─── Public API ───────────────────────────────────────────────────────────────
+# âââ Public API âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 # Maps the patient-facing "priority factor" keys to the scoring axes they
 # emphasise. When the patient picks one of these on intake, the listed
@@ -540,7 +540,7 @@ def _score_modality_pref(t: dict, r: dict) -> float:
 PRIORITY_AXES = {
     # The "always hard" axes (specialty/concern via _primary_concern_pass)
     # and the patient-toggleable hards (payment/availability/urgency/
-    # gender via *_strict flags) live OUTSIDE this boost map — they're
+    # gender via *_strict flags) live OUTSIDE this boost map â they're
     # already enforced or flagged at filter-time. Boost factors only
     # apply to the remaining SOFT axes the patient wants weighted higher.
     "modality":   ["modality", "modality_pref"],
@@ -548,9 +548,9 @@ PRIORITY_AXES = {
     "identity":   ["gender", "style"],
 }
 # Multiplier applied to score axes the patient flagged as a priority.
-# Tuned down from 1.8 → 1.15 in iter-77 because the larger boost
+# Tuned down from 1.8 â 1.15 in iter-77 because the larger boost
 # blew past the 100-pt ceiling for *every* qualifying therapist when
-# the patient picked 3+ priorities — the proportional scale-back then
+# the patient picked 3+ priorities â the proportional scale-back then
 # crushed everyone to 100, removing all differentiation. 1.15 is
 # enough to nudge ranking while keeping totals well within 0-100.
 PRIORITY_BOOST = 1.15
@@ -577,7 +577,7 @@ def _patient_expressed_axis(r: dict, axis: str) -> bool:
     """Per-axis check used by strict-mode: did the patient actually tell
     us something concrete about THIS scoring axis? If not, we skip the
     strict-mode filter for it (otherwise picking a priority factor
-    composed of multiple axes — e.g. 'identity' = gender + style —
+    composed of multiple axes â e.g. 'identity' = gender + style â
     would drop every therapist when the patient set only one of them).
     """
     if axis == "issues":
@@ -599,7 +599,7 @@ def _patient_expressed_axis(r: dict, axis: str) -> bool:
     return False
 
 
-# ─── Expectation alignment scoring ───────────────────────────────────────
+# âââ Expectation alignment scoring âââââââââââââââââââââââââââââââââââââââ
 # Patient picks 2-3 from EXPECTATION_OPTIONS (session_expectations),
 # therapist picks 2-3 from the same set (t6_session_expectations).
 # Score = overlap / max(len(patient), len(therapist)) * MAX_EXPECTATION_ALIGNMENT
@@ -609,10 +609,10 @@ def _score_expectation_alignment(t: dict, r: dict) -> float:
     """Score expectation alignment between patient and therapist.
 
     Special wildcards:
-      - Patient picks "not_sure" → matches ANY therapist (neutral, doesn't
+      - Patient picks "not_sure" â matches ANY therapist (neutral, doesn't
         boost or penalize). Returns 50% of max.
-      - Therapist picks "depends" → matches ANY patient (same logic).
-      - Both wildcards → 50% of max.
+      - Therapist picks "depends" â matches ANY patient (same logic).
+      - Both wildcards â 50% of max.
 
     Normal case: overlap / max(len(patient), len(therapist)) * MAX.
     """
@@ -643,7 +643,7 @@ def _score_expectation_embed_bonus(t: dict, r: dict) -> float:
     return round(sim * MAX_EXPECTATION_EMBED_BONUS, 2)
 
 
-# ─── Therapist reliability scoring ────────────────────────────────────────
+# âââ Therapist reliability scoring ââââââââââââââââââââââââââââââââââââââââ
 
 _RELIABILITY_WEIGHTS = {
     "response_rate": 0.25,
@@ -655,7 +655,7 @@ _RELIABILITY_WEIGHTS = {
 
 def _score_reliability(t: dict) -> float:
     """Score therapist reliability from passive behavior data.
-    New therapists get neutral (50% of max) — not penalized, not boosted.
+    New therapists get neutral (50% of max) â not penalized, not boosted.
     Each component defaults to 0.5 if not yet measured."""
     rel = t.get("reliability") or {}
     if not rel:
@@ -669,12 +669,12 @@ def _score_reliability(t: dict) -> float:
 
 def calculate_tai(feedback_data: dict) -> float:
     """
-    Therapeutic Alliance Index (TAI) — 0-100 composite score.
+    Therapeutic Alliance Index (TAI) â 0-100 composite score.
 
     Derived from patient survey data across the feedback arc:
-      Bond (40%):  3w confidence (0-100) + 9w "feel understood" (1-5 → 0-100)
+      Bond (40%):  3w confidence (0-100) + 9w "feel understood" (1-5 â 0-100)
       Tasks (30%): 3w expectation match (Yes=100, Somewhat=50, No=0)
-      Goals (30%): 9w "same page" (1-5 → 0-100) + 15w progress (1-10 → 0-100)
+      Goals (30%): 9w "same page" (1-5 â 0-100) + 15w progress (1-10 â 0-100)
 
     Returns 0-100 float. Returns -1 if insufficient data.
     """
@@ -686,7 +686,7 @@ def calculate_tai(feedback_data: dict) -> float:
     if "confidence_3w" in feedback_data:
         bond_signals.append(feedback_data["confidence_3w"])  # already 0-100
     if "feel_understood_9w" in feedback_data:
-        bond_signals.append((feedback_data["feel_understood_9w"] - 1) * 25)  # 1-5 → 0-100
+        bond_signals.append((feedback_data["feel_understood_9w"] - 1) * 25)  # 1-5 â 0-100
     if "still_seeing_9w" in feedback_data:
         bond_signals.append(100.0 if feedback_data["still_seeing_9w"] == "yes" else 0.0)
     if "still_seeing_15w" in feedback_data:
@@ -699,9 +699,9 @@ def calculate_tai(feedback_data: dict) -> float:
 
     # Goals signals
     if "same_page_9w" in feedback_data:
-        goals_signals.append((feedback_data["same_page_9w"] - 1) * 25)  # 1-5 → 0-100
+        goals_signals.append((feedback_data["same_page_9w"] - 1) * 25)  # 1-5 â 0-100
     if "progress_15w" in feedback_data:
-        goals_signals.append((feedback_data["progress_15w"] - 1) * 100 / 9)  # 1-10 → 0-100
+        goals_signals.append((feedback_data["progress_15w"] - 1) * 100 / 9)  # 1-10 â 0-100
 
     # Need at least one signal in each pillar for a meaningful score
     if not bond_signals or not tasks_signals or not goals_signals:
@@ -714,17 +714,17 @@ def calculate_tai(feedback_data: dict) -> float:
     return round(bond * 0.40 + tasks * 0.30 + goals * 0.30, 1)
 
 
-# ─── Deep-match scoring (Iter-89 v2) ───────────────────────────────────
+# âââ Deep-match scoring (Iter-89 v2) âââââââââââââââââââââââââââââââââââ
 # Three axes activated only when the patient opted into the deep flow
 # (request.deep_match_opt_in is True) AND the therapist has answered
-# the corresponding T-fields. Each axis returns a 0–1 sub-score; the
+# the corresponding T-fields. Each axis returns a 0â1 sub-score; the
 # bonus added to the total is `weight * sub_score * DEEP_MATCH_SCALE`.
 #
 # Default weights match the founder's v2 spec:
 #   relationship_style 0.40 / way_of_working 0.35 / contextual_resonance 0.25
 # Admins can override these in `app_config.deep_match_weights`. The
 # scale factor pegs the maximum total deep bonus to 30 score points
-# (≈ a 30% lift over baseline) — large enough that deep answers can
+# (â a 30% lift over baseline) â large enough that deep answers can
 # meaningfully reorder results, small enough that they can't swamp
 # hard-requirement axes like specialty and licensure.
 _DEEP_MATCH_DEFAULT_WEIGHTS = {
@@ -732,11 +732,11 @@ _DEEP_MATCH_DEFAULT_WEIGHTS = {
     "way_of_working": 0.35,
     "contextual_resonance": 0.25,
 }
-_DEEP_MATCH_SCALE = 30.0  # max bonus per axis ≈ weight * 30
+_DEEP_MATCH_SCALE = 30.0  # max bonus per axis â weight * 30
 
 # NOTE: T1 (stuck_ranked) and T3 (breakthrough) are deprecated in the
 # new survey timeline but the scoring logic still works with existing
-# data. New therapists may not have T1/T3 answers — sub-scores will
+# data. New therapists may not have T1/T3 answers â sub-scores will
 # be 0.0 for those axes, which is the correct neutral behavior.
 #
 # Canonical option order for P1/T1 vectors. Indices here drive the
@@ -750,7 +750,7 @@ _P1_T1_KEYS = (
     "guides_questions",   # 5
 )
 
-# T4 → adjustments to the therapist's T1 rank vector. Each T4 slug
+# T4 â adjustments to the therapist's T1 rank vector. Each T4 slug
 # emphasises certain positions on the directiveness/warmth axis. These
 # values come straight from the v2 spec.
 _T4_BOOST_MAP: dict[str, dict[int, float]] = {
@@ -768,9 +768,9 @@ def _p1_to_vector(picks: list[str]) -> list[float]:
 
 
 def _t1_rank_to_vector(rank_order: list[str]) -> list[float]:
-    """Therapist's T1 ranking → normalised 6-vector. The slug at index 0
-    of `rank_order` is rank-1 (most instinctive) → 1.0; index 5 is
-    rank-6 → 0.0. Slugs missing from the input default to 0.0 so a
+    """Therapist's T1 ranking â normalised 6-vector. The slug at index 0
+    of `rank_order` is rank-1 (most instinctive) â 1.0; index 5 is
+    rank-6 â 0.0. Slugs missing from the input default to 0.0 so a
     therapist who hasn't answered T1 yet scores neutrally rather than
     being penalised."""
     pos: dict[str, int] = {slug: i for i, slug in enumerate(rank_order or [])}
@@ -783,7 +783,7 @@ def _t1_rank_to_vector(rank_order: list[str]) -> list[float]:
 
 def _apply_t4_boost(t_vec: list[float], t4: str | None) -> list[float]:
     """Add T4-driven boosts to the therapist rank vector and clamp at
-    1.0. Pure function — caller passes a copy if it doesn't want
+    1.0. Pure function â caller passes a copy if it doesn't want
     mutation."""
     if not t4 or t4 not in _T4_BOOST_MAP:
         return t_vec
@@ -808,12 +808,12 @@ def _cosine6(a: list[float], b: list[float]) -> float:
 def _score_relationship_style(
     p1_picks: list[str], t1_ranks: list[str], t4: str | None
 ) -> float:
-    """Dimension 1 — Relationship Style (weight 0.40 in v2 spec).
+    """Dimension 1 â Relationship Style (weight 0.40 in v2 spec).
 
     score = cosine_sim(P1_vec, blend(T1_rank_vec, T4))
 
     P1_vec is a 6-element binary vector indicating the 2 picks. T1
-    ranking is normalised so rank-1 → 1.0, rank-6 → 0.0. T4 boosts
+    ranking is normalised so rank-1 â 1.0, rank-6 â 0.0. T4 boosts
     specific positions per `_T4_BOOST_MAP` (e.g., a "direct" T4 lifts
     `challenges` and `direct_honest` slots by 0.15 each)."""
     if not p1_picks or not t1_ranks:
@@ -825,9 +825,9 @@ def _score_relationship_style(
 
 
 def _score_way_of_working(p2_picks: list[str], t3_picks: list[str]) -> float:
-    """Dimension 2 — Way of Working (weight 0.35 in v2 spec). Both pick
+    """Dimension 2 â Way of Working (weight 0.35 in v2 spec). Both pick
     exactly 2 from the same set of 6 slugs; score = (overlapping picks) / 2.
-    So: 0 shared → 0.0, 1 shared → 0.5, 2 shared → 1.0.
+    So: 0 shared â 0.0, 1 shared â 0.5, 2 shared â 1.0.
     """
     if not p2_picks or not t3_picks:
         return 0.0
@@ -842,12 +842,12 @@ def _t6_to_t1_fallback(t6_picks: list[str]) -> list[str]:
     P1-vs-T1 deep-match bonus scoring for new therapists who never
     answered the (now deprecated) T1 drag-rank question.
 
-    Mapping rationale (T6 → T1 equivalents):
-      guide_direct     → leads_structured, direct_honest
-      listen_heard     → follows_lead, warm_first
-      tools_fast       → leads_structured, challenges
-      explore_patterns → guides_questions, follows_lead
-      depends          → warm_first, guides_questions
+    Mapping rationale (T6 â T1 equivalents):
+      guide_direct     â leads_structured, direct_honest
+      listen_heard     â follows_lead, warm_first
+      tools_fast       â leads_structured, challenges
+      explore_patterns â guides_questions, follows_lead
+      depends          â warm_first, guides_questions
     """
     _T6_TO_T1 = {
         "guide_direct":     ["leads_structured", "direct_honest"],
@@ -878,12 +878,12 @@ def _t6_to_t3_fallback(t6_picks: list[str]) -> list[str]:
     """When a therapist has T6 but no T3, derive plausible T3 picks
     from their T6 session-expectation selections.
 
-    Mapping rationale (T6 → T3 equivalents):
-      guide_direct     → practical_tools
-      listen_heard     → deep_emotional
-      tools_fast       → practical_tools, focus_forward
-      explore_patterns → explore_past, build_insight
-      depends          → (neutral — no strong T3 signal)
+    Mapping rationale (T6 â T3 equivalents):
+      guide_direct     â practical_tools
+      listen_heard     â deep_emotional
+      tools_fast       â practical_tools, focus_forward
+      explore_patterns â explore_past, build_insight
+      depends          â (neutral â no strong T3 signal)
     """
     _T6_TO_T3 = {
         "guide_direct":     ["practical_tools"],
@@ -903,7 +903,7 @@ def _score_contextual_resonance(
     p3_embedding: list[float] | None,
     t5_embedding: list[float] | None,
 ) -> float:
-    """Dimension 3 — Contextual Resonance (weight 0.25 in v2 spec).
+    """Dimension 3 â Contextual Resonance (weight 0.25 in v2 spec).
     score = sim(P3, T5). T2 was removed; its weight now goes
     entirely to T5 (lived experience), which is the stronger signal.
     """
@@ -977,10 +977,10 @@ def score_therapist(
     (has `themes` extracted), we fold the evidence-depth + approach-
     alignment bonus directly into the final score so the score the
     therapist sees in their notification matches the score the patient
-    sees on the results page. No LLM calls happen here — it's pure set
+    sees on the results page. No LLM calls happen here â it's pure set
     arithmetic over the cached themes + the patient's brief.
     """
-    # ── Hard filters (always-on) ──────────────────────────────────────
+    # ââ Hard filters (always-on) ââââââââââââââââââââââââââââââââââââââ
     if not _state_pass(t, r):
         return {"total": -1, "filter_failed": "state", "filtered": True}
     if not _client_type_pass(t, r):
@@ -993,7 +993,7 @@ def score_therapist(
             "filter_failed": "primary_concern",
             "filtered": True,
         }
-    # ── Patient-toggleable hard filters (soft by default) ─────────────
+    # ââ Patient-toggleable hard filters (soft by default) âââââââââââââ
     if not _payment_pass(t, r):
         return {"total": -1, "filter_failed": "payment", "filtered": True}
     if not _modality_pass(t, r):
@@ -1026,7 +1026,7 @@ def score_therapist(
 
     # Strict mode: patient said "don't show me anyone who scores zero on
     # my top priorities." Hard-filter any therapist that whiffed an axis
-    # the patient flagged as important — but ONLY if the patient actually
+    # the patient flagged as important â but ONLY if the patient actually
     # expressed a preference on that axis. e.g. picking "identity" with
     # gender_preference='no_pref' would otherwise drop every therapist
     # because _score_gender returns 0 when the patient doesn't care.
@@ -1052,12 +1052,12 @@ def score_therapist(
     #
     # Worked example: patient picks 3 axes (specialty/schedule/payment)
     # and a therapist scores 140 raw across the boosted axes. We
-    # multiply every axis by 100/140 ≈ 0.714, so the therapist now
+    # multiply every axis by 100/140 â 0.714, so the therapist now
     # scores 100. A weaker therapist whose raw total is 110 gets
-    # 110*0.714 ≈ 78.6 — they're still meaningfully behind the top.
+    # 110*0.714 â 78.6 â they're still meaningfully behind the top.
     weights = _priority_weights(priority_factors)
     breakdown = {ax: round(v * weights[ax], 2) for ax, v in raw.items()}
-    # Reputation boost — verified online reviews ≥ 4.5★ adds +5 (out of 100).
+    # Reputation boost â verified online reviews â¥ 4.5â adds +5 (out of 100).
     review_avg = float(t.get("review_avg") or 0)
     review_count = int(t.get("review_count") or 0)
     if review_avg >= 4.5 and review_count >= 3:
@@ -1066,7 +1066,7 @@ def score_therapist(
         breakdown["reviews"] = 2
     else:
         breakdown["reviews"] = 0
-    # Differentiator bonus — adds up to +1.5 in fractional points so two
+    # Differentiator bonus â adds up to +1.5 in fractional points so two
     # otherwise-identical therapists don't display the same integer score.
     # Uses verified-review quality, years experience, and review-count
     # depth. Capped well below the next bucket boundary so it can't
@@ -1081,11 +1081,11 @@ def score_therapist(
         )
     years = float(t.get("years_experience") or 0)
     if years > 0:
-        # 0-0.5: 0 yrs → 0, 5 yrs → 0.25, 20 yrs → 0.5
+        # 0-0.5: 0 yrs â 0, 5 yrs â 0.25, 20 yrs â 0.5
         diff_bonus += min(0.5, years / 40.0)
     breakdown["differentiator"] = round(diff_bonus, 2)
 
-    # Language soft axis — small bonus when the patient's preferred
+    # Language soft axis â small bonus when the patient's preferred
     # language is in the therapist's `languages_spoken`. Skipped when
     # patient's preferred_language is empty or English (the implicit
     # default) so we don't bias every match toward "Spanish-speaking
@@ -1107,11 +1107,11 @@ def score_therapist(
     # end to produce a human-friendly 0-97 display score.
     total = round(raw_total, 2)
 
-    # ── Research-cache bonus (folded directly into the live score) ────
+    # ââ Research-cache bonus (folded directly into the live score) ââââ
     # When the therapist has a warm pre-warm cache, we project it through
     # the patient's brief now (cheap set arithmetic, no LLM call) so the
     # final score reflects evidence-graded specialty match + style/modality
-    # alignment. This used to live in a separate background task — moving
+    # alignment. This used to live in a separate background task â moving
     # it inline means notifications go out with the SAME score the patient
     # eventually sees, and re-ranking (a deep-cache match jumping from #6
     # to #2) actually works.
@@ -1130,7 +1130,7 @@ def score_therapist(
         except Exception:
             # Defensive: a malformed cache should never break scoring.
             research_axes = {}
-    # ── Deep-match bonus (Iter-89) ────────────────────────────────────
+    # ââ Deep-match bonus (Iter-89) ââââââââââââââââââââââââââââââââââââ
     # Three additional axes activated when the patient opted in. Each
     # sub-score is in [0,1]; we multiply by configurable weights and
     # _DEEP_MATCH_SCALE before adding to the total. Always recorded in
@@ -1145,12 +1145,12 @@ def score_therapist(
         if deep["bonus"]:
             breakdown["deep_match"] = deep["bonus"]
             total = round(min(150.0, total + deep["bonus"]), 2)
-    # ── Patient `other_issue` free-text resonance bonus ─────────────
+    # ââ Patient `other_issue` free-text resonance bonus âââââââââââââ
     # When the patient filled in *Anything else?* on intake, we
     # embedded their text at request creation. Cosine similarity vs the
     # therapist's T5 lived-experience and T2 progress-story embeddings
     # awards up to MAX_OTHER_ISSUE_BONUS points. This closes the gap
-    # the text-impact experiment surfaced — the engine was previously
+    # the text-impact experiment surfaced â the engine was previously
     # blind to this textarea, so two patients with identical slug
     # picks but different free-text ranked therapists identically.
     other_issue_axes: dict[str, float] = {}
@@ -1171,7 +1171,7 @@ def score_therapist(
             }
         except Exception:
             other_issue_axes = {}
-    # ── Patient `prior_therapy_notes` free-text resonance bonus ─────
+    # ââ Patient `prior_therapy_notes` free-text resonance bonus âââââ
     # Patients describe what worked / didn't work in past therapy
     # ("liked her style, took time to know us both"). Embed at request
     # creation, cosine-compare against therapist T5/T2, soft-bonus when
@@ -1199,12 +1199,12 @@ def score_therapist(
     # (axis maxes sum to ~185). We normalize to a 0-97 display range
     # using a soft curve so (a) the patient never sees 100% (no match
     # is truly perfect) and (b) therapists who score differently in raw
-    # points still show different percentages on the UI — the old
+    # points still show different percentages on the UI â the old
     # hard-cap at 95 crushed all top-tier therapists to the same number.
     #
     # Formula: display = 97 * (raw / (raw + 30))
-    #   raw=50  → 61%   |  raw=80  → 70%   |  raw=100 → 75%
-    #   raw=120 → 78%   |  raw=150 → 81%   |  raw=200 → 84%
+    #   raw=50  â 61%   |  raw=80  â 70%   |  raw=100 â 75%
+    #   raw=120 â 78%   |  raw=150 â 81%   |  raw=200 â 84%
     # Deep-match + research can push above 100 raw, which maps to 75-85.
     # The +30 denominator controls the curve's steepness.
     if isinstance(total, (int, float)) and total > 0:
@@ -1228,10 +1228,10 @@ def score_therapist(
 def _tiebreaker(t: dict) -> tuple[float, float, float, float]:
     """Tiebreaker tuple applied AFTER the integer match_score. Returns
     values that resolve identical match_scores by:
-      1. Verified review quality (avg × log10(count+1)) — real social proof
-      2. Years of experience — seasoned therapists slightly preferred
-      3. Recency of profile activity — active therapists outrank stale ones
-      4. Hash of the therapist id — final stable shuffle so we don't
+      1. Verified review quality (avg Ã log10(count+1)) â real social proof
+      2. Years of experience â seasoned therapists slightly preferred
+      3. Recency of profile activity â active therapists outrank stale ones
+      4. Hash of the therapist id â final stable shuffle so we don't
          consistently favour alphabetical order when EVERYTHING else
          is equal.
     All values are returned negated so a desc-sort works the same as
@@ -1242,7 +1242,7 @@ def _tiebreaker(t: dict) -> tuple[float, float, float, float]:
     import math as _math
     review_signal = review_avg * _math.log10(review_count + 1)
     years = float(t.get("years_experience") or 0.0)
-    # Recency: prefer therapists whose `updated_at` is recent — stale
+    # Recency: prefer therapists whose `updated_at` is recent â stale
     # profiles indicate the therapist may have moved on.
     from helpers import _parse_iso as _piso
     updated = _piso(t.get("updated_at") or t.get("created_at") or "")
@@ -1250,7 +1250,7 @@ def _tiebreaker(t: dict) -> tuple[float, float, float, float]:
     # Stable per-therapist random-ish offset so two genuinely-identical
     # therapists don't always sort the same way (avoids one therapist
     # always getting the top slot at the expense of another). SHA-256
-    # used purely as a stable hash function — not for any security purpose.
+    # used purely as a stable hash function â not for any security purpose.
     tid = (t.get("id") or t.get("email") or "").encode("utf-8")
     import hashlib as _h
     salt = int(_h.sha256(tid).hexdigest()[:8], 16) / 0xFFFFFFFF
@@ -1274,7 +1274,7 @@ def rank_therapists(
          (caller should trigger Phase D outreach to find more)
 
     Identical `match_score` values are tie-broken via `_tiebreaker` so
-    the ordering is deterministic AND meaningful — the 70-point therapist
+    the ordering is deterministic AND meaningful â the 70-point therapist
     with 80 verified reviews ranks above the 70-point therapist with 0.
 
     `research_caches` (optional): {therapist_id: research_cache_dict}.
@@ -1296,11 +1296,11 @@ def rank_therapists(
         if result["filtered"]:
             continue
         # Decline-history penalty (soft re-rank, not a strict filter).
-        # We don't filter outright — capacity may have changed since the
-        # decline — but the -10pt penalty re-ranks them lower. NOTE: a
+        # We don't filter outright â capacity may have changed since the
+        # decline â but the -10pt penalty re-ranks them lower. NOTE: a
         # therapist sitting just above the threshold (e.g. score 75)
         # will drop to 65 and fall below the 70-point cutoff applied
-        # below — that's intended. They've actively declined a similar
+        # below â that's intended. They've actively declined a similar
         # request in the last 30 days; we'd rather route to someone who
         # hasn't recently said no, even if their raw score was a hair lower.
         dh = decline_history.get(t.get("id")) or {}
@@ -1332,7 +1332,7 @@ def gap_axes(
 ) -> list[dict]:
     """Return up-to-3 plain-English explanations of *why* this match isn't 100%.
 
-    Each entry: {key, label, explanation, suggestion} — designed for the therapist
+    Each entry: {key, label, explanation, suggestion} â designed for the therapist
     notification email + Apply page so they know exactly what to address in their
     response if they want to apply.
     """
@@ -1350,7 +1350,7 @@ def gap_axes(
         "modality_pref":(MAX_MODALITY_PREF,"Preferred therapy approach"),
     }
 
-    # ─── Per-axis explanation generators ───────────────────────────────────
+    # âââ Per-axis explanation generators âââââââââââââââââââââââââââââââââââ
     def _issues() -> Optional[tuple[str, str]]:
         patient_issues = [i.lower() for i in (request.get("presenting_issues") or []) if i]
         if not patient_issues:
@@ -1373,7 +1373,7 @@ def gap_axes(
         if in_secondary:
             nice2 = ", ".join(_humanize(i) for i in in_secondary)
             return (
-                f"You list {nice2} as secondary — patient flagged {nice2} as a top concern.",
+                f"You list {nice2} as secondary â patient flagged {nice2} as a top concern.",
                 f"Highlight any specific training or recent cases you've handled with {nice2}.",
             )
         return None
@@ -1408,7 +1408,7 @@ def gap_axes(
         if pref == "prefer_inperson" and offering == "telehealth":
             return (
                 "Patient prefers in-person; you're telehealth-only.",
-                "Acknowledge this in your reply — some patients flex if the fit feels right.",
+                "Acknowledge this in your reply â some patients flex if the fit feels right.",
             )
         return None
 
@@ -1431,7 +1431,7 @@ def gap_axes(
             notes = request.get("prior_therapy_notes")
             base = "Patient has tried therapy before and it didn't fully click."
             sugg = (
-                "Acknowledge this — share how your approach is different from "
+                "Acknowledge this â share how your approach is different from "
                 "what they've tried."
             )
             if notes:
@@ -1461,10 +1461,10 @@ def gap_axes(
             required = request.get("gender_required")
             base = f"Patient prefers a {pref} therapist; you're {actual or 'unspecified'}."
             sugg = (
-                "This is a hard preference — they may pass, but go ahead and apply if "
+                "This is a hard preference â they may pass, but go ahead and apply if "
                 "you feel you're a strong fit on other dimensions."
             ) if required else (
-                "It's a soft preference — apply if other dimensions are a clear win."
+                "It's a soft preference â apply if other dimensions are a clear win."
             )
             return (base, sugg)
         return None
@@ -1557,7 +1557,7 @@ def gap_axes(
             "label": label,
             "explanation": explanation,
             "suggestion": suggestion,
-            "gap": gap,; not shown to user
+            "gap": gap,
         })
     candidates.sort(key=lambda c: c["gap"], reverse=True)
     for c in candidates:
