@@ -44,17 +44,20 @@ test.afterAll(async () => {
 });
 
 test("therapist signup → DB record → admin approval", async ({ page }) => {
-  // Helper: click Next and verify we advanced to expected step by waiting
-  // for a step-specific element. If Next is disabled, log the block reason.
+  // Helper: wait for Next to become enabled, click it, and verify
+  // we advanced to the expected step by waiting for a step-specific element.
   async function clickNextAndVerify(
     stepName: string,
     nextStepLocator: string,
     timeout = 10_000,
   ) {
-    // Check if Next is disabled and capture the reason
     const nextBtn = page.getByTestId("signup-next-btn");
-    const isDisabled = await nextBtn.isDisabled();
-    if (isDisabled) {
+
+    // Wait for the Next button to become enabled (React state may need a tick)
+    try {
+      await expect(nextBtn).toBeEnabled({ timeout });
+    } catch {
+      // Still disabled — capture diagnostic info before failing
       const blockReason = await page
         .getByTestId("signup-step-error")
         .textContent()
@@ -62,15 +65,20 @@ test("therapist signup → DB record → admin approval", async ({ page }) => {
       console.error(
         `[DIAG] Next disabled at ${stepName}. Reason: ${blockReason}`,
       );
-      // Capture the page HTML for debugging
-      const html = await page.content();
-      console.error(`[DIAG] Page snippet: ${html.slice(0, 2000)}`);
+      throw new Error(
+        `Next button disabled at ${stepName}: ${blockReason}`,
+      );
     }
-    await nextBtn.click({ timeout });
+
+    await nextBtn.click();
     // Wait for the next step's content to render
     await page.waitForSelector(`[data-testid="${nextStepLocator}"]`, {
       timeout,
     });
+    // Let the smooth scroll animation finish before interacting with the
+    // new step's content — scrollFormIntoView uses behavior:"smooth" which
+    // takes ~300ms and makes elements "unstable" for Playwright clicks.
+    await page.waitForTimeout(400);
   }
 
   // ── Navigate to signup page ──────────────────────────────────────
@@ -133,10 +141,17 @@ test("therapist signup → DB record → admin approval", async ({ page }) => {
 
   // ── Step 3: Who You See ──────────────────────────────────────────
   // Client types — pick individual
-  await page.getByTestId("signup-client-type-individual").click();
+  const clientPill = page.getByTestId("signup-client-type-individual");
+  await clientPill.scrollIntoViewIfNeeded();
+  await clientPill.click();
+  // Verify the pill toggled — active pills get the green background class
+  await expect(clientPill).toHaveClass(/bg-\[#2D4A3E\]/, { timeout: 3_000 });
 
   // Age groups — pick adult
-  await page.getByTestId("signup-age-group-adult").click();
+  const agePill = page.getByTestId("signup-age-group-adult");
+  await agePill.scrollIntoViewIfNeeded();
+  await agePill.click();
+  await expect(agePill).toHaveClass(/bg-\[#2D4A3E\]/, { timeout: 3_000 });
 
   await clickNextAndVerify("Step 3 → 4", "signup-issue-anxiety-primary");
 
