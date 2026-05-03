@@ -24,7 +24,12 @@ db = mongo_client[os.environ["DB_NAME"]]
 
 
 # ─── Env-driven constants ────────────────────────────────────────────────────
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123!")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+if not ADMIN_PASSWORD:
+    raise RuntimeError(
+        "FATAL: ADMIN_PASSWORD environment variable is not set. "
+        "Refusing to start with no admin password."
+    )
 DEFAULT_THRESHOLD = float(os.environ.get("DEFAULT_MATCH_THRESHOLD", "70"))
 MIN_TARGET_MATCHES = int(os.environ.get("MIN_TARGET_MATCHES", "30"))
 AUTO_DELAY_HOURS = float(os.environ.get("AUTO_RESULTS_DELAY_HOURS", "24"))
