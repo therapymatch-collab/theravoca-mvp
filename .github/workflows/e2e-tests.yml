@@ -1,0 +1,104 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [staging, main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+
+    env:
+      # Backend reads these
+      MONGO_URL: mongodb://localhost:27017
+      DB_NAME: theravoca_test
+      ADMIN_PASSWORD: testadmin123
+      JWT_SECRET: test-jwt-secret-for-ci
+      CORS_ORIGINS: "*"
+      PORT: "10000"
+      # Playwright test reads these
+      MONGO_URI: mongodb://localhost:27017
+      MONGO_DB: theravoca_test
+      # No REACT_APP_TURNSTILE_SITE_KEY — skips Turnstile in CI
+      # No RESEND_API_KEY — emails will fail silently
+      # No TWILIO vars — SMS will fail silently
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Python backend ────────────────────────────────────
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend deps
+        run: pip install -r backend/requirements.txt
+
+      # ── Node frontend ─────────────────────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          CI=false npx craco build
+          # Copy build output to where _start.py expects it
+          cp -r build ../backend/static_build
+
+      # ── Playwright ─────────────────────────────────────────
+      - name: Install E2E deps
+        working-directory: tests/e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      # ── Start backend ──────────────────────────────────────
+      - name: Start server
+        working-directory: backend
+        run: |
+          uvicorn _start:app --host 0.0.0.0 --port 10000 &
+          echo "Waiting for server..."
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:10000/api/version && break
+            sleep 2
+          done
+          echo "Server is up"
+
+      # ── Run tests ──────────────────────────────────────────
+      - name: Run E2E tests
+        working-directory: tests/e2e
+        run: npx playwright test
+        env:
+          BASE_URL: http://localhost:10000
+
+      # ── Upload artifacts on failure ────────────────────────
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: tests/e2e/playwright-report/
+          retention-days: 7
+
+      - name: Upload traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: tests/e2e/test-results/
+          retention-days: 7
