@@ -11,6 +11,7 @@
 import { useRef, useState, useEffect } from "react";
 import { Play, ChevronLeft, ChevronRight } from "lucide-react";
 import useSiteCopy from "@/lib/useSiteCopy";
+import GetMatchedCTA from "@/components/GetMatchedCTA";
 
 // Source URLs come from the user's own theravoca.com WordPress media library.
 const TESTIMONIALS = [
@@ -169,15 +170,7 @@ export default function VideoTestimonials() {
           ))}
           </div>
         </div>
-        <div className="mt-10 flex justify-center">
-          <a
-            href="/#start"
-            className="tv-btn-primary"
-            data-testid="testimonials-cta-btn"
-          >
-            {t("cta.testimonials", "Get matched today")}
-          </a>
-        </div>
+        <GetMatchedCTA id="testimonials-cta" copyKey="cta.testimonials" />
       </div>
     </section>
   );
