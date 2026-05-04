@@ -157,7 +157,26 @@ export function WhoStep({ data, set, hardCapacity }) {
         </div>
       )}
 
-      {stateChoice === "ID" && (
+      {stateChoice === "ID" && hc.loading && (
+        <>
+          <Group label="What type of therapy is needed?">
+            <div className="flex flex-wrap gap-2">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-9 w-24 rounded-full bg-[#F0EDE8] animate-pulse" />
+              ))}
+            </div>
+          </Group>
+          <Group label="What age group is the client?">
+            <div className="flex flex-wrap gap-2">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="h-9 w-28 rounded-full bg-[#F0EDE8] animate-pulse" />
+              ))}
+            </div>
+          </Group>
+        </>
+      )}
+
+      {stateChoice === "ID" && !hc.loading && (
         <>
           <Group label="What type of therapy is needed?">
             <PillRow

@@ -218,170 +218,58 @@ async def compute_capacity(db) -> dict:
         ]),
     }
 
-    # Human-readable explanations for disabled options (count == 0).
+    # Patient-facing copy -- deliberately vague.  No counts, no mention
+    # of recruiting.  Keeps the form feeling confident, not apologetic.
+    _DISABLED_LABEL = (
+        "We don't currently have therapists matching this preference. "
+        "You can still submit -- we'll work to find a match."
+    )
+    _WARNED_LABEL = "Match times may be slightly longer for this preference."
+
+    # Disabled protections (count == 0).
     protections: list[dict] = []
     for lang in disabled["language_strict"]:
-        protections.append({
-            "axis": "language_strict",
-            "value": lang,
-            "count": 0,
-            "label": (
-                f"No therapists in our directory currently speak "
-                f"{lang}. We're actively recruiting -- submit your "
-                f"request and we'll add you to our recruit list."
-            ),
-        })
+        protections.append({"axis": "language_strict", "value": lang,
+                            "count": 0, "label": _DISABLED_LABEL})
     for gender in disabled["gender_required"]:
-        count = gen_c.get(gender, 0)
-        protections.append({
-            "axis": "gender_required",
-            "value": gender,
-            "count": count,
-            "label": (
-                f"Only {count} {gender} therapist{'s' if count != 1 else ''} "
-                f"in our directory. Requiring {gender} would leave you "
-                f"with too few matches."
-            ),
-        })
+        protections.append({"axis": "gender_required", "value": gender,
+                            "count": gen_c.get(gender, 0), "label": _DISABLED_LABEL})
     if disabled["in_person_only"]:
-        protections.append({
-            "axis": "in_person_only",
-            "value": "in_person_only",
-            "count": in_person,
-            "label": (
-                f"Only {in_person} therapist{'s' if in_person != 1 else ''} "
-                f"currently offer{'' if in_person == 1 else 's'} in-person "
-                f"sessions in Idaho. Choose 'Prefer in-person' instead -- "
-                f"we'll rank in-person therapists first but keep "
-                f"telehealth options available."
-            ),
-        })
+        protections.append({"axis": "in_person_only", "value": "in_person_only",
+                            "count": in_person, "label": _DISABLED_LABEL})
     if disabled["telehealth_only"]:
-        protections.append({
-            "axis": "telehealth_only",
-            "value": "telehealth_only",
-            "count": telehealth,
-            "label": (
-                f"Only {telehealth} therapist{'s' if telehealth != 1 else ''} "
-                f"currently offer{'' if telehealth == 1 else 's'} telehealth-only "
-                f"in Idaho."
-            ),
-        })
+        protections.append({"axis": "telehealth_only", "value": "telehealth_only",
+                            "count": telehealth, "label": _DISABLED_LABEL})
     for carrier in disabled["insurance_strict"]:
-        protections.append({
-            "axis": "insurance_strict",
-            "value": carrier,
-            "count": 0,
-            "label": (
-                f"No therapists in our directory currently accept "
-                f"{carrier.title()}. We're actively recruiting -- "
-                f"submit your request and we'll add you to our recruit list."
-            ),
-        })
+        protections.append({"axis": "insurance_strict", "value": carrier,
+                            "count": 0, "label": _DISABLED_LABEL})
     for u in disabled["urgency_strict"]:
-        protections.append({
-            "axis": "urgency_strict",
-            "value": u,
-            "count": 0,
-            "label": (
-                f"No therapists currently accept "
-                f"{u.replace('_', ' ')} starts. We're recruiting -- "
-                f"submit your request and we'll prioritize finding a match."
-            ),
-        })
+        protections.append({"axis": "urgency_strict", "value": u,
+                            "count": 0, "label": _DISABLED_LABEL})
     for ct in disabled["client_type"]:
-        protections.append({
-            "axis": "client_type",
-            "value": ct,
-            "count": 0,
-            "label": (
-                f"No therapists in our directory currently offer {ct} "
-                f"therapy. We're actively recruiting {ct} therapists "
-                f"in Idaho."
-            ),
-        })
+        protections.append({"axis": "client_type", "value": ct,
+                            "count": 0, "label": _DISABLED_LABEL})
     for ag in disabled["age_group"]:
-        pretty = ag.replace("_", " ")
-        protections.append({
-            "axis": "age_group",
-            "value": ag,
-            "count": 0,
-            "label": (
-                f"No therapists in our directory currently see {pretty} "
-                f"clients. We're actively recruiting {pretty} specialists "
-                f"in Idaho."
-            ),
-        })
+        protections.append({"axis": "age_group", "value": ag,
+                            "count": 0, "label": _DISABLED_LABEL})
 
-    # Human-readable explanations for warned options (limited supply).
+    # Warned explanations (0 < count < MIN_REQUIRED).
     warnings: list[dict] = []
     for lang in warned["language_strict"]:
-        count = lang_ci.get(lang.lower(), 0)
-        warnings.append({
-            "axis": "language_strict",
-            "value": lang,
-            "count": count,
-            "label": (
-                f"Limited availability -- only {count} "
-                f"therapist{'s' if count != 1 else ''} in our directory "
-                f"speak{'' if count == 1 else ''} {lang}. We'll do our "
-                f"best to match you, and may add you to our recruit list "
-                f"if needed."
-            ),
-        })
+        warnings.append({"axis": "language_strict", "value": lang,
+                         "count": lang_ci.get(lang.lower(), 0), "label": _WARNED_LABEL})
     for carrier in warned["insurance_strict"]:
-        count = ins_c.get(carrier.lower(), 0)
-        warnings.append({
-            "axis": "insurance_strict",
-            "value": carrier,
-            "count": count,
-            "label": (
-                f"Limited availability -- only {count} "
-                f"therapist{'s' if count != 1 else ''} in network for "
-                f"{carrier.title()}. We'll do our best to match you, "
-                f"and may add you to our recruit list if needed."
-            ),
-        })
+        warnings.append({"axis": "insurance_strict", "value": carrier,
+                         "count": ins_c.get(carrier.lower(), 0), "label": _WARNED_LABEL})
     for u in warned["urgency_strict"]:
-        count = urgency_counts.get(u, 0)
-        warnings.append({
-            "axis": "urgency_strict",
-            "value": u,
-            "count": count,
-            "label": (
-                f"Limited availability -- only {count} "
-                f"therapist{'s' if count != 1 else ''} currently accept "
-                f"{u.replace('_', ' ')} starts. We'll do our best to "
-                f"match you, and may add you to our recruit list if needed."
-            ),
-        })
+        warnings.append({"axis": "urgency_strict", "value": u,
+                         "count": urgency_counts.get(u, 0), "label": _WARNED_LABEL})
     for ct in warned["client_type"]:
-        count = ct_c.get(ct, 0)
-        warnings.append({
-            "axis": "client_type",
-            "value": ct,
-            "count": count,
-            "label": (
-                f"Limited availability -- only {count} "
-                f"therapist{'s' if count != 1 else ''} in our directory "
-                f"offer {ct} therapy. We'll do our best to match you, "
-                f"and may add you to our recruit list if needed."
-            ),
-        })
+        warnings.append({"axis": "client_type", "value": ct,
+                         "count": ct_c.get(ct, 0), "label": _WARNED_LABEL})
     for ag in warned["age_group"]:
-        count = ag_c.get(ag, 0)
-        pretty = ag.replace("_", " ")
-        warnings.append({
-            "axis": "age_group",
-            "value": ag,
-            "count": count,
-            "label": (
-                f"Limited availability -- only {count} "
-                f"therapist{'s' if count != 1 else ''} in our directory "
-                f"see {pretty} clients. We'll do our best to match you, "
-                f"and may add you to our recruit list if needed."
-            ),
-        })
+        warnings.append({"axis": "age_group", "value": ag,
+                         "count": ag_c.get(ag, 0), "label": _WARNED_LABEL})
 
     return {
         "pool_size": pool_size,

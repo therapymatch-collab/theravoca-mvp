@@ -10,6 +10,7 @@ import { api } from "./api";
 // Consumers receive helpers for both tiers plus the raw capacity object.
 export default function useHardCapacity() {
   const [capacity, setCapacity] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let alive = true;
@@ -19,6 +20,8 @@ export default function useHardCapacity() {
         if (alive) setCapacity(r.data || null);
       } catch (_) {
         // Silent fail -- capacity gating is a nice-to-have, not critical.
+      } finally {
+        if (alive) setLoading(false);
       }
     })();
     return () => {
@@ -54,5 +57,5 @@ export default function useHardCapacity() {
   const isWarned = (axis, value) => _check(capacity?.warned, axis, value);
   const warnReasonFor = (axis, value) => _label(capacity?.warnings, axis, value);
 
-  return { capacity, isDisabled, reasonFor, isWarned, warnReasonFor };
+  return { capacity, loading, isDisabled, reasonFor, isWarned, warnReasonFor };
 }
