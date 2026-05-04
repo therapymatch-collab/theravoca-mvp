@@ -8,20 +8,42 @@ import { api } from "./api";
 //   (normal)  -- count >= MIN_REQUIRED, no flags
 //
 // Consumers receive helpers for both tiers plus the raw capacity object.
+const CACHE_KEY = "tv_capacity_v1";
+const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function _readCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Date.now() - (parsed._ts || 0) > CACHE_MAX_AGE_MS) return null;
+    return parsed.data || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function _writeCache(data) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ data, _ts: Date.now() }));
+  } catch (_) {
+    // Quota exceeded or private mode -- ignore.
+  }
+}
+
 export default function useHardCapacity() {
-  const [capacity, setCapacity] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [capacity, setCapacity] = useState(() => _readCache());
 
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         const r = await api.get("/config/hard-capacity");
-        if (alive) setCapacity(r.data || null);
+        const fresh = r.data || null;
+        if (alive) setCapacity(fresh);
+        if (fresh) _writeCache(fresh);
       } catch (_) {
-        // Silent fail -- capacity gating is a nice-to-have, not critical.
-      } finally {
-        if (alive) setLoading(false);
+        // Silent fail -- keep cached or null.
       }
     })();
     return () => {
@@ -57,5 +79,5 @@ export default function useHardCapacity() {
   const isWarned = (axis, value) => _check(capacity?.warned, axis, value);
   const warnReasonFor = (axis, value) => _label(capacity?.warnings, axis, value);
 
-  return { capacity, loading, isDisabled, reasonFor, isWarned, warnReasonFor };
+  return { capacity, isDisabled, reasonFor, isWarned, warnReasonFor };
 }
