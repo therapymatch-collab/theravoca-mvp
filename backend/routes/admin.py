@@ -3103,7 +3103,7 @@ async def public_hard_capacity() -> dict[str, Any]:
     (Admins see the same data + full protection reasons via
     /api/admin/hard-capacity)."""
     import hard_capacity
-    result = await hard_capacity.compute_capacity(db)
+    result = await hard_capacity.compute_capacity_cached(db)
     # Lean payload for public consumers Ã¢ÂÂ omit raw counts to keep
     # directory breakdown private. We only need the disabled flags +
     # the short protections blurbs for the UI tooltip.
@@ -3119,7 +3119,7 @@ async def public_hard_capacity() -> dict[str, Any]:
 async def admin_hard_capacity() -> dict[str, Any]:
     """Admin view Ã¢ÂÂ full capacity snapshot with raw counts per variant."""
     import hard_capacity
-    return await hard_capacity.compute_capacity(db)
+    return await hard_capacity.compute_capacity_cached(db)
 
 
 @router.get("/admin/turnstile-settings", dependencies=[Depends(require_admin)])

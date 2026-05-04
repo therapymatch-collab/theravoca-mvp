@@ -16,10 +16,27 @@ Pure-read: never mutates the directory.
 """
 from __future__ import annotations
 
+import time
 from collections import Counter
 
 
 MIN_REQUIRED = 30  # target notified count per request
+
+# In-memory cache -- avoids re-running the full therapist scan on every
+# page load.  Invalidates after CACHE_TTL_SEC seconds.
+CACHE_TTL_SEC = 300  # 5 minutes
+_cache: dict = {"result": None, "ts": 0.0}
+
+
+async def compute_capacity_cached(db) -> dict:
+    """Return cached capacity snapshot, recomputing only when stale."""
+    now = time.monotonic()
+    if _cache["result"] is not None and (now - _cache["ts"]) < CACHE_TTL_SEC:
+        return _cache["result"]
+    result = await compute_capacity(db)
+    _cache["result"] = result
+    _cache["ts"] = now
+    return result
 
 
 # Filter predicates — one per HARD variant. Each takes a therapist doc
