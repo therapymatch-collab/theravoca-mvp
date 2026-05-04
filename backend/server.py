@@ -54,9 +54,12 @@ async def lifespan(_app: FastAPI):
     # therapist directory (don't double-seed alongside real data).
     therapist_count = await db.therapists.count_documents({})
     if therapist_count == 0:
-        therapists = generate_seed_therapists(100)
-        await db.therapists.insert_many([t.copy() for t in therapists])
-        logger.info("Cold start — seeded %d Idaho therapists with v2 schema", len(therapists))
+        if _ENV == "production":
+            logger.warning("therapists collection is empty in production -- skipping auto-seed")
+        else:
+            therapists = generate_seed_therapists(100)
+            await db.therapists.insert_many([t.copy() for t in therapists])
+            logger.info("Cold start -- seeded %d Idaho therapists with v2 schema", len(therapists))
 
     asyncio.create_task(_backfill_therapist_geo())
     # Best-effort indexes on the hottest query paths. The rate-limit
