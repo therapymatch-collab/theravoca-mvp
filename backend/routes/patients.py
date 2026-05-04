@@ -644,7 +644,37 @@ async def public_request_results(
     breakdowns = req.get("notified_breakdowns") or {}
     distances = req.get("notified_distances") or {}
     for a in apps:
-        t = await db.therapists.find_one({"id": a["therapist_id"]}, {"_id": 0})
+        t = await db.therapists.find_one({"id": a["therapist_id"]}, {
+            "_id": 0,
+            "id": 1,
+            "name": 1,
+            "email": 1,
+            "phone": 1,
+            "profile_picture": 1,
+            "credential_type": 1,
+            "years_experience": 1,
+            "modalities": 1,
+            "primary_specialties": 1,
+            "secondary_specialties": 1,
+            "general_treats": 1,
+            "modality_offering": 1,
+            "telehealth": 1,
+            "offers_in_person": 1,
+            "cash_rate": 1,
+            "sliding_scale": 1,
+            "free_consult": 1,
+            "insurance_accepted": 1,
+            "availability_windows": 1,
+            "review_avg": 1,
+            "review_count": 1,
+            "review_sources": 1,
+            "style_tags": 1,
+            "website": 1,
+            "office_addresses": 1,
+            "office_locations": 1,
+            "languages_spoken": 1,
+            "bio": 1,
+        })
         if t:
             enriched.append({
                 **a,
