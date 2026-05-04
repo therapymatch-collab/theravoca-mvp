@@ -7,7 +7,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-hits=$(grep -rn -E '\xc3|\xc2' \
+hits=$(grep -rn -P '\xc3|\xc2' \
   "$REPO_ROOT/backend/" \
   "$REPO_ROOT/frontend/src/" \
   --include='*.py' --include='*.jsx' --include='*.js' \
