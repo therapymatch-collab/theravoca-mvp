@@ -26,6 +26,20 @@ Each commit contains exactly one logical change. Don't batch unrelated fixes int
 
 Before any multi-file refactor, architectural change, or large-scale modification, we discuss the plan first. No surprise rewrites. Lay out what files change, why, and what could break. Get approval before writing code.
 
+## 7. File editing: use the right tool
+
+Never write or overwrite source files (.py, .jsx, .js) through the Linux bash mount. The mount re-encodes UTF-8 multi-byte characters (em-dashes, math symbols, box-drawing chars) as double-encoded Latin-1 garbage. This corrupted 121 lines across 3 files (commit ba93f38) and wasn't caught for weeks.
+
+Rules:
+- **Edit/Write tools only** for modifying file content. They operate on the Windows filesystem and preserve encoding.
+- **Bash is for running commands** — git, tests, grep, python scripts that *read* files — never for writing file content back through the mount.
+- **After every commit**, run `grep -rn 'Ã' backend/ frontend/src/ --include='*.py' --include='*.jsx' --include='*.js'` to catch encoding corruption before pushing. If the count is > 0, stop and fix before pushing.
+- **Use ASCII in comments** — prefer `--` over `—`, `<=` over `≤`, `>=` over `>=`, `->` over `→`. Unicode is fine in user-facing strings but unnecessary risk in comments.
+
+## 8. Verify before marking done
+
+Never mark a fix as "completed" until it has been verified on the deployed staging site. "I changed the code" is not "it works." Check the actual rendered output — admin dashboard, patient portal, emails, SMS — before reporting success.
+
 ---
 
 ## Quick reference
@@ -44,4 +58,4 @@ main (production — theravoca-mvp.onrender.com)
   └── staging (pre-production — theravoca-production.onrender.com)
 ```
 
-Last updated: 2026-05-03
+Last updated: 2026-05-04
