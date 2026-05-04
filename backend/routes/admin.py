@@ -304,8 +304,16 @@ async def admin_list_requests(request: Request, _: bool = Depends(require_admin)
         ip=request.headers.get("x-forwarded-for", ""),
         user_agent=request.headers.get("user-agent", ""),
     )
+    # Slim projection -- the list table only needs summary fields.
+    # Full doc is loaded on-demand via GET /admin/requests/{id}.
+    _LIST_PROJECTION = {
+        "_id": 0, "id": 1, "email": 1, "status": 1, "location_state": 1,
+        "client_age": 1, "referral_source": 1, "created_at": 1,
+        "verified": 1, "threshold": 1, "notified_therapist_ids": 1,
+        "matched_at": 1,
+    }
     docs = await db.requests.find(
-        {}, {"_id": 0, "verification_token": 0}
+        {}, _LIST_PROJECTION
     ).sort("created_at", -1).to_list(500)
     out = []
     for d in docs:
@@ -649,7 +657,14 @@ async def admin_list_therapists(
         query["pending_approval"] = True
     elif pending is False:
         query["pending_approval"] = {"$ne": True}
-    rows = await db.therapists.find(query, {"_id": 0, "password_hash": 0, "password_set_at": 0}).sort("created_at", -1).to_list(500)
+    # Exclude heavy blobs from list view -- license_picture (base64,
+    # potentially MB), embeddings, raw review data, lived-experience text.
+    _THERAPIST_LIST_EXCLUDE = {
+        "_id": 0, "password_hash": 0, "password_set_at": 0,
+        "t5_embedding": 0, "t6b_embedding": 0, "license_picture": 0,
+        "t5_lived_experience": 0, "google_reviews": 0,
+    }
+    rows = await db.therapists.find(query, _THERAPIST_LIST_EXCLUDE).sort("created_at", -1).to_list(500)
     # Attach lightweight license-status metadata so admin UI can render the
     # "Verify" badge without doing its own date math (keeps frontend lean
     # and lets us swap in live DOPL API calls here without touching React).
