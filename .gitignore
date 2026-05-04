@@ -190,3 +190,10 @@ credentials.json
 *.pem
 *.key
 .credentials
+
+# Test artifacts
+.pytest_cache/
+pytest-cache-files-*/
+backend/pytest-cache-files-*/
+htmlcov/
+.coverage
