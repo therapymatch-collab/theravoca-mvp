@@ -59,16 +59,12 @@ def _verify_action_signature(
     sig: Optional[str],
     exp: Optional[str],
 ) -> None:
-    """Verify a signed URL's signature and expiry. Raises 403 on failure.
-    During migration: if sig is None, log a warning but allow through so
-    old unsigned email links still work temporarily."""
+    """Verify a signed URL's signature and expiry. Raises 403 on failure."""
     if not sig:
-        logger.warning(
-            "Unsigned %s link used for request=%s therapist=%s — "
-            "old email link? Will require signatures in future.",
-            action, request_id, therapist_id,
+        raise HTTPException(
+            403,
+            "Link signature is missing -- please use the link from your email",
         )
-        return  # Grace period — remove after migration
     if not exp:
         raise HTTPException(403, "Link is missing expiration")
     # Check expiry
