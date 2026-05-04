@@ -368,7 +368,7 @@ export default function TherapistSignup() {
           data.office_addresses.length >= 1) &&
         data.availability_windows.length >= 1
       );
-    if (s === 6) return data.cash_rate > 0 && data.years_experience >= 0;
+    if (s === 6) return data.cash_rate > 0 && data.years_experience >= 1;
     if (s === 7) return data.style_tags.length >= 1;
     if (s === 8) {
       const t6Len = (data.t6_session_expectations || []).length;

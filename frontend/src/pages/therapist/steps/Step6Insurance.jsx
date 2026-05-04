@@ -157,8 +157,9 @@ export default function Step6Insurance({
             <Input
               type="number"
               value={data.years_experience}
+              min={1}
               onChange={(e) =>
-                set("years_experience", parseInt(e.target.value, 10) || 0)
+                set("years_experience", Math.max(1, parseInt(e.target.value, 10) || 1))
               }
               className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
               data-testid="signup-years"

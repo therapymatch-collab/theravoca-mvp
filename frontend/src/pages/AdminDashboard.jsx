@@ -2116,7 +2116,7 @@ export default function AdminDashboard() {
                     onChange={(e) =>
                       setEditTherapist({
                         ...editTherapist,
-                        years_experience: parseInt(e.target.value, 10) || 0,
+                        years_experience: Math.max(1, parseInt(e.target.value, 10) || 1),
                       })
                     }
                     data-testid="edit-years"

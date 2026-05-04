@@ -112,6 +112,12 @@ class TherapistSignup(BaseModel):
     # from the inside, not from a textbook?" Open text. Primary signal
     # for Contextual Resonance scoring.
     t5_lived_experience: Optional[str] = Field(default="", max_length=2000)
+    # T6a — "What should a client expect from the first few sessions?"
+    # Multi-select, 1–2 picks from predefined option slugs.
+    t6_session_expectations: list[str] = Field(default_factory=list, max_length=2)
+    # T6b — "Describe what your early sessions typically look like."
+    # Open text ≥30 chars on frontend; stored for deep-match scoring.
+    t6_early_sessions_description: Optional[str] = Field(default="", max_length=2000)
     # Cloudflare Turnstile token (optional). Backend fail-softs when not
     # configured; verified at the route layer.
     turnstile_token: Optional[str] = Field(default=None, max_length=2200)
