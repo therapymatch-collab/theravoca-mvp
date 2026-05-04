@@ -17,6 +17,7 @@ import stripe_service
 from email_service import send_therapist_signup_received
 from embeddings import embed_texts
 from geocoding import geocode_offices
+import audit
 from helpers import _now_iso, _spawn_bg
 from models import (
     ApplicationOut, BulkApplyIn, TherapistApplyIn, TherapistDeclineIn, TherapistSignup,
@@ -431,10 +432,17 @@ async def therapist_bulk_apply(
 async def therapist_view(
     request_id: str,
     therapist_id: str,
+    request: Request,
     sig: Optional[str] = Query(None),
     exp: Optional[str] = Query(None),
 ):
     _verify_action_signature(request_id, therapist_id, "apply", sig, exp)
+    audit.emit(
+        actor_type="therapist", actor_id=therapist_id, action="view_referral",
+        resource="request", resource_id=request_id,
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     req = await db.requests.find_one(
         {"id": request_id}, {"_id": 0, "email": 0, "verification_token": 0}
     )
@@ -474,10 +482,17 @@ async def therapist_apply(
     request_id: str,
     therapist_id: str,
     payload: TherapistApplyIn,
+    request: Request,
     sig: Optional[str] = Query(None),
     exp: Optional[str] = Query(None),
 ):
     _verify_action_signature(request_id, therapist_id, "apply", sig, exp)
+    audit.emit(
+        actor_type="therapist", actor_id=therapist_id, action="apply",
+        resource="request", resource_id=request_id,
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     req = await db.requests.find_one({"id": request_id}, {"_id": 0})
     therapist = await db.therapists.find_one({"id": therapist_id}, {"_id": 0})
     if not req or not therapist:
@@ -552,10 +567,17 @@ async def therapist_decline_action(
     request_id: str,
     therapist_id: str,
     payload: TherapistDeclineIn,
+    request: Request,
     sig: Optional[str] = Query(None),
     exp: Optional[str] = Query(None),
 ):
     _verify_action_signature(request_id, therapist_id, "decline", sig, exp)
+    audit.emit(
+        actor_type="therapist", actor_id=therapist_id, action="decline",
+        resource="request", resource_id=request_id,
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     req = await db.requests.find_one({"id": request_id}, {"_id": 0, "id": 1})
     therapist = await db.therapists.find_one(
         {"id": therapist_id}, {"_id": 0, "id": 1, "email": 1}
@@ -584,10 +606,17 @@ async def therapist_decline_action(
 @router.get("/therapist/{therapist_id}/referrals")
 async def therapist_referrals(
     therapist_id: str,
+    request: Request,
     session: dict = Depends(require_session(("therapist",))),
 ):
     """Authenticated referral list — therapist must be logged in and can
     only view their own referrals."""
+    audit.emit(
+        actor_type="therapist", actor_id=therapist_id, action="list_referrals",
+        resource="request", detail="limit=100",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     t = await db.therapists.find_one(
         {"id": therapist_id}, {"_id": 0, "id": 1, "name": 1, "email": 1}
     )

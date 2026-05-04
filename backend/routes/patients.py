@@ -16,6 +16,7 @@ from geocoding import geocode_city, geocode_zip
 from helpers import _now_iso, _parse_iso, _trigger_matching, _spawn_bg, compute_patient_rank_score
 from models import FollowupResponse, RequestCreate
 from sms_service import send_patient_intake_receipt_sms
+import audit
 from validation import (
     email_is_plausible, is_disposable_email,
     validate_zip_city_consistent, validate_zip_for_state,
@@ -115,7 +116,7 @@ async def root():
 
 
 @router.get("/requests/prefill")
-async def prefill_from_prior_request(email: str):
+async def prefill_from_prior_request(email: str, request: Request):
     """Returning-patient helper: if this email already filed a request,
     return the fields that never change between visits (referral source,
     attribution, location, language) so we can pre-populate the intake.
@@ -123,6 +124,12 @@ async def prefill_from_prior_request(email: str):
     payment situation, urgency) — those legitimately change every time
     they come back.
     """
+    audit.emit(
+        actor_type="anonymous", actor_id="anonymous", action="prefill_lookup",
+        resource="request",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     email_norm = (email or "").strip().lower()
     if not email_norm or "@" not in email_norm:
         raise HTTPException(400, "Invalid email")
@@ -451,10 +458,16 @@ async def create_request(payload: RequestCreate, request: Request):
 
 
 @router.get("/requests/verify/{token}")
-async def verify_request(token: str):
+async def verify_request(token: str, request: Request):
     req = await db.requests.find_one({"verification_token": token}, {"_id": 0})
     if not req:
         raise HTTPException(404, "Invalid or expired token")
+    audit.emit(
+        actor_type="anonymous", actor_id="anonymous", action="verify_request",
+        resource="request", resource_id=req["id"],
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     if not req.get("verified"):
         await db.requests.update_one(
             {"id": req["id"]},
@@ -482,7 +495,13 @@ async def verify_request(token: str):
 
 
 @router.get("/requests/{request_id}/public", response_model=dict)
-async def public_request_view(request_id: str):
+async def public_request_view(request_id: str, request: Request):
+    audit.emit(
+        actor_type="anonymous", actor_id="anonymous", action="view_request_public",
+        resource="request", resource_id=request_id,
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     # Whitelist safe fields — never leak email, phone, or clinical data
     _PUBLIC_PROJECTION = {
         "_id": 0,
@@ -509,9 +528,16 @@ async def public_request_view(request_id: str):
 
 
 @router.get("/followup/{request_id}/{milestone}")
-async def followup_view(request_id: str, milestone: str):
+async def followup_view(request_id: str, milestone: str, request: Request):
     """Surface enough context for the follow-up form: list of therapist
     applications the patient saw, plus any previously submitted response."""
+    audit.emit(
+        actor_type="anonymous", actor_id="anonymous", action="view_followup",
+        resource="request", resource_id=request_id,
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+        detail=f"milestone={milestone}",
+    )
     if milestone not in ("48h", "3wk", "9wk", "15wk", "2wk", "6wk"):
         raise HTTPException(400, "Invalid milestone")
     req = await db.requests.find_one(
@@ -537,9 +563,16 @@ async def followup_view(request_id: str, milestone: str):
 
 @router.post("/followup/{request_id}/{milestone}")
 async def followup_submit(
-    request_id: str, milestone: str, payload: FollowupResponse,
+    request_id: str, milestone: str, payload: FollowupResponse, request: Request,
 ):
     """Patient submits the follow-up survey. Idempotent — last write wins."""
+    audit.emit(
+        actor_type="anonymous", actor_id="anonymous", action="submit_followup",
+        resource="request", resource_id=request_id,
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+        detail=f"milestone={milestone}",
+    )
     if milestone not in ("48h", "3wk", "9wk", "15wk", "2wk", "6wk"):
         raise HTTPException(400, "Invalid milestone")
     req = await db.requests.find_one({"id": request_id}, {"_id": 0, "id": 1, "email": 1})
@@ -576,6 +609,7 @@ async def admin_release_results(request_id: str, _: bool = Depends(require_admin
 @router.get("/requests/{request_id}/results", response_model=dict)
 async def public_request_results(
     request_id: str,
+    request: Request,
     t: Optional[str] = None,  # view_token from email
     authorization: Optional[str] = Header(None),
 ):
@@ -600,6 +634,7 @@ async def public_request_results(
 
     # ── auth gate ──
     granted = False
+    _auth_method = "view_token"
     expected_token = req.get("view_token")
     if t and expected_token and t == expected_token:
         granted = True
@@ -613,6 +648,7 @@ async def public_request_results(
             and (sess.get("email", "").lower() == (req.get("email") or "").lower())
         ):
             granted = True
+            _auth_method = "patient_session"
     if not granted:
         # 401 → frontend redirects to /sign-in?role=patient&next=/results/...
         raise HTTPException(
@@ -620,6 +656,18 @@ async def public_request_results(
             detail="signin_required",
             headers={"X-Auth-Hint": "magic_code"},
         )
+    # Audit after auth gate -- we know who the actor is now.
+    _actor_id = (
+        audit._hash_patient_email(req.get("email", ""))
+        if req.get("email") else "anonymous"
+    )
+    audit.emit(
+        actor_type="patient", actor_id=_actor_id, action="view_results",
+        resource="request", resource_id=request_id,
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+        detail=f"auth={_auth_method}",
+    )
     apps_raw = await db.applications.find(
         {"request_id": request_id}, {"_id": 0}
     ).to_list(50)

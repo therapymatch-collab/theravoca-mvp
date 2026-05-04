@@ -17,6 +17,7 @@ from deps import (
     _create_session_token, require_session, _client_ip,
 )
 from email_service import send_magic_code
+import audit
 from helpers import _now_iso, _safe_summary_for_therapist, _spawn_bg
 from models import MagicCodeRequest, MagicCodeVerify
 from profile_completeness import evaluate as _evaluate_profile_inline
@@ -398,8 +399,16 @@ async def portal_therapist_update_profile(
 
 @router.get("/portal/patient/requests")
 async def portal_patient_requests(
+    request: Request,
     session: dict[str, Any] = Depends(require_session(("patient",))),
 ):
+    audit.emit(
+        actor_type="patient",
+        actor_id=audit._hash_patient_email(session["email"]),
+        action="list_own_requests", resource="request",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     docs = await db.requests.find(
         {"email": {"$regex": f"^{re.escape(session['email'])}$", "$options": "i"}},
         {"_id": 0, "verification_token": 0},
@@ -422,6 +431,7 @@ async def portal_patient_requests(
 
 @router.get("/portal/therapist/analytics")
 async def portal_therapist_analytics(
+    request: Request,
     session: dict[str, Any] = Depends(require_session(("therapist",))),
 ):
     """Lightweight analytics for the therapist portal: how many referrals
@@ -429,6 +439,12 @@ async def portal_therapist_analytics(
     avg match score, top specialty fits, and review summary."""
     from collections import Counter
 
+    audit.emit(
+        actor_type="therapist", actor_id=audit._hash_patient_email(session.get("email", "")),
+        action="view_analytics", resource="therapist",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     therapist = await db.therapists.find_one(
         {"email": {"$regex": f"^{re.escape(session['email'])}$", "$options": "i"}},
         {"_id": 0},
@@ -486,8 +502,15 @@ async def portal_therapist_analytics(
 
 @router.get("/portal/therapist/referrals")
 async def portal_therapist_referrals(
+    request: Request,
     session: dict[str, Any] = Depends(require_session(("therapist",))),
 ):
+    audit.emit(
+        actor_type="therapist", actor_id=audit._hash_patient_email(session.get("email", "")),
+        action="list_referrals", resource="request", detail="limit=100",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     therapist = await db.therapists.find_one(
         {"email": {"$regex": f"^{re.escape(session['email'])}$", "$options": "i"}},
         {"_id": 0},

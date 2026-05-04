@@ -12,6 +12,7 @@ from deps import (
     LICENSE_WARN_DAYS, AVAILABILITY_PROMPT_DAYS,
     DAILY_TASK_HOUR_LOCAL, DAILY_TASK_TZ_OFFSET_HOURS,
 )
+import audit
 from email_service import (
     send_availability_prompt,
     send_followup_survey,
@@ -25,6 +26,10 @@ from sms_service import send_availability_prompt_sms
 # ─── Results sweep ───────────────────────────────────────────────────────────
 
 async def _sweep_overdue_results() -> None:
+    audit.emit(
+        actor_type="system", actor_id="cron", action="sweep_overdue_results",
+        resource="request", detail="limit=200",
+    )
     cutoff = datetime.now(timezone.utc) - timedelta(hours=AUTO_DELAY_HOURS)
     cutoff_iso = cutoff.isoformat()
     overdue = await db.requests.find(
@@ -234,6 +239,10 @@ async def _run_availability_prompts() -> dict[str, int]:
 async def _run_followup_surveys() -> dict[str, int]:
     """Send 48h / 2-week / 6-week follow-ups based on `results_sent_at`.
     Idempotent via `followup_sent_at_<milestone>` flag on the request doc."""
+    audit.emit(
+        actor_type="system", actor_id="cron", action="run_followup_surveys",
+        resource="request",
+    )
     now = datetime.now(timezone.utc)
     milestones = [
         ("48h", 2, "followup_sent_48h"),
@@ -288,6 +297,10 @@ async def _run_patient_structured_followups() -> dict[str, int]:
     `patient_followup_2w` templates.
     Flags: `structured_followup_48h_sent_at`, `structured_followup_2w_sent_at`.
     """
+    audit.emit(
+        actor_type="system", actor_id="cron", action="run_structured_followups",
+        resource="request",
+    )
     from email_service import send_patient_followup_48h, send_patient_followup_2w
     now = datetime.now(timezone.utc)
     milestones = [
