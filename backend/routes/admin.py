@@ -328,6 +328,46 @@ async def admin_list_requests(request: Request, _: bool = Depends(require_admin)
     return out
 
 
+@router.get("/admin/audit-log")
+async def admin_audit_log(
+    request: Request,
+    _: bool = Depends(require_admin),
+    limit: int = 100,
+    actor_type: Optional[str] = None,
+    action: Optional[str] = None,
+    resource: Optional[str] = None,
+    resource_id: Optional[str] = None,
+    actor_id: Optional[str] = None,
+):
+    """HIPAA audit trail viewer. Returns recent PHI access events.
+
+    All entries are PHI-free by design -- actors are identified by
+    hashed IDs or role labels, resources by UUID.
+    """
+    audit.emit(
+        actor_type="admin", actor_id="admin", action="view_audit_log",
+        resource="audit_log", detail=f"limit={min(limit, 500)}",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    cap = min(max(limit, 1), 500)
+    query: dict[str, Any] = {}
+    if actor_type:
+        query["actor_type"] = actor_type
+    if action:
+        query["action"] = action
+    if resource:
+        query["resource"] = resource
+    if resource_id:
+        query["resource_id"] = resource_id
+    if actor_id:
+        query["actor_id"] = actor_id
+    rows = await db.audit_log.find(
+        query, {"_id": 0}
+    ).sort("ts", -1).to_list(cap)
+    return {"entries": rows, "count": len(rows), "limit": cap}
+
+
 @router.get("/admin/requests/{request_id}", response_model=dict)
 async def admin_request_detail(request_id: str, request: Request, _: bool = Depends(require_admin)):
     audit.emit(
