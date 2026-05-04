@@ -32,7 +32,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException, Query
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from deps import db, JWT_SECRET, _decode_session_from_authorization
 from email_service import _send
@@ -112,28 +112,30 @@ def _verify_feedback_token(
 
 class PatientFeedback48h(BaseModel):
     """48-hour soft touch check-in — process feedback, not a real survey."""
-    process_rating: str  # "great" | "fine" | "had_issues"
-    issues_text: Optional[str] = None
-    started_reaching_out: str  # "yes" | "not_yet"
+    model_config = ConfigDict(extra="ignore")
+    process: str  # "great" | "fine" | "had_issues"
+    issues: Optional[str] = None
+    reached_out: str  # "yes" | "not_yet"
 
 
 class PatientFeedback3w(BaseModel):
     """3-week selection + first impressions."""
-    chosen_therapist_id: Optional[str] = None  # therapist id string or None
-    chosen_status: str  # "picked" | "still_deciding" | "none"
+    model_config = ConfigDict(extra="ignore")
+    contacted_therapist: Optional[str] = None  # therapist id string or None
     had_session: str  # "yes" | "scheduled" | "no"
-    confidence: int = Field(ge=0, le=100)
-    expectation_match: str  # "yes" | "somewhat" | "no"
-    surprise_text: Optional[str] = None
+    fit_confidence: int = Field(ge=0, le=100)
+    met_expectations: str  # "yes" | "somewhat" | "no"
+    surprises: Optional[str] = None
     notes: Optional[str] = None
 
 
 class PatientFeedback9w(BaseModel):
     """9-week retention + TAI questions."""
+    model_config = ConfigDict(extra="ignore")
     still_seeing: str  # "yes" | "no" | "switched"
     session_count: str  # "1-3" | "4-6" | "7+" | "none"
-    whats_working: str
-    whats_not: Optional[str] = None
+    working_well: str
+    not_working: Optional[str] = None
     feel_understood: int = Field(ge=1, le=5)  # TAI Bond
     same_page: int = Field(ge=1, le=5)  # TAI Goals
     recommend_therapist: int = Field(ge=1, le=10)
@@ -142,6 +144,7 @@ class PatientFeedback9w(BaseModel):
 
 class PatientFeedback15w(BaseModel):
     """15-week outcome survey."""
+    model_config = ConfigDict(extra="ignore")
     still_seeing: str  # "yes" | "no" | "switched"
     progress: int = Field(ge=1, le=10)
     refer_therapist: str  # "yes" | "maybe" | "no"
