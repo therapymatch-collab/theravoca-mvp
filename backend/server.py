@@ -25,7 +25,7 @@ from cron import (  # noqa: F401
 )
 from deps import (  # noqa: F401
     db, logger, mongo_client, ADMIN_PASSWORD, DEFAULT_THRESHOLD,
-    AUTO_DELAY_HOURS, JWT_SECRET, JWT_ALGO, _login_attempts, _check_lockout,
+    AUTO_DELAY_HOURS, JWT_SECRET, JWT_ALGO, _ENV, _login_attempts, _check_lockout,
     _client_ip, _record_failure, _reset_failures, require_admin,
     require_session, _create_session_token,
 )
@@ -141,10 +141,32 @@ async def get_version():
         "started_at": _SERVER_START,
     }
 
+# -- CORS: never default to wildcard. Production must set CORS_ORIGINS
+# explicitly; dev falls back to localhost only.
+_cors_raw = os.environ.get("CORS_ORIGINS", "").strip()
+if not _cors_raw:
+    if _ENV == "production":
+        raise RuntimeError(
+            "CORS_ORIGINS must be set in production. "
+            "Example: https://theravoca.com,https://www.theravoca.com"
+        )
+    _cors_origins = [
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8000",
+    ]
+    logger.warning(
+        "CORS_ORIGINS not set -- defaulting to localhost only: %s",
+        _cors_origins,
+    )
+else:
+    _cors_origins = [o.strip() for o in _cors_raw.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
