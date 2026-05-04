@@ -7,7 +7,6 @@ export const STATUS_RATE_LIMITED = 429;
 
 // UI timing
 export const RESULTS_POLL_INTERVAL_MS = 8000;
-export const ADMIN_POLL_INTERVAL_MS = 10000;
 
 // Iconography
 export const ICON_SIZE_LG = 26;

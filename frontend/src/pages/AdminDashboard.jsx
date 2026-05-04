@@ -41,7 +41,7 @@ import { adminClient } from "@/lib/api";
 import { AdminClientProvider } from "@/lib/useAdminClient";
 import credentialLabel from "@/lib/credentialLabel";
 import { imageToDataUrl } from "@/lib/image";
-import { ADMIN_POLL_INTERVAL_MS, STATUS_UNAUTHORIZED } from "@/lib/constants";
+import { STATUS_UNAUTHORIZED } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -357,8 +357,9 @@ export default function AdminDashboard() {
       return;
     }
     refresh();
-    const intervalId = setInterval(refresh, ADMIN_POLL_INTERVAL_MS);
-    return () => clearInterval(intervalId);
+    // No auto-poll -- admin uses the Refresh button when needed.
+    // Previously polled every 10s, which saturated connections when
+    // endpoints were slow (therapists list especially).
   }, [pwd, adminToken, navigate, refresh]);
 
   const openDetail = async (id) => {
