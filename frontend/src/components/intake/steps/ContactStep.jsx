@@ -33,6 +33,8 @@ export default function ContactStep({
   confirmNotEmergency,
   setConfirmNotEmergency,
   referralSourceOptions,
+  referralSourceError,
+  retryReferralSources,
   t,
 }) {
   const handleEmailBlur = () => {
@@ -128,6 +130,18 @@ export default function ContactStep({
         )}
       </Field>
       <Field label="How did you hear about us?">
+        {referralSourceError ? (
+          <div className="rounded-xl border border-[#D45D5D]/30 bg-[#D45D5D]/5 px-4 py-3 text-sm text-[#6D6A65]">
+            <p>Couldn't load form options. Please refresh the page or try again.</p>
+            <button
+              type="button"
+              onClick={retryReferralSources}
+              className="mt-2 text-sm font-medium text-[#3B7A6E] underline underline-offset-2 hover:text-[#2B6259]"
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
         <Select
           value={data.referral_source}
           onValueChange={(v) => set("referral_source", v)}
@@ -136,7 +150,7 @@ export default function ContactStep({
             className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
             data-testid="referral-source-trigger"
           >
-            <SelectValue placeholder="Select an option…" />
+            <SelectValue placeholder="Select an option..." />
           </SelectTrigger>
           <SelectContent>
             {referralSourceOptions.map((opt) => (
@@ -153,6 +167,7 @@ export default function ContactStep({
             ))}
           </SelectContent>
         </Select>
+        )}
       </Field>
       {data.referral_source === "Other" && (
         <Field label="Please specify">

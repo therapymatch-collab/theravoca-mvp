@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowRight, Check } from "lucide-react";
@@ -241,7 +241,8 @@ export default function IntakeForm() {
 
   // ── Admin-managed referral source dropdown options ────────────────────
   const [referralSourceOptions, setReferralSourceOptions] = useState([]);
-  useEffect(() => {
+  const [referralSourceError, setReferralSourceError] = useState(false);
+  const loadReferralSources = useCallback(() => {
     const reorder = (opts) => {
       // Always show "Other" and "Prefer not to say" at the bottom of the list,
       // regardless of how the admin saved them.
@@ -253,11 +254,13 @@ export default function IntakeForm() {
       );
       return [...head, ...(other ? [other] : []), ...(prefer ? [prefer] : [])];
     };
+    setReferralSourceError(false);
     api
       .get("/config/referral-source-options")
       .then((r) => setReferralSourceOptions(reorder(r.data?.options || [])))
-      .catch(() => setReferralSourceOptions([]));
+      .catch(() => setReferralSourceError(true));
   }, []);
+  useEffect(() => { loadReferralSources(); }, [loadReferralSources]);
 
   // ── Refer-a-friend capture: `?ref=PATXXXXX` on the landing URL — we
   // forward this to the backend as `referred_by_patient_code`, and pre-select
@@ -743,6 +746,8 @@ export default function IntakeForm() {
                 confirmNotEmergency={confirmNotEmergency}
                 setConfirmNotEmergency={setConfirmNotEmergency}
                 referralSourceOptions={referralSourceOptions}
+                referralSourceError={referralSourceError}
+                retryReferralSources={loadReferralSources}
                 t={t}
               />
             )}
