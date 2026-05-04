@@ -59,6 +59,28 @@ if not _jwt_secret_raw:
     )
 JWT_SECRET = _jwt_secret_raw
 JWT_ALGO = "HS256"
+
+# -- Email service: RESEND_API_KEY + PUBLIC_APP_URL are required in
+# production. Without them, patient intake is silently broken (emails
+# never send, links have no domain).
+_resend_key = os.environ.get("RESEND_API_KEY", "").strip()
+_public_url = os.environ.get("PUBLIC_APP_URL", "").strip()
+if _ENV == "production":
+    if not _resend_key:
+        raise RuntimeError(
+            "RESEND_API_KEY must be set in production -- "
+            "without it, verification emails will never send"
+        )
+    if not _public_url:
+        raise RuntimeError(
+            "PUBLIC_APP_URL must be set in production -- "
+            "without it, all email links will be broken"
+        )
+else:
+    if not _resend_key:
+        logger.warning("RESEND_API_KEY not set -- emails will be skipped")
+    if not _public_url:
+        logger.warning("PUBLIC_APP_URL not set -- email links will have no domain")
 SESSION_TTL_DAYS = int(os.environ.get("SESSION_TTL_DAYS", "30"))
 MAGIC_CODE_TTL_MINUTES = int(os.environ.get("MAGIC_CODE_TTL_MINUTES", "30"))
 MAGIC_CODE_MAX_PER_HOUR = int(os.environ.get("MAGIC_CODE_MAX_PER_HOUR", "5"))
