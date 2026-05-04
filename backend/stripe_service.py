@@ -172,17 +172,18 @@ def create_billing_portal_session(
 
 
 def construct_event(payload: bytes, sig_header: str) -> Any:
-    """Verify the Stripe signature (if STRIPE_WEBHOOK_SECRET is set) then return
-    the event as a plain dict — keeping the handler decoupled from stripe's
-    StripeObject quirks (`.object` is reserved as the type discriminator)."""
+    """Verify the Stripe webhook signature and return the event as a plain dict.
+    Rejects ALL webhooks if STRIPE_WEBHOOK_SECRET is not configured."""
     import json
     if not _configure():
         raise RuntimeError("STRIPE_API_KEY not configured")
     secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
-    if secret:
-        # Raises stripe.error.SignatureVerificationError on bad sig — caller
-        # turns that into a 400. Discard the returned StripeObject and re-parse.
-        stripe.Webhook.construct_event(payload, sig_header, secret)
-    else:
-        logger.warning("STRIPE_WEBHOOK_SECRET not set — accepting unverified event")
+    if not secret:
+        raise RuntimeError(
+            "STRIPE_WEBHOOK_SECRET not set — refusing to process unverified webhook. "
+            "Set this env var from your Stripe dashboard → Developers → Webhooks → Signing secret."
+        )
+    # Raises stripe.error.SignatureVerificationError on bad sig — caller
+    # turns that into a 400.
+    stripe.Webhook.construct_event(payload, sig_header, secret)
     return json.loads(payload)
