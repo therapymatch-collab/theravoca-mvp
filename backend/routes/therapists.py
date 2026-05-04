@@ -240,7 +240,7 @@ async def therapist_sync_payment_method(therapist_id: str, payload: dict):
     if not t:
         raise HTTPException(404)
 
-    is_demo = session_id.startswith("demo_") or stripe_service._is_emergent_proxy()
+    is_demo = session_id.startswith("demo_") and _ENV != "production"
     if is_demo:
         info = {
             "status": "complete",
@@ -254,6 +254,11 @@ async def therapist_sync_payment_method(therapist_id: str, payload: dict):
             raise HTTPException(502, "Could not retrieve Stripe session")
         if info.get("status") != "complete":
             return {"ok": False, "status": info.get("status")}
+        # Verify this Stripe session was created for THIS therapist
+        if info.get("client_reference_id") != therapist_id:
+            raise HTTPException(
+                403, "Stripe session does not belong to this therapist"
+            )
 
     trial_end = datetime.now(timezone.utc) + timedelta(days=30)
     await db.therapists.update_one(
@@ -285,14 +290,20 @@ async def therapist_sync_payment_method(therapist_id: str, payload: dict):
 
 
 @router.post("/therapists/{therapist_id}/portal-session")
-async def therapist_portal_session(therapist_id: str):
-    """Stripe Customer Portal — therapist self-serve subscription management."""
+async def therapist_portal_session(
+    therapist_id: str,
+    session: dict = Depends(require_session(("therapist",))),
+):
+    """Stripe Customer Portal -- therapist self-serve subscription management."""
+    import re
     t = await db.therapists.find_one(
         {"id": therapist_id},
-        {"_id": 0, "id": 1, "stripe_customer_id": 1},
+        {"_id": 0, "id": 1, "email": 1, "stripe_customer_id": 1},
     )
     if not t:
         raise HTTPException(404)
+    if t["email"].lower() != session["email"].lower():
+        raise HTTPException(403, "Not your account")
     if not t.get("stripe_customer_id"):
         raise HTTPException(400, "No Stripe customer on file. Add a payment method first.")
     base = os.environ.get("PUBLIC_APP_URL", "")
@@ -304,14 +315,21 @@ async def therapist_portal_session(therapist_id: str):
 
 
 @router.get("/therapists/{therapist_id}/subscription")
-async def therapist_subscription_status(therapist_id: str):
+async def therapist_subscription_status(
+    therapist_id: str,
+    session: dict = Depends(require_session(("therapist",))),
+):
+    import re
     t = await db.therapists.find_one(
         {"id": therapist_id},
-        {"_id": 0, "id": 1, "subscription_status": 1, "trial_ends_at": 1,
-         "current_period_end": 1, "stripe_customer_id": 1, "stripe_payment_method_id": 1},
+        {"_id": 0, "id": 1, "email": 1, "subscription_status": 1,
+         "trial_ends_at": 1, "current_period_end": 1},
     )
     if not t:
         raise HTTPException(404)
+    if t["email"].lower() != session["email"].lower():
+        raise HTTPException(403, "Not your account")
+    t.pop("email", None)
     return t
 
 
