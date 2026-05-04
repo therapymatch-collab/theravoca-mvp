@@ -66,12 +66,12 @@ async def search_therapist_business(
                 json={"textQuery": query, "maxResultCount": 3},
             )
             if resp.status_code != 200:
-                logger.warning("Places search %s — HTTP %s: %s",
-                               name, resp.status_code, resp.text[:200])
+                logger.warning("Places search HTTP %s: %s",
+                               resp.status_code, resp.text[:200])
                 return None
             places = (resp.json() or {}).get("places") or []
     except (httpx.TimeoutException, httpx.RequestError) as e:
-        logger.warning("Places search network error for %s: %s", name, e)
+        logger.warning("Places search network error: %s", e)
         return None
 
     if not places:

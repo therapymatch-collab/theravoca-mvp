@@ -450,7 +450,7 @@ async def _send_outreach_invite(
             )
             return {"ok": True, "channel": "email", "error": None}
         except Exception as e:
-            logger.warning("Outreach email failed for %s: %s", email, e)
+            logger.warning("Outreach email failed for invite=%s: %s", invite_id, e)
             if not phone:
                 return {"ok": False, "channel": "email", "error": str(e)}
 
@@ -462,7 +462,7 @@ async def _send_outreach_invite(
             return {"ok": True, "channel": "sms", "error": None}
         return {"ok": False, "channel": "sms", "error": "twilio_not_configured_or_failed"}
     except Exception as e:
-        logger.warning("Outreach SMS failed for %s: %s", phone, e)
+        logger.warning("Outreach SMS failed for invite=%s: %s", invite_id, e)
         return {"ok": False, "channel": "sms", "error": str(e)}
 
 
@@ -563,15 +563,15 @@ async def _filter_existing_contacts(candidates: list[dict]) -> tuple[list[dict],
         e_for_dedupe = "" if _is_shared_inbox(e) else e
         if (e and e in opted_emails) or (p and p in opted_phones):
             skip_opt += 1
-            logger.info("Outreach: skipping %s/%s (opted out)", e, p)
+            logger.info("Outreach: skipping candidate (opted out)")
             continue
         if (e_for_dedupe and e_for_dedupe in therapist_emails) or (p and p in therapist_phones):
             skip_t += 1
-            logger.info("Outreach: skipping %s/%s (already in therapists)", e, p)
+            logger.info("Outreach: skipping candidate (already in therapists)")
             continue
         if (e_for_dedupe and e_for_dedupe in invite_emails) or (p and p in invite_phones):
             skip_i += 1
-            logger.info("Outreach: skipping %s/%s (already invited)", e, p)
+            logger.info("Outreach: skipping candidate (already invited)")
             continue
         if not e and not p:
             # No contact info — drop silently, can't reach them

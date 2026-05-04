@@ -145,7 +145,7 @@ async def auth_request_code(payload: MagicCodeRequest):
             {"_id": 0, "id": 1},
         )
         if not therapist:
-            logger.info("Magic-code requested for unknown/pending therapist email=%s", email)
+            logger.info("Magic-code requested for unknown/pending therapist")
             return {"ok": True}
 
     code = f"{secrets.randbelow(900000) + 100000:06d}"

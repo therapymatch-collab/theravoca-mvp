@@ -73,18 +73,18 @@ async def send_sms(to: str, body: str, *, force: bool = False) -> dict[str, Any]
     If force=True, bypasses the TWILIO_ENABLED check (for admin test-sms).
     """
     if not force and not _enabled():
-        logger.info("SMS disabled (TWILIO_ENABLED!=true), would have sent to %s", to)
+        logger.info("SMS disabled (TWILIO_ENABLED!=true), skipping send")
         return None
 
     client = _client()
     from_ = _from_number()
     if client is None or not from_:
-        logger.warning("Twilio not fully configured, skipping SMS to %s", to)
+        logger.warning("Twilio not fully configured, skipping SMS send")
         return None
 
     intended_to = normalize_us_phone(to)
     if not intended_to:
-        logger.warning("Invalid phone %r, skipping SMS", to)
+        logger.warning("Invalid phone format, skipping SMS")
         return None
 
     override = normalize_us_phone(_override_to())
@@ -98,14 +98,11 @@ async def send_sms(to: str, body: str, *, force: bool = False) -> dict[str, Any]
 
     try:
         msg = await asyncio.to_thread(_send_sync)
-        logger.info(
-            "Sent SMS sid=%s to %s (intended %s) status=%s",
-            msg.sid, actual_to, intended_to, msg.status,
-        )
+        logger.info("Sent SMS sid=%s status=%s", msg.sid, msg.status)
         return {"sid": msg.sid, "to": actual_to, "intended_to": intended_to,
                 "status": msg.status}
     except Exception as e:
-        logger.exception("Failed to send SMS to %s: %s", actual_to, e)
+        logger.exception("Failed to send SMS: %s", e)
         return None
 
 

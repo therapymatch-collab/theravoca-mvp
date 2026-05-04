@@ -727,7 +727,7 @@ async def join_waitlist(payload: dict):
         "created_at": _now_iso(),
     }
     await db.waitlist.insert_one(doc)
-    logger.info("Waitlist signup: %s for state %s", email, state)
+    logger.info("Waitlist signup: id=%s for state %s", doc["id"], state)
 
     # Send confirmation email
     try:
@@ -780,7 +780,7 @@ async def join_therapist_waitlist(payload: dict):
         "created_at": _now_iso(),
     }
     await db.therapist_waitlist.insert_one(doc)
-    logger.info("Therapist waitlist signup: %s (%s) for state %s", name, email, state)
+    logger.info("Therapist waitlist signup: id=%s for state %s", doc["id"], state)
 
     # Send confirmation email
     try:

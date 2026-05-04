@@ -181,8 +181,8 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
             name=f"embed_signup_{tid[:8]}",
         )
     logger.info(
-        "New therapist signup: %s (%s) with %d geocoded offices, recruit_code=%s",
-        payload.email, tid, len(office_geos), recruit_code or "—",
+        "New therapist signup: tid=%s with %d geocoded offices, recruit_code=%s",
+        tid, len(office_geos), recruit_code or "none",
     )
     # Kick off deep web-research enrichment in the background so by the
     # time admin reviews the application, we already have evidence-graded

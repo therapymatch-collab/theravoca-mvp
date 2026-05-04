@@ -261,7 +261,7 @@ async def run_gap_recruitment(dry_run: bool = True, max_drafts: int = DRAFT_LIMI
                             "address": place.get("formattedAddress", ""),
                         }
                 except Exception as e:
-                    logger.warning("Places lookup failed for %s: %s", name, e)
+                    logger.warning("Places lookup failed: %s", e)
 
             await db.recruit_drafts.insert_one({
                 "id": str(uuid.uuid4()),
@@ -414,7 +414,7 @@ async def send_pending_drafts() -> dict[str, Any]:
             )
             sent += 1
         except Exception as e:
-            logger.warning("Recruit-draft send failed for %s: %s", c.get("email"), e)
+            logger.warning("Recruit-draft send failed for draft=%s: %s", d.get("id", "unknown"), e)
             failed += 1
     return {"sent": sent, "failed": failed}
 

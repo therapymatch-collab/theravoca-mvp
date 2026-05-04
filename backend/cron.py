@@ -123,7 +123,7 @@ async def _run_daily_billing_charges() -> dict[str, int]:
                 {"id": t["id"]},
                 {"$set": {"subscription_status": "past_due", "updated_at": _now_iso()}},
             )
-            logger.warning("Daily billing: %s charge failed (%s)", t.get("email"), res.get("error"))
+            logger.warning("Daily billing: therapist=%s charge failed (%s)", t.get("id"), res.get("error"))
             failed += 1
             continue
         next_period = now + timedelta(days=30)
@@ -211,14 +211,14 @@ async def _run_availability_prompts() -> dict[str, int]:
                 await send_availability_prompt(t["email"], t["name"])
                 sent_email += 1
             except Exception as e:
-                logger.warning("Availability email failed for %s: %s", t.get("email"), e)
+                logger.warning("Availability email failed for therapist=%s: %s", t.get("id"), e)
         sms_to = t.get("phone_alert") or t.get("phone") or ""
         if sms_to and t.get("notify_sms", True):
             try:
                 await send_availability_prompt_sms(sms_to, t["name"], portal_url)
                 sent_sms += 1
             except Exception as e:
-                logger.warning("Availability SMS failed for %s: %s", t.get("email"), e)
+                logger.warning("Availability SMS failed for therapist=%s: %s", t.get("id"), e)
         await db.therapists.update_one(
             {"id": t["id"]},
             {"$set": {

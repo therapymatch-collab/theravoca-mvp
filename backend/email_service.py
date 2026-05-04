@@ -79,7 +79,7 @@ def _wrap(title: str, inner_html: str) -> str:
 async def _send(to: str, subject: str, html: str) -> dict[str, Any] | None:
     api_key = _get_api_key()
     if not api_key:
-        logger.warning("RESEND_API_KEY not configured, skipping email to %s", to)
+        logger.warning("RESEND_API_KEY not configured, skipping email send")
         return None
     resend.api_key = api_key
     # Dev/test mode: redirect every outbound email to a single inbox (e.g. for Resend test mode)
@@ -89,10 +89,10 @@ async def _send(to: str, subject: str, html: str) -> dict[str, Any] | None:
     params = {"from": _get_sender(), "to": [actual_to], "subject": actual_subject, "html": html}
     try:
         result = await asyncio.to_thread(resend.Emails.send, params)
-        logger.info("Sent email to %s (intended %s) id=%s", actual_to, to, result.get("id"))
+        logger.info("Sent email id=%s", result.get("id"))
         return result
     except Exception as e:
-        logger.exception("Failed to send email to %s: %s", actual_to, e)
+        logger.exception("Failed to send email: %s", e)
         return None
 
 
