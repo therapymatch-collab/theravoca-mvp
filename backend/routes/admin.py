@@ -23,6 +23,7 @@ from email_templates import DEFAULTS as EMAIL_TEMPLATE_DEFAULTS, list_templates,
 from helpers import _deliver_results, _now_iso, _spawn_bg, _trigger_matching
 from seed_data import generate_seed_therapists
 from sms_service import send_sms, SMS_TEMPLATE_DEFAULTS
+import audit
 
 router = APIRouter()
 
@@ -296,7 +297,13 @@ async def admin_send_claim_campaign(
 
 
 @router.get("/admin/requests", response_model=list)
-async def admin_list_requests(_: bool = Depends(require_admin)):
+async def admin_list_requests(request: Request, _: bool = Depends(require_admin)):
+    audit.emit(
+        actor_type="admin", actor_id="admin", action="list_requests",
+        resource="request", detail="limit=500",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     docs = await db.requests.find(
         {}, {"_id": 0, "verification_token": 0}
     ).sort("created_at", -1).to_list(500)
@@ -314,7 +321,13 @@ async def admin_list_requests(_: bool = Depends(require_admin)):
 
 
 @router.get("/admin/requests/{request_id}", response_model=dict)
-async def admin_request_detail(request_id: str, _: bool = Depends(require_admin)):
+async def admin_request_detail(request_id: str, request: Request, _: bool = Depends(require_admin)):
+    audit.emit(
+        actor_type="admin", actor_id="admin", action="view_request",
+        resource="request", resource_id=request_id,
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     req = await db.requests.find_one(
         {"id": request_id}, {"_id": 0, "verification_token": 0}
     )
@@ -595,12 +608,24 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
 
 
 @router.post("/admin/requests/{request_id}/trigger-results")
-async def admin_trigger_results(request_id: str, _: bool = Depends(require_admin)):
+async def admin_trigger_results(request_id: str, request: Request, _: bool = Depends(require_admin)):
+    audit.emit(
+        actor_type="admin", actor_id="admin", action="trigger_results",
+        resource="request", resource_id=request_id,
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     return await _deliver_results(request_id)
 
 
 @router.post("/admin/requests/{request_id}/resend-notifications")
-async def admin_resend_notifications(request_id: str, _: bool = Depends(require_admin)):
+async def admin_resend_notifications(request_id: str, request: Request, _: bool = Depends(require_admin)):
+    audit.emit(
+        actor_type="admin", actor_id="admin", action="resend_notifications",
+        resource="request", resource_id=request_id,
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     return await _trigger_matching(request_id)
 
 
@@ -1599,7 +1624,7 @@ async def admin_outcome_tracking(_: bool = Depends(require_admin)):
 
 
 @router.get("/admin/patients")
-async def admin_list_patients_by_email(_: bool = Depends(require_admin)):
+async def admin_list_patients_by_email(request: Request, _: bool = Depends(require_admin)):
     """Aggregate every email that has submitted a request and how many
     requests they've filed. Useful for spotting power users / repeat
     submitters. Sorted by most-recent request first.
@@ -1608,6 +1633,12 @@ async def admin_list_patients_by_email(_: bool = Depends(require_admin)):
     has a row in `patient_accounts` with a hash) so the admin can see
     who's converted to a tracked account.
     """
+    audit.emit(
+        actor_type="admin", actor_id="admin", action="list_patients",
+        resource="patient_list", detail="limit=2000",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     pipeline = [
         {"$match": {"email": {"$exists": True, "$ne": None}}},
         {"$group": {
@@ -3173,11 +3204,17 @@ async def admin_research_all_reviews(
 
 @router.post("/admin/requests/{request_id}/run-outreach")
 async def admin_run_outreach_now(
-    request_id: str, _: bool = Depends(require_admin),
+    request_id: str, request: Request, _: bool = Depends(require_admin),
 ):
     """Manually re-run the LLM outreach for a request whose initial run was
     skipped or failed. Clears the `outreach_run_at` flag first so the agent
     will actually execute regardless of prior state."""
+    audit.emit(
+        actor_type="admin", actor_id="admin", action="run_outreach",
+        resource="request", resource_id=request_id,
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     req = await db.requests.find_one({"id": request_id}, {"_id": 0, "id": 1})
     if not req:
         raise HTTPException(404, "Request not found")
@@ -3539,13 +3576,19 @@ async def admin_list_gap_drafts(_: bool = Depends(require_admin)):
 
 
 @router.get("/admin/referral-analytics")
-async def admin_referral_analytics(_: bool = Depends(require_admin)):
+async def admin_referral_analytics(request: Request, _: bool = Depends(require_admin)):
     """Referral analytics:
     - patient `referred_by_patient_code` chains
     - therapist `referred_by_code` chains
     - gap-recruit conversion rate
     - referral_source breakdown from intake form
     """
+    audit.emit(
+        actor_type="admin", actor_id="admin", action="view_referral_analytics",
+        resource="request", detail="projection=email,referral_code,created_at",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     from collections import Counter
 
     # Patient Ã¢ÂÂ patient referrals
