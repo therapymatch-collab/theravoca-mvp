@@ -41,6 +41,20 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
+# -- Sentry error tracking: reads SENTRY_DSN from env. If unset, Sentry
+# is silently disabled (safe for local dev).
+import sentry_sdk  # noqa: E402
+
+_sentry_dsn = os.environ.get("SENTRY_DSN", "").strip()
+if _sentry_dsn:
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        environment=_ENV,
+        traces_sample_rate=0.1,
+        send_default_pii=False,
+    )
+    logger.info("Sentry initialized for env=%s", _ENV)
+
 
 _sweep_task: Optional[asyncio.Task] = None
 _daily_task: Optional[asyncio.Task] = None
