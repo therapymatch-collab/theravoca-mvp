@@ -188,6 +188,11 @@ class RequestCreate(BaseModel):
     # engine is allowed to add the "Communication Style" + "Theory of
     # Change" + "Contextual Resonance" axes. False/None means standard
     # matching with the existing axes only.
+    # ─── Expectation alignment (Iter-119) ───────────────────────────
+    # Patient picks 1–2 from the same option set as therapist T6a
+    # (e.g. "build_rapport", "set_goals", "not_sure"). Feeds the #1
+    # scoring signal: _score_expectation_alignment().
+    session_expectations: list[str] = Field(default_factory=list, max_length=2)
     deep_match_opt_in: Optional[bool] = None
     # P1 — "When your therapist is really helping, what are they
     # doing?" Pick exactly 2 from the slug set

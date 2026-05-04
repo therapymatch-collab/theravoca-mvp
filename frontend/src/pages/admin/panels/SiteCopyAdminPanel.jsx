@@ -389,7 +389,7 @@ export default function SiteCopyAdminPanel({ client }) {
       ) : (
         <div className="space-y-3">
           {Array.from(visibleGroups.entries()).map(([section, rows]) => {
-            const isCollapsed = collapsed.has(section);
+            const isCollapsed = search.trim() ? false : collapsed.has(section);
             const sectionOverrides = rows.filter((r) => overrides[r.key]).length;
             return (
               <div

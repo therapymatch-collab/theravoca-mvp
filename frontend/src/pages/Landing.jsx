@@ -7,7 +7,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Check, X, Sparkles } from "lucide-react";
+import { Check, X, Sparkles, ArrowRight } from "lucide-react";
 import { useEffect } from "react";
 import useSiteCopy from "@/lib/useSiteCopy";
 import useFaqs from "@/lib/useFaqs";
@@ -102,7 +102,7 @@ export default function Landing() {
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-4">
               <a href="#start" className="tv-btn-primary" data-testid="hero-cta">
-                {t("landing.hero.cta", "Get matched — free")}
+                {t("landing.hero.cta", "Get matched — free")} <ArrowRight size={16} className="ml-1.5 inline" />
               </a>
               <a
                 href="#how"

@@ -104,11 +104,11 @@ export const PRIOR_THERAPY = [
 ];
 
 export const EXPERIENCE = [
-  { v: "no_pref", l: "No preference" },
   { v: "0-3", l: "0–3 years" },
   { v: "3-7", l: "3–7 years" },
   { v: "7-15", l: "7–15 years" },
   { v: "15+", l: "15+ years" },
+  { v: "no_pref", l: "No preference" },
 ];
 
 export const GENDERS = [

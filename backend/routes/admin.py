@@ -644,7 +644,7 @@ async def admin_list_therapists(
     return rows
 
 
-_DUP_THRESHOLD = 5  # axes with Ã¢ÂÂ¥5 active matches are "duplicates"
+_DUP_THRESHOLD = 10  # axes with >=10 active matches are "duplicates"
 
 
 async def _attach_value_tags(pending_rows: list[dict]) -> None:
