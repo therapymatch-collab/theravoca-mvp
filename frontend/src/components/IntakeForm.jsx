@@ -415,7 +415,13 @@ export default function IntakeForm() {
         insurance_name: insName,
         referred_by_patient_code: referredByPatientCode,
         budget: data.budget ? parseInt(data.budget, 10) : null,
-        // Bot-defense fields — backend rejects if honeypot has any value
+        // Consent audit trail -- canNext() guarantees all three are true
+        // by the time we reach here; timestamp captures moment of submit.
+        agreed_to_terms: true,
+        agreed_to_terms_at: new Date().toISOString(),
+        confirm_adult: true,
+        confirm_not_emergency: true,
+        // Bot-defense fields -- backend rejects if honeypot has any value
         // OR if form completion took less than ~2s.
         fax_number: fax,
         form_started_at_ms: formStartedAt,

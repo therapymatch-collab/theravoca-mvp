@@ -232,6 +232,14 @@ async def create_request(payload: RequestCreate, request: Request):
     if not ok:
         raise HTTPException(400, ts_err or "Security check failed.")
 
+    # ─── Consent validation (server-side enforcement) ──────────────────
+    if not payload.agreed_to_terms:
+        raise HTTPException(400, "You must agree to the terms of use and privacy notice")
+    if not payload.confirm_adult:
+        raise HTTPException(400, "You must confirm you are 18 or older")
+    if not payload.confirm_not_emergency:
+        raise HTTPException(400, "You must confirm this is not an emergency")
+
     # ─── Spam / sanity gates (run before any DB writes) ────────────────
     if not email_is_plausible(payload.email):
         raise HTTPException(400, "That email address doesn't look right. Please double-check it.")

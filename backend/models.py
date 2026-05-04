@@ -210,6 +210,11 @@ class RequestCreate(BaseModel):
     # receipt doubles as their paper trail for any post-submit
     # corrections (forward + email support).
     email_receipt: bool = False
+    # ─── Consent fields (persisted as audit trail) ─────────────────────
+    agreed_to_terms: bool = False
+    agreed_to_terms_at: Optional[str] = None   # ISO 8601 timestamp
+    confirm_adult: bool = False
+    confirm_not_emergency: bool = False
     # ─── Bot defenses (rejected at the route layer; never persisted) ───
     # Honeypot input — a hidden field bots auto-fill. Real users leave it
     # blank because they never see it.
