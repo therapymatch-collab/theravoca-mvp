@@ -657,14 +657,49 @@ async def admin_list_therapists(
         query["pending_approval"] = True
     elif pending is False:
         query["pending_approval"] = {"$ne": True}
-    # Exclude heavy blobs from list view -- license_picture (base64,
-    # potentially MB), embeddings, raw review data, lived-experience text.
-    _THERAPIST_LIST_EXCLUDE = {
-        "_id": 0, "password_hash": 0, "password_set_at": 0,
-        "t5_embedding": 0, "t6b_embedding": 0, "license_picture": 0,
-        "t5_lived_experience": 0, "google_reviews": 0,
+    # Inclusion projection -- only fields the admin table + edit modal use.
+    # Pending view also needs license_picture (PendingSignupRow renders it).
+    _THERAPIST_FIELDS = {
+        "_id": 0,
+        # Identity
+        "id": 1, "name": 1, "email": 1, "real_email": 1,
+        "phone": 1, "phone_alert": 1, "office_phone": 1,
+        "profile_picture": 1, "gender": 1,
+        # Credentials
+        "credential_type": 1, "license_number": 1,
+        "license_expires_at": 1, "licensed_states": 1,
+        # Practice
+        "bio": 1, "years_experience": 1, "cash_rate": 1,
+        "sliding_scale": 1, "free_consult": 1,
+        "modality_offering": 1, "telehealth": 1, "offers_in_person": 1,
+        "urgency_capacity": 1, "website": 1, "source": 1,
+        # Clinical arrays
+        "primary_specialties": 1, "secondary_specialties": 1,
+        "general_treats": 1, "modalities": 1, "style_tags": 1,
+        "insurance_accepted": 1, "languages_spoken": 1,
+        "client_types": 1, "age_groups": 1,
+        # Location + availability
+        "office_locations": 1, "office_addresses": 1,
+        "availability_windows": 1,
+        # Status flags
+        "is_active": 1, "pending_approval": 1, "subscription_status": 1,
+        "pending_reapproval": 1, "pending_reapproval_fields": 1,
+        "notify_email": 1, "notify_sms": 1,
+        # Reviews + research
+        "review_count": 1, "review_avg": 1, "review_research_source": 1,
+        "research_summary": 1, "research_depth_signal": 1,
+        "research_style_signals": 1,
+        "google_place_name": 1, "google_place_address": 1,
+        # Edit modal fields
+        "t6_session_expectations": 1, "t6b_early_sessions": 1,
+        "reliability": 1, "referral_code": 1, "referred_by_code": 1,
+        # Metadata
+        "created_at": 1,
     }
-    rows = await db.therapists.find(query, _THERAPIST_LIST_EXCLUDE).sort("created_at", -1).to_list(500)
+    proj = {**_THERAPIST_FIELDS}
+    if pending is True:
+        proj["license_picture"] = 1
+    rows = await db.therapists.find(query, proj).sort("created_at", -1).to_list(500)
     # Attach lightweight license-status metadata so admin UI can render the
     # "Verify" badge without doing its own date math (keeps frontend lean
     # and lets us swap in live DOPL API calls here without touching React).
