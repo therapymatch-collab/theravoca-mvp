@@ -1,0 +1,15 @@
+name: Encoding Check
+
+on:
+  push:
+    branches: [staging, main]
+  pull_request:
+    branches: [staging, main]
+
+jobs:
+  check-encoding:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run encoding sanity check
+        run: bash scripts/check_encoding.sh
