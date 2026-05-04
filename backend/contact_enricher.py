@@ -1,11 +1,15 @@
 """Real contact-info enrichment for scraped therapist candidates.
 
-Instead of guessing "info@domain.com", this module FETCHES each therapist's
-actual website and extracts real emails and phone numbers via regex and
-mailto:/tel: link parsing.
+Primary strategy: Google Places API (fast, reliable, structured data).
+Fallback: scrape the therapist's website for mailto:/tel: links.
 
-Anti-hallucination design: every piece of contact info comes from actual
-scraped HTML content. Nothing is generated or guessed.
+Flow:
+  1. Search Google Places for "{name} therapist {city}, {state}"
+  2. Fetch Place Details → phone, website, (sometimes email)
+  3. If Places didn't yield email, fall back to website scraping
+
+Anti-hallucination design: every piece of contact info comes from
+Google's business data or actual scraped HTML. Nothing is generated or guessed.
 """
 from __future__ import annotations
 
@@ -15,6 +19,8 @@ import re
 from typing import Optional
 
 import httpx
+
+import places_client
 
 logger = logging.getLogger("theravoca.contact_enricher")
 
@@ -145,36 +151,96 @@ async def _fetch_site(url: str, client: httpx.AsyncClient) -> Optional[str]:
     return None
 
 
-async def enrich_one(candidate: dict, client: httpx.AsyncClient) -> dict:
-    """Enrich a single candidate with real contact info from their website.
+async def _enrich_from_places(candidate: dict) -> bool:
+    """Try Google Places API first. Returns True if we got useful data."""
+    if not places_client.is_configured():
+        return False
+    name = candidate.get("name", "")
+    city = candidate.get("city", "")
+    state = candidate.get("state", "ID")
+    if not name:
+        return False
 
-    Only sets email/phone if REAL data is found on the actual page.
-    Modifies candidate in place.
-    """
+    place = await places_client.search_therapist_business(name, city, state)
+    if not place:
+        return False
+
+    # Get full details (phone, website)
+    pid = place.get("id") or (place.get("name") or "").replace("places/", "")
+    if not pid:
+        return False
+
+    details = await places_client.get_place_reviews(pid)
+    if not details:
+        return False
+
+    got_something = False
+
+    # Phone from Google Places
+    phone_raw = details.get("internationalPhoneNumber", "")
+    if phone_raw:
+        digits = re.sub(r"[^\d]", "", phone_raw)
+        if len(digits) >= 10 and not _is_fake_phone(digits):
+            candidate["phone"] = _format_phone(digits)
+            candidate["phone_source"] = "google_places"
+            got_something = True
+
+    # Website from Google Places (useful for email fallback)
+    website = details.get("websiteUri", "")
+    if website and not candidate.get("website"):
+        candidate["website"] = website
+        got_something = True
+
+    # Store place_id for future use (reviews, etc.)
+    candidate["google_place_id"] = pid
+    candidate["google_place_name"] = (details.get("displayName") or {}).get("text", "")
+
+    return got_something
+
+
+async def _enrich_from_website(candidate: dict, client: httpx.AsyncClient) -> None:
+    """Fallback: scrape the therapist's website for email/phone."""
     website = candidate.get("website") or ""
     if not website:
-        return candidate
+        return
 
     html = await _fetch_site(website, client)
     if not html:
-        return candidate
+        return
 
-    # Extract real emails
-    emails = _extract_emails(html)
-    if emails:
-        # Prefer emails whose domain matches the website
-        domain_m = re.search(r"https?://(?:www\.)?([^/]+)", website)
-        site_domain = domain_m.group(1).lower() if domain_m else ""
-        matching = [e for e in emails if site_domain and site_domain in e]
-        best_email = matching[0] if matching else emails[0]
-        candidate["email"] = best_email
-        candidate["email_source"] = "website"
+    # Extract real emails (only if we don't already have one)
+    if not candidate.get("email"):
+        emails = _extract_emails(html)
+        if emails:
+            domain_m = re.search(r"https?://(?:www\.)?([^/]+)", website)
+            site_domain = domain_m.group(1).lower() if domain_m else ""
+            matching = [e for e in emails if site_domain and site_domain in e]
+            best_email = matching[0] if matching else emails[0]
+            candidate["email"] = best_email
+            candidate["email_source"] = "website"
 
-    # Extract real phones
-    phones = [p for p in _extract_phones(html) if not _is_fake_phone(p)]
-    if phones:
-        candidate["phone"] = _format_phone(phones[0])
-        candidate["phone_source"] = "website"
+    # Extract real phones (only if we don't already have one from Places)
+    if not candidate.get("phone") or candidate.get("phone_source") != "google_places":
+        phones = [p for p in _extract_phones(html) if not _is_fake_phone(p)]
+        if phones:
+            candidate["phone"] = _format_phone(phones[0])
+            candidate["phone_source"] = "website"
+
+
+async def enrich_one(candidate: dict, client: httpx.AsyncClient) -> dict:
+    """Enrich a single candidate with real contact info.
+
+    Strategy:
+      1. Google Places API → phone, website (structured, reliable)
+      2. Website scraping → email, phone fallback (regex on HTML)
+
+    Modifies candidate in place.
+    """
+    # Step 1: Google Places (gets phone + website reliably)
+    await _enrich_from_places(candidate)
+
+    # Step 2: Website scraping (gets email, phone if Places missed it)
+    await _enrich_from_website(candidate, client)
 
     return candidate
 
@@ -185,16 +251,16 @@ async def enrich_batch(
     delay_sec: float = 0.4,
     max_enrich: int = 50,
 ) -> list[dict]:
-    """Enrich up to max_enrich candidates with real contact info.
+    """Enrich up to max_enrich candidates via Google Places + website fallback.
 
-    Fetches each candidate's website and extracts email/phone.
-    Rate-limited to be polite to therapist websites.
+    Works on ALL candidates with a name (Places API doesn't need a website).
+    Rate-limited to stay within API quotas.
     """
-    to_enrich = [c for c in candidates if c.get("website")][:max_enrich]
+    to_enrich = [c for c in candidates if c.get("name")][:max_enrich]
     if not to_enrich:
         return candidates
 
-    logger.info("Enriching %d candidates with real contact info", len(to_enrich))
+    logger.info("Enriching %d candidates (Places API + website fallback)", len(to_enrich))
 
     async with httpx.AsyncClient(follow_redirects=True) as client:
         for i, c in enumerate(to_enrich):
@@ -202,7 +268,9 @@ async def enrich_batch(
             if i < len(to_enrich) - 1:
                 await asyncio.sleep(delay_sec)
 
-    enriched = sum(1 for c in to_enrich if c.get("email_source") == "website")
-    logger.info("Contact enrichment done: %d/%d got real emails", enriched, len(to_enrich))
+    got_phone = sum(1 for c in to_enrich if c.get("phone"))
+    got_email = sum(1 for c in to_enrich if c.get("email"))
+    logger.info("Enrichment done: %d/%d phones, %d/%d emails",
+                got_phone, len(to_enrich), got_email, len(to_enrich))
 
     return candidates

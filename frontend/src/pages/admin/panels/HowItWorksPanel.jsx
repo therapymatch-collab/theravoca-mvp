@@ -94,15 +94,15 @@ const STEPS = [
   },
   {
     icon: Repeat,
-    title: "9. Automated follow-ups (48h · 2wk · 8wk)",
+    title: "9. Automated follow-ups (48h · 3wk · 9wk · 15wk)",
     body:
-      "The system auto-pings both the patient and the matched therapist at 48 hours, 2 weeks, and 8 weeks. The goal: did a real working relationship form? (Definition of 'successful match' = patient is in active sessions at the 8-week check.)",
+      "The system auto-sends structured surveys to patients at 4 milestones: 48-Hour Check-in (process feedback), 3-Week Selection (who they picked, confidence), 9-Week Retention + TAI (therapeutic alliance, still seeing therapist?), and 15-Week Outcome (progress, referral willingness). Each milestone has different questions tailored to where the patient is in their therapy journey. Therapists get a separate weekly pulse check (never about specific patients).",
   },
   {
     icon: TrendingUp,
     title: "10. Feed success back into the matching algorithm",
     body:
-      "Every follow-up data point trains the matching algorithm. Successful axes get up-weighted, unsuccessful ones get down-weighted. Over time the engine self-tunes for actual outcomes, not just self-reported preferences.",
+      "Survey responses feed directly into therapist reliability scores (25% of total match weight) and Therapeutic Alliance Index (TAI). The 9-week TAI score (bond + goals subscales) and 15-week outcome data adjust future match rankings. Over time the engine self-tunes for actual therapeutic outcomes, not just self-reported preferences.",
   },
   {
     icon: Bot,

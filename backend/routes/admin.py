@@ -3960,12 +3960,12 @@ async def _run_scraper_job(job_id: str, city: str, state: str, issues: list, cou
         }},
     )
 
-    # Phase 2: Enrich with real contact info from websites
+    # Phase 2: Enrich with Google Places API + website fallback
     import asyncio
     enriched = 0
     async with httpx.AsyncClient(follow_redirects=True) as client:
         for i, c in enumerate(candidates):
-            if c.get("website"):
+            if c.get("name"):  # enrich all candidates (Places API + website fallback)
                 try:
                     await enrich_one(c, client)
                     enriched += 1

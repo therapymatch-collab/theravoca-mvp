@@ -376,14 +376,14 @@ async def scrape_pt_candidates(
     needed: int = 30,
     *,
     max_pages: int = 3,
-    enrich_profiles: bool = True,
 ) -> list[dict]:
-    """Returns up to `needed` real therapist candidates from Psychology Today
-    listings for the given state+city. Each candidate dict has:
-        name, profile_url, phone, city, state, zip, lat, lng, source,
-        license_types, primary_license, specialties, website, email
-    `email` is populated later by contact_enricher.enrich_batch which
-    scrapes the therapist's actual website for real contact info.
+    """Returns up to `needed` therapist names+locations from Psychology Today.
+
+    PT is used ONLY for discovering therapist names and cities.
+    Contact enrichment (phone, website, email) is handled separately
+    by contact_enricher via Google Places API.
+
+    Each candidate dict has: name, profile_url, city, state, zip, lat, lng, source.
     """
     out: list[dict] = []
     async with httpx.AsyncClient(follow_redirects=True) as client:
@@ -405,59 +405,10 @@ async def scrape_pt_candidates(
                 out.append(card)
             await asyncio.sleep(REQUEST_DELAY_SEC)
 
-        # Phase 2: enrich the top N with profile-page detail (license /
-        # specialties / website). Cap to MAX_PROFILE_FETCHES per run.
-        if enrich_profiles:
-            to_fetch = out[: min(MAX_PROFILE_FETCHES, len(out))]
-            for c in to_fetch:
-                detail = await _fetch_profile_details(c["profile_url"], client)
-                c.update(detail)
 
-                # Phase 2b: visit the therapist's REAL website to extract
-                # actual phone + email (not the PT placeholder).
-                website = detail.get("website") or ""
-                if website:
-                    contacts = await _extract_contacts_from_website(
-                        website, c["name"], client,
-                    )
-                    if contacts.get("phone"):
-                        c["phone"] = contacts["phone"]
-                        c["phone_source"] = "website"
-                    else:
-                        c["phone_source"] = "not found on website"
-                    if contacts.get("email"):
-                        c["email"] = contacts["email"]
-                        c["email_source"] = "website"
-                    else:
-                        c["email_source"] = "not found on website"
-                else:
-                    # No external website listed on PT profile
-                    c["phone_source"] = "no website listed"
-                    c["email_source"] = "no website listed"
-
-                # Keep the original PT phone as fallback — a directory
-                # phone is more useful to recruiters than a blank field.
-                # Only clear genuinely fake placeholders (max-int, all-zeros).
-                if _is_fake_phone(c.get("phone", "")) and c.get("phone_source") != "website":
-                    c["phone"] = ""
-                    if c.get("phone_source") != "no website listed":
-                        c["phone_source"] = "not found on website"
-                elif c.get("phone") and not c.get("phone_source"):
-                    c["phone_source"] = "psychology_today"
-
-                # Fallback: guess email from website domain when LLM
-                # extraction didn't find one.
-                if not c.get("email") and website:
-                    guessed = _guess_email_from_website(website, c["name"])
-                    if guessed:
-                        c["email"] = guessed
-                        c["email_source"] = "guessed_from_domain"
-
-                await asyncio.sleep(REQUEST_DELAY_SEC)
 
     logger.info(
-        "PT scrape: state=%s city=%s pages<=%d ÃÂ¢ÃÂÃÂ %d candidates (enriched=%d)",
+        "PT scrape: state=%s city=%s pages<=%d -> %d names found",
         state_code, city, max_pages, len(out),
-        sum(1 for c in out if c.get("license_types")),
     )
     return out

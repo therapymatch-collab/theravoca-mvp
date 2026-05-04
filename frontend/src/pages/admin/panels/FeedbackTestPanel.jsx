@@ -115,7 +115,7 @@ export default function FeedbackTestPanel() {
                   </span>
                 </div>
                 <a
-                  href={`/feedback/patient/${r.id}?milestone=48h`}
+                  href={`/feedback/${r.id}/48h`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs text-[#2D4A3E] hover:underline flex items-center gap-1"
@@ -157,7 +157,7 @@ export default function FeedbackTestPanel() {
                           Send
                         </button>
                         <a
-                          href={`/feedback/patient/${r.id}?milestone=${ms.code}`}
+                          href={`/feedback/${r.id}/${ms.code}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs px-2 py-1 border border-[#E8E5DF] rounded-lg hover:bg-[#FDFBF7] text-[#2D4A3E]"
