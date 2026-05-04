@@ -68,6 +68,7 @@ import RecruitDraftsPanel from "@/pages/admin/panels/RecruitDraftsPanel";
 import PatientsByEmailPanel from "@/pages/admin/panels/PatientsByEmailPanel";
 import FeedbackPanel from "@/pages/admin/panels/FeedbackPanel";
 import OutcomeTrackingPanel from "@/pages/admin/panels/OutcomeTrackingPanel";
+import AuditLogPanel from "@/pages/admin/panels/AuditLogPanel";
 import WaitlistPanel from "@/pages/admin/panels/WaitlistPanel";
 import ProviderPreviewCard from "@/pages/admin/panels/ProviderPreviewCard";
 import SimulatorPanel from "@/pages/admin/panels/SimulatorPanel";
@@ -1715,6 +1716,8 @@ export default function AdminDashboard() {
 
               {tab === "settings" && <SettingsPanel client={client} />}
 
+              {tab === "audit_log" && <AuditLogPanel client={client} />}
+
               {tab === "scrape_sources" && <ScrapeSourcesPanel client={client} />}
 
               {tab === "sms_status" && <SmsStatusPanel client={client} />}
@@ -3131,6 +3134,11 @@ function AdminTabsBar({
       id: "settings",
       label: "Settings",
       icon: <Sliders size={14} />,
+    },
+    {
+      id: "audit_log",
+      label: "Audit log",
+      icon: <Eye size={14} />,
     },
     {
       id: "scrape_sources",
