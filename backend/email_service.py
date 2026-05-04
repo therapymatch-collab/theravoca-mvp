@@ -336,9 +336,19 @@ async def send_patient_results(to: str, request_id: str, applications: list[dict
         f'<a href="{results_url}" style="display:inline-block;background:{BRAND["primary"]};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">{cta_label}</a>'
         f'</p>'
     ) if cta_label else ""
+    followup_note = (
+        f'<div style="background:{BRAND["bg"]};border:1px solid {BRAND["border"]};border-radius:12px;padding:16px 18px;margin:20px 0;">'
+        f'<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:{BRAND["primary"]};">What happens next</p>'
+        f'<p style="margin:0;font-size:13px;line-height:1.6;color:{BRAND["text"]};">'
+        f'Over the coming weeks we\'ll send you a few short check-ins to see how things are going. '
+        f'These quick surveys (under 60 seconds each) help us improve your matches and make TheraVoca better for everyone. '
+        f'Your responses are anonymous to therapists and completely optional — but they make a real difference.'
+        f'</p></div>'
+    )
     inner = f"""
     <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">{intro}</p>
     <div style="margin:24px 0;">{cards}</div>
+    {followup_note}
     {cta_html}
     """
     subject = render(tpl["subject"], **vars_)

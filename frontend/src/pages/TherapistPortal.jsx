@@ -488,10 +488,32 @@ export default function TherapistPortal() {
             </div>
           )}
 
-          {/* Trial badge + Manage subscription — REMOVED: now shown
-              as a compact pill next to "Edit profile" in the header.
-              The dunning banner above still surfaces when payment is
-              required (past_due / canceled / unpaid / incomplete). */}
+          {/* No subscription at all — fresh signup, needs to start trial */}
+          {therapist && !isPending && !sub && (
+            <div
+              className="mt-6 bg-[#EFF6F2] border border-[#C8DDD3] rounded-2xl p-5 flex items-start justify-between gap-4 flex-wrap"
+              data-testid="no-subscription-banner"
+            >
+              <div className="flex items-start gap-3">
+                <AlertTriangle size={18} className="text-[#2D4A3E] mt-1 shrink-0" />
+                <div>
+                  <div className="text-sm font-semibold text-[#2B2A29]">
+                    Start your free trial to receive referrals
+                  </div>
+                  <p className="text-sm text-[#6D6A65] mt-1 leading-relaxed">
+                    You won't receive patient referrals until you add a payment method and start your 30-day free trial. You won't be charged until the trial ends.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={startCheckout}
+                className="tv-btn-primary !py-2 !px-4 text-sm shrink-0"
+                data-testid="portal-start-trial-btn"
+              >
+                Start free trial
+              </button>
+            </div>
+          )}
 
           {/* KPI strip — Option C: 4 most important numbers at the top
               so the therapist sees their performance at a glance before
