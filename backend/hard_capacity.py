@@ -166,58 +166,69 @@ async def compute_capacity(db) -> dict:
             if s and s.lower() not in lang_canonical:
                 lang_canonical[s.lower()] = s
 
-    # Disabled lists — values the patient UI should grey out.
+    # Disabled lists -- values the patient UI should grey out entirely
+    # (count == 0 for soft-warn axes, < MIN_REQUIRED for hard axes).
     disabled = {
-        # When a non-English language has < MIN_REQUIRED speakers,
-        # `language_strict=True` would collapse the pool.
+        # Soft-warn axes: disabled only when truly zero therapists.
         "language_strict": sorted([
             lang_canonical.get(k, k)
             for k, v in lang_ci.items()
-            if k != "english" and v < MIN_REQUIRED
+            if k != "english" and v == 0
         ]),
-        # Gender-required → for any gender with < MIN_REQUIRED
-        # therapists, `gender_required=True` would collapse the pool.
+        # Hard axes: binary disable unchanged.
         "gender_required": sorted([
             g for g, v in gen_c.items() if v < MIN_REQUIRED
         ]),
-        # In-person / telehealth only.
         "in_person_only": in_person < MIN_REQUIRED,
         "telehealth_only": telehealth < MIN_REQUIRED,
-        # Insurance carriers with thin coverage.
+        # Soft-warn axes: disabled at zero.
         "insurance_strict": sorted([
-            k for k, v in ins_c.items() if v < MIN_REQUIRED
+            k for k, v in ins_c.items() if v == 0
         ]),
-        # Urgency buckets that are HARD and thin.
         "urgency_strict": [
-            u for u, v in urgency_counts.items() if v < MIN_REQUIRED
+            u for u, v in urgency_counts.items() if v == 0
         ],
-        # Client type (HARD-by-default — patient picks exactly one
-        # and the matcher filters on it). Surfacing thin buckets so
-        # the intake form can warn the patient before they pick one
-        # we can't fulfil.
         "client_type": sorted([
-            ct for ct, v in ct_c.items() if v < MIN_REQUIRED
+            ct for ct, v in ct_c.items() if v == 0
         ]),
-        # Age group (also HARD-by-default).
         "age_group": sorted([
-            ag for ag, v in ag_c.items() if v < MIN_REQUIRED
+            ag for ag, v in ag_c.items() if v == 0
         ]),
     }
 
-    # Human-readable explanations — what the tooltip says.
+    # Warned lists -- values with limited supply (0 < count < MIN_REQUIRED).
+    # UI shows these as selectable with a soft warning, not greyed out.
+    warned = {
+        "language_strict": sorted([
+            lang_canonical.get(k, k)
+            for k, v in lang_ci.items()
+            if k != "english" and 0 < v < MIN_REQUIRED
+        ]),
+        "insurance_strict": sorted([
+            k for k, v in ins_c.items() if 0 < v < MIN_REQUIRED
+        ]),
+        "urgency_strict": [
+            u for u, v in urgency_counts.items() if 0 < v < MIN_REQUIRED
+        ],
+        "client_type": sorted([
+            ct for ct, v in ct_c.items() if 0 < v < MIN_REQUIRED
+        ]),
+        "age_group": sorted([
+            ag for ag, v in ag_c.items() if 0 < v < MIN_REQUIRED
+        ]),
+    }
+
+    # Human-readable explanations for disabled options (count == 0).
     protections: list[dict] = []
     for lang in disabled["language_strict"]:
-        count = lang_ci.get(lang.lower(), 0)
         protections.append({
             "axis": "language_strict",
             "value": lang,
-            "count": count,
+            "count": 0,
             "label": (
-                f"Only {count} active therapist{'s' if count != 1 else ''} "
-                f"in our directory speak{'' if count == 1 else ''} "
-                f"{lang}. Keeping language as a preference (not HARD) "
-                f"lets us still show you every Idaho therapist who fits "
-                f"your other criteria — you pick who to reach out to."
+                f"No therapists in our directory currently speak "
+                f"{lang}. We're actively recruiting -- submit your "
+                f"request and we'll add you to our recruit list."
             ),
         })
     for gender in disabled["gender_required"]:
@@ -240,7 +251,7 @@ async def compute_capacity(db) -> dict:
             "label": (
                 f"Only {in_person} therapist{'s' if in_person != 1 else ''} "
                 f"currently offer{'' if in_person == 1 else 's'} in-person "
-                f"sessions in Idaho. Choose 'Prefer in-person' instead — "
+                f"sessions in Idaho. Choose 'Prefer in-person' instead -- "
                 f"we'll rank in-person therapists first but keep "
                 f"telehealth options available."
             ),
@@ -257,52 +268,118 @@ async def compute_capacity(db) -> dict:
             ),
         })
     for carrier in disabled["insurance_strict"]:
-        count = ins_c.get(carrier.lower(), 0)
         protections.append({
             "axis": "insurance_strict",
             "value": carrier,
-            "count": count,
+            "count": 0,
             "label": (
-                f"Only {count} therapist{'s' if count != 1 else ''} in "
-                f"network for {carrier.title()}. Keeping insurance as a "
-                f"preference lets us show you their cash-pay alternatives too."
+                f"No therapists in our directory currently accept "
+                f"{carrier.title()}. We're actively recruiting -- "
+                f"submit your request and we'll add you to our recruit list."
             ),
         })
     for u in disabled["urgency_strict"]:
-        count = urgency_counts.get(u, 0)
         protections.append({
             "axis": "urgency_strict",
             "value": u,
-            "count": count,
+            "count": 0,
             "label": (
-                f"Only {count} therapist{'s' if count != 1 else ''} "
-                f"currently accept {u.replace('_', ' ')} starts."
+                f"No therapists currently accept "
+                f"{u.replace('_', ' ')} starts. We're recruiting -- "
+                f"submit your request and we'll prioritize finding a match."
             ),
         })
     for ct in disabled["client_type"]:
-        count = ct_c.get(ct, 0)
         protections.append({
             "axis": "client_type",
             "value": ct,
-            "count": count,
+            "count": 0,
             "label": (
-                f"Only {count} therapist{'s' if count != 1 else ''} in our "
-                f"directory offer {ct} therapy. Picking this would leave "
-                f"you with too few matches — we're actively recruiting "
-                f"more {ct} therapists in Idaho."
+                f"No therapists in our directory currently offer {ct} "
+                f"therapy. We're actively recruiting {ct} therapists "
+                f"in Idaho."
             ),
         })
     for ag in disabled["age_group"]:
-        count = ag_c.get(ag, 0)
         pretty = ag.replace("_", " ")
         protections.append({
             "axis": "age_group",
             "value": ag,
+            "count": 0,
+            "label": (
+                f"No therapists in our directory currently see {pretty} "
+                f"clients. We're actively recruiting {pretty} specialists "
+                f"in Idaho."
+            ),
+        })
+
+    # Human-readable explanations for warned options (limited supply).
+    warnings: list[dict] = []
+    for lang in warned["language_strict"]:
+        count = lang_ci.get(lang.lower(), 0)
+        warnings.append({
+            "axis": "language_strict",
+            "value": lang,
             "count": count,
             "label": (
-                f"Only {count} therapist{'s' if count != 1 else ''} "
-                f"in our directory see {pretty} clients. We're "
-                f"actively recruiting {pretty} specialists in Idaho."
+                f"Limited availability -- only {count} "
+                f"therapist{'s' if count != 1 else ''} in our directory "
+                f"speak{'' if count == 1 else ''} {lang}. We'll do our "
+                f"best to match you, and may add you to our recruit list "
+                f"if needed."
+            ),
+        })
+    for carrier in warned["insurance_strict"]:
+        count = ins_c.get(carrier.lower(), 0)
+        warnings.append({
+            "axis": "insurance_strict",
+            "value": carrier,
+            "count": count,
+            "label": (
+                f"Limited availability -- only {count} "
+                f"therapist{'s' if count != 1 else ''} in network for "
+                f"{carrier.title()}. We'll do our best to match you, "
+                f"and may add you to our recruit list if needed."
+            ),
+        })
+    for u in warned["urgency_strict"]:
+        count = urgency_counts.get(u, 0)
+        warnings.append({
+            "axis": "urgency_strict",
+            "value": u,
+            "count": count,
+            "label": (
+                f"Limited availability -- only {count} "
+                f"therapist{'s' if count != 1 else ''} currently accept "
+                f"{u.replace('_', ' ')} starts. We'll do our best to "
+                f"match you, and may add you to our recruit list if needed."
+            ),
+        })
+    for ct in warned["client_type"]:
+        count = ct_c.get(ct, 0)
+        warnings.append({
+            "axis": "client_type",
+            "value": ct,
+            "count": count,
+            "label": (
+                f"Limited availability -- only {count} "
+                f"therapist{'s' if count != 1 else ''} in our directory "
+                f"offer {ct} therapy. We'll do our best to match you, "
+                f"and may add you to our recruit list if needed."
+            ),
+        })
+    for ag in warned["age_group"]:
+        count = ag_c.get(ag, 0)
+        pretty = ag.replace("_", " ")
+        warnings.append({
+            "axis": "age_group",
+            "value": ag,
+            "count": count,
+            "label": (
+                f"Limited availability -- only {count} "
+                f"therapist{'s' if count != 1 else ''} in our directory "
+                f"see {pretty} clients. We'll do our best to match you, "
+                f"and may add you to our recruit list if needed."
             ),
         })
 
@@ -322,5 +399,7 @@ async def compute_capacity(db) -> dict:
             "age_group": dict(ag_c),
         },
         "disabled": disabled,
+        "warned": warned,
         "protections": protections,
+        "warnings": warnings,
     }

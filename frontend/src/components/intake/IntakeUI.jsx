@@ -39,74 +39,103 @@ export function Field({ label, children }) {
   );
 }
 
-export function PillRow({ items, selected, onSelect, testid, disabledValues, disabledReasons, showRank = false }) {
-  // `disabledValues` (Set<string> | string[]) marks options as
-  // unavailable — used by hard-capacity to grey out child/teen age
-  // groups, family/group client types, etc. when our active
-  // therapist directory has < 30 providers in that bucket.
+export function PillRow({
+  items, selected, onSelect, testid,
+  disabledValues, disabledReasons,
+  warnValues, warnReasons,
+  showRank = false,
+}) {
+  // Tri-state option rendering:
+  //   disabled (count == 0): greyed out, unclickable, line-through
+  //   warned   (low supply): selectable, amber dashed border, shows
+  //            warning banner below when selected
+  //   normal:  fully enabled, no indicators
   //
-  // `showRank` (default false) surfaces the SELECTION ORDER as a small
-  // 1°/2°/3° badge on each active pill. Used by the presenting-issues
-  // step where the order is meaningful (issue #1 is a HARD filter,
-  // #2/#3 are soft-scored bonuses) but was previously invisible to
-  // patients.
-  const disabledSet = new Set(
-    Array.isArray(disabledValues)
-      ? disabledValues.map((s) => String(s).toLowerCase())
-      : disabledValues
-        ? Array.from(disabledValues).map((s) => String(s).toLowerCase())
-        : [],
-  );
+  // `showRank` surfaces selection order as a 1st/2nd/3rd badge.
+  const toSet = (vals) =>
+    new Set(
+      Array.isArray(vals)
+        ? vals.map((s) => String(s).toLowerCase())
+        : vals
+          ? Array.from(vals).map((s) => String(s).toLowerCase())
+          : [],
+    );
+  const disabledSet = toSet(disabledValues);
+  const warnSet = toSet(warnValues);
+
+  // Collect warning text for any selected + warned option.
+  const activeWarnings = items
+    .filter((it) => selected.includes(it.v) && warnSet.has(String(it.v).toLowerCase()))
+    .map((it) => {
+      const key = String(it.v).toLowerCase();
+      return (warnReasons && (warnReasons[key] || warnReasons[it.v])) || "";
+    })
+    .filter(Boolean);
+
   return (
-    <div className="flex flex-wrap gap-2">
-      {items.map((it) => {
-        const active = selected.includes(it.v);
-        const rank = showRank && active ? selected.indexOf(it.v) + 1 : null;
-        const isDisabled =
-          !active && disabledSet.has(String(it.v).toLowerCase());
-        const reason =
-          isDisabled && disabledReasons
-            ? disabledReasons[String(it.v).toLowerCase()] || disabledReasons[it.v]
-            : "";
-        return (
-          <button
-            key={it.v}
-            type="button"
-            onClick={() => !isDisabled && onSelect(it.v)}
-            disabled={isDisabled}
-            title={
-              rank === 1
-                ? "1st priority — primary concern (used as a hard filter)"
-                : rank
-                  ? `Priority #${rank} — soft scoring bonus`
-                  : reason || undefined
-            }
-            aria-disabled={isDisabled}
-            data-testid={`${testid}-${it.v}${isDisabled ? "-disabled" : ""}`}
-            className={`text-sm px-4 py-2 rounded-full border transition inline-flex items-center gap-1.5 ${
-              active
-                ? "bg-[#2D4A3E] text-white border-[#2D4A3E] shadow-sm"
-                : isDisabled
-                  ? "bg-[#F2EFE9] text-[#9C9893] border-[#E8E5DF] cursor-not-allowed line-through opacity-70"
-                  : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
-            }`}
-          >
-            {rank && (
-              <span
-                className={`text-[10px] font-bold leading-none px-1.5 py-0.5 rounded-full ${
-                  rank === 1
-                    ? "bg-[#F0C674] text-[#2B2A29]"
-                    : "bg-white/25 text-white"
-                }`}
-                data-testid={`${testid}-${it.v}-rank-${rank}`}
-              >
-                {rank === 1 ? "1st" : rank === 2 ? "2nd" : rank === 3 ? "3rd" : rank === 4 ? "4th" : "5th"}
-              </span>
-            )}
-            {it.l}
-          </button>
-        );
-      })}
+    <div>
+      <div className="flex flex-wrap gap-2">
+        {items.map((it) => {
+          const active = selected.includes(it.v);
+          const rank = showRank && active ? selected.indexOf(it.v) + 1 : null;
+          const key = String(it.v).toLowerCase();
+          const isDisabled = !active && disabledSet.has(key);
+          const isWarned = warnSet.has(key);
+          const reason = isDisabled && disabledReasons
+            ? disabledReasons[key] || disabledReasons[it.v]
+            : isWarned && warnReasons
+              ? warnReasons[key] || warnReasons[it.v]
+              : "";
+          return (
+            <button
+              key={it.v}
+              type="button"
+              onClick={() => !isDisabled && onSelect(it.v)}
+              disabled={isDisabled}
+              title={
+                rank === 1
+                  ? "1st priority -- primary concern (used as a hard filter)"
+                  : rank
+                    ? `Priority #${rank} -- soft scoring bonus`
+                    : reason || undefined
+              }
+              aria-disabled={isDisabled}
+              data-testid={`${testid}-${it.v}${isDisabled ? "-disabled" : isWarned ? "-warned" : ""}`}
+              className={`text-sm px-4 py-2 rounded-full border transition inline-flex items-center gap-1.5 ${
+                active
+                  ? "bg-[#2D4A3E] text-white border-[#2D4A3E] shadow-sm"
+                  : isDisabled
+                    ? "bg-[#F2EFE9] text-[#9C9893] border-[#E8E5DF] cursor-not-allowed line-through opacity-70"
+                    : isWarned
+                      ? "bg-[#FFFBF0] text-[#2B2A29] border-[#D4A853] border-dashed hover:border-[#B8922E]"
+                      : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+              }`}
+            >
+              {rank && (
+                <span
+                  className={`text-[10px] font-bold leading-none px-1.5 py-0.5 rounded-full ${
+                    rank === 1
+                      ? "bg-[#F0C674] text-[#2B2A29]"
+                      : "bg-white/25 text-white"
+                  }`}
+                  data-testid={`${testid}-${it.v}-rank-${rank}`}
+                >
+                  {rank === 1 ? "1st" : rank === 2 ? "2nd" : rank === 3 ? "3rd" : rank === 4 ? "4th" : "5th"}
+                </span>
+              )}
+              {it.l}
+            </button>
+          );
+        })}
+      </div>
+      {activeWarnings.length > 0 && (
+        <div
+          className="mt-2 px-3 py-2 rounded-lg bg-[#FFF8E7] border border-[#E8D5A3] text-xs text-[#7A6520] leading-relaxed"
+          data-testid={`${testid}-warn-banner`}
+        >
+          {activeWarnings[0]}
+        </div>
+      )}
     </div>
   );
 }

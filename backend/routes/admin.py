@@ -3111,7 +3111,9 @@ async def public_hard_capacity() -> dict[str, Any]:
         "pool_size": result["pool_size"],
         "min_required": result["min_required"],
         "disabled": result["disabled"],
+        "warned": result["warned"],
         "protections": result["protections"],
+        "warnings": result["warnings"],
     }
 
 

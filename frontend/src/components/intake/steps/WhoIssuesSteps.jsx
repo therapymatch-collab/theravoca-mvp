@@ -32,6 +32,8 @@ export function WhoStep({ data, set, hardCapacity }) {
   const hc = hardCapacity || {};
   const ctDisabled = hc.capacity?.disabled?.client_type || [];
   const agDisabled = hc.capacity?.disabled?.age_group || [];
+  const ctWarned = hc.capacity?.warned?.client_type || [];
+  const agWarned = hc.capacity?.warned?.age_group || [];
   const ctReasons = Object.fromEntries(
     (hc.capacity?.protections || [])
       .filter((p) => p.axis === "client_type")
@@ -42,13 +44,23 @@ export function WhoStep({ data, set, hardCapacity }) {
       .filter((p) => p.axis === "age_group")
       .map((p) => [String(p.value).toLowerCase(), p.label]),
   );
+  const ctWarnReasons = Object.fromEntries(
+    (hc.capacity?.warnings || [])
+      .filter((p) => p.axis === "client_type")
+      .map((p) => [String(p.value).toLowerCase(), p.label]),
+  );
+  const agWarnReasons = Object.fromEntries(
+    (hc.capacity?.warnings || [])
+      .filter((p) => p.axis === "age_group")
+      .map((p) => [String(p.value).toLowerCase(), p.label]),
+  );
   const ctHint =
     ctDisabled.length > 0
-      ? `${ctDisabled.length} option${ctDisabled.length === 1 ? "" : "s"} unavailable — we're recruiting more therapists in those formats`
+      ? `${ctDisabled.length} option${ctDisabled.length === 1 ? "" : "s"} unavailable -- we're recruiting more therapists in those formats`
       : "";
   const agHint =
     agDisabled.length > 0
-      ? `${agDisabled.length} option${agDisabled.length === 1 ? "" : "s"} unavailable — we're recruiting more therapists for those age groups`
+      ? `${agDisabled.length} option${agDisabled.length === 1 ? "" : "s"} unavailable -- we're recruiting more therapists for those age groups`
       : "";
 
   // State choice: "ID" or "other"
@@ -155,6 +167,8 @@ export function WhoStep({ data, set, hardCapacity }) {
               testid="client-type"
               disabledValues={ctDisabled}
               disabledReasons={ctReasons}
+              warnValues={ctWarned}
+              warnReasons={ctWarnReasons}
             />
             {ctHint && (
               <p className="text-xs text-[#B37E35] mt-2" data-testid="client-type-warning">
@@ -170,6 +184,8 @@ export function WhoStep({ data, set, hardCapacity }) {
               testid="age-group"
               disabledValues={agDisabled}
               disabledReasons={agReasons}
+              warnValues={agWarned}
+              warnReasons={agWarnReasons}
             />
             {agHint && (
               <p className="text-xs text-[#B37E35] mt-2" data-testid="age-group-warning">

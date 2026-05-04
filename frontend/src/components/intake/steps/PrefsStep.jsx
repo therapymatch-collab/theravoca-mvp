@@ -18,11 +18,13 @@ import { EXPERIENCE, GENDERS, STYLES, MODALITY_PREFS } from "./intakeOptions";
  * "language only" toggle, plus optional style / modality preferences.
  */
 export default function PrefsStep({ data, set, toggleArr, hardCapacity }) {
-  const hc = hardCapacity || { isDisabled: () => false, reasonFor: () => "" };
+  const hc = hardCapacity || { isDisabled: () => false, reasonFor: () => "", isWarned: () => false, warnReasonFor: () => "" };
   const genderHardDisabled = hc.isDisabled("gender_required", data.gender_preference);
   const genderReason = hc.reasonFor("gender_required", data.gender_preference);
   const langHardDisabled = hc.isDisabled("language_strict", data.preferred_language);
   const langReason = hc.reasonFor("language_strict", data.preferred_language);
+  const langWarned = hc.isWarned("language_strict", data.preferred_language);
+  const langWarnReason = hc.warnReasonFor("language_strict", data.preferred_language);
   return (
     <div className="space-y-6">
       <Group label="Therapist experience preference (pick all that apply)">
@@ -138,6 +140,10 @@ export default function PrefsStep({ data, set, toggleArr, hardCapacity }) {
                 {langHardDisabled ? (
                   <span className="block mt-1 text-xs text-[#B37E35]">
                     {langReason}
+                  </span>
+                ) : langWarned ? (
+                  <span className="block mt-1 text-xs text-[#7A6520]">
+                    {langWarnReason}
                   </span>
                 ) : (
                   <span className="text-[#6D6A65]">

@@ -19,15 +19,12 @@ import { PAYMENT } from "./intakeOptions";
  *  - cash budget input + optional sliding-scale opt-in
  */
 export default function PaymentStep({ data, set, hardCapacity }) {
-  const hc = hardCapacity || { isDisabled: () => false, reasonFor: () => "" };
-  const insHardDisabled = hc.isDisabled(
-    "insurance_strict",
-    data.insurance_name === "Other (specify)" ? data.insurance_name_other : data.insurance_name,
-  );
-  const insReason = hc.reasonFor(
-    "insurance_strict",
-    data.insurance_name === "Other (specify)" ? data.insurance_name_other : data.insurance_name,
-  );
+  const hc = hardCapacity || { isDisabled: () => false, reasonFor: () => "", isWarned: () => false, warnReasonFor: () => "" };
+  const insValue = data.insurance_name === "Other (specify)" ? data.insurance_name_other : data.insurance_name;
+  const insHardDisabled = hc.isDisabled("insurance_strict", insValue);
+  const insReason = hc.reasonFor("insurance_strict", insValue);
+  const insWarned = hc.isWarned("insurance_strict", insValue);
+  const insWarnReason = hc.warnReasonFor("insurance_strict", insValue);
   return (
     <div className="space-y-5">
       <Group label="How would the client like to pay?">
@@ -99,7 +96,11 @@ export default function PaymentStep({ data, set, hardCapacity }) {
             explicitly accept this insurance.{" "}
             {insHardDisabled ? (
               <span className="block mt-1 text-xs text-[#B37E35]">
-                {insReason || "Too few in-network therapists right now — we'll still prioritise them, but can't make it a hard filter."}
+                {insReason || "No in-network therapists right now."}
+              </span>
+            ) : insWarned ? (
+              <span className="block mt-1 text-xs text-[#7A6520]">
+                {insWarnReason}
               </span>
             ) : (
               <span className="text-[#6D6A65]">

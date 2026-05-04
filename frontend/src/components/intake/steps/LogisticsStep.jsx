@@ -11,9 +11,11 @@ import { AVAILABILITY, URGENCY, PRIOR_THERAPY } from "./intakeOptions";
  * didn't).
  */
 export default function LogisticsStep({ data, set, toggleArr, hardCapacity }) {
-  const hc = hardCapacity || { isDisabled: () => false, reasonFor: () => "" };
+  const hc = hardCapacity || { isDisabled: () => false, reasonFor: () => "", isWarned: () => false, warnReasonFor: () => "" };
   const urgencyHardDisabled = hc.isDisabled("urgency_strict", data.urgency);
   const urgencyReason = hc.reasonFor("urgency_strict", data.urgency);
+  const urgencyWarned = hc.isWarned("urgency_strict", data.urgency);
+  const urgencyWarnReason = hc.warnReasonFor("urgency_strict", data.urgency);
   return (
     <div className="space-y-6">
       <Group
@@ -74,7 +76,12 @@ export default function LogisticsStep({ data, set, toggleArr, hardCapacity }) {
             can start within this timeframe.
             {urgencyHardDisabled && (
               <span className="block mt-1 text-xs text-[#B37E35]">
-                {urgencyReason || "Too few therapists have openings in this timeframe right now — we'll still prioritise them, but can't make it a hard filter."}
+                {urgencyReason || "No therapists have openings in this timeframe right now."}
+              </span>
+            )}
+            {!urgencyHardDisabled && urgencyWarned && (
+              <span className="block mt-1 text-xs text-[#7A6520]">
+                {urgencyWarnReason}
               </span>
             )}
           </span>
