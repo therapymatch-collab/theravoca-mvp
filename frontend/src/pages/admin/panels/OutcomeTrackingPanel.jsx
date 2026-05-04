@@ -69,7 +69,7 @@ function FeedbackCard({ entry }) {
         {open ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
       </button>
       {!open && preview.length > 0 && (
-        <div className="mt-1 text-xs text-gray-400">{preview.join(" Â· ")}</div>
+        <div className="mt-1 text-xs text-gray-400">{preview.join(" · ")}</div>
       )}
       {open && (
         <div className="mt-3 space-y-1">
@@ -263,7 +263,7 @@ export default function OutcomeTrackingPanel() {
                     <TaiGauge score={t.tai_score} />
                     <span className="text-sm text-gray-600">{t.patient_email || t.request_id}</span>
                     <span className="text-xs text-gray-400 ml-auto">
-                      {t.milestone} Â· {t.created_at ? new Date(t.created_at).toLocaleDateString() : ""}
+                      {t.milestone} · {t.created_at ? new Date(t.created_at).toLocaleDateString() : ""}
                     </span>
                   </div>
                 ))}

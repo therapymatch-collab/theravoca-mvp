@@ -239,7 +239,7 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
             bits.append("Cash: amount not specified")
         if sliding:
             bits.append("open to sliding scale")
-        payment_label = "Either — " + " Â· ".join(bits)
+        payment_label = "Either — " + " · ".join(bits)
     else:
         payment_label = payment_type_raw.title() or "Not specified"
     avail = req.get("availability_windows") or []
