@@ -107,6 +107,9 @@ async def lifespan(_app: FastAPI):
         await db.magic_codes.create_index([("email", 1), ("code", 1)])
         # Site-copy lookups happen on every page load (public GET).
         await db.site_copy.create_index("key", unique=True)
+        # HIPAA audit trail -- TTL + query indexes for PHI access log.
+        from audit import ensure_indexes as _ensure_audit_indexes
+        await _ensure_audit_indexes()
     except Exception as _idx_err:  # noqa: BLE001
         logger.warning("Index setup encountered an error: %s", _idx_err)
     sweep_interval = int(os.environ.get("SWEEP_INTERVAL_SECONDS", "300"))
