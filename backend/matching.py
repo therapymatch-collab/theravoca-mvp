@@ -1321,7 +1321,22 @@ def rank_therapists(
         reverse=True,
     )
     above = [s for s in scored if s["match_score"] >= threshold]
-    return above[:top_n]
+
+    # Tag every result so callers/frontend can distinguish above-threshold
+    # matches from "best available" fallbacks.
+    for s in scored:
+        s["above_threshold"] = s["match_score"] >= threshold
+
+    if len(above) >= min_results:
+        # Normal path — enough therapists cleared the floor.
+        return above[:top_n]
+
+    # Fallback: fewer than min_results above threshold.  Return the top
+    # min_results by score regardless of threshold so the patient still
+    # gets *some* options.  The `above_threshold=False` flag tells the
+    # frontend/email to present these as "best available" rather than
+    # strong matches.
+    return scored[:min_results]
 
 
 def gap_axes(

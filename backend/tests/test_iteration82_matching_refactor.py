@@ -314,3 +314,93 @@ class TestRequestApiNewFields:
         # 400 = Turnstile / validation rejection (expected without token)
         # 422 = Pydantic validation rejection (also acceptable)
         assert r.status_code in (400, 422), f"Unexpected status: {r.status_code} — {r.text[:200]}"
+
+
+# ─── Unit: rank_therapists min_results fallback ─────────────────────────────
+
+class TestMinResultsFallback:
+    """Bucket 2 Fix #5 — when fewer than min_results therapists clear the
+    threshold, return the top min_results regardless and tag them."""
+
+    def test_normal_path_enough_above_threshold(self):
+        """When >= min_results therapists score above threshold, only above-
+        threshold results are returned and all have above_threshold=True."""
+        therapists = [
+            _therapist(id="t-good1", primary_specialties=["anxiety"]),
+            _therapist(id="t-good2", primary_specialties=["anxiety"]),
+            _therapist(id="t-good3", primary_specialties=["anxiety"]),
+            _therapist(id="t-good4", primary_specialties=["anxiety"]),
+        ]
+        req = _request(presenting_issues=["anxiety"])
+        results = rank_therapists(therapists, req, threshold=40.0, min_results=3)
+        assert len(results) >= 3
+        assert all(r["above_threshold"] is True for r in results)
+
+    def test_fallback_returns_min_results_below_threshold(self):
+        """Niche request: only 1 therapist above threshold, but min_results=3
+        should still return 3 results with correct flags.
+        NOTE: all therapists must pass the hard _primary_concern_pass filter
+        (they must list the patient's issue) — we use a sky-high threshold
+        instead to force some below-threshold."""
+        therapists = [
+            # All three treat anxiety (pass hard filter) but differ in other axes.
+            # Give each a unique email to avoid any dedup.
+            _therapist(id="t-match", email="match@test.com",
+                       primary_specialties=["anxiety"],
+                       years_experience=20, review_avg=5.0, review_count=50),
+            _therapist(id="t-low1", email="low1@test.com",
+                       primary_specialties=["anxiety"],
+                       years_experience=1, modality_offering="in_person"),
+            _therapist(id="t-low2", email="low2@test.com",
+                       primary_specialties=["anxiety"],
+                       years_experience=1, modality_offering="in_person"),
+        ]
+        req = _request(presenting_issues=["anxiety"])
+        # Verify all pass hard filters first
+        for t in therapists:
+            result = score_therapist(t, req)
+            assert not result["filtered"], f"{t['id']} unexpectedly filtered"
+        # threshold=99 ensures most/all fall below it
+        results = rank_therapists(therapists, req, threshold=99.0, min_results=3)
+        # Should return all 3 even though most are below 99%
+        assert len(results) == 3, (
+            f"Expected 3 results but got {len(results)}: "
+            f"{[r.get('id') for r in results]}"
+        )
+        # The best therapist should be first
+        assert results[0]["id"] == "t-match"
+        # At least one result should be below threshold
+        below = [r for r in results if r["above_threshold"] is False]
+        assert len(below) >= 1, "Expected at least one below-threshold fallback"
+
+    def test_above_threshold_flag_present(self):
+        """Every returned result must have the above_threshold flag."""
+        therapists = [_therapist(id=f"t-{i}") for i in range(5)]
+        req = _request()
+        results = rank_therapists(therapists, req, threshold=70.0, min_results=3)
+        for r in results:
+            assert "above_threshold" in r, f"Missing above_threshold flag on {r['id']}"
+            assert isinstance(r["above_threshold"], bool)
+
+    def test_fallback_sorted_by_score_descending(self):
+        """Fallback results should still be sorted by score descending."""
+        therapists = [
+            _therapist(id="t-best", primary_specialties=["anxiety"],
+                       secondary_specialties=["depression", "trauma"]),
+            _therapist(id="t-mid", primary_specialties=["depression"]),
+            _therapist(id="t-worst", primary_specialties=["eating disorders"]),
+        ]
+        req = _request(presenting_issues=["anxiety"])
+        results = rank_therapists(therapists, req, threshold=99.0, min_results=3)
+        scores = [r["match_score"] for r in results]
+        assert scores == sorted(scores, reverse=True), \
+            f"Results not sorted by score descending: {scores}"
+
+    def test_fewer_than_min_results_available(self):
+        """If total scored therapists < min_results, return whatever we have."""
+        therapists = [_therapist(id="t-only")]
+        req = _request()
+        results = rank_therapists(therapists, req, threshold=99.0, min_results=5)
+        # Can't return 5 when only 1 exists — return what we have
+        assert len(results) >= 1
+        assert len(results) <= 1
