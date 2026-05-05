@@ -4480,5 +4480,47 @@ async def run_provider_import(payload: dict):
         sys.stderr = old_stderr
 
 
+# ── Fake-out emails (prevent real therapist notifications during testing) ──
+
+@router.post("/admin/fake-out-emails", dependencies=[Depends(require_admin)])
+async def fake_out_emails():
+    """Replace real emails on imported therapists with therapymatch+tN@gmail.com.
+
+    Only touches therapists with source="imported_xlsx". Does NOT modify
+    _backfill_audit so strip-backfill still works at launch.
+    """
+    cur = db.therapists.find(
+        {"source": "imported_xlsx"},
+        {"_id": 1, "email": 1, "name": 1},
+    ).sort("name", 1)
+    therapists = await cur.to_list(length=2000)
+
+    samples = []
+    updated = 0
+    for idx, t in enumerate(therapists, 1001):
+        old_email = t.get("email", "")
+        new_email = f"therapymatch+t{idx}@gmail.com"
+        if old_email == new_email:
+            continue
+        await db.therapists.update_one(
+            {"_id": t["_id"]},
+            {"$set": {"email": new_email}},
+        )
+        updated += 1
+        if len(samples) < 3:
+            samples.append({
+                "name": t.get("name", "???"),
+                "before": old_email,
+                "after": new_email,
+            })
+
+    return {
+        "ok": True,
+        "updated": updated,
+        "total_imported": len(therapists),
+        "samples": samples,
+    }
+
+
 # Suppress unused-import warnings on logger (kept for future logging)
 void = logger
