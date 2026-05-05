@@ -5,6 +5,7 @@ import { Toaster } from "sonner";
 import Landing from "@/pages/Landing";
 import VerifyEmail from "@/pages/VerifyEmail";
 import TherapistApply from "@/pages/TherapistApply";
+import TherapistDecline from "@/pages/TherapistDecline";
 import TherapistSignup from "@/pages/TherapistSignup";
 import SignIn from "@/pages/SignIn";
 import PatientPortal from "@/pages/PatientPortal";
@@ -61,6 +62,10 @@ function App() {
             <Route
               path="/therapist/apply/:requestId/:therapistId"
               element={<TherapistApply />}
+            />
+            <Route
+              path="/therapist/decline/:requestId/:therapistId"
+              element={<TherapistDecline />}
             />
             <Route path="/results/:requestId" element={<PatientResults />} />
             <Route path="/followup/:requestId/:milestone" element={<FollowupForm />} />
