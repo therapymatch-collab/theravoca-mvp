@@ -569,7 +569,7 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
             ],
         })
         axes.append(_axis(
-            f"Cash rate Ã¢ÂÂ¤ ${budget} (or sliding scale)",
+            f"Cash rate <= ${budget} (or sliding scale)",
             cnt, max(15, target // 2),
         ))
 
@@ -628,7 +628,7 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
         ))
 
     summary = (
-        f"Only {notified_count} therapist(s) were notified Ã¢ÂÂ target was "
+        f"Only {notified_count} therapist(s) were notified  --  target was "
         f"{target}. Active directory size: {total_active}. The axes below "
         f"show which filter cut the pool down."
     )
@@ -639,7 +639,7 @@ async def _explain_match_gap(req: dict, notified_count: int) -> dict:
     verified = bool(req.get("verified"))
     if not verified:
         summary = (
-            "Patient hasn't verified their email yet Ã¢ÂÂ matching only runs "
+            "Patient hasn't verified their email yet  --  matching only runs "
             "after verification, so 0 therapists have been notified. The "
             "axes below show what the directory could match if/when they "
             "verify; the actual notify count will fill in once they "
@@ -1118,7 +1118,7 @@ async def admin_test_sms(payload: dict, _: bool = Depends(require_admin)):
         except (KeyError, IndexError):
             body = template  # show raw template if formatting fails
     else:
-        body = (payload or {}).get("body") or "TheraVoca: SMS smoke test Ã¢ÂÂ your Twilio integration is wired up."
+        body = (payload or {}).get("body") or "TheraVoca: SMS smoke test  --  your Twilio integration is wired up."
 
     # force=True bypasses TWILIO_ENABLED check Ã¢ÂÂ admin explicitly chose to test
     result = await send_sms(to, body, force=True)
@@ -1159,7 +1159,7 @@ async def admin_test_sms(payload: dict, _: bool = Depends(require_admin)):
         hint = (
             "A2P 10DLC registration required. US carriers block unregistered "
             "numbers from sending SMS. Register at "
-            "twilio.com/console/sms/a2p-messaging Ã¢ÂÂ or switch to a "
+            "twilio.com/console/sms/a2p-messaging  --  or switch to a "
             "verified toll-free number."
         )
     elif error_code == 21610:
@@ -2355,10 +2355,10 @@ async def admin_backfill_deep_match(payload: dict = None) -> dict[str, Any]:
 
     _T2_TEMPLATES = [
         "I worked with a client dealing with {issue} who had been in therapy before without real progress. Through {approach}, we built trust and self-awareness over about {months} months. The turning point came when they started applying insights to daily life. By the end, they reported feeling more confident and connected than they had in years.",
-        "One client stands out Ã¢ÂÂ someone overwhelmed by {issue}. They were skeptical. Using {approach}, we focused on practical tools between sessions. Week by week, small shifts added up. After {months} months, they told me they finally felt like themselves again.",
+        "One client stands out  --  someone overwhelmed by {issue}. They were skeptical. Using {approach}, we focused on practical tools between sessions. Week by week, small shifts added up. After {months} months, they told me they finally felt like themselves again.",
     ]
     _T5_TEMPLATES = [
-        "I understand {exp1} from the inside Ã¢ÂÂ it shaped how I show up in the therapy room. I also bring personal experience with {exp2}, which helps me connect with clients navigating similar challenges without judgment.",
+        "I understand {exp1} from the inside  --  it shaped how I show up in the therapy room. I also bring personal experience with {exp2}, which helps me connect with clients navigating similar challenges without judgment.",
         "My own journey through {exp1} gives me depth beyond clinical training. I've also navigated {exp2} personally, which informs how I hold space for clients going through the same.",
     ]
     _EXPERIENCES = [
@@ -2601,35 +2601,35 @@ async def admin_get_email_templates() -> dict[str, Any]:
             "key": "availability_prompt",
             "name": "Availability Check-in",
             "description": "Weekly Monday morning email asking therapists to confirm their availability",
-            "subject": "Quick check Ã¢ÂÂ is your TheraVoca availability still current?",
+            "subject": "Quick check  --  is your TheraVoca availability still current?",
             "trigger": "Cron job, configurable days via /admin/availability-prompt",
         },
         {
             "key": "verification",
             "name": "Email Verification",
             "description": "Sent to patient after request submission to verify their email",
-            "subject": "Verify your email Ã¢ÂÂ TheraVoca",
+            "subject": "Verify your email  --  TheraVoca",
             "trigger": "After patient submits intake form",
         },
         {
             "key": "results",
             "name": "Results Delivery",
             "description": "Sent to patient when their matched therapist results are ready",
-            "subject": "Your therapist matches are ready Ã¢ÂÂ TheraVoca",
+            "subject": "Your therapist matches are ready  --  TheraVoca",
             "trigger": "After matching completes or auto-delay expires",
         },
         {
             "key": "therapist_notification",
             "name": "New Referral Match",
             "description": "Sent to therapist when a new patient matches their profile",
-            "subject": "New referral match ({match_score}%) Ã¢ÂÂ TheraVoca",
+            "subject": "New referral match ({match_score}%)  --  TheraVoca",
             "trigger": "During matching when therapist scores above threshold",
         },
         {
             "key": "claim_profile",
             "name": "Claim Profile",
             "description": "One-time go-live outreach asking existing therapists to claim their profile",
-            "subject": "Your TheraVoca profile is ready Ã¢ÂÂ complete it now",
+            "subject": "Your TheraVoca profile is ready  --  complete it now",
             "trigger": "Manual admin action",
         },
     ]
@@ -3184,13 +3184,13 @@ def _render_opt_out_page(*, success: bool, email: str | None, phone: str | None,
         )
     already_line = (
         '<p style="color:#6D6A65;font-size:13px;margin:10px 0 0;">'
-        '(You were already opted out Ã¢ÂÂ no action needed.)</p>'
+        '(You were already opted out  --  no action needed.)</p>'
         if already else ""
     )
     return f"""<!doctype html>
 <html><head>
 <meta charset="utf-8">
-<title>TheraVoca Ã¢ÂÂ {headline}</title>
+<title>TheraVoca  --  {headline}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   body {{ margin:0; padding:48px 20px; background:#FDFBF7; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif; color:#2B2A29; }}
@@ -3455,7 +3455,7 @@ async def _compute_coverage_gap_analysis() -> dict:
                 "severity": "critical" if have < target / 2 else "warning",
                 "recommendation": (
                     f"Recruit {target - have} more therapist(s) specializing in "
-                    f"`{slug.replace('_', ' ')}` Ã¢ÂÂ patient demand is {demand}."
+                    f"`{slug.replace('_', ' ')}`  --  patient demand is {demand}."
                 ),
             })
     for m in MODALITIES_CORE:
@@ -3470,7 +3470,7 @@ async def _compute_coverage_gap_analysis() -> dict:
                 "severity": "critical" if have < 3 else "warning",
                 "recommendation": (
                     f"Recruit {target - have} more therapist(s) trained in "
-                    f"{m} Ã¢ÂÂ common patient request."
+                    f"{m}  --  common patient request."
                 ),
             })
     for ag in AGE_GROUPS:
@@ -3485,7 +3485,7 @@ async def _compute_coverage_gap_analysis() -> dict:
                 "severity": "critical" if have < target / 2 or have == 0 else "warning",
                 "recommendation": (
                     f"Recruit {target - have} more therapist(s) serving "
-                    f"`{ag}` Ã¢ÂÂ age group is a HARD filter in matching, "
+                    f"`{ag}`  --  age group is a HARD filter in matching, "
                     "patients in this bucket will see weak or zero matches."
                 ),
             })
@@ -3544,8 +3544,8 @@ async def _compute_coverage_gap_analysis() -> dict:
             "severity": "warning",
             "recommendation": (
                 f"Only {can_take_quick} therapist(s) flagged with ASAP / "
-                "2Ã¢ÂÂ3-week capacity. Patients marking `urgency=asap` will see "
-                "weak matches Ã¢ÂÂ prioritize confirming availability with your "
+                "2-3-week capacity. Patients marking `urgency=asap` will see "
+                "weak matches  --  prioritize confirming availability with your "
                 "current network."
             ),
         })
@@ -3594,7 +3594,7 @@ async def _compute_coverage_gap_analysis() -> dict:
             "severity": "warning",
             "recommendation": (
                 f"Only {sliding_scale} therapist(s) offer a sliding scale. "
-                "We tell patients we have flexible-fee options Ã¢ÂÂ verify."
+                "We tell patients we have flexible-fee options  --  verify."
             ),
         })
 
@@ -3704,7 +3704,7 @@ async def admin_referral_analytics(request: Request, _: bool = Depends(require_a
         meta = patient_codes_seen.get(code) or {}
         top_patient_referrers.append({
             "code": code,
-            "inviter_email": meta.get("email") or "Ã¢ÂÂ",
+            "inviter_email": meta.get("email") or "—",
             "invited_count": n,
         })
 
@@ -3728,8 +3728,8 @@ async def admin_referral_analytics(request: Request, _: bool = Depends(require_a
         meta = therapist_codes.get(code) or {}
         top_therapist_referrers.append({
             "code": code,
-            "inviter_name": meta.get("name") or "Ã¢ÂÂ",
-            "inviter_email": meta.get("email") or "Ã¢ÂÂ",
+            "inviter_name": meta.get("name") or "—",
+            "inviter_email": meta.get("email") or "—",
             "invited_count": n,
         })
 
@@ -4068,165 +4068,4 @@ async def _run_scraper_job(job_id: str, city: str, state: str, issues: list, cou
             )
             results.extend(backup)
             for src in ("therapyden", "goodtherapy", "google_maps"):
-                sources_summary[src] = sum(1 for c in backup if c.get("source") == src)
-        except Exception as e:
-            errors.append(f"Backup scrapers: {e}")
-
-    # Deduplicate by name+city
-    seen = set()
-    unique = []
-    for c in results:
-        key = f"{(c.get('name') or '').lower().strip()}|{(c.get('city') or '').lower().strip()}"
-        if key not in seen and key != "|":
-            seen.add(key)
-            unique.append(c)
-    candidates = unique[:count]
-
-    # Save Phase 1 results
-    await db.scraper_jobs.update_one(
-        {"id": job_id},
-        {"$set": {
-            "phase": "enriching",
-            "total": len(candidates),
-            "sources": sources_summary,
-            "errors": errors,
-            "candidates": candidates,
-            "enriched_count": 0,
-        }},
-    )
-
-    # Phase 2: Enrich with Google Places API + website fallback
-    import asyncio
-    enriched = 0
-    async with httpx.AsyncClient(follow_redirects=True) as client:
-        for i, c in enumerate(candidates):
-            if c.get("name"):  # enrich all candidates (Places API + website fallback)
-                try:
-                    await enrich_one(c, client)
-                    enriched += 1
-                except Exception:
-                    pass
-                # Update progress every candidate
-                await db.scraper_jobs.update_one(
-                    {"id": job_id},
-                    {"$set": {
-                        "candidates": candidates,
-                        "enriched_count": enriched,
-                    }},
-                )
-                await asyncio.sleep(0.4)
-
-    # Sort by completeness
-    def _completeness(c):
-        s = 0
-        if c.get("email"): s += 3
-        if c.get("phone"): s += 3
-        if c.get("website"): s += 2
-        if c.get("license_types"): s += 2
-        return s
-    candidates.sort(key=_completeness, reverse=True)
-
-    await db.scraper_jobs.update_one(
-        {"id": job_id},
-        {"$set": {
-            "phase": "done",
-            "candidates": candidates,
-            "enriched_count": enriched,
-            "completed_at": datetime.now(timezone.utc).isoformat(),
-        }},
-    )
-
-
-@router.post("/admin/scraper-test", dependencies=[Depends(require_admin)])
-async def scraper_test(payload: dict):
-    """Start a background scraper job. Returns job_id for polling."""
-    import asyncio
-    city = (payload.get("city") or "").strip()
-    state = (payload.get("state") or "ID").upper()[:2]
-    issues = payload.get("presenting_issues") or []
-    count = min(int(payload.get("count") or 50), 100)
-    if not city:
-        raise HTTPException(400, "city is required")
-
-    job_id = str(_uuid.uuid4())
-    await db.scraper_jobs.insert_one({
-        "id": job_id,
-        "city": city,
-        "state": state,
-        "presenting_issues": issues,
-        "count": count,
-        "phase": "scraping",
-        "total": 0,
-        "sources": {},
-        "errors": [],
-        "candidates": [],
-        "enriched_count": 0,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "completed_at": None,
-    })
-
-    # Fire and forget â runs in background
-    asyncio.create_task(_run_scraper_job(job_id, city, state, issues, count))
-
-    return {"ok": True, "job_id": job_id}
-
-
-@router.get("/admin/scraper-jobs/{job_id}", dependencies=[Depends(require_admin)])
-async def get_scraper_job(job_id: str):
-    """Poll a scraper job for status and results."""
-    job = await db.scraper_jobs.find_one({"id": job_id}, {"_id": 0})
-    if not job:
-        raise HTTPException(404, "Job not found")
-    return job
-
-
-@router.get("/admin/scraper-jobs", dependencies=[Depends(require_admin)])
-async def list_scraper_jobs():
-    """List recent scraper jobs."""
-    cursor = db.scraper_jobs.find({}, {"_id": 0}).sort("created_at", -1).limit(10)
-    jobs = []
-    async for j in cursor:
-        # Return summary without full candidates list for the list view
-        jobs.append({
-            "id": j["id"],
-            "city": j.get("city"),
-            "state": j.get("state"),
-            "phase": j.get("phase"),
-            "total": j.get("total", 0),
-            "enriched_count": j.get("enriched_count", 0),
-            "sources": j.get("sources", {}),
-            "created_at": j.get("created_at"),
-            "completed_at": j.get("completed_at"),
-        })
-    return {"jobs": jobs}
-
-
-@router.post("/admin/trigger-feedback-email", dependencies=[Depends(require_admin)])
-async def trigger_feedback_email(payload: dict):
-    """Manually trigger a feedback survey email for testing."""
-    from email_service import (
-        send_patient_followup_48h, send_patient_followup_3w,
-        send_patient_followup_9w, send_patient_followup_15w,
-    )
-    request_id = payload.get("request_id")
-    milestone = payload.get("milestone")
-    if not request_id or not milestone:
-        raise HTTPException(400, "request_id and milestone required")
-    req = await db.requests.find_one({"id": request_id}, {"_id": 0, "email": 1})
-    if not req:
-        raise HTTPException(404, "Request not found")
-    senders = {
-        "48h": send_patient_followup_48h,
-        "3w": send_patient_followup_3w,
-        "9w": send_patient_followup_9w,
-        "15w": send_patient_followup_15w,
-    }
-    sender = senders.get(milestone)
-    if not sender:
-        raise HTTPException(400, f"Invalid milestone: {milestone}")
-    await sender(req["email"], request_id)
-    return {"ok": True, "sent_to": req["email"], "milestone": milestone}
-
-
-# Suppress unused-import warnings on logger (kept for future logging)
-void = logger
+                sources_summary[src] = sum(1 for c in ba
