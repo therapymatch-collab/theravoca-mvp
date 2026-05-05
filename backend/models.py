@@ -215,6 +215,11 @@ class RequestCreate(BaseModel):
     agreed_to_terms_at: Optional[str] = None   # ISO 8601 timestamp
     confirm_adult: bool = False
     confirm_not_emergency: bool = False
+    # ─── Capacity-aware intake ────────────────────────────────────────
+    # Categories the patient selected despite a low-supply warning on the
+    # intake form.  Empty when no warned options were chosen.  Backend
+    # uses this to tag the request for recruit-priority handling.
+    low_supply_categories: list[str] = Field(default_factory=list)
     # ─── Bot defenses (rejected at the route layer; never persisted) ───
     # Honeypot input — a hidden field bots auto-fill. Real users leave it
     # blank because they never see it.

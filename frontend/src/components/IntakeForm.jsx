@@ -429,6 +429,27 @@ export default function IntakeForm() {
         // configured, so an empty string here is harmless in dev.
         turnstile_token: turnstileToken,
       };
+      // Capacity-aware intake: capture which warned categories the
+      // patient selected so the backend can tag for recruit priority.
+      const lowSupply = [];
+      if (hardCapacity.isWarned("client_type", data.client_type))
+        lowSupply.push(`client_type:${data.client_type.toLowerCase()}`);
+      if (hardCapacity.isWarned("age_group", data.age_group))
+        lowSupply.push(`age_group:${data.age_group.toLowerCase()}`);
+      if (hardCapacity.isWarned("urgency_strict", data.urgency))
+        lowSupply.push(`urgency:${data.urgency.toLowerCase()}`);
+      if (
+        data.preferred_language !== "English" &&
+        hardCapacity.isWarned("language_strict", data.preferred_language)
+      )
+        lowSupply.push(`language:${data.preferred_language.toLowerCase()}`);
+      if (
+        data.insurance_name &&
+        data.insurance_name !== "Other / not listed" &&
+        hardCapacity.isWarned("insurance_strict", data.insurance_name)
+      )
+        lowSupply.push(`insurance:${data.insurance_name.toLowerCase()}`);
+      payload.low_supply_categories = lowSupply;
       delete payload.referral_source_other;
       delete payload.insurance_name_other;
       const res = await api.post("/requests", payload);

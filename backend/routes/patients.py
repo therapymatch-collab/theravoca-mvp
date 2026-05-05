@@ -374,6 +374,16 @@ async def create_request(payload: RequestCreate, request: Request):
         doc["content_flags"] = content_flags
 
     await db.requests.insert_one(doc.copy())
+    # Tag requests where the patient selected low-supply categories so
+    # the admin and future automation can prioritize recruiting.
+    if payload.low_supply_categories:
+        await db.requests.update_one(
+            {"id": rid},
+            {"$set": {
+                "recruit_priority": True,
+                "recruit_categories": payload.low_supply_categories,
+            }},
+        )
     # If the patient ticked "Send me a copy" in the Review modal, fire
     # off a read-only receipt email with the same fields they just
     # confirmed. Best-effort — failures don't block the request.
