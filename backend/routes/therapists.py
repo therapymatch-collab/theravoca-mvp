@@ -9,6 +9,7 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 
@@ -50,7 +51,8 @@ def generate_signed_url(
         datetime.now(timezone.utc) + timedelta(hours=SIGNED_URL_TTL_HOURS)
     ).isoformat()
     sig = generate_action_signature(request_id, therapist_id, action, expires)
-    return f"{base_url}/therapist/{action}/{request_id}/{therapist_id}?sig={sig}&exp={expires}"
+    exp_encoded = quote(expires, safe="")
+    return f"{base_url}/therapist/{action}/{request_id}/{therapist_id}?sig={sig}&exp={exp_encoded}"
 
 
 async def _verify_action_signature(
@@ -91,10 +93,10 @@ async def _verify_action_signature(
     # Check expiry
     try:
         exp_dt = datetime.fromisoformat(exp)
-        if exp_dt < datetime.now(timezone.utc):
-            raise HTTPException(403, "This link has expired. Please check your email for a newer notification.")
     except ValueError:
-        raise HTTPException(403, "Invalid link expiration")
+        raise HTTPException(403, "Invalid link -- please use the link from your email")
+    if exp_dt < datetime.now(timezone.utc):
+        raise HTTPException(403, "This link has expired. Please check your email for a newer notification.")
     expected = generate_action_signature(request_id, therapist_id, action, exp)
     if not hmac.compare_digest(sig, expected):
         raise HTTPException(403, "Invalid link signature")
