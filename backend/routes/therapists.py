@@ -10,9 +10,9 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 
-from deps import db, logger, require_admin, require_session, _create_session_token, JWT_SECRET
+from deps import db, logger, require_admin, require_session, _create_session_token, JWT_SECRET, _decode_session_from_authorization
 import stripe_service
 from email_service import send_therapist_signup_received
 from embeddings import embed_texts
@@ -53,14 +53,34 @@ def generate_signed_url(
     return f"{base_url}/therapist/{action}/{request_id}/{therapist_id}?sig={sig}&exp={expires}"
 
 
-def _verify_action_signature(
+async def _verify_action_signature(
     request_id: str,
     therapist_id: str,
     action: str,
     sig: Optional[str],
     exp: Optional[str],
+    authorization: Optional[str] = None,
 ) -> None:
-    """Verify a signed URL's signature and expiry. Raises 403 on failure."""
+    """Verify a signed URL's signature and expiry. Raises 403 on failure.
+
+    If the caller provides a valid therapist session token whose email
+    matches the therapist_id in the URL, signature verification is
+    skipped -- the therapist is already authenticated via their portal
+    session and owns this resource.
+    """
+    # -- Authenticated-session bypass (Bug C fix) --
+    # A logged-in therapist accessing their own referral from the
+    # dashboard doesn't need a signed URL -- they're already authed.
+    if not sig and authorization:
+        session = _decode_session_from_authorization(authorization)
+        if session and session.get("role") == "therapist":
+            # Ownership check: session email must match therapist_id
+            therapist = await db.therapists.find_one(
+                {"id": therapist_id}, {"_id": 0, "email": 1}
+            )
+            if therapist and therapist.get("email", "").lower() == session["email"].lower():
+                return  # authenticated owner -- skip signature
+    # -- Standard signed-URL path --
     if not sig:
         raise HTTPException(
             403,
@@ -435,8 +455,9 @@ async def therapist_view(
     request: Request,
     sig: Optional[str] = Query(None),
     exp: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
 ):
-    _verify_action_signature(request_id, therapist_id, "apply", sig, exp)
+    await _verify_action_signature(request_id, therapist_id, "apply", sig, exp, authorization)
     audit.emit(
         actor_type="therapist", actor_id=therapist_id, action="view_referral",
         resource="request", resource_id=request_id,
@@ -485,8 +506,9 @@ async def therapist_apply(
     request: Request,
     sig: Optional[str] = Query(None),
     exp: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
 ):
-    _verify_action_signature(request_id, therapist_id, "apply", sig, exp)
+    await _verify_action_signature(request_id, therapist_id, "apply", sig, exp, authorization)
     audit.emit(
         actor_type="therapist", actor_id=therapist_id, action="apply",
         resource="request", resource_id=request_id,
@@ -570,8 +592,9 @@ async def therapist_decline_action(
     request: Request,
     sig: Optional[str] = Query(None),
     exp: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
 ):
-    _verify_action_signature(request_id, therapist_id, "decline", sig, exp)
+    await _verify_action_signature(request_id, therapist_id, "decline", sig, exp, authorization)
     audit.emit(
         actor_type="therapist", actor_id=therapist_id, action="decline",
         resource="request", resource_id=request_id,

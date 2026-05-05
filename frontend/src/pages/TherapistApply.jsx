@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Loader2, CheckCircle2, AlertCircle, ThumbsDown, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { Header, Footer } from "@/components/SiteShell";
-import { api, getSession } from "@/lib/api";
+import { api, getSession, sessionClient } from "@/lib/api";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -63,6 +63,13 @@ function BackToDashboardLink() {
 export default function TherapistApply() {
   const { requestId, therapistId } = useParams();
   const [searchParams] = useSearchParams();
+  // Forward signed-URL params to backend API calls (email links include these)
+  const sig = searchParams.get("sig") || "";
+  const exp = searchParams.get("exp") || "";
+  const sigQs = sig ? `?sig=${encodeURIComponent(sig)}&exp=${encodeURIComponent(exp)}` : "";
+  // Use authenticated client when therapist is logged in (dashboard flow);
+  // fall back to bare api for unauthenticated email-link visitors.
+  const http = getSession() ? sessionClient() : api;
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState("");
@@ -78,8 +85,9 @@ export default function TherapistApply() {
   const [declined, setDeclined] = useState(false);
 
   useEffect(() => {
-    api
-      .get(`/therapist/apply/${requestId}/${therapistId}`)
+    const client = getSession() ? sessionClient() : api;
+    client
+      .get(`/therapist/apply/${requestId}/${therapistId}${sigQs}`)
       .then((res) => {
         setData(res.data);
         if (res.data.already_applied) {
@@ -95,7 +103,8 @@ export default function TherapistApply() {
         }
       })
       .catch((e) => setError(e?.response?.data?.detail || "Could not load this referral."));
-  }, [requestId, therapistId, searchParams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestId, therapistId, sigQs, searchParams]);
 
   const allConfirmed = confirmAvail && confirmUrgency && confirmPayment;
 
@@ -106,7 +115,7 @@ export default function TherapistApply() {
     }
     setSubmitting(true);
     try {
-      await api.post(`/therapist/apply/${requestId}/${therapistId}`, {
+      await http.post(`/therapist/apply/${requestId}/${therapistId}${sigQs}`, {
         message,
         confirms_availability: confirmAvail,
         confirms_urgency: confirmUrgency,
@@ -133,7 +142,7 @@ export default function TherapistApply() {
     }
     setDeclineSubmitting(true);
     try {
-      await api.post(`/therapist/decline/${requestId}/${therapistId}`, {
+      await http.post(`/therapist/decline/${requestId}/${therapistId}${sigQs}`, {
         reason_codes: declineReasons,
         notes: declineNotes,
       });
