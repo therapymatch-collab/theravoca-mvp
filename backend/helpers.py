@@ -488,10 +488,12 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
     new_matches = [m for m in matches if m["id"] not in already]
 
     notified_ids = list(already) + [m["id"] for m in new_matches]
+    # Refresh scores and breakdowns for ALL matches (not just new) so
+    # re-runs pick up updated therapist data (e.g. newly imported T-fields).
     notified_scores = req.get("notified_scores") or {}
-    notified_scores.update({m["id"]: m["match_score"] for m in new_matches})
+    notified_scores.update({m["id"]: m["match_score"] for m in matches})
     notified_breakdowns: dict[str, dict] = req.get("notified_breakdowns") or {}
-    notified_breakdowns.update({m["id"]: m.get("match_breakdown") or {} for m in new_matches})
+    notified_breakdowns.update({m["id"]: m.get("match_breakdown") or {} for m in matches})
     # Persist the research axes per match (rationale + chips) so the
     # patient results endpoint can read them directly. Folded into the
     # SAME pass as scoring — no separate enrichment step needed.
