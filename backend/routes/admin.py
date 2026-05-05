@@ -4241,5 +4241,244 @@ async def trigger_feedback_email(payload: dict):
     return {"ok": True, "sent_to": req["email"], "milestone": milestone}
 
 
+# ── Provider directory import (real data over backfill placeholders) ──────
+
+@router.post("/admin/run-provider-import", dependencies=[Depends(require_admin)])
+async def run_provider_import(payload: dict):
+    """Run the provider directory xlsx import inline.
+
+    Body: {"dry_run": true|false, "limit": int|null}
+    Returns: {"ok": bool, "output": str, "error": str|null}
+    """
+    import asyncio
+    import io
+    import sys
+    import traceback
+    from pathlib import Path
+
+    dry_run = payload.get("dry_run", True)
+    limit = payload.get("limit")
+
+    # Locate the xlsx -- check a few known paths
+    candidates = [
+        Path(__file__).resolve().parents[1] / "imports" / "providers_2025_09.xlsx",
+        Path(__file__).resolve().parents[2] / "imports" / "Copy of TheraVoca Idaho Provider Directory (Responses) (1).xlsx",
+    ]
+    xlsx_path = None
+    for c in candidates:
+        if c.exists():
+            xlsx_path = c
+            break
+    if not xlsx_path:
+        raise HTTPException(404, f"xlsx not found at any of: {[str(c) for c in candidates]}")
+
+    # Capture stdout
+    buf = io.StringIO()
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    sys.stdout = buf
+    sys.stderr = buf
+
+    try:
+        # Build fake args
+        class Args:
+            pass
+        args = Args()
+        args.xlsx = str(xlsx_path)
+        args.dry_run = dry_run
+        args.apply = not dry_run
+        args.limit = limit if limit else 3
+        args.col_offset = 0
+        args.skip_llm = False
+
+        # Import and run the script's main logic inline
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+
+        from scripts.import_providers_update import (
+            process_row, normalize_license, normalize_name,
+            infer_t6_llm, infer_t6_keyword_fallback, compute_update,
+        )
+        from collections import Counter
+        import openpyxl
+        import random
+
+        wb = openpyxl.load_workbook(args.xlsx, data_only=True)
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+
+        # Detect timestamp column
+        first_header = str(rows[0][0] or "").lower()
+        col_offset = args.col_offset
+        if "timestamp" in first_header:
+            col_offset = 1
+            print("Detected Timestamp in col 0 -- applying col_offset=1")
+
+        data = rows[1:]
+        data = [r for r in data if (r[0 + col_offset] or r[1 + col_offset])]
+        print(f"Loaded {len(data)} rows with data from xlsx")
+
+        if args.dry_run:
+            data = data[:args.limit]
+            print(f"DRY RUN -- processing first {len(data)} rows only\n")
+
+        # Build matching indices
+        all_therapists = await db.therapists.find({}).to_list(length=2000)
+        print(f"Found {len(all_therapists)} existing therapists in DB\n")
+
+        license_index = {}
+        name_index = {}
+        for t in all_therapists:
+            lic = normalize_license(t.get("license_number"))
+            if lic:
+                license_index[lic] = t
+            nm = normalize_name(t.get("name"))
+            if nm:
+                name_index[nm] = t
+
+        unmapped_log = []
+        matched = 0
+        unmatched = 0
+        updated_count = 0
+        fields_per_therapist = []
+        t6_distribution = Counter()
+        match_method_counts = Counter()
+        unmatched_names = []
+        sanity_samples = []
+
+        for idx, row in enumerate(data, 1):
+            parsed = process_row(row, col_offset, unmapped_log)
+            if parsed is None:
+                continue
+
+            name = parsed["_xlsx_name"]
+            xlsx_lic = parsed.get("_xlsx_license_norm", "")
+
+            # Match by license, fall back to name
+            existing = None
+            if xlsx_lic and xlsx_lic in license_index:
+                existing = license_index[xlsx_lic]
+            else:
+                xlsx_name_norm = normalize_name(parsed.get("_xlsx_name", ""))
+                if xlsx_name_norm and xlsx_name_norm in name_index:
+                    existing = name_index[xlsx_name_norm]
+
+            # t6 classification
+            t6_narrative = parsed.pop("_t6_narrative", "")
+            t6_fallback = parsed.pop("_t6_keyword_fallback", ["depends"])
+            if t6_narrative.strip():
+                t6_slugs = await infer_t6_llm(t6_narrative, name)
+                if t6_slugs is None:
+                    t6_slugs = t6_fallback
+                    print(f"  [{idx}] {name}: LLM failed, keyword fallback")
+            else:
+                t6_slugs = t6_fallback
+            parsed["t6_session_expectations"] = t6_slugs
+            for s in t6_slugs:
+                t6_distribution[s] += 1
+
+            sanity_samples.append((name, dict(parsed)))
+
+            if existing is None:
+                unmatched += 1
+                unmatched_names.append(name)
+                if args.dry_run:
+                    print(f"  [{idx}] {name}: NO MATCH (license_norm='{xlsx_lic}')")
+                continue
+
+            matched += 1
+            match_key = ("license" if normalize_license(
+                existing.get("license_number")) == xlsx_lic and xlsx_lic
+                else "name")
+            match_method_counts[match_key] += 1
+
+            set_fields, newly_real, audit_unset = compute_update(parsed, existing)
+            fields_per_therapist.append(len(set_fields))
+
+            if args.dry_run:
+                print(f"  [{idx}] {name} (matched by {match_key})")
+                print(f"       fields to update: {len(set_fields)}")
+                for k, v in sorted(set_fields.items()):
+                    old = existing.get(k)
+                    old_str = str(old)[:50] if old else "(empty)"
+                    new_str = str(v)[:50]
+                    print(f"         {k}: {old_str} -> {new_str}")
+                if audit_unset:
+                    print(f"       audit unset: {audit_unset}")
+                print()
+            elif args.apply:
+                from datetime import datetime, timezone
+                update = {"$set": set_fields}
+                update["$set"]["updated_at"] = datetime.now(timezone.utc).isoformat()
+                real_email = parsed.get("email", "")
+                if real_email:
+                    update["$set"]["_backfill_audit.original_email"] = real_email
+                if audit_unset:
+                    existing_audit = existing.get("_backfill_audit", {})
+                    existing_fields_added = existing_audit.get("fields_added", [])
+                    new_fields_added = [f for f in existing_fields_added
+                                        if f not in set(audit_unset)]
+                    update["$set"]["_backfill_audit.fields_added"] = new_fields_added
+                await db.therapists.update_one({"_id": existing["_id"]}, update)
+                updated_count += 1
+
+        # Report
+        print("\n" + "=" * 60)
+        print("IMPORT REPORT")
+        print("=" * 60)
+        print(f"  Total rows: {len(data)}")
+        print(f"  Matched: {matched} ({dict(match_method_counts)})")
+        print(f"  Unmatched: {unmatched}")
+        if unmatched_names:
+            for n in unmatched_names[:20]:
+                print(f"    - {n}")
+
+        if fields_per_therapist:
+            avg = sum(fields_per_therapist) / len(fields_per_therapist)
+            print(f"\n  Fields/therapist: avg={avg:.1f}, min={min(fields_per_therapist)}, max={max(fields_per_therapist)}")
+
+        if unmapped_log:
+            by_field = {}
+            for field, val in unmapped_log:
+                by_field.setdefault(field, []).append(val)
+            print(f"\n  Unmapped enum values ({len(unmapped_log)} total):")
+            for field, vals in sorted(by_field.items()):
+                unique = sorted(set(vals))
+                print(f"    {field} ({len(unique)} unique):")
+                for v in unique[:10]:
+                    print(f"      - \"{v}\" (x{vals.count(v)})")
+                if len(unique) > 10:
+                    print(f"      ... and {len(unique)-10} more")
+
+        print(f"\n  t6_session_expectations distribution:")
+        for slug, count in t6_distribution.most_common():
+            print(f"    {slug}: {count}")
+
+        if sanity_samples:
+            random.seed(42)
+            picks = random.sample(sanity_samples, min(5, len(sanity_samples)))
+            print(f"\n  Sanity check ({len(picks)} therapists):")
+            for sname, sfields in picks:
+                print(f"    {sname}:")
+                print(f"      t4: {sfields.get('t4_hard_truth', '?')}")
+                print(f"      t6: {sfields.get('t6_session_expectations', [])}")
+                print(f"      t6b: {str(sfields.get('t6_early_sessions_description', ''))[:100]}...")
+                print(f"      t5: {str(sfields.get('t5_lived_experience', ''))[:100]}...")
+
+        if args.apply:
+            print(f"\n  Successfully updated {updated_count} therapist records.")
+
+        output = buf.getvalue()
+        return {"ok": True, "output": output, "error": None}
+
+    except Exception as e:
+        output = buf.getvalue()
+        tb = traceback.format_exc()
+        return {"ok": False, "output": output, "error": f"{e}\n{tb}"}
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+
+
 # Suppress unused-import warnings on logger (kept for future logging)
 void = logger
