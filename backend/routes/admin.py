@@ -856,6 +856,19 @@ async def _attach_value_tags(pending_rows: list[dict]) -> None:
         }
 
 
+@router.get("/admin/therapists/{therapist_id}")
+async def admin_therapist_detail(therapist_id: str, _: bool = Depends(require_admin)):
+    """Return the full therapist document (minus password_hash) for admin
+    debugging. Unlike the list endpoint this includes _backfill_audit,
+    embeddings, and every other field on the doc."""
+    t = await db.therapists.find_one(
+        {"id": therapist_id}, {"_id": 0, "password_hash": 0, "password_set_at": 0},
+    )
+    if not t:
+        raise HTTPException(404, "Therapist not found")
+    return t
+
+
 @router.post("/admin/therapists/{therapist_id}/approve")
 async def admin_approve_therapist(therapist_id: str, _: bool = Depends(require_admin)):
     import asyncio
