@@ -197,3 +197,7 @@ pytest-cache-files-*/
 backend/pytest-cache-files-*/
 htmlcov/
 .coverage
+
+# Provider directory imports (contain real therapist PII)
+backend/imports/
+imports/
