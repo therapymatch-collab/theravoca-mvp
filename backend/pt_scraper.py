@@ -7,13 +7,13 @@ Approach (pragmatic, single-process, no proxy stack):
 1. Fetch the PT search results page for the patient's state + city. PT
    embeds a `<script type="application/ld+json">` block listing each
    therapist as a Schema.org Person with name, profile URL, phone, and
-   address. We parse that JSON-LD ÃÂ¢ÃÂÃÂ no fragile CSS selectors, no JS
+   address. We parse that JSON-LD  --  no fragile CSS selectors, no JS
    rendering required.
 2. For each candidate profile, fetch the profile page and scrape:
      - License credentials (LCSW / LMFT / LCPC / LPC / PsyD / PhD)
      - Specialties
      - External website URL (if any)
-   PT does NOT expose therapist emails publicly ÃÂ¢ÃÂÃÂ they gate them behind a
+   PT does NOT expose therapist emails publicly  --  they gate them behind a
    contact form. So we record the phone (always present in JSON-LD) and
    best-guess an email from the website domain when one is published.
 3. The outreach agent (`outreach_agent.run_outreach_for_request`) then uses
@@ -66,7 +66,7 @@ LICENSE_SUFFIXES = (
     "PsyD", "PhD", "MD", "LMSW", "MA", "MEd", "MSW", "EdSP",
 )
 
-# Specialty keyword ÃÂ¢ÃÂÃÂ internal slug
+# Specialty keyword -> internal slug
 SPECIALTY_KEYWORDS = {
     "anxiety": "anxiety",
     "depression": "depression",
@@ -90,7 +90,7 @@ SPECIALTY_KEYWORDS = {
     "grief": "life_transitions",
 }
 
-# Maximum profile detail fetches per outreach run ÃÂ¢ÃÂÃÂ keeps PT happy and
+# Maximum profile detail fetches per outreach run  --  keeps PT happy and
 # request-handler latency bounded.
 MAX_PROFILE_FETCHES = int(os.environ.get("PT_MAX_PROFILE_FETCHES", "30"))
 REQUEST_DELAY_SEC = float(os.environ.get("PT_REQUEST_DELAY_SEC", "0.6"))
@@ -121,7 +121,7 @@ async def _http_get(url: str, client: httpx.AsyncClient, *, retries: int = 2) ->
 
 
 def _city_slug(city: str) -> str:
-    """'Idaho Falls' ÃÂ¢ÃÂÃÂ 'idaho-falls'. Matches PT URL slug convention."""
+    """'Idaho Falls' -> 'idaho-falls'. Matches PT URL slug convention."""
     return re.sub(r"[^a-z0-9\-]+", "-", (city or "").lower().strip()).strip("-")
 
 
@@ -232,7 +232,7 @@ def _parse_external_website(html: str) -> Optional[str]:
 def _guess_email_from_website(website: str, name: str) -> Optional[str]:
     """Best-effort email guess. We do NOT call the website (avoid noisy crawls
     + privacy risk); we just synthesize a plausible address from the domain.
-    The outreach agent treats this as low-confidence ÃÂ¢ÃÂÃÂ bounce-back tracking
+    The outreach agent treats this as low-confidence  --  bounce-back tracking
     in Resend handles invalid sends gracefully."""
     if not website:
         return None
@@ -242,7 +242,7 @@ def _guess_email_from_website(website: str, name: str) -> Optional[str]:
     domain = m.group(1).lower().lstrip("www.")
     if not domain or "." not in domain:
         return None
-    # Never guess emails for directory domains Ã¢ÂÂ these are shared mailboxes
+    # Never guess emails for directory domains  --  these are shared mailboxes
     SKIP_DOMAINS = (
         "psychologytoday.com", "therapyden.com", "goodtherapy.org",
         "healthgrades.com", "zocdoc.com", "betterhelp.com",
