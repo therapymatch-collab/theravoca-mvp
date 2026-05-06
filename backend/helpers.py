@@ -414,9 +414,7 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None, 
             {"key": "matching_defaults"}, {"_id": 0},
         ) or {}
         if threshold is None:
-            threshold = req.get("threshold") or float(
-                mcfg.get("threshold") or DEFAULT_THRESHOLD
-            )
+            threshold = float(mcfg.get("threshold") or DEFAULT_THRESHOLD)
         if top_n is None:
             top_n = int(mcfg.get("max_invites") or MIN_TARGET_MATCHES)
     therapists_cursor = db.therapists.find(
