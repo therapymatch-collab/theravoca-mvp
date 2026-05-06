@@ -706,7 +706,7 @@ async def therapist_referrals(
         # WS3: server-side tab state so the client just groups by it.
         # "active"  = pending referral on a live request
         # "applied" = therapist expressed interest
-        # "past"    = declined OR request moved past active lifecycle
+        # "past"    = declined OR request moved past active lifecycle OR 24h idle
         r_status = (r.get("status") or "").lower()
         if ref_status == "declined":
             state = "past"
@@ -715,7 +715,17 @@ async def therapist_referrals(
         elif r_status in ("delivered", "results_sent", "closed", "archived"):
             state = "past"
         else:
-            state = "active"
+            matched_ts = r.get("matched_at") or r.get("created_at") or ""
+            try:
+                matched_dt = datetime.fromisoformat(matched_ts)
+                if matched_dt.tzinfo is None:
+                    matched_dt = matched_dt.replace(tzinfo=timezone.utc)
+                if datetime.now(timezone.utc) - matched_dt > timedelta(hours=24):
+                    state = "past"
+                else:
+                    state = "active"
+            except (ValueError, TypeError):
+                state = "active"
         out.append({
             "request_id": rid,
             "matched_at": r.get("matched_at"),

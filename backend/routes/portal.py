@@ -545,6 +545,28 @@ async def portal_therapist_referrals(
             ref_status = "declined"
         else:
             ref_status = "pending"
+        # WS3: server-side tab state
+        r_status = (r.get("status") or "").lower()
+        if ref_status == "declined":
+            state = "past"
+        elif ref_status == "interested":
+            state = "applied"
+        elif r_status in ("delivered", "results_sent", "closed", "archived"):
+            state = "past"
+        else:
+            # 24hr idle expiry -- if the referral has been sitting
+            # without a response for >24h, move it to "past".
+            matched_ts = r.get("matched_at") or r.get("created_at") or ""
+            try:
+                matched_dt = datetime.fromisoformat(matched_ts)
+                if matched_dt.tzinfo is None:
+                    matched_dt = matched_dt.replace(tzinfo=timezone.utc)
+                if datetime.now(timezone.utc) - matched_dt > timedelta(hours=24):
+                    state = "past"
+                else:
+                    state = "active"
+            except (ValueError, TypeError):
+                state = "active"
         out.append({
             "request_id": r["id"],
             "match_score": score,
@@ -553,6 +575,9 @@ async def portal_therapist_referrals(
             "created_at": r["created_at"],
             "status": r.get("status"),
             "referral_status": ref_status,
+            "state": state,
+            "request_status": r_status,
+            "deep_match_opt_in": bool(r.get("deep_match_opt_in")),
             "summary": _safe_summary_for_therapist({**r, "email": ""}),
             "presenting_issues_preview": (r.get("presenting_issues") or "")[:140] if isinstance(r.get("presenting_issues"), str) else (", ".join(r.get("presenting_issues") or []))[:140],
             "applied": bool(application),
