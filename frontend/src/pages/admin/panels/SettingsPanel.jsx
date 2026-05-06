@@ -589,6 +589,8 @@ export default function SettingsPanel({ client: clientProp }) {
         )}
       </div>
 
+      <MatchingDefaultsCard client={client} />
+
       {/* LLM web-research enrichment */}
       <div
         className="bg-white border border-[#E8E5DF] rounded-2xl p-6"
@@ -725,6 +727,115 @@ export default function SettingsPanel({ client: clientProp }) {
 // ─── Deep-match weights card (Iter-90) ──────────────────────────────
 // Admins can override the v2-spec default 0.40 / 0.35 / 0.25 weighting
 // for the three deep-match axes. Backend renormalises so any input
+// Global matching defaults — threshold + max invites. Read by
+// _trigger_matching on every new patient request.
+function MatchingDefaultsCard({ client: clientProp }) {
+  const ctxClient = useAdminClient();
+  const client = clientProp || ctxClient;
+  const [loaded, setLoaded] = useState(false);
+  const [threshold, setThreshold] = useState(70);
+  const [maxInvites, setMaxInvites] = useState(30);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await _adminGetWithRetry(client, "/admin/matching-defaults");
+        if (!alive) return;
+        setThreshold(r.data.threshold);
+        setMaxInvites(r.data.max_invites);
+        setLoaded(true);
+      } catch (e) {
+        console.warn("matching-defaults unreachable:", e?.message);
+        setLoaded(true);
+      }
+    })();
+    return () => { alive = false; };
+  }, [client]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await client.put("/admin/matching-defaults", {
+        threshold: Number(threshold),
+        max_invites: Number(maxInvites),
+      });
+      toast.success("Matching defaults saved");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-[#E8E5DF] rounded-2xl p-6">
+      <h3 className="font-serif-display text-2xl text-[#2D4A3E]">
+        Matching defaults
+      </h3>
+      <p className="text-sm text-[#6D6A65] mt-2 max-w-2xl leading-relaxed">
+        Global threshold and max invites for all new patient requests.
+        Changes take effect immediately on the next match run.
+      </p>
+      {!loaded ? (
+        <div className="mt-6 text-sm text-[#6D6A65] inline-flex items-center gap-2">
+          <Loader2 size={14} className="animate-spin" /> Loading...
+        </div>
+      ) : (
+        <div className="mt-5 space-y-4 max-w-md">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label
+                htmlFor="md-threshold"
+                className="text-xs uppercase tracking-wider text-[#6D6A65]"
+              >
+                Threshold (%)
+              </label>
+              <Input
+                id="md-threshold"
+                type="number"
+                min={0}
+                max={100}
+                value={threshold}
+                onChange={(e) => setThreshold(e.target.value)}
+                className="mt-1"
+                data-testid="matching-threshold-input"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="md-max"
+                className="text-xs uppercase tracking-wider text-[#6D6A65]"
+              >
+                Max invites
+              </label>
+              <Input
+                id="md-max"
+                type="number"
+                min={1}
+                max={200}
+                value={maxInvites}
+                onChange={(e) => setMaxInvites(e.target.value)}
+                className="mt-1"
+                data-testid="matching-max-invites-input"
+              />
+            </div>
+          </div>
+          <button
+            className="tv-btn-primary !py-2 !px-5 text-sm disabled:opacity-60"
+            onClick={save}
+            disabled={saving}
+            data-testid="matching-defaults-save"
+          >
+            {saving ? "Saving..." : "Save"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // summing to a positive number works; live preview shows what the
 // values will normalise to before save.
 function DeepMatchWeightsCard({ client }) {

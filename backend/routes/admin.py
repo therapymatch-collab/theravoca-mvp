@@ -2125,6 +2125,40 @@ async def admin_set_deep_match_weights(payload: dict) -> dict[str, Any]:
 
 
 
+@router.get("/admin/matching-defaults", dependencies=[Depends(require_admin)])
+async def admin_get_matching_defaults() -> dict[str, Any]:
+    """Return global matching defaults (threshold + max invites)."""
+    doc = await db.app_config.find_one(
+        {"key": "matching_defaults"}, {"_id": 0},
+    )
+    return {
+        "threshold": float((doc or {}).get("threshold") or DEFAULT_THRESHOLD),
+        "max_invites": int((doc or {}).get("max_invites") or 30),
+    }
+
+
+@router.put("/admin/matching-defaults", dependencies=[Depends(require_admin)])
+async def admin_set_matching_defaults(payload: dict) -> dict[str, Any]:
+    """Persist global matching defaults. Takes effect on next match run."""
+    threshold = float(payload.get("threshold", 70))
+    max_invites = int(payload.get("max_invites", 30))
+    if not (0 <= threshold <= 100):
+        raise HTTPException(400, "threshold must be 0-100")
+    if not (1 <= max_invites <= 200):
+        raise HTTPException(400, "max_invites must be 1-200")
+    await db.app_config.update_one(
+        {"key": "matching_defaults"},
+        {"$set": {
+            "key": "matching_defaults",
+            "threshold": threshold,
+            "max_invites": max_invites,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+    return {"saved": True, "threshold": threshold, "max_invites": max_invites}
+
+
 @router.get("/admin/intake-rate-limit", dependencies=[Depends(require_admin)])
 async def admin_get_intake_rate_limit() -> dict[str, Any]:
     doc = await db.app_config.find_one(

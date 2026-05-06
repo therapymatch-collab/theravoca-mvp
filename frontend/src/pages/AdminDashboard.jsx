@@ -2689,12 +2689,14 @@ export default function AdminDashboard() {
                   current={detail.request.threshold}
                   onChange={(t) => updateThreshold(detail.request.id, t)}
                 />
-                <RerunWithCutoffs
+                {/* Per-request custom re-run hidden — replaced by global
+                    matching-defaults in Settings. Keep code for future use. */}
+                {false && <RerunWithCutoffs
                   requestId={detail.request.id}
                   currentThreshold={detail.request.effective_threshold || detail.request.threshold || 70}
                   currentTopN={detail.request.effective_top_n || 30}
                   onDone={() => { refresh(); openDetail(detail.request.id); }}
-                />
+                />}
               </div>
 
               <div>

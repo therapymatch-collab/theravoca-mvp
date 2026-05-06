@@ -406,8 +406,19 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None, 
     req = await db.requests.find_one({"id": request_id}, {"_id": 0})
     if not req:
         raise HTTPException(404, "Request not found")
-    if threshold is None:
-        threshold = req.get("threshold", DEFAULT_THRESHOLD)
+    # Read global matching defaults from app_config. Per-request body
+    # overrides take priority; then global config; then env/hardcoded.
+    # No in-memory cache yet (Bug 43 logged for 60s cache).
+    if threshold is None or top_n is None:
+        mcfg = await db.app_config.find_one(
+            {"key": "matching_defaults"}, {"_id": 0},
+        ) or {}
+        if threshold is None:
+            threshold = req.get("threshold") or float(
+                mcfg.get("threshold") or DEFAULT_THRESHOLD
+            )
+        if top_n is None:
+            top_n = int(mcfg.get("max_invites") or MIN_TARGET_MATCHES)
     therapists_cursor = db.therapists.find(
         {
             "is_active": {"$ne": False},
