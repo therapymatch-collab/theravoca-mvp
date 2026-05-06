@@ -38,7 +38,7 @@ import {
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
-import { AdminClientProvider } from "@/lib/useAdminClient";
+import useAdminClient, { AdminClientProvider } from "@/lib/useAdminClient";
 import credentialLabel from "@/lib/credentialLabel";
 import { imageToDataUrl } from "@/lib/image";
 import { STATUS_UNAUTHORIZED } from "@/lib/constants";
@@ -2689,12 +2689,23 @@ export default function AdminDashboard() {
                   current={detail.request.threshold}
                   onChange={(t) => updateThreshold(detail.request.id, t)}
                 />
+                <RerunWithCutoffs
+                  requestId={detail.request.id}
+                  currentThreshold={detail.request.effective_threshold || detail.request.threshold || 70}
+                  currentTopN={detail.request.effective_top_n || 30}
+                  onDone={() => { refresh(); openDetail(detail.request.id); }}
+                />
               </div>
 
               <div>
                 <div className="flex items-baseline justify-between gap-3 mb-3">
                   <h4 className="font-semibold text-[#2B2A29]">
                     Matched providers ({detail.notified.length})
+                    {detail.request.effective_threshold != null && (
+                      <span className="ml-2 text-xs font-normal text-[#6D6A65]">
+                        threshold {detail.request.effective_threshold}% / max {detail.request.effective_top_n || 30}
+                      </span>
+                    )}
                   </h4>
                   <p className="text-xs text-[#6D6A65]">
                     Sorted by match score • click any row to see the breakdown
@@ -3343,6 +3354,93 @@ function ThresholdControl({ current, onChange }) {  const [open, setOpen] = useS
             data-testid="threshold-save"
           >
             Save
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RerunWithCutoffs({ requestId, currentThreshold, currentTopN, onDone }) {
+  const [open, setOpen] = useState(false);
+  const [threshold, setThreshold] = useState(currentThreshold);
+  const [topN, setTopN] = useState(currentTopN);
+  const [loading, setLoading] = useState(false);
+  const client = useAdminClient();
+
+  const run = async () => {
+    setLoading(true);
+    try {
+      const res = await client.post(
+        `/admin/requests/${requestId}/resend-notifications`,
+        { threshold, top_n: topN },
+      );
+      toast.success(
+        `Re-ran: ${res.data.notified} notified (threshold ${threshold}%, max ${topN})`,
+      );
+      setOpen(false);
+      onDone();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Re-run failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="relative">
+      <button
+        className="tv-btn-secondary !py-2 !px-4 text-sm"
+        onClick={() => setOpen((o) => !o)}
+        data-testid="rerun-cutoffs-btn"
+      >
+        <Sliders size={14} className="inline mr-1.5" /> Custom re-run
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-2 bg-white border border-[#E8E5DF] rounded-xl p-4 shadow-lg z-10 w-64">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-medium text-[#2B2A29]">Re-run with custom cutoffs</span>
+            <button onClick={() => setOpen(false)}>
+              <X size={14} className="text-[#6D6A65]" />
+            </button>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-[#6D6A65] mb-1 block">Threshold (%)</label>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                value={threshold}
+                onChange={(e) => setThreshold(Number(e.target.value))}
+                className="bg-[#FDFBF7] border-[#E8E5DF] rounded-lg text-sm"
+                data-testid="cutoff-threshold-input"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-[#6D6A65] mb-1 block">Max invites</label>
+              <Input
+                type="number"
+                min="1"
+                max="200"
+                value={topN}
+                onChange={(e) => setTopN(Number(e.target.value))}
+                className="bg-[#FDFBF7] border-[#E8E5DF] rounded-lg text-sm"
+                data-testid="cutoff-topn-input"
+              />
+            </div>
+          </div>
+          <div className="text-[10px] text-[#6D6A65] mt-2">
+            Last run: threshold {currentThreshold}%, max {currentTopN}
+          </div>
+          <button
+            className="tv-btn-primary w-full mt-3 justify-center !py-2 text-sm disabled:opacity-60"
+            onClick={run}
+            disabled={loading}
+            data-testid="cutoff-rerun-btn"
+          >
+            {loading ? <Loader2 size={14} className="inline mr-1.5 animate-spin" /> : <RotateCw size={14} className="inline mr-1.5" />}
+            Re-run matching
           </button>
         </div>
       )}

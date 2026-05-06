@@ -674,7 +674,20 @@ async def admin_resend_notifications(request_id: str, request: Request, _: bool 
         ip=request.headers.get("x-forwarded-for", ""),
         user_agent=request.headers.get("user-agent", ""),
     )
-    return await _trigger_matching(request_id)
+    # Accept optional threshold/top_n overrides from request body.
+    # When omitted, _trigger_matching falls back to request.threshold / env default.
+    body: dict = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    threshold = body.get("threshold")
+    top_n = body.get("top_n")
+    if threshold is not None:
+        threshold = float(threshold)
+    if top_n is not None:
+        top_n = int(top_n)
+    return await _trigger_matching(request_id, threshold=threshold, top_n=top_n)
 
 
 @router.put("/admin/requests/{request_id}/threshold")

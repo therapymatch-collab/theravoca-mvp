@@ -402,7 +402,7 @@ async def _build_decline_history(
     return history
 
 
-async def _trigger_matching(request_id: str, threshold: Optional[float] = None) -> dict[str, Any]:
+async def _trigger_matching(request_id: str, threshold: Optional[float] = None, top_n: Optional[int] = None) -> dict[str, Any]:
     req = await db.requests.find_one({"id": request_id}, {"_id": 0})
     if not req:
         raise HTTPException(404, "Request not found")
@@ -474,12 +474,13 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
                 ),
             }
 
+    effective_top_n = top_n if top_n is not None else MIN_TARGET_MATCHES
     all_scored: list[dict] = []
     matches = rank_therapists(
         therapists,
         req,
         threshold=threshold,
-        top_n=MIN_TARGET_MATCHES,
+        top_n=effective_top_n,
         min_results=3,
         research_caches=research_caches,
         decline_history=decline_history,
@@ -577,7 +578,7 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
             }
 
     notified_total = len(notified_ids)
-    outreach_needed_count = max(0, MIN_TARGET_MATCHES - notified_total)
+    outreach_needed_count = max(0, effective_top_n - notified_total)
     await db.requests.update_one(
         {"id": request_id},
         {"$set": {
@@ -592,6 +593,8 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
             "outreach_needed_count": outreach_needed_count,
             "all_scored": all_scored_map,
             "all_scored_at": _now_iso(),
+            "effective_threshold": threshold,
+            "effective_top_n": effective_top_n,
         }},
     )
     logger.info(
@@ -652,9 +655,13 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
         except Exception as e:
             logger.warning("Could not schedule cold-cache warmup for %s: %s", request_id, e)
     return {
+        "notified": len(new_matches),
         "notified_new": len(new_matches),
         "notified_total": notified_total,
+        "all_scored_count": len(all_scored_map),
         "outreach_needed_count": outreach_needed_count,
+        "effective_threshold": threshold,
+        "effective_top_n": effective_top_n,
         "matches": [
             {"id": m["id"], "name": m["name"], "match_score": m["match_score"]}
             for m in new_matches
