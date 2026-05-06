@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { Loader2, CheckCircle2, AlertCircle, ThumbsDown, ArrowLeft } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, ThumbsDown, ArrowLeft, Sparkles, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Header, Footer } from "@/components/SiteShell";
 import { api, getSession, sessionClient } from "@/lib/api";
@@ -14,13 +14,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const DECLINE_REASONS = [
-  { v: "wrong_specialty", l: "Outside my specialty area" },
-  { v: "schedule_mismatch", l: "Schedule mismatch" },
-  { v: "fee_mismatch", l: "Fee outside my range" },
   { v: "caseload_full", l: "Caseload currently full" },
-  { v: "location_mismatch", l: "Location/format mismatch" },
+  { v: "specialty_mismatch", l: "Outside my specialty area" },
+  { v: "schedule_mismatch", l: "Schedule mismatch" },
+  { v: "payment_mismatch", l: "Payment method or fee mismatch" },
+  { v: "location_mismatch", l: "Location or modality mismatch" },
+  { v: "difficult_fit", l: "Reviewed details -- not a good clinical fit" },
   { v: "other", l: "Other" },
 ];
 
@@ -214,8 +221,54 @@ export default function TherapistApply() {
               <div className="text-xs uppercase tracking-[0.15em] text-[#6D6A65]">
                 Match score
               </div>
-              <div className="font-serif-display text-5xl text-[#2D4A3E] mt-1">
-                {Math.round(data.match_score)}%
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="font-serif-display text-5xl text-[#2D4A3E] mt-1 cursor-help">
+                      {Math.round(data.match_score)}%
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="right"
+                    className="bg-[#2B2A29] text-white border-none p-3 max-w-[240px]"
+                  >
+                    <div className="text-[10px] uppercase tracking-wider text-white/60 mb-1.5">
+                      Score breakdown
+                    </div>
+                    {Object.entries(data.match_breakdown || {}).length > 0 ? (
+                      <div className="space-y-1">
+                        {Object.entries(data.match_breakdown)
+                          .sort(([, a], [, b]) => b - a)
+                          .map(([axis, pts]) => (
+                            <div key={axis} className="flex justify-between gap-3 text-xs">
+                              <span className="text-white/80 capitalize">
+                                {axis.replace(/_/g, " ")}
+                              </span>
+                              <span className="font-mono tabular-nums">
+                                {pts > 0 ? "+" : ""}{Math.round(pts)}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-white/60 italic">
+                        Breakdown not available
+                      </div>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              {/* WS1: Deep vs Quick patient signal badge */}
+              <div className="mt-2">
+                {data.deep_match_opt_in ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#EEEDFE] text-[#3C3489]">
+                    <Sparkles size={10} /> Deep match
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#F1EFE8] text-[#444441]">
+                    <Zap size={10} /> Quick intake
+                  </span>
+                )}
               </div>
               <div className="mt-4 h-1.5 bg-[#E8E5DF] rounded-full overflow-hidden">
                 <div

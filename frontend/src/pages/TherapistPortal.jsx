@@ -16,6 +16,7 @@ import {
   TrendingUp,
   Calendar,
   AlertCircle,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header, Footer } from "@/components/SiteShell";
@@ -25,6 +26,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { api, sessionClient, getSession, clearSession } from "@/lib/api";
 import credentialLabel from "@/lib/credentialLabel";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const AVAILABILITY = [
   { v: "weekday_morning", l: "Weekday mornings" },
@@ -125,6 +132,25 @@ export default function TherapistPortal() {
   const [bulkUrgency, setBulkUrgency] = useState(false);
   const [bulkPayment, setBulkPayment] = useState(false);
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
+
+  // WS3: tab state (Active / Applied / Past)
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window === "undefined") return "active";
+    return window.sessionStorage.getItem("tv_referral_tab") || "active";
+  });
+  const changeTab = (t) => {
+    setActiveTab(t);
+    window.sessionStorage.setItem("tv_referral_tab", t);
+  };
+  // WS2: filter pill state (all / deep / quick)
+  const [signalFilter, setSignalFilter] = useState(() => {
+    if (typeof window === "undefined") return "all";
+    return window.sessionStorage.getItem("tv_referral_filter") || "all";
+  });
+  const changeSignalFilter = (f) => {
+    setSignalFilter(f);
+    window.sessionStorage.setItem("tv_referral_filter", f);
+  };
 
   const toggleSelect = (rid) => {
     setSelected((s) => {
@@ -563,9 +589,78 @@ export default function TherapistPortal() {
             </div>
           )}
 
-          {!isPending && data?.referrals?.length > 0 && (
+          {!isPending && data?.referrals?.length > 0 && (() => {
+            // WS2 + WS3: apply tab + signal filters
+            const allReferrals = data.referrals;
+            const tabbed = allReferrals.filter((r) => (r.state || "active") === activeTab);
+            const filtered = signalFilter === "all"
+              ? tabbed
+              : signalFilter === "deep"
+              ? tabbed.filter((r) => r.deep_match_opt_in)
+              : tabbed.filter((r) => !r.deep_match_opt_in);
+            const tabCounts = {
+              active: allReferrals.filter((r) => (r.state || "active") === "active").length,
+              applied: allReferrals.filter((r) => r.state === "applied").length,
+              past: allReferrals.filter((r) => r.state === "past").length,
+            };
+            return (
             <div className="mt-6">
-              {/* Bulk action bar — only shown when ≥1 selected */}
+              {/* WS3: Lifecycle tabs */}
+              <div className="flex gap-1 bg-[#F1EFE8] rounded-xl p-1 mb-3" data-testid="referral-tabs">
+                {[
+                  { k: "active", l: "Active" },
+                  { k: "applied", l: "Applied" },
+                  { k: "past", l: "Past" },
+                ].map((tab) => (
+                  <button
+                    key={tab.k}
+                    onClick={() => changeTab(tab.k)}
+                    className={`flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition ${
+                      activeTab === tab.k
+                        ? "bg-white text-[#2D4A3E] shadow-sm"
+                        : "text-[#6D6A65] hover:text-[#2B2A29]"
+                    }`}
+                    data-testid={`tab-${tab.k}`}
+                  >
+                    {tab.l}
+                    {tabCounts[tab.k] > 0 && (
+                      <span className={`ml-1.5 text-xs ${
+                        activeTab === tab.k ? "text-[#C87965]" : "text-[#A4A29E]"
+                      }`}>
+                        {tabCounts[tab.k]}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* WS2: Deep / Quick signal filter pills */}
+              <div className="flex gap-2 mb-4" data-testid="signal-filter-pills">
+                {[
+                  { k: "all", l: "All" },
+                  { k: "deep", l: "⚡ Deep responses", icon: null },
+                  { k: "quick", l: "⏱ Quick intake", icon: null },
+                ].map((pill) => (
+                  <button
+                    key={pill.k}
+                    onClick={() => changeSignalFilter(pill.k)}
+                    className={`text-xs font-medium px-3 py-1 rounded-full border transition ${
+                      signalFilter === pill.k
+                        ? pill.k === "deep"
+                          ? "bg-[#EEEDFE] border-[#EEEDFE] text-[#3C3489]"
+                          : pill.k === "quick"
+                          ? "bg-[#F1EFE8] border-[#F1EFE8] text-[#444441]"
+                          : "bg-[#2D4A3E] border-[#2D4A3E] text-white"
+                        : "bg-white border-[#E8E5DF] text-[#6D6A65] hover:border-[#2D4A3E]"
+                    }`}
+                    data-testid={`filter-${pill.k}`}
+                  >
+                    {pill.l}
+                  </button>
+                ))}
+              </div>
+
+              {/* Bulk action bar -- only shown when >=1 selected */}
               {selected.size > 0 && (
                 <div
                   className="sticky top-2 z-10 mb-4 bg-[#2D4A3E] text-white rounded-2xl p-4 flex items-center justify-between gap-4 flex-wrap shadow-lg"
@@ -593,10 +688,25 @@ export default function TherapistPortal() {
                   </div>
                 </div>
               )}
+
+              {filtered.length === 0 ? (
+                <div className="bg-white border border-[#E8E5DF] rounded-2xl p-8 text-center">
+                  <p className="text-sm text-[#6D6A65]">
+                    {signalFilter !== "all"
+                      ? `No ${signalFilter === "deep" ? "deep match" : "quick intake"} referrals in this tab.`
+                      : activeTab === "active"
+                      ? "No active referrals right now."
+                      : activeTab === "applied"
+                      ? "You haven't applied to any referrals yet."
+                      : "No past referrals."}
+                  </p>
+                </div>
+              ) : (
               <div className="space-y-4">
-                {data.referrals.map((r) => {
+                <TooltipProvider delayDuration={200}>
+                {filtered.map((r) => {
                   const isSelected = selected.has(r.request_id);
-                  const canBulk = r.referral_status === "pending";
+                  const canBulk = r.referral_status === "pending" && r.state === "active";
                   return (
                     <div
                       key={r.request_id}
@@ -620,11 +730,55 @@ export default function TherapistPortal() {
                           to={`/therapist/apply/${r.request_id}/${therapist.id}`}
                           className="flex-1 min-w-0"
                         >
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <span className="inline-flex items-center gap-1 bg-[#2D4A3E] text-white text-xs font-semibold px-2.5 py-1 rounded-full">
-                              <Star size={10} fill="currentColor" />
-                              {Math.round(r.match_score)}% match
-                            </span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {/* WS4: score tooltip */}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex items-center gap-1 bg-[#2D4A3E] text-white text-xs font-semibold px-2.5 py-1 rounded-full cursor-help">
+                                  <Star size={10} fill="currentColor" />
+                                  {Math.round(r.match_score)}% match
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="bottom"
+                                className="bg-[#2B2A29] text-white border-none p-3 max-w-[220px]"
+                              >
+                                <div className="text-[10px] uppercase tracking-wider text-white/60 mb-1.5">
+                                  Score breakdown
+                                </div>
+                                {Object.entries(r.match_breakdown || {}).length > 0 ? (
+                                  <div className="space-y-0.5">
+                                    {Object.entries(r.match_breakdown)
+                                      .sort(([, a], [, b]) => b - a)
+                                      .map(([axis, pts]) => (
+                                        <div key={axis} className="flex justify-between gap-3 text-[11px]">
+                                          <span className="text-white/80 capitalize truncate">
+                                            {axis.replace(/_/g, " ")}
+                                          </span>
+                                          <span className="font-mono tabular-nums shrink-0">
+                                            {pts > 0 ? "+" : ""}{Math.round(pts)}
+                                          </span>
+                                        </div>
+                                      ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-[11px] text-white/60 italic">
+                                    Breakdown not available
+                                  </div>
+                                )}
+                              </TooltipContent>
+                            </Tooltip>
+                            {/* WS1: Deep / Quick badge */}
+                            {r.deep_match_opt_in ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#EEEDFE] text-[#3C3489]">
+                                <Sparkles size={10} /> Deep
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#F1EFE8] text-[#444441]">
+                                <Zap size={10} /> Quick
+                              </span>
+                            )}
+                            {/* Status badge */}
                             {r.referral_status === "interested" ? (
                               <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-[#4A6B5D]/15 text-[#4A6B5D]">
                                 <CheckCircle2 size={11} /> interested
@@ -633,13 +787,17 @@ export default function TherapistPortal() {
                               <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-[#6D6A65]/15 text-[#6D6A65]">
                                 <ThumbsDown size={11} /> declined
                               </span>
+                            ) : r.state === "past" ? (
+                              <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-[#6D6A65]/10 text-[#A4A29E]">
+                                <Clock size={11} /> expired
+                              </span>
                             ) : (
                               <span className="inline-flex text-xs px-2.5 py-1 rounded-full bg-[#C87965]/15 text-[#C87965]">
                                 new
                               </span>
                             )}
                             <span className="text-xs text-[#6D6A65]">
-                              {new Date(r.created_at).toLocaleString()}
+                              {new Date(r.matched_at || r.created_at).toLocaleString()}
                             </span>
                           </div>
                           <p className="text-[#2B2A29] mt-3 leading-relaxed line-clamp-2">
@@ -673,9 +831,12 @@ export default function TherapistPortal() {
                     </div>
                   );
                 })}
+                </TooltipProvider>
               </div>
+              )}
             </div>
-          )}
+            );
+          })()}
 
           {/* ─── Secondary content (below referrals) ───────────────────
               Lower priority than the referrals list; collected at the

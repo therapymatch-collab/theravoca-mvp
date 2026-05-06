@@ -2713,6 +2713,7 @@ export default function AdminDashboard() {
                         key={t.id}
                         t={t}
                         onEdit={setEditTherapist}
+                        deepMatch={detail.request?.deep_match_opt_in ? true : false}
                       />
                     ))}
                 </div>

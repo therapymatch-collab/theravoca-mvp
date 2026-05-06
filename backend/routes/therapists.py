@@ -487,6 +487,7 @@ async def therapist_view(
         "therapist": {"id": therapist["id"], "name": therapist["name"]},
         "match_score": score,
         "match_breakdown": breakdown,
+        "deep_match_opt_in": bool(req.get("deep_match_opt_in")),
         "gaps": gaps,
         "summary": summary,
         "presenting_issues": req.get("presenting_issues", ""),
@@ -603,22 +604,49 @@ async def therapist_decline_action(
         ip=request.headers.get("x-forwarded-for", ""),
         user_agent=request.headers.get("user-agent", ""),
     )
-    req = await db.requests.find_one({"id": request_id}, {"_id": 0, "id": 1})
+    req = await db.requests.find_one(
+        {"id": request_id},
+        {"_id": 0, "id": 1, "notified_scores": 1, "notified_breakdowns": 1,
+         "client_age": 1, "location_state": 1, "session_expectations": 1,
+         "insurance_type": 1, "presenting_issues": 1, "deep_match_opt_in": 1,
+         "notified_therapist_ids": 1, "urgency": 1,
+         "modality_preference": 1, "modality_preferences": 1},
+    )
     therapist = await db.therapists.find_one(
         {"id": therapist_id}, {"_id": 0, "id": 1, "email": 1}
     )
     if not req or not therapist:
         raise HTTPException(404)
     score = (req.get("notified_scores") or {}).get(therapist_id) if req else None
+    breakdown = (req.get("notified_breakdowns") or {}).get(therapist_id) or {}
+    # WS5: count active referrals for this therapist at moment of decline
+    active_referral_count = await db.requests.count_documents(
+        {"notified_therapist_ids": therapist_id},
+    )
+    now = _now_iso()
     doc = {
         "id": str(uuid.uuid4()),
         "request_id": request_id,
         "therapist_id": therapist_id,
         "therapist_email": therapist.get("email", ""),
         "match_score": score,
+        "match_breakdown": breakdown,
+        "patient_input_summary": {
+            "client_age": req.get("client_age"),
+            "location_state": req.get("location_state"),
+            "session_expectations": req.get("session_expectations"),
+            "insurance_type": req.get("insurance_type"),
+            "presenting_issues": req.get("presenting_issues"),
+            "deep_match_opt_in": bool(req.get("deep_match_opt_in")),
+            "urgency": req.get("urgency"),
+            "modality_preference": req.get("modality_preference"),
+            "modality_preferences": req.get("modality_preferences"),
+        },
+        "therapist_load_at_decline": active_referral_count,
         "reason_codes": payload.reason_codes,
         "notes": payload.notes,
-        "created_at": _now_iso(),
+        "created_at": now,
+        "declined_at": now,
     }
     await db.declines.update_one(
         {"request_id": request_id, "therapist_id": therapist_id},
@@ -675,6 +703,19 @@ async def therapist_referrals(
             ref_status = "declined"
         else:
             ref_status = "pending"
+        # WS3: server-side tab state so the client just groups by it.
+        # "active"  = pending referral on a live request
+        # "applied" = therapist expressed interest
+        # "past"    = declined OR request moved past active lifecycle
+        r_status = (r.get("status") or "").lower()
+        if ref_status == "declined":
+            state = "past"
+        elif ref_status == "interested":
+            state = "applied"
+        elif r_status in ("delivered", "results_sent", "closed", "archived"):
+            state = "past"
+        else:
+            state = "active"
         out.append({
             "request_id": rid,
             "matched_at": r.get("matched_at"),
@@ -682,6 +723,10 @@ async def therapist_referrals(
             "match_score": score,
             "match_breakdown": breakdown,
             "status": ref_status,
+            "referral_status": ref_status,
+            "state": state,
+            "request_status": r_status,
+            "deep_match_opt_in": bool(r.get("deep_match_opt_in")),
             "summary": _safe_summary_for_therapist({**r, "email": ""}),
         })
     return {"therapist": t, "referrals": out}

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Sparkles, Zap } from "lucide-react";
 
 // Per-axis maxes — kept in sync with matching.py constants. If the
 // backend ever changes the weights, update here too. Used to render
@@ -49,7 +50,7 @@ const HARD_FILTERS_PASSED = [
   "Offers therapy format patient needs",
 ];
 
-export default function MatchedProviderCard({ t, onEdit }) {
+export default function MatchedProviderCard({ t, onEdit, deepMatch }) {
   const [open, setOpen] = useState(false);
   const breakdown = t.match_breakdown || {};
   // Show every axis the backend reported (including zeros & negatives —
@@ -102,6 +103,17 @@ export default function MatchedProviderCard({ t, onEdit }) {
               <span className="font-medium text-[#2B2A29] truncate">{t.name}</span>
             )}
             <span className="text-xs text-[#6D6A65]">{t.credential_type || "—"}</span>
+            {deepMatch != null && (
+              deepMatch ? (
+                <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[#EEEDFE] text-[#3C3489]">
+                  <Sparkles size={9} /> Deep
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[#F1EFE8] text-[#444441]">
+                  <Zap size={9} /> Quick
+                </span>
+              )
+            )}
             {t.review_count >= 10 && t.review_avg >= 4.0 && (
               <span className="text-[10px] text-[#C87965]">
                 ★{t.review_avg.toFixed(1)} · {t.review_count}
