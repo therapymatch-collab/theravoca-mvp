@@ -474,6 +474,7 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
                 ),
             }
 
+    all_scored: list[dict] = []
     matches = rank_therapists(
         therapists,
         req,
@@ -482,6 +483,7 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
         min_results=3,
         research_caches=research_caches,
         decline_history=decline_history,
+        all_scored_out=all_scored,
     )
 
     already = set(req.get("notified_therapist_ids") or [])
@@ -562,6 +564,18 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
             except Exception as e:
                 logger.warning("SMS send failed for therapist %s: %s", m["id"], e)
 
+    # Build all_scored: every therapist that was scored (including those
+    # below threshold or beyond top_n). Enables admin "show all" toggle
+    # and flexible cutoff adjustments without re-running matching.
+    all_scored_map: dict[str, dict] = {}
+    for s in all_scored:
+        tid = s.get("id")
+        if tid:
+            all_scored_map[tid] = {
+                "score": s["match_score"],
+                "breakdown": s.get("match_breakdown") or {},
+            }
+
     notified_total = len(notified_ids)
     outreach_needed_count = max(0, MIN_TARGET_MATCHES - notified_total)
     await db.requests.update_one(
@@ -576,6 +590,8 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None) 
             "matched_at": _now_iso(),
             "status": "matched",
             "outreach_needed_count": outreach_needed_count,
+            "all_scored": all_scored_map,
+            "all_scored_at": _now_iso(),
         }},
     )
     logger.info(

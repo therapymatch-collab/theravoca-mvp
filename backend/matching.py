@@ -1195,25 +1195,26 @@ def score_therapist(
             }
         except Exception:
             prior_therapy_axes = {}
-    # Display-score normalization: raw totals routinely exceed 100
-    # (axis maxes sum to ~185). We normalize to a 0-97 display range
-    # using a soft curve so (a) the patient never sees 100% (no match
-    # is truly perfect) and (b) therapists who score differently in raw
-    # points still show different percentages on the UI  --  the old
-    # hard-cap at 95 crushed all top-tier therapists to the same number.
+    # Display-score normalization: piecewise linear mapping from raw
+    # totals (which routinely exceed 100) to a 0-97 display range.
+    # Three segments ensure differentiation across the full range:
+    #   raw 0-80   -> display 0-70   (slope 0.875)
+    #   raw 80-160 -> display 70-92  (slope 0.275)
+    #   raw 160+   -> display 92-97  (slope 0.125, hard cap at 97)
     #
-    # Formula: display = 97 * (raw / (raw + 30))
-    #   raw=50  -> 61%   |  raw=80  -> 70%   |  raw=100 -> 75%
-    #   raw=120 -> 78%   |  raw=150 -> 81%   |  raw=200 -> 84%
-    # Deep-match + research can push above 100 raw, which maps to 75-85.
-    # The +30 denominator controls the curve's steepness.
+    # Reference points:
+    #   raw=50 -> 44   |  raw=80  -> 70  |  raw=100 -> 76
+    #   raw=120 -> 81  |  raw=140 -> 87  |  raw=160 -> 92
+    #   raw=180 -> 94  |  raw=200 -> 97
     if isinstance(total, (int, float)) and total > 0:
-        total = round(97.0 * (total / (total + 30.0)))
-        # Round to a whole number so every UI surface (patient results,
-        # therapist portal, admin dashboard, simulator) renders the
-        # same integer without each callsite needing its own
-        # Math.round / toFixed(0). Filter sentinels (-1) skip this.
-        total = int(total)
+        raw_total = total
+        if raw_total <= 80:
+            total = raw_total * (70.0 / 80.0)
+        elif raw_total <= 160:
+            total = 70.0 + (raw_total - 80) * (22.0 / 80.0)
+        else:
+            total = 92.0 + (raw_total - 160) * 0.125
+        total = int(round(max(0, min(97, total))))
     return {
         "total": total,
         "breakdown": breakdown,
@@ -1266,6 +1267,7 @@ def rank_therapists(
     *,
     research_caches: Optional[dict[str, dict]] = None,
     decline_history: Optional[dict[str, dict]] = None,
+    all_scored_out: Optional[list] = None,
 ) -> list[dict]:
     """Score and filter per spec:
        - hard floor: never include therapists below `threshold` (default 70)
@@ -1327,8 +1329,14 @@ def rank_therapists(
     for s in scored:
         s["above_threshold"] = s["match_score"] >= threshold
 
+    # When caller passes a list via all_scored_out, populate it with
+    # every scored therapist (regardless of threshold/top_n). This
+    # enables the admin "show all 122" view without re-matching.
+    if all_scored_out is not None:
+        all_scored_out.extend(scored)
+
     if len(above) >= min_results:
-        # Normal path — enough therapists cleared the floor.
+        # Normal path -- enough therapists cleared the floor.
         return above[:top_n]
 
     # Fallback: fewer than min_results above threshold.  Return the top
