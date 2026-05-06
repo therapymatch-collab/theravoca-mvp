@@ -131,7 +131,7 @@ export default function RequestsPanel({
               >
                 {r.invited_count || 0}
               </td>
-              <td className="p-4">{r.threshold}%</td>
+              <td className="p-4">{r.effective_threshold ?? r.threshold}%</td>
               <td className="p-4 text-xs text-[#6D6A65]">
                 {new Date(r.created_at).toLocaleString()}
               </td>

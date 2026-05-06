@@ -2685,29 +2685,21 @@ export default function AdminDashboard() {
                 >
                   <Send size={14} className="inline mr-1.5" /> Run LLM outreach now
                 </button>
-                <ThresholdControl
-                  current={detail.request.threshold}
-                  onChange={(t) => updateThreshold(detail.request.id, t)}
-                />
-                {/* Per-request custom re-run hidden — replaced by global
-                    matching-defaults in Settings. Keep code for future use. */}
-                {false && <RerunWithCutoffs
+                <RerunWithCutoffs
                   requestId={detail.request.id}
                   currentThreshold={detail.request.effective_threshold || detail.request.threshold || 70}
                   currentTopN={detail.request.effective_top_n || 30}
                   onDone={() => { refresh(); openDetail(detail.request.id); }}
-                />}
+                />
               </div>
 
               <div>
                 <div className="flex items-baseline justify-between gap-3 mb-3">
                   <h4 className="font-semibold text-[#2B2A29]">
                     Matched providers ({detail.notified.length})
-                    {detail.request.effective_threshold != null && (
-                      <span className="ml-2 text-xs font-normal text-[#6D6A65]">
-                        threshold {detail.request.effective_threshold}% / max {detail.request.effective_top_n || 30}
-                      </span>
-                    )}
+                    <span className="ml-2 text-xs font-normal text-[#6D6A65]">
+                      threshold {detail.request.effective_threshold ?? detail.request.threshold ?? 70}% / max {detail.request.effective_top_n || 30}
+                    </span>
                   </h4>
                   <p className="text-xs text-[#6D6A65]">
                     Sorted by match score • click any row to see the breakdown
@@ -3396,12 +3388,12 @@ function RerunWithCutoffs({ requestId, currentThreshold, currentTopN, onDone }) 
         onClick={() => setOpen((o) => !o)}
         data-testid="rerun-cutoffs-btn"
       >
-        <Sliders size={14} className="inline mr-1.5" /> Custom re-run
+        <Sliders size={14} className="inline mr-1.5" /> Override &amp; re-run
       </button>
       {open && (
         <div className="absolute right-0 mt-2 bg-white border border-[#E8E5DF] rounded-xl p-4 shadow-lg z-10 w-64">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-medium text-[#2B2A29]">Re-run with custom cutoffs</span>
+            <span className="text-xs font-medium text-[#2B2A29]">Override (this request only)</span>
             <button onClick={() => setOpen(false)}>
               <X size={14} className="text-[#6D6A65]" />
             </button>
