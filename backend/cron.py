@@ -101,12 +101,17 @@ def _now_local() -> datetime:
     return datetime.now(timezone.utc) + timedelta(hours=DAILY_TASK_TZ_OFFSET_HOURS)
 
 
+async def _get_testing_mode() -> bool:
+    """Read the feedback_testing flag from app_config. Used by any cron
+    function that needs to collapse time delays for QA."""
+    doc = await db.app_config.find_one({"key": "feedback_testing"}, {"_id": 0})
+    return bool((doc or {}).get("enabled", False))
+
+
 async def _run_daily_billing_charges() -> dict[str, int]:
     now = datetime.now(timezone.utc)
 
-    # Check if feedback testing mode is active
-    testing_doc = await db.app_config.find_one({"key": "feedback_testing"}, {"_id": 0})
-    testing_mode = bool((testing_doc or {}).get("enabled", False))
+    testing_mode = await _get_testing_mode()
     cur = db.therapists.find(
         {
             "subscription_status": {"$in": ["trialing", "active"]},
@@ -244,6 +249,7 @@ async def _run_followup_surveys() -> dict[str, int]:
         resource="request",
     )
     now = datetime.now(timezone.utc)
+    testing_mode = await _get_testing_mode()
     milestones = [
         ("48h", 2, "followup_sent_48h"),
         ("2wk", 14, "followup_sent_2wk"),
