@@ -4584,7 +4584,7 @@ async def fire_test_surveys(
     """Send all 4 v2 survey emails to a request's patient and stamp the
     request so cron skips it. Requires global feedback_testing to be
     enabled in app_config."""
-    cfg = (await db.app_config.find_one({"_id": "feedback_testing"})) or {}
+    cfg = (await db.app_config.find_one({"key": "feedback_testing"})) or {}
     if not cfg.get("enabled"):
         raise HTTPException(400, "Enable testing mode in Settings first")
 
