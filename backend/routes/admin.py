@@ -4574,5 +4574,56 @@ async def fake_out_emails():
     }
 
 
+# ── Phase 4: fire all v2 test surveys for a single request ──────────
+
+@router.post("/admin/requests/{request_id}/fire-test-surveys")
+async def fire_test_surveys(
+    request_id: str,
+    _admin: bool = Depends(require_admin),
+):
+    """Send all 4 v2 survey emails to a request's patient and stamp the
+    request so cron skips it. Requires global feedback_testing to be
+    enabled in app_config."""
+    cfg = (await db.app_config.find_one({"_id": "feedback_testing"})) or {}
+    if not cfg.get("enabled"):
+        raise HTTPException(400, "Enable testing mode in Settings first")
+
+    req = await db.requests.find_one(
+        {"id": request_id}, {"_id": 0, "email": 1, "id": 1}
+    )
+    if not req:
+        raise HTTPException(404, "Request not found")
+
+    email = req.get("email")
+    if not email:
+        raise HTTPException(400, "Request has no patient email")
+
+    from email_service import (
+        send_patient_survey_v2_48h,
+        send_patient_survey_v2_3w,
+        send_patient_survey_v2_9w,
+        send_patient_survey_v2_15w,
+    )
+    now = datetime.now(timezone.utc).isoformat()
+    await send_patient_survey_v2_48h(email, request_id)
+    await send_patient_survey_v2_3w(email, request_id)
+    await send_patient_survey_v2_9w(email, request_id)
+    await send_patient_survey_v2_15w(email, request_id)
+
+    await db.requests.update_one(
+        {"id": request_id},
+        {"$set": {
+            "surveys_test_fired": True,
+            "surveys_test_fired_at": now,
+            "v2_survey_48h_sent_at": now,
+            "v2_survey_3w_sent_at": now,
+            "v2_survey_9w_sent_at": now,
+            "v2_survey_15w_sent_at": now,
+        }},
+    )
+
+    return {"count": 4, "request_id": request_id, "patient_email": email}
+
+
 # Suppress unused-import warnings on logger (kept for future logging)
 void = logger

@@ -169,6 +169,8 @@ export default function AdminDashboard() {
   const [tab, setTab] = useState("requests");
   const [openId, setOpenId] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [fireTestSurveys, setFireTestSurveys] = useState(false);
+  const [testingEnabled, setTestingEnabled] = useState(false);
   const [editTherapist, setEditTherapist] = useState(null);
   // Patient-preview modal: opened from the "Preview" button on each
   // provider row so admins can see what patients will see.
@@ -366,18 +368,32 @@ export default function AdminDashboard() {
   const openDetail = async (id) => {
     setOpenId(id);
     setDetail(null);
+    setFireTestSurveys(false);
     try {
       const res = await client.get(`/admin/requests/${id}`);
       setDetail(res.data);
     } catch {
       toast.error("Failed to load detail");
     }
+    // Fetch testing toggle state (non-blocking)
+    client.get("/admin/feedback-testing")
+      .then((r) => setTestingEnabled(r.data?.enabled || false))
+      .catch(() => setTestingEnabled(false));
   };
 
   const triggerResults = async (id) => {
     try {
       const res = await client.post(`/admin/requests/${id}/trigger-results`);
       toast.success(`Results emailed to patient (${res.data.count} matches)`);
+      // Fire v2 test surveys if checkbox is checked
+      if (fireTestSurveys) {
+        try {
+          const surveyRes = await client.post(`/admin/requests/${id}/fire-test-surveys`);
+          toast.success(`4 v2 test surveys sent to ${surveyRes.data.patient_email}`);
+        } catch (e2) {
+          toast.error(e2?.response?.data?.detail || "Failed to fire test surveys");
+        }
+      }
       refresh();
       if (openId === id) openDetail(id);
     } catch (e) {
@@ -2692,6 +2708,37 @@ export default function AdminDashboard() {
                   onDone={() => { refresh(); openDetail(detail.request.id); }}
                 />
               </div>
+
+              {/* v2 test survey checkbox */}
+              <div className="flex items-center gap-2 mt-1">
+                <input
+                  type="checkbox"
+                  id="fire-test-surveys"
+                  checked={fireTestSurveys}
+                  onChange={(e) => setFireTestSurveys(e.target.checked)}
+                  disabled={!testingEnabled}
+                  className="accent-[#2D4A3E] w-4 h-4"
+                  data-testid="fire-test-surveys-checkbox"
+                />
+                <label
+                  htmlFor="fire-test-surveys"
+                  className={`text-sm ${testingEnabled ? "text-[#2B2A29]" : "text-[#A8A39B]"}`}
+                >
+                  Also fire all 4 v2 surveys with matches
+                </label>
+                {!testingEnabled && (
+                  <span className="text-[10px] bg-[#E8E5DF] text-[#6D6A65] rounded-full px-2 py-0.5">
+                    test mode off
+                  </span>
+                )}
+              </div>
+              {fireTestSurveys && testingEnabled && (
+                <div className="bg-[#FEF9C3] border border-[#FDE68A] rounded-xl px-4 py-3 text-sm text-[#92400E]">
+                  All 4 v2 surveys (48hr, 3wk, 9wk, 15wk) will fire to{" "}
+                  <strong>{detail.request.email}</strong> within seconds.
+                  Cron jobs will be suppressed for this request.
+                </div>
+              )}
 
               <div>
                 <div className="flex items-baseline justify-between gap-3 mb-3">
