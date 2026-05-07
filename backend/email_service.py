@@ -642,7 +642,7 @@ async def send_patient_followup_15w(to: str, request_id: str) -> None:
 async def send_patient_survey_v2_48h(to: str, request_id: str) -> None:
     from routes.feedback import generate_feedback_token
     token = generate_feedback_token(request_id, "patient")
-    url = f"{_get_app_url()}/feedback/{request_id}/48h?token={token}"
+    url = f"{_get_app_url()}/feedback/{request_id}/48h?token={token}&v=2"
     await _send_simple_cta_template(
         "patient_survey_v2_48h", to, url, {"request_id": request_id},
     )
@@ -651,7 +651,7 @@ async def send_patient_survey_v2_48h(to: str, request_id: str) -> None:
 async def send_patient_survey_v2_3w(to: str, request_id: str) -> None:
     from routes.feedback import generate_feedback_token
     token = generate_feedback_token(request_id, "patient")
-    url = f"{_get_app_url()}/feedback/{request_id}/3w?token={token}"
+    url = f"{_get_app_url()}/feedback/{request_id}/3w?token={token}&v=2"
     await _send_simple_cta_template(
         "patient_survey_v2_3w", to, url, {"request_id": request_id},
     )
@@ -660,7 +660,7 @@ async def send_patient_survey_v2_3w(to: str, request_id: str) -> None:
 async def send_patient_survey_v2_9w(to: str, request_id: str) -> None:
     from routes.feedback import generate_feedback_token
     token = generate_feedback_token(request_id, "patient")
-    url = f"{_get_app_url()}/feedback/{request_id}/9w?token={token}"
+    url = f"{_get_app_url()}/feedback/{request_id}/9w?token={token}&v=2"
     await _send_simple_cta_template(
         "patient_survey_v2_9w", to, url, {"request_id": request_id},
     )
@@ -669,7 +669,7 @@ async def send_patient_survey_v2_9w(to: str, request_id: str) -> None:
 async def send_patient_survey_v2_15w(to: str, request_id: str) -> None:
     from routes.feedback import generate_feedback_token
     token = generate_feedback_token(request_id, "patient")
-    url = f"{_get_app_url()}/feedback/{request_id}/15w?token={token}"
+    url = f"{_get_app_url()}/feedback/{request_id}/15w?token={token}&v=2"
     await _send_simple_cta_template(
         "patient_survey_v2_15w", to, url, {"request_id": request_id},
     )
@@ -680,7 +680,7 @@ async def send_patient_survey_v2_15w(to: str, request_id: str) -> None:
 async def send_patient_survey_v2_48h_reminder(to: str, request_id: str) -> None:
     from routes.feedback import generate_feedback_token
     token = generate_feedback_token(request_id, "patient")
-    url = f"{_get_app_url()}/feedback/{request_id}/48h?token={token}"
+    url = f"{_get_app_url()}/feedback/{request_id}/48h?token={token}&v=2"
     await _send_simple_cta_template(
         "patient_survey_v2_48h_reminder", to, url, {"request_id": request_id},
     )
@@ -689,7 +689,7 @@ async def send_patient_survey_v2_48h_reminder(to: str, request_id: str) -> None:
 async def send_patient_survey_v2_3w_reminder(to: str, request_id: str) -> None:
     from routes.feedback import generate_feedback_token
     token = generate_feedback_token(request_id, "patient")
-    url = f"{_get_app_url()}/feedback/{request_id}/3w?token={token}"
+    url = f"{_get_app_url()}/feedback/{request_id}/3w?token={token}&v=2"
     await _send_simple_cta_template(
         "patient_survey_v2_3w_reminder", to, url, {"request_id": request_id},
     )
@@ -698,7 +698,7 @@ async def send_patient_survey_v2_3w_reminder(to: str, request_id: str) -> None:
 async def send_patient_survey_v2_9w_reminder(to: str, request_id: str) -> None:
     from routes.feedback import generate_feedback_token
     token = generate_feedback_token(request_id, "patient")
-    url = f"{_get_app_url()}/feedback/{request_id}/9w?token={token}"
+    url = f"{_get_app_url()}/feedback/{request_id}/9w?token={token}&v=2"
     await _send_simple_cta_template(
         "patient_survey_v2_9w_reminder", to, url, {"request_id": request_id},
     )
@@ -707,7 +707,7 @@ async def send_patient_survey_v2_9w_reminder(to: str, request_id: str) -> None:
 async def send_patient_survey_v2_15w_reminder(to: str, request_id: str) -> None:
     from routes.feedback import generate_feedback_token
     token = generate_feedback_token(request_id, "patient")
-    url = f"{_get_app_url()}/feedback/{request_id}/15w?token={token}"
+    url = f"{_get_app_url()}/feedback/{request_id}/15w?token={token}&v=2"
     await _send_simple_cta_template(
         "patient_survey_v2_15w_reminder", to, url, {"request_id": request_id},
     )

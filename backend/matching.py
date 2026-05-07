@@ -667,6 +667,29 @@ def _score_reliability(t: dict) -> float:
     return round(score * MAX_RELIABILITY, 2)
 
 
+def _still_seeing_score(val: str) -> float:
+    """Map still_seeing enum to 0-100 retention score.
+
+    Handles both v1 values (yes/no/switched) and v2 values
+    (yes_same_weekly, yes_same_less_often, yes_different, outside,
+    stopped, never_started).
+    """
+    _map = {
+        # v2 values
+        "yes_same_weekly": 100.0,
+        "yes_same_less_often": 80.0,
+        "yes_different": 60.0,
+        "outside": 30.0,
+        "stopped": 0.0,
+        "never_started": 0.0,
+        # v1 values
+        "yes": 100.0,
+        "switched": 30.0,
+        "no": 0.0,
+    }
+    return _map.get(val, 0.0)
+
+
 def calculate_match_strength(feedback_data: dict) -> float:
     """Match Strength Score -- 0-100 composite from patient feedback answers.
 
@@ -691,9 +714,9 @@ def calculate_match_strength(feedback_data: dict) -> float:
     if "feel_understood_9w" in feedback_data:
         bond_signals.append((feedback_data["feel_understood_9w"] - 1) * 25)  # 1-5 -> 0-100
     if "still_seeing_9w" in feedback_data:
-        bond_signals.append(100.0 if feedback_data["still_seeing_9w"] == "yes" else 0.0)
+        bond_signals.append(_still_seeing_score(feedback_data["still_seeing_9w"]))
     if "still_seeing_15w" in feedback_data:
-        bond_signals.append(100.0 if feedback_data["still_seeing_15w"] == "yes" else 0.0)
+        bond_signals.append(_still_seeing_score(feedback_data["still_seeing_15w"]))
 
     # Tasks signals
     if "expectation_match_3w" in feedback_data:

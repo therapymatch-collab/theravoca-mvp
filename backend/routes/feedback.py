@@ -155,15 +155,24 @@ def _verify_feedback_token(
 # ═══════════════════════════════════════════════════════════════════════
 
 class PatientFeedback48h(BaseModel):
-    """48-hour soft touch check-in — process feedback, not a real survey."""
+    """48-hour check-in. v1 and v2 fields coexist; extra="ignore" drops
+    any unknown keys. v1 fields are kept Optional so v2-only payloads
+    still parse, and vice versa."""
     model_config = ConfigDict(extra="ignore")
-    process: str  # "great" | "fine" | "had_issues"
+    survey_version: Optional[int] = None  # 1 or 2, sent by frontend
+    # -- v1 fields (kept for backward compat) --
+    process: Optional[str] = None  # "great" | "fine" | "had_issues"
     issues: Optional[str] = None
-    reached_out: str  # "yes" | "not_yet"
+    reached_out: Optional[str] = None  # v1: "yes" | "not_yet"
+    # -- v2 fields --
+    match_feel: Optional[int] = None  # 1-4
+    # v2 reached_out reuses the same field name with richer enum:
+    # "scheduled_or_session" | "message_no_reply" | "not_yet_reviewing" | "none_seemed_right"
+    improvement_text: Optional[str] = Field(None, max_length=1000)
 
 
 class PatientFeedback3w(BaseModel):
-    """3-week selection + first impressions.
+    """3-week check-in. v1 and v2 fields coexist.
 
     Field aliases accept the OLD v1 names (contacted_therapist,
     fit_confidence, met_expectations) so in-flight email links that
@@ -171,37 +180,57 @@ class PatientFeedback3w(BaseModel):
     populate_by_name=True lets the NEW names work too.
     """
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
-    chosen_status: str = Field(alias="contacted_therapist")  # "picked" | "still_deciding" | "none"
-    chosen_therapist_id: Optional[str] = None  # therapist id when chosen_status=="picked"
-    had_session: str  # "yes" | "scheduled" | "no"
-    confidence: int = Field(ge=0, le=100, alias="fit_confidence")
-    expectation_match: str = Field(alias="met_expectations")  # "yes" | "somewhat" | "no"
+    survey_version: Optional[int] = None
+    # -- v1 fields (kept for backward compat, all Optional now) --
+    chosen_status: Optional[str] = Field(None, alias="contacted_therapist")
+    chosen_therapist_id: Optional[str] = None
+    had_session: Optional[str] = None  # "yes" | "scheduled" | "no"
+    confidence: Optional[int] = Field(None, ge=0, le=100, alias="fit_confidence")
+    expectation_match: Optional[str] = Field(None, alias="met_expectations")
     surprises: Optional[str] = None
     notes: Optional[str] = None
+    # -- v2 fields --
+    selected_therapists: Optional[list[str]] = None  # therapist_ids or sentinel strings
+    going_so_far: Optional[int] = None  # 1-4
+    nps: Optional[int] = Field(None, ge=0, le=10)
 
 
 class PatientFeedback9w(BaseModel):
-    """9-week retention + Match Strength questions."""
+    """9-week retention + Match Strength questions. v1 and v2 coexist."""
     model_config = ConfigDict(extra="ignore")
-    still_seeing: str  # "yes" | "no" | "switched"
-    session_count: str  # "1-3" | "4-6" | "7+" | "none"
-    working_well: str
-    not_working: Optional[str] = None
-    feel_understood: int = Field(ge=1, le=5)  # Bond signal
-    same_page: int = Field(ge=1, le=5)  # Goals signal
-    recommend_therapist: int = Field(ge=1, le=10)
-    recommend_theravoca: int = Field(ge=1, le=10)
+    survey_version: Optional[int] = None
+    # -- v1 fields (kept for backward compat, all Optional now) --
+    still_seeing: Optional[str] = None  # v1: "yes"|"no"|"switched"; v2: richer enum
+    session_count: Optional[str] = None  # v1 only
+    working_well: Optional[str] = None  # v1 only
+    not_working: Optional[str] = None  # v1 only
+    feel_understood: Optional[int] = Field(None, ge=1, le=5)  # v1: 1-5, v2: 1-4 (fits)
+    same_page: Optional[int] = Field(None, ge=1, le=5)  # v1 only
+    recommend_therapist: Optional[int] = Field(None, ge=1, le=10)  # v1 only
+    recommend_theravoca: Optional[int] = Field(None, ge=1, le=10)  # v1 only
+    # -- v2 fields --
+    expectations_match: Optional[int] = Field(None, ge=1, le=4)  # Tasks signal
+    goals_aligned: Optional[int] = Field(None, ge=1, le=4)  # Goals signal
+    nps: Optional[int] = Field(None, ge=0, le=10)
 
 
 class PatientFeedback15w(BaseModel):
-    """15-week outcome survey."""
+    """15-week outcome survey. v1 and v2 coexist."""
     model_config = ConfigDict(extra="ignore")
-    still_seeing: str  # "yes" | "no" | "switched"
-    progress: int = Field(ge=1, le=10)
-    refer_therapist: str  # "yes" | "maybe" | "no"
-    refer_theravoca: str  # "yes" | "maybe" | "no"
-    what_changed: str
-    notes: Optional[str] = None
+    survey_version: Optional[int] = None
+    # -- v1 fields (kept for backward compat, all Optional now) --
+    still_seeing: Optional[str] = None  # v1: "yes"|"no"|"switched"; v2: richer enum
+    progress: Optional[int] = Field(None, ge=1, le=10)  # v1 only
+    refer_therapist: Optional[str] = None  # v1 only
+    refer_theravoca: Optional[str] = None  # v1 only
+    what_changed: Optional[str] = None  # v1 only
+    notes: Optional[str] = None  # v1 only
+    # -- v2 fields --
+    feel_understood: Optional[int] = Field(None, ge=1, le=5)  # Bond signal
+    expectations_match: Optional[int] = Field(None, ge=1, le=4)  # Tasks signal
+    goals_aligned: Optional[int] = Field(None, ge=1, le=4)  # Goals signal
+    nps: Optional[int] = Field(None, ge=0, le=10)
+    final_reflection: Optional[str] = Field(None, max_length=2000)
 
 
 class TherapistWeeklyPulse(BaseModel):
@@ -556,12 +585,25 @@ async def get_patient_matches(
     therapists: list[dict] = []
     async for t in db.therapists.find(
         {"id": {"$in": therapist_ids}},
-        {"_id": 0, "id": 1, "name": 1},
+        {"_id": 0, "id": 1, "name": 1,
+         "credential_type": 1, "years_experience": 1,
+         "modality_offering": 1},
     ):
+        # Deterministic avatar color from therapist_id hash
+        _colors = [
+            "#4F46E5", "#7C3AED", "#2563EB", "#0891B2",
+            "#059669", "#D97706", "#DC2626", "#DB2777",
+        ]
+        tid = t["id"]
+        _hash = sum(ord(c) for c in tid) % len(_colors)
         therapists.append({
-            "therapist_id": t["id"],
+            "therapist_id": tid,
             "therapist_name": t.get("name", "Therapist"),
-            "match_score": apps.get(t["id"]),
+            "match_score": apps.get(tid),
+            "credential_type": t.get("credential_type"),
+            "years_experience": t.get("years_experience"),
+            "modality_offering": t.get("modality_offering"),
+            "avatar_color": _colors[_hash],
         })
 
     return {"matches": therapists}

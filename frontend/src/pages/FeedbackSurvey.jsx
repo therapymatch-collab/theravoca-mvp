@@ -136,6 +136,94 @@ function TextArea({ value, onChange, placeholder, rows = 3, testId }) {
 }
 
 /* ────────────────────────────────────────────────────────────────── */
+/*  v2 shared UI components                                          */
+/* ────────────────────────────────────────────────────────────────── */
+
+function NpsRow({ value, onChange, testPrefix = "nps" }) {
+  // 0-6 red, 7-8 yellow, 9-10 green
+  const colorFor = (n) => {
+    if (n <= 6) return { bg: "#FEE2E2", border: "#FECACA", text: "#991B1B", activeBg: "#DC2626", activeText: "#fff" };
+    if (n <= 8) return { bg: "#FEF9C3", border: "#FDE68A", text: "#92400E", activeBg: "#D97706", activeText: "#fff" };
+    return { bg: "#DCFCE7", border: "#BBF7D0", text: "#166534", activeBg: "#059669", activeText: "#fff" };
+  };
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5 justify-center">
+        {Array.from({ length: 11 }, (_, i) => i).map((n) => {
+          const c = colorFor(n);
+          const active = value === n;
+          return (
+            <button
+              key={n}
+              type="button"
+              onClick={() => onChange(n)}
+              style={{
+                backgroundColor: active ? c.activeBg : c.bg,
+                borderColor: active ? c.activeBg : c.border,
+                color: active ? c.activeText : c.text,
+                minWidth: "2.25rem",
+              }}
+              className="h-9 rounded-full border text-sm font-semibold transition px-2"
+              data-testid={`${testPrefix}-${n}`}
+            >
+              {n}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex justify-between mt-1.5 text-[10px] text-[#6D6A65] px-1">
+        <span>Not at all likely</span>
+        <span>Extremely likely</span>
+      </div>
+    </div>
+  );
+}
+
+function FourButtonScale({ value, onChange, labels, testPrefix = "scale4" }) {
+  // Default labels: 1=Not great, 2=Just OK, 3=Good, 4=Really good
+  const _labels = labels || [
+    { v: 1, l: "Not great" },
+    { v: 2, l: "Just OK" },
+    { v: 3, l: "Good" },
+    { v: 4, l: "Really good" },
+  ];
+  return (
+    <div className="flex flex-wrap gap-2">
+      {_labels.map((o) => (
+        <PillButton
+          key={o.v}
+          selected={value === o.v}
+          onClick={() => onChange(o.v)}
+          testId={`${testPrefix}-${o.v}`}
+        >
+          {o.l}
+        </PillButton>
+      ))}
+    </div>
+  );
+}
+
+function PrivacyBanner({ long = false }) {
+  return (
+    <div className="bg-[#F0EDEA] rounded-xl px-4 py-3 text-xs text-[#6D6A65] leading-relaxed">
+      <span className="mr-1">{"🔒"}</span>
+      {long ? (
+        <>
+          Your therapist never sees your individual responses. All feedback
+          is used in aggregate to improve TheraVoca's matching quality.
+          Your identity is never shared with therapists in any reports.
+        </>
+      ) : (
+        <>
+          Your therapist never sees your responses. This feedback
+          goes only to the TheraVoca team.
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────── */
 /*  Milestone headings                                               */
 /* ────────────────────────────────────────────────────────────────── */
 
@@ -552,6 +640,370 @@ function Milestone15w({ answers, setAnswer }) {
 }
 
 /* ────────────────────────────────────────────────────────────────── */
+/*  v2 milestone: 48h                                                */
+/* ────────────────────────────────────────────────────────────────── */
+
+function V2Milestone48h({ answers, setAnswer }) {
+  return (
+    <>
+      <PrivacyBanner />
+      <QuestionCard number={1} label="How do you feel about the therapists matched to you?">
+        <FourButtonScale
+          value={answers.match_feel}
+          onChange={(v) => setAnswer("match_feel", v)}
+          labels={[
+            { v: 1, l: "Not great" },
+            { v: 2, l: "Just OK" },
+            { v: 3, l: "Good" },
+            { v: 4, l: "Really good" },
+          ]}
+          testPrefix="q1-match-feel"
+        />
+      </QuestionCard>
+
+      <QuestionCard number={2} label="Have you started reaching out to your matched therapists?">
+        <div className="flex flex-wrap gap-2">
+          {[
+            { v: "yes_contacted", l: "Yes, I've contacted one" },
+            { v: "yes_multiple", l: "Yes, contacted several" },
+            { v: "not_yet", l: "Not yet" },
+            { v: "message_no_reply", l: "Sent a message but no reply" },
+          ].map((o) => (
+            <PillButton
+              key={o.v}
+              selected={answers.reached_out === o.v}
+              onClick={() => setAnswer("reached_out", o.v)}
+              testId={`q2-reached-${o.v}`}
+            >
+              {o.l}
+            </PillButton>
+          ))}
+        </div>
+      </QuestionCard>
+
+      <QuestionCard number={3} label="Anything we could improve about the matching process?" required={false}>
+        <TextArea
+          value={answers.improvement_text || ""}
+          onChange={(v) => setAnswer("improvement_text", v)}
+          placeholder="What would have made the experience better?"
+          testId="q3-improvement"
+        />
+      </QuestionCard>
+    </>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────── */
+/*  v2 milestone: 3w                                                 */
+/* ────────────────────────────────────────────────────────────────── */
+
+function TherapistAvatar({ name, color }) {
+  const initials = (name || "T")
+    .split(" ")
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+  return (
+    <span
+      style={{ backgroundColor: color || "#4F46E5" }}
+      className="inline-flex items-center justify-center w-8 h-8 rounded-full text-white text-xs font-semibold shrink-0"
+    >
+      {initials}
+    </span>
+  );
+}
+
+function V2Milestone3w({ answers, setAnswer, therapists }) {
+  // Multi-select therapists + sentinel options
+  const selected = answers.selected_therapists || [];
+
+  const toggleTherapist = (id) => {
+    // If selecting a sentinel, clear everything else
+    if (id === "_outside" || id === "_not_started") {
+      if (selected.includes(id)) {
+        setAnswer("selected_therapists", []);
+      } else {
+        setAnswer("selected_therapists", [id]);
+      }
+      return;
+    }
+    // If selecting a real therapist, remove any sentinel
+    const without = selected.filter((s) => s !== "_outside" && s !== "_not_started");
+    if (without.includes(id)) {
+      setAnswer("selected_therapists", without.filter((s) => s !== id));
+    } else {
+      setAnswer("selected_therapists", [...without, id]);
+    }
+  };
+
+  return (
+    <>
+      <PrivacyBanner />
+      <QuestionCard number={1} label="Which therapists have you contacted or started seeing?">
+        <div className="space-y-2">
+          {therapists.map((t) => {
+            const isSelected = selected.includes(t.therapist_id);
+            return (
+              <button
+                key={t.therapist_id}
+                type="button"
+                onClick={() => toggleTherapist(t.therapist_id)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left text-sm transition ${
+                  isSelected
+                    ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
+                    : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+                }`}
+                data-testid={`q1-therapist-${t.therapist_id}`}
+              >
+                <TherapistAvatar name={t.therapist_name} color={isSelected ? "#ffffff30" : t.avatar_color} />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium truncate">{t.therapist_name}</div>
+                  <div className={`text-xs ${isSelected ? "text-white/70" : "text-[#6D6A65]"}`}>
+                    {[
+                      t.credential_type,
+                      t.years_experience ? `${t.years_experience} yrs` : null,
+                    ].filter(Boolean).join(" · ") || "Therapist"}
+                  </div>
+                </div>
+                {t.match_score != null && (
+                  <span className={`text-xs font-medium ${isSelected ? "text-white/70" : "text-[#6D6A65]"}`}>
+                    {Math.round(t.match_score)}%
+                  </span>
+                )}
+              </button>
+            );
+          })}
+          {/* Sentinel options */}
+          <button
+            type="button"
+            onClick={() => toggleTherapist("_outside")}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left text-sm transition ${
+              selected.includes("_outside")
+                ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
+                : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+            }`}
+            data-testid="q1-therapist-outside"
+          >
+            Found someone outside my matches
+          </button>
+          <button
+            type="button"
+            onClick={() => toggleTherapist("_not_started")}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left text-sm transition ${
+              selected.includes("_not_started")
+                ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
+                : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+            }`}
+            data-testid="q1-therapist-not-started"
+          >
+            Haven't started looking yet
+          </button>
+        </div>
+      </QuestionCard>
+
+      <QuestionCard number={2} label="How is the experience going so far?">
+        <FourButtonScale
+          value={answers.going_so_far}
+          onChange={(v) => setAnswer("going_so_far", v)}
+          labels={[
+            { v: 1, l: "Not great" },
+            { v: 2, l: "Just OK" },
+            { v: 3, l: "Good" },
+            { v: 4, l: "Really good" },
+          ]}
+          testPrefix="q2-going"
+        />
+      </QuestionCard>
+
+      <QuestionCard number={3} label="How likely are you to recommend TheraVoca to a friend?">
+        <NpsRow
+          value={answers.nps}
+          onChange={(v) => setAnswer("nps", v)}
+          testPrefix="q3-nps"
+        />
+      </QuestionCard>
+    </>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────── */
+/*  v2 milestone: 9w                                                 */
+/* ────────────────────────────────────────────────────────────────── */
+
+function V2Milestone9w({ answers, setAnswer }) {
+  return (
+    <>
+      <PrivacyBanner long />
+      <QuestionCard number={1} label="Are you still seeing a therapist from your matches?">
+        <div className="flex flex-wrap gap-2">
+          {[
+            { v: "yes_same_weekly", l: "Yes, same therapist (weekly)" },
+            { v: "yes_same_less_often", l: "Yes, same therapist (less than weekly)" },
+            { v: "yes_different", l: "Yes, a different one from my matches" },
+            { v: "outside", l: "Seeing someone outside my matches" },
+            { v: "stopped", l: "Stopped therapy" },
+            { v: "never_started", l: "Never started" },
+          ].map((o) => (
+            <PillButton
+              key={o.v}
+              selected={answers.still_seeing === o.v}
+              onClick={() => setAnswer("still_seeing", o.v)}
+              testId={`q1-seeing-${o.v}`}
+            >
+              {o.l}
+            </PillButton>
+          ))}
+        </div>
+      </QuestionCard>
+
+      <QuestionCard number={2} label="Do you feel understood by your therapist?">
+        <FourButtonScale
+          value={answers.feel_understood}
+          onChange={(v) => setAnswer("feel_understood", v)}
+          labels={[
+            { v: 1, l: "Not at all" },
+            { v: 2, l: "A little" },
+            { v: 3, l: "Mostly" },
+            { v: 4, l: "Completely" },
+          ]}
+          testPrefix="q2-understood"
+        />
+      </QuestionCard>
+
+      <QuestionCard number={3} label="Has therapy met your expectations so far?">
+        <FourButtonScale
+          value={answers.expectations_match}
+          onChange={(v) => setAnswer("expectations_match", v)}
+          labels={[
+            { v: 1, l: "Not at all" },
+            { v: 2, l: "Somewhat" },
+            { v: 3, l: "Mostly" },
+            { v: 4, l: "Completely" },
+          ]}
+          testPrefix="q3-expectations"
+        />
+      </QuestionCard>
+
+      <QuestionCard number={4} label="Are you and your therapist aligned on your goals?">
+        <FourButtonScale
+          value={answers.goals_aligned}
+          onChange={(v) => setAnswer("goals_aligned", v)}
+          labels={[
+            { v: 1, l: "Not at all" },
+            { v: 2, l: "Somewhat" },
+            { v: 3, l: "Mostly" },
+            { v: 4, l: "Completely" },
+          ]}
+          testPrefix="q4-goals"
+        />
+      </QuestionCard>
+
+      <QuestionCard number={5} label="How likely are you to recommend TheraVoca to a friend?">
+        <NpsRow
+          value={answers.nps}
+          onChange={(v) => setAnswer("nps", v)}
+          testPrefix="q5-nps"
+        />
+      </QuestionCard>
+    </>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────── */
+/*  v2 milestone: 15w                                                */
+/* ────────────────────────────────────────────────────────────────── */
+
+function V2Milestone15w({ answers, setAnswer }) {
+  return (
+    <>
+      <PrivacyBanner long />
+      <QuestionCard number={1} label="Are you still seeing a therapist from your matches?">
+        <div className="flex flex-wrap gap-2">
+          {[
+            { v: "yes_same_weekly", l: "Yes, same therapist (weekly)" },
+            { v: "yes_same_less_often", l: "Yes, same therapist (less than weekly)" },
+            { v: "yes_different", l: "Yes, a different one from my matches" },
+            { v: "outside", l: "Seeing someone outside my matches" },
+            { v: "stopped", l: "Stopped therapy" },
+            { v: "never_started", l: "Never started" },
+          ].map((o) => (
+            <PillButton
+              key={o.v}
+              selected={answers.still_seeing === o.v}
+              onClick={() => setAnswer("still_seeing", o.v)}
+              testId={`q1-seeing-${o.v}`}
+            >
+              {o.l}
+            </PillButton>
+          ))}
+        </div>
+      </QuestionCard>
+
+      <QuestionCard number={2} label="Do you feel understood by your therapist?">
+        <FourButtonScale
+          value={answers.feel_understood}
+          onChange={(v) => setAnswer("feel_understood", v)}
+          labels={[
+            { v: 1, l: "Not at all" },
+            { v: 2, l: "A little" },
+            { v: 3, l: "Mostly" },
+            { v: 4, l: "Completely" },
+          ]}
+          testPrefix="q2-understood"
+        />
+      </QuestionCard>
+
+      <QuestionCard number={3} label="Has therapy met your expectations?">
+        <FourButtonScale
+          value={answers.expectations_match}
+          onChange={(v) => setAnswer("expectations_match", v)}
+          labels={[
+            { v: 1, l: "Not at all" },
+            { v: 2, l: "Somewhat" },
+            { v: 3, l: "Mostly" },
+            { v: 4, l: "Completely" },
+          ]}
+          testPrefix="q3-expectations"
+        />
+      </QuestionCard>
+
+      <QuestionCard number={4} label="Are you and your therapist aligned on your goals?">
+        <FourButtonScale
+          value={answers.goals_aligned}
+          onChange={(v) => setAnswer("goals_aligned", v)}
+          labels={[
+            { v: 1, l: "Not at all" },
+            { v: 2, l: "Somewhat" },
+            { v: 3, l: "Mostly" },
+            { v: 4, l: "Completely" },
+          ]}
+          testPrefix="q4-goals"
+        />
+      </QuestionCard>
+
+      <QuestionCard number={5} label="How likely are you to recommend TheraVoca to a friend?">
+        <NpsRow
+          value={answers.nps}
+          onChange={(v) => setAnswer("nps", v)}
+          testPrefix="q5-nps"
+        />
+      </QuestionCard>
+
+      <QuestionCard number={6} label="Any final reflections on your experience?" required={false}>
+        <TextArea
+          value={answers.final_reflection || ""}
+          onChange={(v) => setAnswer("final_reflection", v)}
+          placeholder="Looking back, what stands out about your experience?"
+          rows={4}
+          testId="q6-reflection"
+        />
+      </QuestionCard>
+    </>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────── */
 /*  Validation helpers                                               */
 /* ────────────────────────────────────────────────────────────────── */
 
@@ -597,6 +1049,49 @@ const VALIDATORS = {
 };
 
 /* ────────────────────────────────────────────────────────────────── */
+/*  v2 validation helpers                                            */
+/* ────────────────────────────────────────────────────────────────── */
+
+function validateV2_48h(a) {
+  if (!a.match_feel) return "Please rate how you feel about your matches.";
+  if (!a.reached_out) return "Please let us know if you've started reaching out.";
+  return null;
+}
+
+function validateV2_3w(a) {
+  if (!a.selected_therapists || a.selected_therapists.length === 0)
+    return "Please select which therapists you've contacted.";
+  if (!a.going_so_far) return "Please rate how the experience is going.";
+  if (a.nps == null) return "Please rate how likely you are to recommend TheraVoca.";
+  return null;
+}
+
+function validateV2_9w(a) {
+  if (!a.still_seeing) return "Please tell us your current therapy status.";
+  if (!a.feel_understood) return "Please rate how understood you feel.";
+  if (!a.expectations_match) return "Please rate whether therapy has met expectations.";
+  if (!a.goals_aligned) return "Please rate goal alignment with your therapist.";
+  if (a.nps == null) return "Please rate how likely you are to recommend TheraVoca.";
+  return null;
+}
+
+function validateV2_15w(a) {
+  if (!a.still_seeing) return "Please tell us your current therapy status.";
+  if (!a.feel_understood) return "Please rate how understood you feel.";
+  if (!a.expectations_match) return "Please rate whether therapy has met expectations.";
+  if (!a.goals_aligned) return "Please rate goal alignment with your therapist.";
+  if (a.nps == null) return "Please rate how likely you are to recommend TheraVoca.";
+  return null;
+}
+
+const V2_VALIDATORS = {
+  "48h": validateV2_48h,
+  "3w": validateV2_3w,
+  "9w": validateV2_9w,
+  "15w": validateV2_15w,
+};
+
+/* ────────────────────────────────────────────────────────────────── */
 /*  Closing messages                                                 */
 /* ────────────────────────────────────────────────────────────────── */
 
@@ -616,6 +1111,8 @@ export default function FeedbackSurvey() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get("token");
+  // v=2 in email links; default to 1 for backward compat
+  const surveyVersion = Number(searchParams.get("v")) || 1;
 
   const [answers, setAnswers] = useState({});
   const [therapists, setTherapists] = useState([]);
@@ -657,8 +1154,15 @@ export default function FeedbackSurvey() {
           setTherapists(
             matches.map((m) => ({
               id: m.therapist_id || m.id,
+              therapist_id: m.therapist_id || m.id,
               name: m.therapist_name || m.name || "Therapist",
+              therapist_name: m.therapist_name || m.name || "Therapist",
               score: m.match_score || m.score,
+              match_score: m.match_score || m.score,
+              credential_type: m.credential_type,
+              years_experience: m.years_experience,
+              modality_offering: m.modality_offering,
+              avatar_color: m.avatar_color,
             }))
           );
         })
@@ -675,7 +1179,8 @@ export default function FeedbackSurvey() {
   }, []);
 
   const submit = async () => {
-    const validator = VALIDATORS[milestone];
+    const validatorMap = surveyVersion === 2 ? V2_VALIDATORS : VALIDATORS;
+    const validator = validatorMap[milestone];
     if (validator) {
       const err = validator(answers);
       if (err) {
@@ -689,7 +1194,7 @@ export default function FeedbackSurvey() {
       const client = getClient();
       await client.post(
         `/feedback/patient/${requestId}/${milestone}`,
-        { milestone, ...answers },
+        { milestone, survey_version: surveyVersion, ...answers },
         authParams()
       );
       setSubmitted(true);
@@ -802,23 +1307,44 @@ export default function FeedbackSurvey() {
             {meta.title}
           </h1>
           <p className="text-[#6D6A65] mt-3 max-w-xl leading-relaxed">{meta.subtitle}</p>
-          <p className="text-xs text-[#A8A39B] mt-1">
-            Your therapist never sees your responses.
-          </p>
+          {surveyVersion < 2 && (
+            <p className="text-xs text-[#A8A39B] mt-1">
+              Your therapist never sees your responses.
+            </p>
+          )}
 
           {/* Questions */}
           <div className="mt-8 space-y-5">
-            {milestone === "48h" && (
-              <Milestone48h answers={answers} setAnswer={setAnswer} />
-            )}
-            {milestone === "3w" && (
-              <Milestone3w answers={answers} setAnswer={setAnswer} therapists={therapists} />
-            )}
-            {milestone === "9w" && (
-              <Milestone9w answers={answers} setAnswer={setAnswer} />
-            )}
-            {milestone === "15w" && (
-              <Milestone15w answers={answers} setAnswer={setAnswer} />
+            {surveyVersion === 2 ? (
+              <>
+                {milestone === "48h" && (
+                  <V2Milestone48h answers={answers} setAnswer={setAnswer} />
+                )}
+                {milestone === "3w" && (
+                  <V2Milestone3w answers={answers} setAnswer={setAnswer} therapists={therapists} />
+                )}
+                {milestone === "9w" && (
+                  <V2Milestone9w answers={answers} setAnswer={setAnswer} />
+                )}
+                {milestone === "15w" && (
+                  <V2Milestone15w answers={answers} setAnswer={setAnswer} />
+                )}
+              </>
+            ) : (
+              <>
+                {milestone === "48h" && (
+                  <Milestone48h answers={answers} setAnswer={setAnswer} />
+                )}
+                {milestone === "3w" && (
+                  <Milestone3w answers={answers} setAnswer={setAnswer} therapists={therapists} />
+                )}
+                {milestone === "9w" && (
+                  <Milestone9w answers={answers} setAnswer={setAnswer} />
+                )}
+                {milestone === "15w" && (
+                  <Milestone15w answers={answers} setAnswer={setAnswer} />
+                )}
+              </>
             )}
           </div>
 
