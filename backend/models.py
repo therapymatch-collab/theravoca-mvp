@@ -118,6 +118,16 @@ class TherapistSignup(BaseModel):
     # T6b — "Describe what your early sessions typically look like."
     # Open text ≥30 chars on frontend; stored for deep-match scoring.
     t6_early_sessions_description: Optional[str] = Field(default="", max_length=2000)
+    # -- Scoring-redesign fields (schema only -- scorer not wired yet) --
+    # Inferred session-style tags derived from modalities + bio during
+    # backfill. Values drawn from the patient-side session_expectations
+    # enum: guide_direct, listen_heard, tools_fast, explore_patterns.
+    # Never contains "not_sure" -- that is a patient-only signal.
+    session_style_tags: list[str] = Field(default_factory=list, max_length=3)
+    # Rolling window of response times (hours) between a match
+    # notification and the therapist's first action (interested / not
+    # interested). Capped at the last 10 entries; newest appended.
+    notification_response_times: list[float] = Field(default_factory=list, max_length=10)
     # Cloudflare Turnstile token (optional). Backend fail-softs when not
     # configured; verified at the route layer.
     turnstile_token: Optional[str] = Field(default=None, max_length=2200)

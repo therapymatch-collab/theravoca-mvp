@@ -85,6 +85,48 @@ CREDENTIAL_TYPES = [
 DEFAULT_PROFILE_PICTURE = None
 
 
+# ── Modality -> session-style-tag mapping ────────────────────────
+# Values are drawn from the patient-side session_expectations enum.
+# "not_sure" is never assigned -- it is a patient-only wildcard.
+_MODALITY_STYLE_MAP: dict[str, list[str]] = {
+    "CBT":                  ["guide_direct", "tools_fast"],
+    "Solution-Focused":     ["guide_direct", "tools_fast"],
+    "Behavioral":           ["guide_direct", "tools_fast"],
+    "Coaching":             ["guide_direct", "tools_fast"],
+    "DBT":                  ["guide_direct", "tools_fast"],
+    "Gottman":              ["guide_direct", "tools_fast"],
+    "Motivational Interviewing": ["guide_direct", "listen_heard"],
+    "Person-Centered":      ["listen_heard", "explore_patterns"],
+    "Psychodynamic":        ["listen_heard", "explore_patterns"],
+    "IFS":                  ["listen_heard", "explore_patterns"],
+    "Art Therapy":          ["listen_heard", "explore_patterns"],
+    "Christian Counseling":  ["listen_heard", "explore_patterns"],
+    "EMDR":                 ["listen_heard", "explore_patterns"],
+    "Trauma-Informed":      ["listen_heard", "explore_patterns"],
+    "ACT":                  ["tools_fast", "explore_patterns"],
+    "Mindfulness-Based":    ["tools_fast", "explore_patterns"],
+    "Somatic Experiencing": ["tools_fast", "explore_patterns"],
+    "Eclectic":             ["tools_fast", "listen_heard"],
+}
+_STYLE_DEFAULT = ["guide_direct", "tools_fast"]
+
+
+def _infer_session_style_tags(modalities: list[str]) -> list[str]:
+    """Infer up to 3 session-style tags from a therapist's modalities
+    using the rule-based mapping above. Deduplicates and preserves
+    rough insertion order (most common tags bubble to the front)."""
+    if not modalities:
+        return _STYLE_DEFAULT[:3]
+    seen: dict[str, int] = {}
+    for mod in modalities:
+        tags = _MODALITY_STYLE_MAP.get(mod, _STYLE_DEFAULT)
+        for tag in tags:
+            seen[tag] = seen.get(tag, 0) + 1
+    # Sort by frequency descending (most-mapped tag first), cap at 3
+    ranked = sorted(seen.keys(), key=lambda t: seen[t], reverse=True)
+    return ranked[:3]
+
+
 def _suggest_credential() -> tuple[str, str]:
     """Return (credential_type, license_suffix) tuple."""
     cred_type, license_pool = random.choice(CREDENTIAL_TYPES)
@@ -292,6 +334,15 @@ def backfill_therapist(t: dict[str, Any], idx: int) -> dict[str, Any]:
     # Style tags
     if not t.get("style_tags"):
         set_fields["style_tags"] = random.sample(STYLE_TAGS, random.randint(2, 4))
+
+    # Session style tags -- infer from modalities, cap at 3, never "not_sure"
+    if not t.get("session_style_tags"):
+        mods = set_fields.get("modalities") or t.get("modalities") or []
+        set_fields["session_style_tags"] = _infer_session_style_tags(mods)
+
+    # Notification response times -- real data only, no fake history
+    if not t.get("notification_response_times"):
+        set_fields["notification_response_times"] = []
 
     # Free consult
     if "free_consult" not in t:

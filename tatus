@@ -1,0 +1,354 @@
+[1mdiff --git a/backend/routes/admin.py b/backend/routes/admin.py[m
+[1mindex c1e0f93..eb09c35 100644[m
+[1m--- a/backend/routes/admin.py[m
+[1m+++ b/backend/routes/admin.py[m
+[36m@@ -569,7 +569,7 @@[m [masync def _explain_match_gap(req: dict, notified_count: int) -> dict:[m
+             ],[m
+         })[m
+         axes.append(_axis([m
+[31m-            f"Cash rate Ã¢ÂÂ¤ ${budget} (or sliding scale)",[m
+[32m+[m[32m            f"Cash rate <= ${budget} (or sliding scale)",[m[41m[m
+             cnt, max(15, target // 2),[m
+         ))[m
+ [m
+[36m@@ -628,7 +628,7 @@[m [masync def _explain_match_gap(req: dict, notified_count: int) -> dict:[m
+         ))[m
+ [m
+     summary = ([m
+[31m-        f"Only {notified_count} therapist(s) were notified Ã¢ÂÂ target was "[m
+[32m+[m[32m        f"Only {notified_count} therapist(s) were notified  --  target was "[m[41m[m
+         f"{target}. Active directory size: {total_active}. The axes below "[m
+         f"show which filter cut the pool down."[m
+     )[m
+[36m@@ -639,7 +639,7 @@[m [masync def _explain_match_gap(req: dict, notified_count: int) -> dict:[m
+     verified = bool(req.get("verified"))[m
+     if not verified:[m
+         summary = ([m
+[31m-            "Patient hasn't verified their email yet Ã¢ÂÂ matching only runs "[m
+[32m+[m[32m            "Patient hasn't verified their email yet  --  matching only runs "[m[41m[m
+             "after verification, so 0 therapists have been notified. The "[m
+             "axes below show what the directory could match if/when they "[m
+             "verify; the actual notify count will fill in once they "[m
+[36m@@ -1118,7 +1118,7 @@[m [masync def admin_test_sms(payload: dict, _: bool = Depends(require_admin)):[m
+         except (KeyError, IndexError):[m
+             body = template  # show raw template if formatting fails[m
+     else:[m
+[31m-        body = (payload or {}).get("body") or "TheraVoca: SMS smoke test Ã¢ÂÂ your Twilio integration is wired up."[m
+[32m+[m[32m        body = (payload or {}).get("body") or "TheraVoca: SMS smoke test  --  your Twilio integration is wired up."[m[41m[m
+ [m
+     # force=True bypasses TWILIO_ENABLED check Ã¢ÂÂ admin explicitly chose to test[m
+     result = await send_sms(to, body, force=True)[m
+[36m@@ -1159,7 +1159,7 @@[m [masync def admin_test_sms(payload: dict, _: bool = Depends(require_admin)):[m
+         hint = ([m
+             "A2P 10DLC registration required. US carriers block unregistered "[m
+             "numbers from sending SMS. Register at "[m
+[31m-            "twilio.com/console/sms/a2p-messaging Ã¢ÂÂ or switch to a "[m
+[32m+[m[32m            "twilio.com/console/sms/a2p-messaging  --  or switch to a "[m[41m[m
+             "verified toll-free number."[m
+         )[m
+     elif error_code == 21610:[m
+[36m@@ -2355,10 +2355,10 @@[m [masync def admin_backfill_deep_match(payload: dict = None) -> dict[str, Any]:[m
+ [m
+     _T2_TEMPLATES = [[m
+         "I worked with a client dealing with {issue} who had been in therapy before without real progress. Through {approach}, we built trust and self-awareness over about {months} months. The turning point came when they started applying insights to daily life. By the end, they reported feeling more confident and connected than they had in years.",[m
+[31m-        "One client stands out Ã¢ÂÂ someone overwhelmed by {issue}. They were skeptical. Using {approach}, we focused on practical tools between sessions. Week by week, small shifts added up. After {months} months, they told me they finally felt like themselves again.",[m
+[32m+[m[32m        "One client stands out  --  someone overwhelmed by {issue}. They were skeptical. Using {approach}, we focused on practical tools between sessions. Week by week, small shifts added up. After {months} months, they told me they finally felt like themselves again.",[m[41m[m
+     ][m
+     _T5_TEMPLATES = [[m
+[31m-        "I understand {exp1} from the inside Ã¢ÂÂ it shaped how I show up in the therapy room. I also bring personal experience with {exp2}, which helps me connect with clients navigating similar challenges without judgment.",[m
+[32m+[m[32m        "I understand {exp1} from the inside  --  it shaped how I show up in the therapy room. I also bring personal experience with {exp2}, which helps me connect with clients navigating similar challenges without judgment.",[m[41m[m
+         "My own journey through {exp1} gives me depth beyond clinical training. I've also navigated {exp2} personally, which informs how I hold space for clients going through the same.",[m
+     ][m
+     _EXPERIENCES = [[m
+[36m@@ -2601,35 +2601,35 @@[m [masync def admin_get_email_templates() -> dict[str, Any]:[m
+             "key": "availability_prompt",[m
+             "name": "Availability Check-in",[m
+             "description": "Weekly Monday morning email asking therapists to confirm their availability",[m
+[31m-            "subject": "Quick check Ã¢ÂÂ is your TheraVoca availability still current?",[m
+[32m+[m[32m            "subject": "Quick check  --  is your TheraVoca availability still current?",[m[41m[m
+             "trigger": "Cron job, configurable days via /admin/availability-prompt",[m
+         },[m
+         {[m
+             "key": "verification",[m
+             "name": "Email Verification",[m
+             "description": "Sent to patient after request submission to verify their email",[m
+[31m-            "subject": "Verify your email Ã¢ÂÂ TheraVoca",[m
+[32m+[m[32m            "subject": "Verify your email  --  TheraVoca",[m[41m[m
+             "trigger": "After patient submits intake form",[m
+         },[m
+         {[m
+             "key": "results",[m
+             "name": "Results Delivery",[m
+             "description": "Sent to patient when their matched therapist results are ready",[m
+[31m-            "subject": "Your therapist matches are ready Ã¢ÂÂ TheraVoca",[m
+[32m+[m[32m            "subject": "Your therapist matches are ready  --  TheraVoca",[m[41m[m
+             "trigger": "After matching completes or auto-delay expires",[m
+         },[m
+         {[m
+             "key": "therapist_notification",[m
+             "name": "New Referral Match",[m
+             "description": "Sent to therapist when a new patient matches their profile",[m
+[31m-            "subject": "New referral match ({match_score}%) Ã¢ÂÂ TheraVoca",[m
+[32m+[m[32m            "subject": "New referral match ({match_score}%)  --  TheraVoca",[m[41m[m
+             "trigger": "During matching when therapist scores above threshold",[m
+         },[m
+         {[m
+             "key": "claim_profile",[m
+             "name": "Claim Profile",[m
+             "description": "One-time go-live outreach asking existing therapists to claim their profile",[m
+[31m-            "subject": "Your TheraVoca profile is ready Ã¢ÂÂ complete it now",[m
+[32m+[m[32m            "subject": "Your TheraVoca profile is ready  --  complete it now",[m[41m[m
+             "trigger": "Manual admin action",[m
+         },[m
+     ][m
+[36m@@ -3184,13 +3184,13 @@[m [mdef _render_opt_out_page(*, success: bool, email: str | None, phone: str | None,[m
+         )[m
+     already_line = ([m
+         '<p style="color:#6D6A65;font-size:13px;margin:10px 0 0;">'[m
+[31m-        '(You were already opted out Ã¢ÂÂ no action needed.)</p>'[m
+[32m+[m[32m        '(You were already opted out  --  no action needed.)</p>'[m[41m[m
+         if already else ""[m
+     )[m
+     return f"""<!doctype html>[m
+ <html><head>[m
+ <meta charset="utf-8">[m
+[31m-<title>TheraVoca Ã¢ÂÂ {headline}</title>[m
+[32m+[m[32m<title>TheraVoca  --  {headline}</title>[m[41m[m
+ <meta name="viewport" content="width=device-width,initial-scale=1">[m
+ <style>[m
+   body {{ margin:0; padding:48px 20px; background:#FDFBF7; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif; color:#2B2A29; }}[m
+[36m@@ -3455,7 +3455,7 @@[m [masync def _compute_coverage_gap_analysis() -> dict:[m
+                 "severity": "critical" if have < target / 2 else "warning",[m
+                 "recommendation": ([m
+                     f"Recruit {target - have} more therapist(s) specializing in "[m
+[31m-                    f"`{slug.replace('_', ' ')}` Ã¢ÂÂ patient demand is {demand}."[m
+[32m+[m[32m                    f"`{slug.replace('_', ' ')}`  --  patient demand is {demand}."[m[41m[m
+                 ),[m
+             })[m
+     for m in MODALITIES_CORE:[m
+[36m@@ -3470,7 +3470,7 @@[m [masync def _compute_coverage_gap_analysis() -> dict:[m
+                 "severity": "critical" if have < 3 else "warning",[m
+                 "recommendation": ([m
+                     f"Recruit {target - have} more therapist(s) trained in "[m
+[31m-                    f"{m} Ã¢ÂÂ common patient request."[m
+[32m+[m[32m                    f"{m}  --  common patient request."[m[41m[m
+                 ),[m
+             })[m
+     for ag in AGE_GROUPS:[m
+[36m@@ -3485,7 +3485,7 @@[m [masync def _compute_coverage_gap_analysis() -> dict:[m
+                 "severity": "critical" if have < target / 2 or have == 0 else "warning",[m
+                 "recommendation": ([m
+                     f"Recruit {target - have} more therapist(s) serving "[m
+[31m-                    f"`{ag}` Ã¢ÂÂ age group is a HARD filter in matching, "[m
+[32m+[m[32m                    f"`{ag}`  --  age group is a HARD filter in matching, "[m[41m[m
+                     "patients in this bucket will see weak or zero matches."[m
+                 ),[m
+             })[m
+[36m@@ -3544,8 +3544,8 @@[m [masync def _compute_coverage_gap_analysis() -> dict:[m
+             "severity": "warning",[m
+             "recommendation": ([m
+                 f"Only {can_take_quick} therapist(s) flagged with ASAP / "[m
+[31m-                "2Ã¢ÂÂ3-week capacity. Patients marking `urgency=asap` will see "[m
+[31m-                "weak matches Ã¢ÂÂ prioritize confirming availability with your "[m
+[32m+[m[32m                "2-3-week capacity. Patients marking `urgency=asap` will see "[m[41m[m
+[32m+[m[32m                "weak matches  --  prioritize confirming availability with your "[m[41m[m
+                 "current network."[m
+             ),[m
+         })[m
+[36m@@ -3594,7 +3594,7 @@[m [masync def _compute_coverage_gap_analysis() -> dict:[m
+             "severity": "warning",[m
+             "recommendation": ([m
+                 f"Only {sliding_scale} therapist(s) offer a sliding scale. "[m
+[31m-                "We tell patients we have flexible-fee options Ã¢ÂÂ verify."[m
+[32m+[m[32m                "We tell patients we have flexible-fee options  --  verify."[m[41m[m
+             ),[m
+         })[m
+ [m
+[36m@@ -3704,7 +3704,7 @@[m [masync def admin_referral_analytics(request: Request, _: bool = Depends(require_a[m
+         meta = patient_codes_seen.get(code) or {}[m
+         top_patient_referrers.append({[m
+             "code": code,[m
+[31m-            "inviter_email": meta.get("email") or "Ã¢ÂÂ",[m
+[32m+[m[32m            "inviter_email": meta.get("email") or "—",[m[41m[m
+             "invited_count": n,[m
+         })[m
+ [m
+[36m@@ -3728,8 +3728,8 @@[m [masync def admin_referral_analytics(request: Request, _: bool = Depends(require_a[m
+         meta = therapist_codes.get(code) or {}[m
+         top_therapist_referrers.append({[m
+             "code": code,[m
+[31m-            "inviter_name": meta.get("name") or "Ã¢ÂÂ",[m
+[31m-            "inviter_email": meta.get("email") or "Ã¢ÂÂ",[m
+[32m+[m[32m            "inviter_name": meta.get("name") or "—",[m[41m[m
+[32m+[m[32m            "inviter_email": meta.get("email") or "—",[m[41m[m
+             "invited_count": n,[m
+         })[m
+ [m
+[36m@@ -4068,165 +4068,4 @@[m [masync def _run_scraper_job(job_id: str, city: str, state: str, issues: list, cou[m
+             )[m
+             results.extend(backup)[m
+             for src in ("therapyden", "goodtherapy", "google_maps"):[m
+[31m-                sources_summary[src] = sum(1 for c in backup if c.get("source") == src)[m
+[31m-        except Exception as e:[m
+[31m-            errors.append(f"Backup scrapers: {e}")[m
+[31m-[m
+[31m-    # Deduplicate by name+city[m
+[31m-    seen = set()[m
+[31m-    unique = [][m
+[31m-    for c in results:[m
+[31m-        key = f"{(c.get('name') or '').lower().strip()}|{(c.get('city') or '').lower().strip()}"[m
+[31m-        if key not in seen and key != "|":[m
+[31m-            seen.add(key)[m
+[31m-            unique.append(c)[m
+[31m-    candidates = unique[:count][m
+[31m-[m
+[31m-    # Save Phase 1 results[m
+[31m-    await db.scraper_jobs.update_one([m
+[31m-        {"id": job_id},[m
+[31m-        {"$set": {[m
+[31m-            "phase": "enriching",[m
+[31m-            "total": len(candidates),[m
+[31m-            "sources": sources_summary,[m
+[31m-            "errors": errors,[m
+[31m-            "candidates": candidates,[m
+[31m-            "enriched_count": 0,[m
+[31m-        }},[m
+[31m-    )[m
+[31m-[m
+[31m-    # Phase 2: Enrich with Google Places API + website fallback[m
+[31m-    import asyncio[m
+[31m-    enriched = 0[m
+[31m-    async with httpx.AsyncClient(follow_redirects=True) as client:[m
+[31m-        for i, c in enumerate(candidates):[m
+[31m-            if c.get("name"):  # enrich all candidates (Places API + website fallback)[m
+[31m-                try:[m
+[31m-                    await enrich_one(c, client)[m
+[31m-                    enriched += 1[m
+[31m-                except Exception:[m
+[31m-                    pass[m
+[31m-                # Update progress every candidate[m
+[31m-                await db.scraper_jobs.update_one([m
+[31m-                    {"id": job_id},[m
+[31m-                    {"$set": {[m
+[31m-                        "candidates": candidates,[m
+[31m-                        "enriched_count": enriched,[m
+[31m-                    }},[m
+[31m-                )[m
+[31m-                await asyncio.sleep(0.4)[m
+[31m-[m
+[31m-    # Sort by completeness[m
+[31m-    def _completeness(c):[m
+[31m-        s = 0[m
+[31m-        if c.get("email"): s += 3[m
+[31m-        if c.get("phone"): s += 3[m
+[31m-        if c.get("website"): s += 2[m
+[31m-        if c.get("license_types"): s += 2[m
+[31m-        return s[m
+[31m-    candidates.sort(key=_completeness, reverse=True)[m
+[31m-[m
+[31m-    await db.scraper_jobs.update_one([m
+[31m-        {"id": job_id},[m
+[31m-        {"$set": {[m
+[31m-            "phase": "done",[m
+[31m-            "candidates": candidates,[m
+[31m-            "enriched_count": enriched,[m
+[31m-            "completed_at": datetime.now(timezone.utc).isoformat(),[m
+[31m-        }},[m
+[31m-    )[m
+[31m-[m
+[31m-[m
+[31m-@router.post("/admin/scraper-test", dependencies=[Depends(require_admin)])[m
+[31m-async def scraper_test(payload: dict):[m
+[31m-    """Start a background scraper job. Returns job_id for polling."""[m
+[31m-    import asyncio[m
+[31m-    city = (payload.get("city") or "").strip()[m
+[31m-    state = (payload.get("state") or "ID").upper()[:2][m
+[31m-    issues = payload.get("presenting_issues") or [][m
+[31m-    count = min(int(payload.get("count") or 50), 100)[m
+[31m-    if not city:[m
+[31m-        raise HTTPException(400, "city is required")[m
+[31m-[m
+[31m-    job_id = str(_uuid.uuid4())[m
+[31m-    await db.scraper_jobs.insert_one({[m
+[31m-        "id": job_id,[m
+[31m-        "city": city,[m
+[31m-        "state": state,[m
+[31m-        "presenting_issues": issues,[m
+[31m-        "count": count,[m
+[31m-        "phase": "scraping",[m
+[31m-        "total": 0,[m
+[31m-        "sources": {},[m
+[31m-        "errors": [],[m
+[31m-        "candidates": [],[m
+[31m-        "enriched_count": 0,[m
+[31m-        "created_at": datetime.now(timezone.utc).isoformat(),[m
+[31m-        "completed_at": None,[m
+[31m-    })[m
+[31m-[m
+[31m-    # Fire and forget â runs in background[m
+[31m-    asyncio.create_task(_run_scraper_job(job_id, city, state, issues, count))[m
+[31m-[m
+[31m-    return {"ok": True, "job_id": job_id}[m
+[31m-[m
+[31m-[m
+[31m-@router.get("/admin/scraper-jobs/{job_id}", dependencies=[Depends(require_admin)])[m
+[31m-async def get_scraper_job(job_id: str):[m
+[31m-    """Poll a scraper job for status and results."""[m
+[31m-    job = await db.scraper_jobs.find_one({"id": job_id}, {"_id": 0})[m
+[31m-    if not job:[m
+[31m-        raise HTTPException(404, "Job not found")[m
+[31m-    return job[m
+[31m-[m
+[31m-[m
+[31m-@router.get("/admin/scraper-jobs", dependencies=[Depends(require_admin)])[m
+[31m-async def list_scraper_jobs():[m
+[31m-    """List recent scraper jobs."""[m
+[31m-    cursor = db.scraper_jobs.find({}, {"_id": 0}).sort("created_at", -1).limit(10)[m
+[31m-    jobs = [][m
+[31m-    async for j in cursor:[m
+[31m-        # Return summary without full candidates list for the list view[m
+[31m-        jobs.append({[m
+[31m-            "id": j["id"],[m
+[31m-            "city": j.get("city"),[m
+[31m-            "state": j.get("state"),[m
+[31m-            "phase": j.get("phase"),[m
+[31m-            "total": j.get("total", 0),[m
+[31m-            "enriched_count": j.get("enriched_count", 0),[m
+[31m-            "sources": j.get("sources", {}),[m
+[31m-            "created_at": j.get("created_at"),[m
+[31m-            "completed_at": j.get("completed_at"),[m
+[31m-        })[m
+[31m-    return {"jobs": jobs}[m
+[31m-[m
+[31m-[m
+[31m-@router.post("/admin/trigger-feedback-email", dependencies=[Depends(require_admin)])[m
+[31m-async def trigger_feedback_email(payload: dict):[m
+[31m-    """Manually trigger a feedback survey email for testing."""[m
+[31m-    from email_service import ([m
+[31m-        send_patient_followup_48h, send_patient_followup_3w,[m
+[31m-        send_patient_followup_9w, send_patient_followup_15w,[m
+[31m-    )[m
+[31m-    request_id = payload.get("request_id")[m
+[31m-    milestone = payload.get("milestone")[m
+[31m-    if not request_id or not milestone:[m
+[31m-        raise HTTPException(400, "request_id and milestone required")[m
+[31m-    req = await db.requests.find_one({"id": request_id}, {"_id": 0, "email": 1})[m
+[31m-    if not req:[m
+[31m-        raise HTTPException(404, "Request not found")[m
+[31m-    senders = {[m
+[31m-        "48h": send_patient_followup_48h,[m
+[31m-        "3w": send_patient_followup_3w,[m
+[31m-        "9w": send_patient_followup_9w,[m
+[31m-        "15w": send_patient_followup_15w,[m
+[31m-    }[m
+[31m-    sender = senders.get(milestone)[m
+[31m-    if not sender:[m
+[31m-        raise HTTPException(400, f"Invalid milestone: {milestone}")[m
+[31m-    await sender(req["email"], request_id)[m
+[31m-    return {"ok": True, "sent_to": req["email"], "milestone": milestone}[m
+[31m-[m
+[31m-[m
+[31m-# Suppress unused-import warnings on logger (kept for future logging)[m
+[31m-void = logger[m
+[32m+[m[32m                sources_summary[src] = sum(1 for c in ba[m
+\ No newline at end of file[m

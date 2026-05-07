@@ -1696,7 +1696,7 @@ async def admin_list_feedback(_: bool = Depends(require_admin)):
 
 @router.get("/admin/outcome-tracking")
 async def admin_outcome_tracking(_: bool = Depends(require_admin)):
-    """Aggregated outcome data: feedback by milestone, TAI scores, therapist reliability."""
+    """Aggregated feedback data: responses by milestone, Match Strength scores, therapist reliability."""
     # All feedback grouped by milestone
     feedback = await db.feedback.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
     by_milestone = {}
@@ -1704,14 +1704,17 @@ async def admin_outcome_tracking(_: bool = Depends(require_admin)):
         m = f.get("milestone", "unknown")
         by_milestone.setdefault(m, []).append(f)
 
-    # TAI scores from 9w and 15w feedback
-    tai_scores = []
+    # Match Strength scores from 9w and 15w feedback
+    # Backward-compat: read both new (match_strength_score) and old (tai_score)
+    # field names so the endpoint works before AND after the DB migration.
+    match_strength_scores = []
     for f in feedback:
-        if f.get("tai_score") is not None and f["tai_score"] >= 0:
-            tai_scores.append({
+        score = f.get("match_strength_score") if f.get("match_strength_score") is not None else f.get("tai_score")
+        if score is not None and score >= 0:
+            match_strength_scores.append({
                 "request_id": f.get("request_id"),
                 "milestone": f.get("milestone"),
-                "tai_score": f["tai_score"],
+                "match_strength_score": score,
                 "created_at": f.get("created_at"),
                 "patient_email": f.get("patient_email", ""),
             })
@@ -1724,17 +1727,19 @@ async def admin_outcome_tracking(_: bool = Depends(require_admin)):
 
     # Summary stats
     milestone_counts = {m: len(docs) for m, docs in by_milestone.items()}
-    avg_tai = round(sum(t["tai_score"] for t in tai_scores) / len(tai_scores), 1) if tai_scores else None
+    avg_ms = round(
+        sum(t["match_strength_score"] for t in match_strength_scores) / len(match_strength_scores), 1
+    ) if match_strength_scores else None
 
     return {
         "summary": {
             "total_feedback": len(feedback),
             "milestone_counts": milestone_counts,
-            "tai_scores_count": len(tai_scores),
-            "avg_tai": avg_tai,
+            "match_strength_count": len(match_strength_scores),
+            "avg_match_strength": avg_ms,
         },
         "feedback_by_milestone": by_milestone,
-        "tai_scores": tai_scores,
+        "match_strength_scores": match_strength_scores,
         "therapist_reliability": therapists,
     }
 

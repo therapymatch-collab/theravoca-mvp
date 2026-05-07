@@ -1,6 +1,6 @@
-# v5  --  Expectation alignment first, reliability=25pts, TAI tracking
+# v5  --  Expectation alignment first, reliability=25pts, Match Strength tracking
 # Survey timeline: 48h soft touch -> 3w selection -> 9w retention -> 15w outcome
-"""TheraVoca matching engine v5  --  Expectation alignment first, reliability=25pts, TAI tracking.
+"""TheraVoca matching engine v5  --  Expectation alignment first, reliability=25pts, Match Strength tracking.
 
 Ranking priority:
   1. Expectation alignment  25  (patient + therapist session expectations overlap)
@@ -667,9 +667,12 @@ def _score_reliability(t: dict) -> float:
     return round(score * MAX_RELIABILITY, 2)
 
 
-def calculate_tai(feedback_data: dict) -> float:
-    """
-    Therapeutic Alliance Index (TAI)  --  0-100 composite score.
+def calculate_match_strength(feedback_data: dict) -> float:
+    """Match Strength Score -- 0-100 composite from patient feedback answers.
+
+    Combines patient self-reports of feeling understood (Bond, 40%),
+    expectations matching (Tasks, 30%), and goal alignment (Goals, 30%).
+    Internal use only.
 
     Derived from patient survey data across the feedback arc:
       Bond (40%):  3w confidence (0-100) + 9w "feel understood" (1-5 -> 0-100)

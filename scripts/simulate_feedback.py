@@ -1,7 +1,7 @@
 """Simulate realistic feedback data for TheraVoca's feedback pipeline.
 
 Generates patient feedback (48h/3w/9w/15w) and therapist pulse data,
-then updates therapist reliability subdocuments and calculates TAI scores.
+then updates therapist reliability subdocuments and calculates Match Strength scores.
 
 Usage:
     python scripts/simulate_feedback.py              # insert into DB
@@ -169,7 +169,7 @@ def gen_9w(request_id: str, patient_email: str, therapist_id: str | None,
         "same_page": same_page,
         "recommend_therapist": recommend_therapist,
         "recommend_theravoca": recommend_theravoca,
-        "tai_score": -1.0,  # calculated later
+        "match_strength_score": -1.0,  # calculated later
         "submitted_at": (base_time + timedelta(weeks=9, days=_RNG.randint(0, 5))).isoformat(),
     }
 
@@ -219,7 +219,7 @@ def gen_15w(request_id: str, patient_email: str, therapist_id: str | None,
         "refer_theravoca": refer_theravoca,
         "what_changed": _RNG.choice(what_changed_options),
         "notes": None,
-        "tai_score": -1.0,  # calculated later
+        "match_strength_score": -1.0,  # calculated later
         "submitted_at": (base_time + timedelta(weeks=15, days=_RNG.randint(0, 5))).isoformat(),
     }
 
@@ -258,10 +258,10 @@ def gen_pulse(therapist_id: str, therapist_email: str, therapist_name: str,
 
 
 # ---------------------------------------------------------------------------
-# TAI calculation (mirrors matching.py calculate_tai)
+# Match Strength calculation (mirrors matching.py calculate_match_strength)
 # ---------------------------------------------------------------------------
 
-def calculate_tai(feedback_data: dict) -> float:
+def calculate_match_strength(feedback_data: dict) -> float:
     bond_signals = []
     tasks_signals = []
     goals_signals = []
@@ -358,7 +358,7 @@ async def main(dry_run: bool = False) -> None:
     # ── Counters ──
     stats = {
         "patient_48h": 0, "patient_3w": 0, "patient_9w": 0, "patient_15w": 0,
-        "therapist_pulse": 0, "tai_computed": 0, "skipped_existing": 0,
+        "therapist_pulse": 0, "ms_computed": 0, "skipped_existing": 0,
     }
 
     # Track which therapists got chosen / shown for reliability updates
@@ -423,16 +423,16 @@ async def main(dry_run: bool = False) -> None:
         if fb_3w["chosen_status"] == "picked" and chosen_tid:
             fb_9w = gen_9w(request_id, patient_email, chosen_tid, base_time)
 
-            # Compute partial TAI at 9w
-            tai_data = {
+            # Compute partial Match Strength at 9w
+            ms_data = {
                 "confidence_3w": fb_3w["confidence"],
                 "expectation_match_3w": fb_3w["expectation_match"],
                 "feel_understood_9w": fb_9w["feel_understood"],
                 "same_page_9w": fb_9w["same_page"],
                 "still_seeing_9w": fb_9w["still_seeing"],
             }
-            tai_9w = calculate_tai(tai_data)
-            fb_9w["tai_score"] = tai_9w
+            ms_9w = calculate_match_strength(ms_data)
+            fb_9w["match_strength_score"] = ms_9w
 
             all_feedback_docs.append(fb_9w)
             stats["patient_9w"] += 1
@@ -445,8 +445,8 @@ async def main(dry_run: bool = False) -> None:
         if fb_9w and chosen_tid:
             fb_15w = gen_15w(request_id, patient_email, chosen_tid, fb_9w, base_time)
 
-            # Full TAI at 15w
-            tai_data = {
+            # Full Match Strength at 15w
+            ms_data = {
                 "confidence_3w": fb_3w["confidence"],
                 "expectation_match_3w": fb_3w["expectation_match"],
                 "feel_understood_9w": fb_9w["feel_understood"],
@@ -455,10 +455,10 @@ async def main(dry_run: bool = False) -> None:
                 "still_seeing_15w": fb_15w["still_seeing"],
                 "progress_15w": fb_15w["progress"],
             }
-            tai_15w = calculate_tai(tai_data)
-            fb_15w["tai_score"] = tai_15w
-            if tai_15w > 0:
-                stats["tai_computed"] += 1
+            ms_15w = calculate_match_strength(ms_data)
+            fb_15w["match_strength_score"] = ms_15w
+            if ms_15w > 0:
+                stats["ms_computed"] += 1
 
             all_feedback_docs.append(fb_15w)
             stats["patient_15w"] += 1
@@ -491,7 +491,7 @@ async def main(dry_run: bool = False) -> None:
     print(f"\nGenerated feedback documents:")
     for kind in ["patient_48h", "patient_3w", "patient_9w", "patient_15w", "therapist_pulse"]:
         print(f"  {kind}: {stats[kind]}")
-    print(f"  TAI scores computed: {stats['tai_computed']}")
+    print(f"  Match Strength scores computed: {stats['ms_computed']}")
     print(f"  Skipped (already exists): {stats['skipped_existing']}")
 
     if dry_run:
@@ -563,36 +563,37 @@ async def main(dry_run: bool = False) -> None:
 
     print(f"Updated reliability for {len(updated_therapists)} therapists.")
 
-    # ── Store TAI scores on feedback docs (already set above, but also
-    #    store aggregated TAI on the therapist) ──
-    tai_by_therapist: dict[str, list[float]] = {}
+    # -- Store Match Strength scores on feedback docs (already set above,
+    #    but also store aggregated score on the therapist) --
+    ms_by_therapist: dict[str, list[float]] = {}
     for doc in all_feedback_docs:
-        if doc.get("tai_score", -1) > 0 and doc.get("therapist_id"):
-            tai_by_therapist.setdefault(doc["therapist_id"], []).append(doc["tai_score"])
+        score = doc.get("match_strength_score", -1)
+        if score > 0 and doc.get("therapist_id"):
+            ms_by_therapist.setdefault(doc["therapist_id"], []).append(score)
 
-    for tid, scores in tai_by_therapist.items():
-        avg_tai = round(sum(scores) / len(scores), 1)
+    for tid, scores in ms_by_therapist.items():
+        avg_ms = round(sum(scores) / len(scores), 1)
         await db.therapists.update_one(
             {"id": tid},
             {"$set": {
-                "reliability.avg_tai": avg_tai,
-                "reliability.tai_sample_count": len(scores),
+                "reliability.avg_match_strength": avg_ms,
+                "reliability.match_strength_sample_count": len(scores),
             }},
         )
 
-    # ── Final summary ──
+    # -- Final summary --
     print("\n" + "=" * 60)
     print("SIMULATION SUMMARY")
     print("=" * 60)
     print(f"Feedback docs inserted:  {len(all_feedback_docs)}")
     print(f"Pulse docs inserted:     {len(all_pulse_docs)}")
     print(f"Therapists updated:      {len(updated_therapists)}")
-    print(f"TAI scores computed:     {stats['tai_computed']}")
+    print(f"Match Strength computed: {stats['ms_computed']}")
     print(f"Requests skipped:        {stats['skipped_existing']}")
 
     # Show reliability scores for therapists that have data
     print(f"\nTherapist reliability scores (showing up to 10):")
-    print(f"{'Therapist ID':<40} {'Resp%':>6} {'Sel%':>6} {'Ret9w':>6} {'Ret15w':>7} {'ExpAcc':>7} {'TAI':>6}")
+    print(f"{'Therapist ID':<40} {'Resp%':>6} {'Sel%':>6} {'Ret9w':>6} {'Ret15w':>7} {'ExpAcc':>7} {'MS':>6}")
     print("-" * 80)
 
     sample_therapists = await db.therapists.find(
@@ -608,9 +609,9 @@ async def main(dry_run: bool = False) -> None:
         r9 = rel.get("retention_9w", 0)
         r15 = rel.get("retention_15w", 0)
         exp = rel.get("expectation_accuracy", 0)
-        tai = rel.get("avg_tai", -1)
-        tai_str = f"{tai:.1f}" if tai > 0 else "N/A"
-        print(f"{name_or_id:<40} {resp:>5.1%} {sel:>5.1%} {r9:>5.1%} {r15:>6.1%} {exp:>6.1%} {tai_str:>6}")
+        ms = rel.get("avg_match_strength", -1)
+        ms_str = f"{ms:.1f}" if ms > 0 else "N/A"
+        print(f"{name_or_id:<40} {resp:>5.1%} {sel:>5.1%} {r9:>5.1%} {r15:>6.1%} {exp:>6.1%} {ms_str:>6}")
 
     print()
     client.close()

@@ -115,7 +115,7 @@ DEFAULTS: dict[str, dict[str, str]] = {
     },
     "patient_followup_9w": {
         "title": "Patient follow-up — 9 weeks after matches",
-        "description": "Retention + therapeutic alliance check-in 9 weeks after matches.",
+        "description": "Outcome check-in 9 weeks after matches.",
         "subject": "Nine weeks in — how's therapy going?",
         "heading": "How's your therapist relationship?",
         "greeting": "Hi there,",

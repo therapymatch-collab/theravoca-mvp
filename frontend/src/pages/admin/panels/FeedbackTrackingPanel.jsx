@@ -11,14 +11,14 @@ const MILESTONE_LABELS = {
 
 const MILESTONE_ORDER = ["48h", "3w", "9w", "15w"];
 
-function TaiGauge({ score }) {
+function MatchStrengthGauge({ score }) {
   const color = score >= 75 ? "#2D8B5E" : score >= 50 ? "#D4A843" : "#D45D5D";
   return (
     <span
       className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold"
       style={{ backgroundColor: color + "22", color }}
     >
-      TAI {score.toFixed(1)}
+      Match Strength {Math.round(score)}
     </span>
   );
 }
@@ -40,11 +40,12 @@ function ReliabilityBar({ label, value }) {
 function FeedbackCard({ entry }) {
   const [open, setOpen] = useState(false);
   const milestone = entry.milestone || "unknown";
-  const created = entry.created_at ? new Date(entry.created_at).toLocaleDateString() : "â";
+  const created = entry.created_at ? new Date(entry.created_at).toLocaleDateString() : "—";
 
   // Extract notable fields for preview
   const preview = [];
-  if (entry.tai_score != null && entry.tai_score >= 0) preview.push(`TAI: ${entry.tai_score.toFixed(1)}`);
+  const ms = entry.match_strength_score ?? entry.tai_score;
+  if (ms != null && ms >= 0) preview.push(`Match Strength: ${Math.round(ms)}`);
   if (entry.still_seeing_9w) preview.push(`Still seeing: ${entry.still_seeing_9w}`);
   if (entry.still_seeing_15w) preview.push(`Still seeing (15w): ${entry.still_seeing_15w}`);
   if (entry.confidence_3w != null) preview.push(`Confidence: ${entry.confidence_3w}/100`);
@@ -52,7 +53,7 @@ function FeedbackCard({ entry }) {
   if (entry.progress_15w != null) preview.push(`Progress: ${entry.progress_15w}/10`);
 
   // All answer fields (exclude metadata)
-  const META_KEYS = new Set(["kind", "milestone", "request_id", "created_at", "patient_email", "tai_score", "tai_data"]);
+  const META_KEYS = new Set(["kind", "milestone", "request_id", "created_at", "patient_email", "match_strength_score", "match_strength_data", "tai_score", "tai_data"]);
   const answers = Object.entries(entry).filter(([k]) => !META_KEYS.has(k) && !k.startsWith("_"));
 
   return (
@@ -64,7 +65,7 @@ function FeedbackCard({ entry }) {
           </span>
           <span className="text-gray-400 text-xs">{created}</span>
           <span className="text-gray-500 text-xs truncate max-w-[200px]">{entry.patient_email || entry.request_id}</span>
-          {entry.tai_score != null && entry.tai_score >= 0 && <TaiGauge score={entry.tai_score} />}
+          {ms != null && ms >= 0 && <MatchStrengthGauge score={ms} />}
         </div>
         {open ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
       </button>
@@ -85,7 +86,7 @@ function FeedbackCard({ entry }) {
   );
 }
 
-export default function OutcomeTrackingPanel() {
+export default function FeedbackTrackingPanel() {
   const client = useAdminClient();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -114,7 +115,7 @@ export default function OutcomeTrackingPanel() {
         const res = await client.get("/admin/outcome-tracking");
         setData(res.data);
       } catch (e) {
-        console.error("Failed to load outcome tracking", e);
+        console.error("Failed to load feedback tracking data", e);
       } finally {
         setLoading(false);
       }
@@ -122,15 +123,21 @@ export default function OutcomeTrackingPanel() {
   }, []);
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="animate-spin text-[#2D4A3E]" /></div>;
-  if (!data) return <p className="text-gray-500 py-8 text-center">Failed to load outcome data.</p>;
+  if (!data) return <p className="text-gray-500 py-8 text-center">Failed to load feedback data.</p>;
 
-  const { summary, feedback_by_milestone, tai_scores, therapist_reliability } = data;
+  // Backward-compat: accept both old (tai_scores, avg_tai) and new
+  // (match_strength_scores, avg_match_strength) response keys so the
+  // frontend works before AND after the backend deploy.
+  const match_strength_scores = data.match_strength_scores || data.tai_scores || [];
+  const { summary, feedback_by_milestone, therapist_reliability } = data;
+  const ms_count = summary.match_strength_count ?? summary.tai_scores_count ?? 0;
+  const avg_ms = summary.avg_match_strength ?? summary.avg_tai ?? null;
   const hasFeedback = summary.total_feedback > 0;
 
   const tabs = [
     { id: "overview", label: "Overview", icon: <BarChart3 size={14} /> },
     { id: "surveys", label: "All Surveys", icon: <MessageSquare size={14} />, count: summary.total_feedback },
-    { id: "tai", label: "TAI Scores", icon: <TrendingUp size={14} />, count: summary.tai_scores_count },
+    { id: "match_strength", label: "Match Strength", icon: <TrendingUp size={14} />, count: ms_count },
     { id: "reliability", label: "Therapist Reliability", icon: <Users size={14} />, count: therapist_reliability.length },
   ];
 
@@ -176,14 +183,14 @@ export default function OutcomeTrackingPanel() {
               <div className="text-xs text-gray-500 mt-1">Total Responses</div>
             </div>
             <div className="bg-white border rounded-xl p-4 text-center">
-              <div className="text-2xl font-bold text-[#2D4A3E]">{summary.tai_scores_count}</div>
-              <div className="text-xs text-gray-500 mt-1">TAI Scores</div>
+              <div className="text-2xl font-bold text-[#2D4A3E]">{ms_count}</div>
+              <div className="text-xs text-gray-500 mt-1">Match Strength scores</div>
             </div>
             <div className="bg-white border rounded-xl p-4 text-center">
               <div className="text-2xl font-bold text-[#2D4A3E]">
-                {summary.avg_tai != null ? summary.avg_tai : "â"}
+                {avg_ms != null ? avg_ms : "—"}
               </div>
-              <div className="text-xs text-gray-500 mt-1">Avg TAI Score</div>
+              <div className="text-xs text-gray-500 mt-1">Avg Match Strength</div>
             </div>
             <div className="bg-white border rounded-xl p-4 text-center">
               <div className="text-2xl font-bold text-[#2D4A3E]">{therapist_reliability.length}</div>
@@ -245,22 +252,22 @@ export default function OutcomeTrackingPanel() {
         </div>
       )}
 
-      {/* TAI Scores */}
-      {activeTab === "tai" && (
+      {/* Match Strength Scores */}
+      {activeTab === "match_strength" && (
         <div className="space-y-3">
           <div className="bg-white border rounded-xl p-4">
-            <h3 className="font-semibold text-[#2D4A3E] mb-1">Therapeutic Alliance Index (TAI)</h3>
+            <h3 className="font-semibold text-[#2D4A3E] mb-1">Match Strength Score</h3>
             <p className="text-xs text-gray-500 mb-4">
-              Composite 0â100 score from patient surveys. Bond (40%) + Tasks (30%) + Goals (30%).
+              Composite 0-100 score from patient surveys. Bond (40%) + Tasks (30%) + Goals (30%).
               Computed at 9w and 15w milestones when enough data exists.
             </p>
-            {tai_scores.length === 0 ? (
-              <p className="text-gray-400 text-sm">No TAI scores computed yet. Scores appear after 9-week surveys.</p>
+            {match_strength_scores.length === 0 ? (
+              <p className="text-gray-400 text-sm">No Match Strength scores computed yet. Scores appear after 9-week surveys.</p>
             ) : (
               <div className="space-y-2">
-                {tai_scores.map((t, i) => (
+                {match_strength_scores.map((t, i) => (
                   <div key={i} className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
-                    <TaiGauge score={t.tai_score} />
+                    <MatchStrengthGauge score={t.match_strength_score ?? t.tai_score} />
                     <span className="text-sm text-gray-600">{t.patient_email || t.request_id}</span>
                     <span className="text-xs text-gray-400 ml-auto">
                       {t.milestone} · {t.created_at ? new Date(t.created_at).toLocaleDateString() : ""}

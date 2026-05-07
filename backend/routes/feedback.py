@@ -1,14 +1,14 @@
-"""Feedback system v5 — timeline-aligned patient/therapist follow-ups.
+"""Feedback system v5 -- timeline-aligned patient/therapist follow-ups.
 
 Surveys at 4 patient touchpoints (48h, 3w, 9w, 15w), a conditional 5w
 follow-up, and a weekly therapist pulse.  All feed into the matching
-engine's therapist reliability score, TAI, and expectation accuracy.
+engine's therapist reliability score, Match Strength, and expectation accuracy.
 
 Timeline:
   48h   Soft touch check-in (process feedback, relationship building)
   3w    Selection + first impressions (who picked, confidence, expectation)
   5w    Follow-up only if patient chose "still_deciding" at 3w
-  9w    Retention + TAI questions (still seeing, bond, goals)
+  9w    Retention + Match Strength questions (still seeing, bond, goals)
   15w   Outcome (progress, referral, what changed)
   Weekly Therapist pulse (general satisfaction, never about specific patients)
 
@@ -130,14 +130,14 @@ class PatientFeedback3w(BaseModel):
 
 
 class PatientFeedback9w(BaseModel):
-    """9-week retention + TAI questions."""
+    """9-week retention + Match Strength questions."""
     model_config = ConfigDict(extra="ignore")
     still_seeing: str  # "yes" | "no" | "switched"
     session_count: str  # "1-3" | "4-6" | "7+" | "none"
     working_well: str
     not_working: Optional[str] = None
-    feel_understood: int = Field(ge=1, le=5)  # TAI Bond
-    same_page: int = Field(ge=1, le=5)  # TAI Goals
+    feel_understood: int = Field(ge=1, le=5)  # Bond signal
+    same_page: int = Field(ge=1, le=5)  # Goals signal
     recommend_therapist: int = Field(ge=1, le=10)
     recommend_theravoca: int = Field(ge=1, le=10)
 
@@ -265,7 +265,7 @@ async def submit_patient_9w(
     request_id: str, payload: PatientFeedback9w,
     token: Optional[str] = Query(None), authorization: Optional[str] = Header(None),
 ):
-    """9-week retention + TAI questions."""
+    """9-week retention + Match Strength questions."""
     _verify_feedback_token(request_id, token, "patient", authorization)
     req = await db.requests.find_one({"id": request_id}, {"_id": 0, "email": 1})
     if not req:
@@ -274,12 +274,12 @@ async def submit_patient_9w(
     # Look up the chosen therapist from the 3w survey
     therapist_id = await _get_therapist_for_request(request_id)
 
-    # Build TAI data from accumulated feedback
-    tai_score = -1.0
+    # Build Match Strength data from accumulated feedback
+    match_strength_score = -1.0
     if therapist_id:
-        tai_data = await _build_tai_data(request_id, payload)
-        from matching import calculate_tai
-        tai_score = calculate_tai(tai_data)
+        ms_data = await _build_match_strength_data(request_id, payload)
+        from matching import calculate_match_strength
+        match_strength_score = calculate_match_strength(ms_data)
 
     doc = {
         "id": str(uuid.uuid4()),
@@ -289,7 +289,7 @@ async def submit_patient_9w(
         "patient_email": req.get("email"),
         "therapist_id": therapist_id,
         **payload.model_dump(),
-        "tai_score": tai_score,
+        "match_strength_score": match_strength_score,
         "submitted_at": _now_iso(),
     }
     await db.feedback.insert_one(doc)
@@ -314,12 +314,12 @@ async def submit_patient_15w(
 
     therapist_id = await _get_therapist_for_request(request_id)
 
-    # Build full TAI data from all milestones
-    tai_score = -1.0
+    # Build full Match Strength data from all milestones
+    match_strength_score = -1.0
     if therapist_id:
-        tai_data = await _build_tai_data(request_id, None, payload)
-        from matching import calculate_tai
-        tai_score = calculate_tai(tai_data)
+        ms_data = await _build_match_strength_data(request_id, None, payload)
+        from matching import calculate_match_strength
+        match_strength_score = calculate_match_strength(ms_data)
 
     doc = {
         "id": str(uuid.uuid4()),
@@ -329,7 +329,7 @@ async def submit_patient_15w(
         "patient_email": req.get("email"),
         "therapist_id": therapist_id,
         **payload.model_dump(),
-        "tai_score": tai_score,
+        "match_strength_score": match_strength_score,
         "submitted_at": _now_iso(),
     }
     await db.feedback.insert_one(doc)
@@ -620,7 +620,7 @@ async def update_therapist_response_rate(therapist_id: str, responded: bool) -> 
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# LOOKUP + TAI HELPERS
+# LOOKUP + MATCH STRENGTH HELPERS
 # ═══════════════════════════════════════════════════════════════════════
 
 async def _get_therapist_for_request(request_id: str) -> str | None:
@@ -634,14 +634,14 @@ async def _get_therapist_for_request(request_id: str) -> str | None:
     return None
 
 
-async def _build_tai_data(
+async def _build_match_strength_data(
     request_id: str,
     payload_9w: PatientFeedback9w | None = None,
     payload_15w: PatientFeedback15w | None = None,
 ) -> dict:
-    """Assemble the TAI input dict from accumulated feedback for a request.
-    The dict keys match what matching.calculate_tai() expects."""
-    tai_data: dict = {}
+    """Assemble the Match Strength input dict from accumulated feedback.
+    The dict keys match what matching.calculate_match_strength() expects."""
+    ms_data: dict = {}
 
     # Pull 3w data from DB
     fb_3w = await db.feedback.find_one(
@@ -649,27 +649,27 @@ async def _build_tai_data(
         {"confidence": 1, "expectation_match": 1},
     )
     if fb_3w:
-        tai_data["confidence_3w"] = fb_3w.get("confidence", 50)
-        tai_data["expectation_match_3w"] = fb_3w.get("expectation_match", "somewhat")
+        ms_data["confidence_3w"] = fb_3w.get("confidence", 50)
+        ms_data["expectation_match_3w"] = fb_3w.get("expectation_match", "somewhat")
 
-    # 9w data — from payload if provided, else from DB
+    # 9w data -- from payload if provided, else from DB
     if payload_9w:
-        tai_data["feel_understood_9w"] = payload_9w.feel_understood
-        tai_data["same_page_9w"] = payload_9w.same_page
-        tai_data["still_seeing_9w"] = payload_9w.still_seeing
+        ms_data["feel_understood_9w"] = payload_9w.feel_understood
+        ms_data["same_page_9w"] = payload_9w.same_page
+        ms_data["still_seeing_9w"] = payload_9w.still_seeing
     else:
         fb_9w = await db.feedback.find_one(
             {"request_id": request_id, "kind": "patient_9w"},
             {"feel_understood": 1, "same_page": 1, "still_seeing": 1},
         )
         if fb_9w:
-            tai_data["feel_understood_9w"] = fb_9w.get("feel_understood")
-            tai_data["same_page_9w"] = fb_9w.get("same_page")
-            tai_data["still_seeing_9w"] = fb_9w.get("still_seeing")
+            ms_data["feel_understood_9w"] = fb_9w.get("feel_understood")
+            ms_data["same_page_9w"] = fb_9w.get("same_page")
+            ms_data["still_seeing_9w"] = fb_9w.get("still_seeing")
 
-    # 15w data — from payload if provided
+    # 15w data -- from payload if provided
     if payload_15w:
-        tai_data["progress_15w"] = payload_15w.progress
-        tai_data["still_seeing_15w"] = payload_15w.still_seeing
+        ms_data["progress_15w"] = payload_15w.progress
+        ms_data["still_seeing_15w"] = payload_15w.still_seeing
 
-    return tai_data
+    return ms_data

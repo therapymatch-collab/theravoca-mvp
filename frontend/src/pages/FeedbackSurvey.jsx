@@ -320,7 +320,7 @@ function Milestone3w({ answers, setAnswer, therapists }) {
 }
 
 /* ────────────────────────────────────────────────────────────────── */
-/*  9w milestone (retention + TAI)                                   */
+/*  9w milestone (retention + match strength)                        */
 /* ────────────────────────────────────────────────────────────────── */
 
 function Milestone9w({ answers, setAnswer }) {

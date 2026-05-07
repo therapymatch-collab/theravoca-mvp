@@ -7,7 +7,7 @@ import { toast } from "sonner";
 const MILESTONES = [
   { code: "48h", label: "48-Hour Check-in", days: 2, color: "bg-blue-100 text-blue-700" },
   { code: "3w", label: "3-Week Selection", days: 21, color: "bg-green-100 text-green-700" },
-  { code: "9w", label: "9-Week Retention + TAI", days: 63, color: "bg-purple-100 text-purple-700" },
+  { code: "9w", label: "9-Week Outcome", days: 63, color: "bg-purple-100 text-purple-700" },
   { code: "15w", label: "15-Week Outcome", days: 105, color: "bg-orange-100 text-orange-700" },
 ];
 
