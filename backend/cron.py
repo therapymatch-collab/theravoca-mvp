@@ -11,6 +11,7 @@ from deps import (
     db, logger, AUTO_DELAY_HOURS, ADMIN_NOTIFY_EMAIL,
     LICENSE_WARN_DAYS, AVAILABILITY_PROMPT_DAYS,
     DAILY_TASK_HOUR_LOCAL, DAILY_TASK_TZ_OFFSET_HOURS,
+    PHASE_2_LAUNCH_DATE,
 )
 import audit
 from email_service import (
@@ -243,7 +244,9 @@ async def _run_availability_prompts() -> dict[str, int]:
 
 async def _run_followup_surveys() -> dict[str, int]:
     """Send 48h / 2-week / 6-week follow-ups based on `results_sent_at`.
-    Idempotent via `followup_sent_at_<milestone>` flag on the request doc."""
+    Idempotent via `followup_sent_at_<milestone>` flag on the request doc.
+    v1 only -- applies to requests whose results were sent BEFORE the
+    Phase 2 launch date. Newer requests use _run_patient_surveys_v2."""
     audit.emit(
         actor_type="system", actor_id="cron", action="run_followup_surveys",
         resource="request",
@@ -261,7 +264,8 @@ async def _run_followup_surveys() -> dict[str, int]:
         cutoff = (now - timedelta(days=effective_days)).isoformat()
         cur = db.requests.find(
             {
-                "results_sent_at": {"$ne": None, "$lte": cutoff},
+                "results_sent_at": {"$ne": None, "$lte": cutoff,
+                                    "$lt": PHASE_2_LAUNCH_DATE},
                 flag: {"$exists": False},
                 "email": {"$ne": None},
             },
@@ -299,9 +303,10 @@ async def _run_gap_recruitment() -> dict[str, int]:
 async def _run_patient_structured_followups() -> dict[str, int]:
     """Phase-2 patient follow-ups with links to a structured 3-question form.
     Separate from `_run_followup_surveys` (which sends an unstructured NPS
-    survey) — this sends the new `patient_followup_48h` and
+    survey) -- this sends the new `patient_followup_48h` and
     `patient_followup_2w` templates.
     Flags: `structured_followup_48h_sent_at`, `structured_followup_2w_sent_at`.
+    v1 only -- applies to requests before PHASE_2_LAUNCH_DATE.
     """
     audit.emit(
         actor_type="system", actor_id="cron", action="run_structured_followups",
@@ -318,7 +323,8 @@ async def _run_patient_structured_followups() -> dict[str, int]:
         cutoff = (now - timedelta(days=days)).isoformat()
         cur = db.requests.find(
             {
-                "results_sent_at": {"$ne": None, "$lte": cutoff},
+                "results_sent_at": {"$ne": None, "$lte": cutoff,
+                                    "$lt": PHASE_2_LAUNCH_DATE},
                 flag: {"$exists": False},
                 "email": {"$ne": None},
             },
@@ -334,6 +340,125 @@ async def _run_patient_structured_followups() -> dict[str, int]:
                 count += 1
             except Exception as e:
                 logger.warning("Structured follow-up %s failed for %s: %s", code, r["id"], e)
+        out[code] = count
+    return out
+
+
+async def _run_patient_surveys_v2() -> dict[str, int]:
+    """Phase 2 patient surveys: 48h, 3w, 9w, 15w milestones.
+    Applies only to requests whose results_sent_at >= PHASE_2_LAUNCH_DATE.
+    Idempotent via v2_survey_<milestone>_sent_at flags.
+    Guard rails: skip unsubscribed, hard-bounced, and test-fired requests."""
+    audit.emit(
+        actor_type="system", actor_id="cron", action="run_patient_surveys_v2",
+        resource="request",
+    )
+    from email_service import (
+        send_patient_survey_v2_48h, send_patient_survey_v2_3w,
+        send_patient_survey_v2_9w, send_patient_survey_v2_15w,
+    )
+    now = datetime.now(timezone.utc)
+    testing_mode = await _get_testing_mode()
+    milestones = [
+        ("48h", 2, "v2_survey_48h_sent_at", send_patient_survey_v2_48h),
+        ("3w", 21, "v2_survey_3w_sent_at", send_patient_survey_v2_3w),
+        ("9w", 63, "v2_survey_9w_sent_at", send_patient_survey_v2_9w),
+        ("15w", 105, "v2_survey_15w_sent_at", send_patient_survey_v2_15w),
+    ]
+    out: dict[str, int] = {}
+    for code, days, flag, sender in milestones:
+        effective_days = 0 if testing_mode else days
+        cutoff = (now - timedelta(days=effective_days)).isoformat()
+        cur = db.requests.find(
+            {
+                "results_sent_at": {"$ne": None, "$lte": cutoff,
+                                    "$gte": PHASE_2_LAUNCH_DATE},
+                flag: {"$exists": False},
+                "email": {"$ne": None},
+                "unsubscribed": {"$ne": True},
+                "hard_bounced": {"$ne": True},
+                "surveys_test_fired": {"$ne": True},
+            },
+            {"_id": 0, "id": 1, "email": 1},
+        )
+        count = 0
+        async for r in cur:
+            try:
+                await sender(r["email"], r["id"])
+                await db.requests.update_one(
+                    {"id": r["id"]}, {"$set": {flag: _now_iso()}},
+                )
+                count += 1
+            except Exception as e:
+                logger.warning("v2 survey %s failed for %s: %s", code, r["id"], e)
+        out[code] = count
+    return out
+
+
+async def _run_patient_survey_v2_reminders() -> dict[str, int]:
+    """Send reminders for v2 surveys that haven't been submitted yet.
+    Each reminder fires 3 days after the initial survey email.
+    Idempotent via v2_reminder_<milestone>_sent_at flags.
+    Skips if the patient already submitted feedback for that milestone."""
+    audit.emit(
+        actor_type="system", actor_id="cron", action="run_v2_survey_reminders",
+        resource="request",
+    )
+    from email_service import (
+        send_patient_survey_v2_48h_reminder, send_patient_survey_v2_3w_reminder,
+        send_patient_survey_v2_9w_reminder, send_patient_survey_v2_15w_reminder,
+    )
+    now = datetime.now(timezone.utc)
+    testing_mode = await _get_testing_mode()
+    # reminder_delay_days: how many days after the survey email to send reminder
+    reminder_delay_days = 0 if testing_mode else 3
+    milestones = [
+        ("48h", "v2_survey_48h_sent_at", "v2_reminder_48h_sent_at",
+         send_patient_survey_v2_48h_reminder),
+        ("3w", "v2_survey_3w_sent_at", "v2_reminder_3w_sent_at",
+         send_patient_survey_v2_3w_reminder),
+        ("9w", "v2_survey_9w_sent_at", "v2_reminder_9w_sent_at",
+         send_patient_survey_v2_9w_reminder),
+        ("15w", "v2_survey_15w_sent_at", "v2_reminder_15w_sent_at",
+         send_patient_survey_v2_15w_reminder),
+    ]
+    out: dict[str, int] = {}
+    for code, survey_flag, reminder_flag, sender in milestones:
+        cutoff = (now - timedelta(days=reminder_delay_days)).isoformat()
+        # Find requests where survey was sent but reminder hasn't been,
+        # and no feedback doc exists for this milestone yet.
+        cur = db.requests.find(
+            {
+                survey_flag: {"$ne": None, "$lte": cutoff},
+                reminder_flag: {"$exists": False},
+                "email": {"$ne": None},
+                "unsubscribed": {"$ne": True},
+                "hard_bounced": {"$ne": True},
+                "surveys_test_fired": {"$ne": True},
+            },
+            {"_id": 0, "id": 1, "email": 1},
+        )
+        count = 0
+        async for r in cur:
+            # Skip if patient already submitted feedback for this milestone
+            existing = await db.feedback.find_one(
+                {"request_id": r["id"], "milestone": code},
+                {"_id": 1},
+            )
+            if existing:
+                # Mark reminder as sent so we don't re-check
+                await db.requests.update_one(
+                    {"id": r["id"]}, {"$set": {reminder_flag: _now_iso()}},
+                )
+                continue
+            try:
+                await sender(r["email"], r["id"])
+                await db.requests.update_one(
+                    {"id": r["id"]}, {"$set": {reminder_flag: _now_iso()}},
+                )
+                count += 1
+            except Exception as e:
+                logger.warning("v2 reminder %s failed for %s: %s", code, r["id"], e)
         out[code] = count
     return out
 
@@ -451,6 +576,8 @@ async def _daily_loop() -> None:
                     t_follow = await _run_therapist_2w_followups()
                     stale = await _run_stale_profile_nag()
                     recruit = await _run_gap_recruitment()
+                    v2_surveys = await _run_patient_surveys_v2()
+                    v2_reminders = await _run_patient_survey_v2_reminders()
                     # Weekly self-healing auto-recruit cycle (Mondays).
                     # _run_auto_recruit_weekly() is itself a no-op on non-
                     # Monday days so we can just invoke it unconditionally
@@ -468,6 +595,8 @@ async def _daily_loop() -> None:
                             "therapist_followups": t_follow,
                             "stale_profile_nag": stale,
                             "gap_recruit": recruit,
+                            "v2_surveys": v2_surveys,
+                            "v2_reminders": v2_reminders,
                             "auto_recruit_weekly": auto_rec,
                         }},
                     )

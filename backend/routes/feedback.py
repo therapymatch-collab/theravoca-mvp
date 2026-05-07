@@ -34,7 +34,7 @@ from typing import Optional
 from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from deps import db, JWT_SECRET, _decode_session_from_authorization
+from deps import db, JWT_SECRET, PHASE_2_LAUNCH_DATE, _decode_session_from_authorization
 from email_service import _send
 
 logger = logging.getLogger("theravoca.feedback")
@@ -46,6 +46,50 @@ FEEDBACK_INBOX = os.environ.get("FEEDBACK_INBOX_EMAIL", "theravoca@gmail.com")
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SNAPSHOT / DENORMALIZATION HELPERS (v2 surveys)
+# ═══════════════════════════════════════════════════════════════════════
+
+# Shared projection for request lookups in all 4 patient handlers.
+_REQUEST_SNAPSHOT_PROJECTION = {
+    "_id": 0, "id": 1, "email": 1, "notified_therapist_ids": 1,
+    "results_sent_at": 1, "presenting_issues": 1, "deep_match_opt_in": 1,
+}
+
+
+def _snapshot_fields(req: dict) -> dict:
+    """Return extra fields to denormalize into a feedback doc when the
+    request was served after the Phase 2 launch date."""
+    rsa = req.get("results_sent_at") or ""
+    if rsa < PHASE_2_LAUNCH_DATE:
+        return {}
+    out: dict = {"survey_version": 2}
+    if req.get("presenting_issues"):
+        out["presenting_issues_snapshot"] = req["presenting_issues"]
+    if req.get("deep_match_opt_in") is not None:
+        out["deep_match_opt_in"] = req["deep_match_opt_in"]
+    return out
+
+
+async def _snapshot_match_scores(request_id: str) -> dict:
+    """Grab the top application's match_score and match_breakdown at
+    the time the patient submits feedback, so we can correlate survey
+    answers with the match quality they experienced."""
+    app = await db.applications.find_one(
+        {"request_id": request_id},
+        {"_id": 0, "match_score": 1, "match_breakdown": 1},
+        sort=[("match_score", -1)],
+    )
+    if not app:
+        return {}
+    out = {}
+    if app.get("match_score") is not None:
+        out["match_score_at_response"] = app["match_score"]
+    if app.get("match_breakdown"):
+        out["match_breakdown_at_response"] = app["match_breakdown"]
+    return out
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -186,9 +230,9 @@ async def submit_patient_48h(
     request_id: str, payload: PatientFeedback48h,
     token: Optional[str] = Query(None), authorization: Optional[str] = Header(None),
 ):
-    """48h soft touch — process feedback only, no reliability updates."""
+    """48h soft touch -- process feedback only, no reliability updates."""
     _verify_feedback_token(request_id, token, "patient", authorization)
-    req = await db.requests.find_one({"id": request_id}, {"_id": 0, "email": 1})
+    req = await db.requests.find_one({"id": request_id}, _REQUEST_SNAPSHOT_PROJECTION)
     if not req:
         raise HTTPException(404, "Request not found")
 
@@ -199,6 +243,8 @@ async def submit_patient_48h(
         "request_id": request_id,
         "patient_email": req.get("email"),
         **payload.model_dump(),
+        **_snapshot_fields(req),
+        **(await _snapshot_match_scores(request_id)),
         "submitted_at": _now_iso(),
     }
     await db.feedback.insert_one(doc)
@@ -212,10 +258,7 @@ async def submit_patient_3w(
 ):
     """3-week selection + first impressions."""
     _verify_feedback_token(request_id, token, "patient", authorization)
-    req = await db.requests.find_one(
-        {"id": request_id},
-        {"_id": 0, "email": 1, "notified_therapist_ids": 1},
-    )
+    req = await db.requests.find_one({"id": request_id}, _REQUEST_SNAPSHOT_PROJECTION)
     if not req:
         raise HTTPException(404, "Request not found")
 
@@ -226,6 +269,8 @@ async def submit_patient_3w(
         "request_id": request_id,
         "patient_email": req.get("email"),
         **payload.model_dump(),
+        **_snapshot_fields(req),
+        **(await _snapshot_match_scores(request_id)),
         "submitted_at": _now_iso(),
     }
     await db.feedback.insert_one(doc)
@@ -274,7 +319,7 @@ async def submit_patient_9w(
 ):
     """9-week retention + Match Strength questions."""
     _verify_feedback_token(request_id, token, "patient", authorization)
-    req = await db.requests.find_one({"id": request_id}, {"_id": 0, "email": 1})
+    req = await db.requests.find_one({"id": request_id}, _REQUEST_SNAPSHOT_PROJECTION)
     if not req:
         raise HTTPException(404, "Request not found")
 
@@ -296,6 +341,8 @@ async def submit_patient_9w(
         "patient_email": req.get("email"),
         "therapist_id": therapist_id,
         **payload.model_dump(),
+        **_snapshot_fields(req),
+        **(await _snapshot_match_scores(request_id)),
         "match_strength_score": match_strength_score,
         "submitted_at": _now_iso(),
     }
@@ -315,7 +362,7 @@ async def submit_patient_15w(
 ):
     """15-week outcome survey."""
     _verify_feedback_token(request_id, token, "patient", authorization)
-    req = await db.requests.find_one({"id": request_id}, {"_id": 0, "email": 1})
+    req = await db.requests.find_one({"id": request_id}, _REQUEST_SNAPSHOT_PROJECTION)
     if not req:
         raise HTTPException(404, "Request not found")
 
@@ -336,6 +383,8 @@ async def submit_patient_15w(
         "patient_email": req.get("email"),
         "therapist_id": therapist_id,
         **payload.model_dump(),
+        **_snapshot_fields(req),
+        **(await _snapshot_match_scores(request_id)),
         "match_strength_score": match_strength_score,
         "submitted_at": _now_iso(),
     }
