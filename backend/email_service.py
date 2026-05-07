@@ -34,7 +34,14 @@ def _get_api_key() -> str:
 
 
 def _get_sender() -> str:
-    return os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
+    """Resend 'from' field. Format: 'Display Name <address>'.
+    SENDER_EMAIL env var overrides the address."""
+    addr = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
+    return f"TheraVoca Support <{addr}>"
+
+
+def _get_reply_to() -> str:
+    return os.environ.get("REPLY_TO_EMAIL", "support@theravoca.com")
 
 
 def _get_app_url() -> str:
@@ -86,7 +93,13 @@ async def _send(to: str, subject: str, html: str) -> dict[str, Any] | None:
     override = os.environ.get("EMAIL_OVERRIDE_TO", "").strip()
     actual_to = override or to
     actual_subject = f"[was: {to}] {subject}" if override and override != to else subject
-    params = {"from": _get_sender(), "to": [actual_to], "subject": actual_subject, "html": html}
+    params = {
+        "from": _get_sender(),
+        "to": [actual_to],
+        "subject": actual_subject,
+        "html": html,
+        "reply_to": _get_reply_to(),
+    }
     try:
         result = await asyncio.to_thread(resend.Emails.send, params)
         logger.info("Sent email id=%s", result.get("id"))
@@ -502,6 +515,7 @@ def _build_cta_email_html(
     cta_label = render(tpl.get("cta_label", ""), **vars_)
     footer_note = render(tpl.get("footer_note", ""), **vars_)
     body = render(tpl.get("body", "") or "", **vars_)
+    privacy_note = render(tpl.get("privacy_note", "") or "", **vars_)
     cta_html = (
         f'<p style="margin:28px 0;text-align:center;">'
         f'<a href="{cta_url}" style="display:inline-block;background:{BRAND["primary"]};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">{cta_label}</a>'
@@ -511,10 +525,17 @@ def _build_cta_email_html(
         f'<p style="font-size:15px;line-height:1.7;color:{BRAND["text"]};margin-top:14px;">{body}</p>'
         if body else ""
     )
+    # Privacy note renders just above the CTA button (v2 survey templates)
+    privacy_html = (
+        f'<p style="color:{BRAND["muted"]};font-size:12px;line-height:1.5;'
+        f'margin:20px 0 4px 0;padding:12px 16px;background:{BRAND["bg"]};'
+        f'border-radius:8px;">&#x1F512; {privacy_note}</p>'
+    ) if privacy_note else ""
     inner = f"""
     {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
     <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">{intro}</p>
     {body_html}
+    {privacy_html}
     {cta_html}
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">{footer_note}</p>
     """
@@ -551,6 +572,15 @@ _PREVIEW_VARS: dict[str, dict[str, Any]] = {
     "claim_profile":             {"first_name": "Alex", "claim_url": "https://theravoca.com/claim/sample"},
     "availability_prompt":       {"therapist_name": "Alex Therapist"},
     "followup_survey":           {"first_name": "Alex"},
+    # v2 patient surveys + reminders
+    "patient_survey_v2_48h":          {"request_id": "sample-id"},
+    "patient_survey_v2_3w":           {"request_id": "sample-id"},
+    "patient_survey_v2_9w":           {"request_id": "sample-id"},
+    "patient_survey_v2_15w":          {"request_id": "sample-id"},
+    "patient_survey_v2_48h_reminder": {"request_id": "sample-id"},
+    "patient_survey_v2_3w_reminder":  {"request_id": "sample-id"},
+    "patient_survey_v2_9w_reminder":  {"request_id": "sample-id"},
+    "patient_survey_v2_15w_reminder": {"request_id": "sample-id"},
 }
 
 
@@ -564,7 +594,7 @@ async def render_template_preview(
     """
     base = await get_template(_db(), template_key)
     if draft:
-        for k in ("subject", "heading", "greeting", "intro", "cta_label", "footer_note", "body"):
+        for k in ("subject", "heading", "greeting", "intro", "cta_label", "footer_note", "body", "privacy_note"):
             if k in draft and draft[k] is not None:
                 base[k] = draft[k]
     vars_ = dict(_PREVIEW_VARS.get(template_key) or {})
@@ -605,6 +635,82 @@ async def send_patient_followup_15w(to: str, request_id: str) -> None:
     token = generate_feedback_token(request_id, "patient")
     url = f"{_get_app_url()}/feedback/{request_id}/15w?token={token}"
     await _send_simple_cta_template("patient_followup_15w", to, url, {"request_id": request_id})
+
+
+# ── v2 patient survey senders ────────────────────────────────────────
+
+async def send_patient_survey_v2_48h(to: str, request_id: str) -> None:
+    from routes.feedback import generate_feedback_token
+    token = generate_feedback_token(request_id, "patient")
+    url = f"{_get_app_url()}/feedback/{request_id}/48h?token={token}"
+    await _send_simple_cta_template(
+        "patient_survey_v2_48h", to, url, {"request_id": request_id},
+    )
+
+
+async def send_patient_survey_v2_3w(to: str, request_id: str) -> None:
+    from routes.feedback import generate_feedback_token
+    token = generate_feedback_token(request_id, "patient")
+    url = f"{_get_app_url()}/feedback/{request_id}/3w?token={token}"
+    await _send_simple_cta_template(
+        "patient_survey_v2_3w", to, url, {"request_id": request_id},
+    )
+
+
+async def send_patient_survey_v2_9w(to: str, request_id: str) -> None:
+    from routes.feedback import generate_feedback_token
+    token = generate_feedback_token(request_id, "patient")
+    url = f"{_get_app_url()}/feedback/{request_id}/9w?token={token}"
+    await _send_simple_cta_template(
+        "patient_survey_v2_9w", to, url, {"request_id": request_id},
+    )
+
+
+async def send_patient_survey_v2_15w(to: str, request_id: str) -> None:
+    from routes.feedback import generate_feedback_token
+    token = generate_feedback_token(request_id, "patient")
+    url = f"{_get_app_url()}/feedback/{request_id}/15w?token={token}"
+    await _send_simple_cta_template(
+        "patient_survey_v2_15w", to, url, {"request_id": request_id},
+    )
+
+
+# ── v2 reminder senders (same link, different template) ─────────────
+
+async def send_patient_survey_v2_48h_reminder(to: str, request_id: str) -> None:
+    from routes.feedback import generate_feedback_token
+    token = generate_feedback_token(request_id, "patient")
+    url = f"{_get_app_url()}/feedback/{request_id}/48h?token={token}"
+    await _send_simple_cta_template(
+        "patient_survey_v2_48h_reminder", to, url, {"request_id": request_id},
+    )
+
+
+async def send_patient_survey_v2_3w_reminder(to: str, request_id: str) -> None:
+    from routes.feedback import generate_feedback_token
+    token = generate_feedback_token(request_id, "patient")
+    url = f"{_get_app_url()}/feedback/{request_id}/3w?token={token}"
+    await _send_simple_cta_template(
+        "patient_survey_v2_3w_reminder", to, url, {"request_id": request_id},
+    )
+
+
+async def send_patient_survey_v2_9w_reminder(to: str, request_id: str) -> None:
+    from routes.feedback import generate_feedback_token
+    token = generate_feedback_token(request_id, "patient")
+    url = f"{_get_app_url()}/feedback/{request_id}/9w?token={token}"
+    await _send_simple_cta_template(
+        "patient_survey_v2_9w_reminder", to, url, {"request_id": request_id},
+    )
+
+
+async def send_patient_survey_v2_15w_reminder(to: str, request_id: str) -> None:
+    from routes.feedback import generate_feedback_token
+    token = generate_feedback_token(request_id, "patient")
+    url = f"{_get_app_url()}/feedback/{request_id}/15w?token={token}"
+    await _send_simple_cta_template(
+        "patient_survey_v2_15w_reminder", to, url, {"request_id": request_id},
+    )
 
 
 async def send_therapist_weekly_pulse(to: str, name: str, therapist_id: str) -> None:

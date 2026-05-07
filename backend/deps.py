@@ -44,6 +44,11 @@ AVAILABILITY_PROMPT_DAYS = tuple(int(d.strip()) for d in _avail_days_env.split("
 DAILY_TASK_HOUR_LOCAL = int(os.environ.get("DAILY_TASK_HOUR", "2"))
 DAILY_TASK_TZ_OFFSET_HOURS = int(os.environ.get("DAILY_TASK_TZ_OFFSET", "-7"))
 
+# Phase 2 patient surveys: v2 cron only sends for requests whose
+# results_sent_at >= this date. v1 cron only sends for requests
+# whose results_sent_at < this date. Override via env for staging tests.
+PHASE_2_LAUNCH_DATE = os.environ.get("PHASE_2_LAUNCH_DATE", "2026-05-15")
+
 _ENV = os.environ.get("ENV", "development").lower()
 _jwt_secret_raw = os.environ.get("JWT_SECRET", "")
 if not _jwt_secret_raw and _ENV == "production":

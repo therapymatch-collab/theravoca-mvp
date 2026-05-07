@@ -245,6 +245,173 @@ DEFAULTS: dict[str, dict[str, str]] = {
         ),
         "available_vars": "first_name, rationale, code, signup_url",
     },
+    # ── v2 patient survey emails ────────────────────────────────────
+    "patient_survey_v2_48h": {
+        "title": "48-hour check-in (v2)",
+        "description": "Sent 48 hours after patient receives matches. Quick pulse on process.",
+        "subject": "Quick check-in on your therapist matches",
+        "heading": "How did your matches feel?",
+        "greeting": "Hi --",
+        "intro": (
+            "It's been a couple of days since we sent your therapist matches. "
+            "We'd love a quick 15-second check-in -- your answers help us "
+            "match the next person better."
+        ),
+        "cta_label": "Share a quick update",
+        "privacy_note": (
+            "Your answers are private. We don't share them with any therapist. "
+            "We use them to improve our matching for the next time you or "
+            "someone else needs us. Thanks for paying it forward!"
+        ),
+        "footer_note": "Just 2 questions. Your responses are private and never shared with your therapist.",
+        "available_vars": "request_id",
+    },
+    "patient_survey_v2_3w": {
+        "title": "3-week check-in (v2)",
+        "description": "Sent 3 weeks after matches. Selection + first impressions.",
+        "subject": "Three weeks in -- how's your therapist match?",
+        "heading": "How are things going?",
+        "greeting": "Hi --",
+        "intro": (
+            "It's been about three weeks since we matched you. Whether you've "
+            "started sessions or are still deciding, we'd love to hear how "
+            "it's going -- takes about a minute."
+        ),
+        "cta_label": "Share your update",
+        "privacy_note": (
+            "Your answers are private. We don't share them with any therapist. "
+            "We use them to improve our matching for the next time you or "
+            "someone else needs us. Thanks for paying it forward!"
+        ),
+        "footer_note": "A few quick questions about your experience. Your feedback directly shapes how we match future patients.",
+        "available_vars": "request_id",
+    },
+    "patient_survey_v2_9w": {
+        "title": "9-week check-in (v2)",
+        "description": "Sent 9 weeks after matches. Retention + Match Strength.",
+        "subject": "Nine weeks in -- how's therapy going?",
+        "heading": "How's it going with your therapist?",
+        "greeting": "Hi --",
+        "intro": (
+            "It's been about two months since we connected you with your "
+            "therapist. We'd love to hear how the relationship is developing "
+            "-- your honest answers help us make better matches."
+        ),
+        "cta_label": "Quick check-in (under 2 minutes)",
+        "privacy_note": (
+            "Your answers are private. We don't share them with any therapist "
+            "or use them on public profiles. Internal use only -- to improve "
+            "our matching for the next time you or someone else needs us. "
+            "Thanks for paying it forward!"
+        ),
+        "footer_note": "Your answers are private and never shared with your therapist. They help us improve the matching experience for everyone.",
+        "available_vars": "request_id",
+    },
+    "patient_survey_v2_15w": {
+        "title": "15-week outcome check-in (v2)",
+        "description": "Sent 15 weeks after matches. Final outcome + referral.",
+        "subject": "One last check-in",
+        "heading": "Looking back",
+        "greeting": "Hi --",
+        "intro": (
+            "It's been a few months since we matched you with a therapist. "
+            "This is our last check-in -- we'd love to know how things have "
+            "turned out. Your reflections shape how we match the next person."
+        ),
+        "cta_label": "Share your outcome (under 2 minutes)",
+        "privacy_note": (
+            "Your answers are private. We don't share them with any therapist "
+            "or use them on public profiles. Internal use only -- to improve "
+            "our matching for the next time you or someone else needs us. "
+            "Thanks for paying it forward!"
+        ),
+        "footer_note": "This is the last survey we'll send. Your responses are completely private and help us improve outcomes for future patients.",
+        "available_vars": "request_id",
+    },
+    # ── v2 reminder emails (day +3 after original, one per milestone) ──
+    "patient_survey_v2_48h_reminder": {
+        "title": "48-hour check-in reminder",
+        "description": "One reminder 3 days after the 48h survey email. Final ask.",
+        "subject": "Quick follow-up on your matches",
+        "heading": "Quick follow-up",
+        "greeting": "Hi --",
+        "intro": (
+            "Checking back on the quick feedback we sent a few days ago about "
+            "your matches. Three questions, 60 seconds. Whatever you share "
+            "helps us match the next person better."
+        ),
+        "cta_label": "Share feedback (60 seconds)",
+        "privacy_note": (
+            "Your answers are private. We don't share them with any therapist. "
+            "We use them to improve our matching for the next time you or "
+            "someone else needs us. Thanks for paying it forward!"
+        ),
+        "footer_note": "Three quick questions. Takes 60 seconds.",
+        "available_vars": "request_id",
+    },
+    "patient_survey_v2_3w_reminder": {
+        "title": "3-week check-in reminder",
+        "description": "One reminder 3 days after the 3w survey email. Final ask.",
+        "subject": "How's your therapist match going?",
+        "heading": "Quick follow-up",
+        "greeting": "Hi --",
+        "intro": (
+            "Checking back on the check-in we sent a few days ago. A few "
+            "quick questions about how your therapist match is going -- "
+            "takes about a minute. Your answers directly improve how we "
+            "match the next person."
+        ),
+        "cta_label": "Share your update",
+        "privacy_note": (
+            "Your answers are private. We don't share them with any therapist. "
+            "We use them to improve our matching for the next time you or "
+            "someone else needs us. Thanks for paying it forward!"
+        ),
+        "footer_note": "A few quick questions about your experience. Your feedback directly shapes how we match future patients.",
+        "available_vars": "request_id",
+    },
+    "patient_survey_v2_9w_reminder": {
+        "title": "9-week check-in reminder",
+        "description": "One reminder 3 days after the 9w survey email. Final ask.",
+        "subject": "Two months in -- still love to hear from you",
+        "heading": "Quick follow-up",
+        "greeting": "Hi --",
+        "intro": (
+            "Checking back on the therapy check-in we sent a few days ago. "
+            "Your honest answers about how things are going -- about 2 "
+            "minutes -- help us make better matches for the next person."
+        ),
+        "cta_label": "Quick check-in (under 2 minutes)",
+        "privacy_note": (
+            "Your answers are private. We don't share them with any therapist "
+            "or use them on public profiles. Internal use only -- to improve "
+            "our matching for the next time you or someone else needs us. "
+            "Thanks for paying it forward!"
+        ),
+        "footer_note": "Your answers are private and never shared with your therapist. They help us improve the matching experience for everyone.",
+        "available_vars": "request_id",
+    },
+    "patient_survey_v2_15w_reminder": {
+        "title": "15-week outcome reminder",
+        "description": "One reminder 3 days after the 15w survey email. Final ask.",
+        "subject": "Last check-in -- your TheraVoca outcome",
+        "heading": "Final follow-up",
+        "greeting": "Hi --",
+        "intro": (
+            "Checking back on the final check-in we sent a few days ago. "
+            "Your reflections on how things turned out -- about 2 minutes "
+            "-- shape how we match the next person."
+        ),
+        "cta_label": "Share your outcome (under 2 minutes)",
+        "privacy_note": (
+            "Your answers are private. We don't share them with any therapist "
+            "or use them on public profiles. Internal use only -- to improve "
+            "our matching for the next time you or someone else needs us. "
+            "Thanks for paying it forward!"
+        ),
+        "footer_note": "This is the last survey we'll send. Your responses are completely private and help us improve outcomes for future patients.",
+        "available_vars": "request_id",
+    },
 }
 
 
@@ -282,7 +449,7 @@ async def upsert_template(
     """Persist editable fields for a template. Whitelisted fields only."""
     if key not in DEFAULTS:
         raise ValueError(f"Unknown template key: {key}")
-    allowed = {"subject", "heading", "greeting", "intro", "cta_label", "footer_note", "rationale", "pricing_note", "body"}
+    allowed = {"subject", "heading", "greeting", "intro", "cta_label", "footer_note", "rationale", "pricing_note", "body", "privacy_note"}
     update = {k: v for k, v in fields.items() if k in allowed and isinstance(v, str)}
     update["key"] = key
     await db.email_templates.update_one(
