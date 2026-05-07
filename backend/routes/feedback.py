@@ -119,12 +119,19 @@ class PatientFeedback48h(BaseModel):
 
 
 class PatientFeedback3w(BaseModel):
-    """3-week selection + first impressions."""
-    model_config = ConfigDict(extra="ignore")
-    contacted_therapist: Optional[str] = None  # therapist id string or None
+    """3-week selection + first impressions.
+
+    Field aliases accept the OLD v1 names (contacted_therapist,
+    fit_confidence, met_expectations) so in-flight email links that
+    submit the old payload still parse correctly after deploy.
+    populate_by_name=True lets the NEW names work too.
+    """
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+    chosen_status: str = Field(alias="contacted_therapist")  # "picked" | "still_deciding" | "none"
+    chosen_therapist_id: Optional[str] = None  # therapist id when chosen_status=="picked"
     had_session: str  # "yes" | "scheduled" | "no"
-    fit_confidence: int = Field(ge=0, le=100)
-    met_expectations: str  # "yes" | "somewhat" | "no"
+    confidence: int = Field(ge=0, le=100, alias="fit_confidence")
+    expectation_match: str = Field(alias="met_expectations")  # "yes" | "somewhat" | "no"
     surprises: Optional[str] = None
     notes: Optional[str] = None
 
@@ -463,6 +470,52 @@ async def submit_therapist_exception_legacy(
         "submitted_at": _now_iso(),
     })
     return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# THERAPIST LIST FOR 3w SURVEY DROPDOWN
+# ═══════════════════════════════════════════════════════════════════════
+
+@router.get("/feedback/patient/{request_id}/matches")
+async def get_patient_matches(
+    request_id: str,
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
+):
+    """Return the therapists who were notified for this request,
+    so the 3w survey can populate the 'who did you contact?' dropdown."""
+    _verify_feedback_token(request_id, token, "patient", authorization)
+    req = await db.requests.find_one(
+        {"id": request_id},
+        {"_id": 0, "notified_therapist_ids": 1},
+    )
+    if not req:
+        raise HTTPException(404, "Request not found")
+
+    therapist_ids = req.get("notified_therapist_ids") or []
+    if not therapist_ids:
+        return {"matches": []}
+
+    # Pull match scores from applications
+    apps: dict[str, float | None] = {}
+    async for a in db.applications.find(
+        {"request_id": request_id, "therapist_id": {"$in": therapist_ids}},
+        {"_id": 0, "therapist_id": 1, "match_score": 1},
+    ):
+        apps[a["therapist_id"]] = a.get("match_score")
+
+    therapists: list[dict] = []
+    async for t in db.therapists.find(
+        {"id": {"$in": therapist_ids}},
+        {"_id": 0, "id": 1, "name": 1},
+    ):
+        therapists.append({
+            "therapist_id": t["id"],
+            "therapist_name": t.get("name", "Therapist"),
+            "match_score": apps.get(t["id"]),
+        })
+
+    return {"matches": therapists}
 
 
 # ═══════════════════════════════════════════════════════════════════════

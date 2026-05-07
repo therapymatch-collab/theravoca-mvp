@@ -228,12 +228,33 @@ function Milestone48h({ answers, setAnswer }) {
 /* ────────────────────────────────────────────────────────────────── */
 
 function Milestone3w({ answers, setAnswer, therapists }) {
+  // The dropdown sets chosen_status + chosen_therapist_id together.
+  // A therapist ID means "picked"; the two sentinel values map directly.
+  const handleTherapistSelect = (val) => {
+    if (val === "still_deciding" || val === "none") {
+      setAnswer("chosen_status", val);
+      setAnswer("chosen_therapist_id", null);
+    } else if (val) {
+      setAnswer("chosen_status", "picked");
+      setAnswer("chosen_therapist_id", val);
+    } else {
+      setAnswer("chosen_status", "");
+      setAnswer("chosen_therapist_id", null);
+    }
+  };
+
+  // Derive the dropdown display value from the two answer fields
+  const selectValue =
+    answers.chosen_status === "picked"
+      ? answers.chosen_therapist_id || ""
+      : answers.chosen_status || "";
+
   return (
     <>
       <QuestionCard number={1} label="Who did you reach out to?">
         <select
-          value={answers.contacted_therapist || ""}
-          onChange={(e) => setAnswer("contacted_therapist", e.target.value)}
+          value={selectValue}
+          onChange={(e) => handleTherapistSelect(e.target.value)}
           className="w-full bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5 text-sm
             focus:border-[#2D4A3E] focus:outline-none"
           data-testid="q1-therapist-select"
@@ -270,8 +291,8 @@ function Milestone3w({ answers, setAnswer, therapists }) {
 
       <QuestionCard number={3} label="How confident are you this is a good fit?">
         <RangeSlider
-          value={answers.fit_confidence ?? 50}
-          onChange={(v) => setAnswer("fit_confidence", v)}
+          value={answers.confidence ?? 50}
+          onChange={(v) => setAnswer("confidence", v)}
           min={0}
           max={100}
           labels={{ 0: "Not at all", 50: "Somewhat", 100: "Very confident" }}
@@ -288,8 +309,8 @@ function Milestone3w({ answers, setAnswer, therapists }) {
           ].map((o) => (
             <PillButton
               key={o.v}
-              selected={answers.met_expectations === o.v}
-              onClick={() => setAnswer("met_expectations", o.v)}
+              selected={answers.expectation_match === o.v}
+              onClick={() => setAnswer("expectation_match", o.v)}
               testId={`q4-expectations-${o.v}`}
             >
               {o.l}
@@ -543,8 +564,9 @@ function validate48h(a) {
 }
 
 function validate3w(a) {
-  if (!a.contacted_therapist) return "Please select who you reached out to.";
+  if (!a.chosen_status) return "Please select who you reached out to.";
   if (!a.had_session) return "Please tell us about your session status.";
+  if (!a.expectation_match) return "Please tell us if the first interaction matched expectations.";
   return null;
 }
 
