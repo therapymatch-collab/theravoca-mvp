@@ -482,6 +482,30 @@ async def therapist_view(
     breakdown = (req.get("notified_breakdowns") or {}).get(therapist_id) or {}
     from matching import gap_axes
     gaps = gap_axes(therapist, req, breakdown, top_n=3) if breakdown else []
+    # Compute referral state (same logic as portal endpoint)
+    decline = await db.declines.find_one(
+        {"request_id": request_id, "therapist_id": therapist_id},
+        {"_id": 0, "id": 1},
+    )
+    r_status = (req.get("status") or "").lower()
+    matched_at_str = req.get("matched_at") or req.get("created_at") or ""
+    if decline:
+        ref_state = "past"
+    elif existing:
+        ref_state = "applied"
+    elif r_status in ("delivered", "results_sent", "closed", "archived"):
+        ref_state = "past"
+    else:
+        try:
+            matched_dt = datetime.fromisoformat(matched_at_str)
+            if matched_dt.tzinfo is None:
+                matched_dt = matched_dt.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) - matched_dt > timedelta(hours=24):
+                ref_state = "past"
+            else:
+                ref_state = "active"
+        except (ValueError, TypeError):
+            ref_state = "active"
     return {
         "request_id": request_id,
         "therapist": {"id": therapist["id"], "name": therapist["name"]},
@@ -489,6 +513,8 @@ async def therapist_view(
         "match_breakdown": breakdown,
         "deep_match_opt_in": bool(req.get("deep_match_opt_in")),
         "gaps": gaps,
+        "state": ref_state,
+        "matched_at": matched_at_str,
         "summary": summary,
         "presenting_issues": req.get("presenting_issues", ""),
         "already_applied": bool(existing),

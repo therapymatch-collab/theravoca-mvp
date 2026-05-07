@@ -114,6 +114,16 @@ export default function TherapistApply() {
   }, [requestId, therapistId, sigQs, searchParams]);
 
   const allConfirmed = confirmAvail && confirmUrgency && confirmPayment;
+  // Bug A: referral expiry gating
+  const isExpired = data?.state === "past" && !submitted && !declined;
+  const expiredHoursAgo = (() => {
+    if (!isExpired || !data?.matched_at) return 0;
+    try {
+      const ms = Date.now() - new Date(data.matched_at).getTime();
+      const hrs = Math.max(0, Math.round((ms - 24 * 60 * 60 * 1000) / (60 * 60 * 1000)));
+      return hrs;
+    } catch { return 0; }
+  })();
 
   const submit = async () => {
     if (!allConfirmed) {
@@ -276,31 +286,43 @@ export default function TherapistApply() {
                   style={{ width: `${data.match_score}%` }}
                 />
               </div>
-              {data.gaps && data.gaps.length > 0 && (
+              {/* Bug B: Show gaps section when gaps exist, OR show fallback
+                  when gaps are empty but score < 95%. Hide entirely at 95-97%
+                  (the cap) since those are functionally perfect. */}
+              {Math.round(data.match_score) < 95 && (
                 <div className="mt-5 pt-5 border-t border-[#E8E5DF]" data-testid="apply-gaps">
                   <div className="text-xs uppercase tracking-[0.15em] text-[#6D6A65] mb-3">
                     Why not 100% — and what to address
                   </div>
-                  <ul className="space-y-3">
-                    {data.gaps.map((g) => (
-                      <li
-                        key={g.key}
-                        className="text-xs leading-snug"
-                        data-testid={`gap-${g.key}`}
-                      >
-                        <div className="text-[#C87965] font-semibold">{g.label}</div>
-                        <div className="text-[#2B2A29] mt-0.5 leading-relaxed">
-                          {g.explanation}
-                        </div>
-                        <div className="text-[#6D6A65] italic mt-1 leading-relaxed">
-                          → {g.suggestion}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="text-[10px] text-[#6D6A65] mt-3 leading-relaxed">
-                    Address these directly in your message below if you want to apply.
-                  </p>
+                  {data.gaps && data.gaps.length > 0 ? (
+                    <>
+                      <ul className="space-y-3">
+                        {data.gaps.map((g) => (
+                          <li
+                            key={g.key}
+                            className="text-xs leading-snug"
+                            data-testid={`gap-${g.key}`}
+                          >
+                            <div className="text-[#C87965] font-semibold">{g.label}</div>
+                            <div className="text-[#2B2A29] mt-0.5 leading-relaxed">
+                              {g.explanation}
+                            </div>
+                            <div className="text-[#6D6A65] italic mt-1 leading-relaxed">
+                              → {g.suggestion}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="text-[10px] text-[#6D6A65] mt-3 leading-relaxed">
+                        Address these directly in your message below if you want to apply.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-[#6D6A65] leading-relaxed" data-testid="gaps-fallback">
+                      This is a strong match across the dimensions we evaluate.
+                      Speak to your overall fit and approach in your reply.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -323,7 +345,29 @@ export default function TherapistApply() {
             </div>
           </div>
 
-          <div className="mt-8 bg-white border border-[#E8E5DF] rounded-2xl p-6 md:p-8">
+          {/* Bug A: Expiry banner */}
+          {isExpired && (
+            <div
+              className="mt-8 bg-[#FDF7EC] border border-[#E8DCC1] rounded-2xl p-5 flex items-start gap-3"
+              data-testid="referral-expired-banner"
+            >
+              <AlertCircle size={18} className="text-[#C87965] mt-0.5 shrink-0" />
+              <div>
+                <div className="text-sm font-semibold text-[#2B2A29]">
+                  This referral has expired
+                </div>
+                <p className="text-sm text-[#6D6A65] mt-1 leading-relaxed">
+                  The application window closed{" "}
+                  {expiredHoursAgo > 0
+                    ? `${expiredHoursAgo} hour${expiredHoursAgo === 1 ? "" : "s"} ago`
+                    : "recently"}
+                  . You can no longer submit interest or decline this referral.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className={`mt-8 bg-white border border-[#E8E5DF] rounded-2xl p-6 md:p-8 ${isExpired ? "opacity-60 pointer-events-none" : ""}`}>
             <h3 className="font-semibold text-[#2B2A29] text-lg">
               Write a short note to the patient (optional)
             </h3>

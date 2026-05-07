@@ -810,19 +810,30 @@ export default function TherapistPortal() {
                             {r.summary["Session format"] && <ReferralTag>{r.summary["Session format"]}</ReferralTag>}
                             {r.summary.Payment && <ReferralTag>{r.summary.Payment}</ReferralTag>}
                           </div>
-                          {r.gaps && r.gaps.length > 0 && r.referral_status === "pending" && (
+                          {/* Bug B: gaps fallback -- hide at 95%+ (cap), show
+                              fallback copy when gaps=[] but score < 95% */}
+                          {r.referral_status === "pending" && Math.round(r.match_score) < 95 && (
                             <div className="mt-3 text-xs text-[#6D6A65]">
-                              <div className="font-semibold text-[#C87965] uppercase tracking-wider text-[10px] mb-1">
-                                Address in reply
-                              </div>
-                              <ul className="space-y-1">
-                                {r.gaps.map((g) => (
-                                  <li key={g.key} className="leading-snug">
-                                    <span className="font-medium text-[#2B2A29]">{g.label}:</span>{" "}
-                                    {g.explanation}
-                                  </li>
-                                ))}
-                              </ul>
+                              {r.gaps && r.gaps.length > 0 ? (
+                                <>
+                                  <div className="font-semibold text-[#C87965] uppercase tracking-wider text-[10px] mb-1">
+                                    Address in reply
+                                  </div>
+                                  <ul className="space-y-1">
+                                    {r.gaps.map((g) => (
+                                      <li key={g.key} className="leading-snug">
+                                        <span className="font-medium text-[#2B2A29]">{g.label}:</span>{" "}
+                                        {g.explanation}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </>
+                              ) : (
+                                <p className="leading-relaxed" data-testid="gaps-fallback">
+                                  Strong match across scored dimensions. Speak to
+                                  your overall fit and approach in your reply.
+                                </p>
+                              )}
                             </div>
                           )}
                         </Link>

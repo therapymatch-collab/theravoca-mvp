@@ -142,29 +142,44 @@ async def send_therapist_notification(
         for k, v in summary.items()
     )
     gaps_html = ""
-    if gaps:
-        rows = "".join(
-            f'<li style="margin:10px 0;color:{BRAND["text"]};font-size:14px;line-height:1.55;">'
-            f'<div style="font-weight:600;color:{BRAND["primary"]};margin-bottom:2px;">'
-            f'{g["label"]}</div>'
-            f'<div style="margin-bottom:3px;">{g["explanation"]}</div>'
-            f'<div style="color:{BRAND["muted"]};font-size:13px;font-style:italic;">'
-            f'→ {g["suggestion"]}</div>'
-            f'</li>'
-            for g in gaps
-        )
-        gaps_html = (
-            f'<div style="background:#FDF7EC;border:1px solid #E8DCC1;border-radius:12px;'
-            f'padding:16px 20px;margin:0 0 20px;">'
-            f'<div style="font-size:13px;color:{BRAND["muted"]};text-transform:uppercase;'
-            f'letter-spacing:0.08em;margin-bottom:8px;">Why this isn\'t 100% — and what to address</div>'
-            f'<ul style="margin:6px 0 0;padding-left:18px;list-style:disc;">{rows}</ul>'
-            f'<div style="font-size:12px;color:{BRAND["muted"]};margin-top:10px;line-height:1.5;">'
-            f'These don\'t disqualify you — they\'re just the points the patient cares about. '
-            f'Speak to them in your reply if you want to apply.'
-            f'</div>'
-            f'</div>'
-        )
+    # Bug B: Hide the gaps section entirely at 95-97% (the cap) since those
+    # are functionally perfect. Show fallback copy when gaps=[] but score < 95.
+    if round(match_score) < 95:
+        if gaps:
+            rows = "".join(
+                f'<li style="margin:10px 0;color:{BRAND["text"]};font-size:14px;line-height:1.55;">'
+                f'<div style="font-weight:600;color:{BRAND["primary"]};margin-bottom:2px;">'
+                f'{g["label"]}</div>'
+                f'<div style="margin-bottom:3px;">{g["explanation"]}</div>'
+                f'<div style="color:{BRAND["muted"]};font-size:13px;font-style:italic;">'
+                f'-> {g["suggestion"]}</div>'
+                f'</li>'
+                for g in gaps
+            )
+            gaps_html = (
+                f'<div style="background:#FDF7EC;border:1px solid #E8DCC1;border-radius:12px;'
+                f'padding:16px 20px;margin:0 0 20px;">'
+                f'<div style="font-size:13px;color:{BRAND["muted"]};text-transform:uppercase;'
+                f'letter-spacing:0.08em;margin-bottom:8px;">Why this isn\'t 100% — and what to address</div>'
+                f'<ul style="margin:6px 0 0;padding-left:18px;list-style:disc;">{rows}</ul>'
+                f'<div style="font-size:12px;color:{BRAND["muted"]};margin-top:10px;line-height:1.5;">'
+                f'These don\'t disqualify you -- they\'re just the points the patient cares about. '
+                f'Speak to them in your reply if you want to apply.'
+                f'</div>'
+                f'</div>'
+            )
+        else:
+            gaps_html = (
+                f'<div style="background:#FDF7EC;border:1px solid #E8DCC1;border-radius:12px;'
+                f'padding:16px 20px;margin:0 0 20px;">'
+                f'<div style="font-size:13px;color:{BRAND["muted"]};text-transform:uppercase;'
+                f'letter-spacing:0.08em;margin-bottom:8px;">Why this isn\'t 100% — and what to address</div>'
+                f'<p style="font-size:14px;color:{BRAND["text"]};line-height:1.6;margin:0;">'
+                f'This is a strong match across the dimensions we evaluate. '
+                f'Speak to your overall fit and approach in your reply.'
+                f'</p>'
+                f'</div>'
+            )
     bulk_cta = (
         f'<p style="color:{BRAND["muted"]};font-size:13px;line-height:1.6;text-align:center;'
         f'margin:18px 0 0;">'
