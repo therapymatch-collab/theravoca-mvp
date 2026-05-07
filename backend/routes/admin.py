@@ -1389,6 +1389,20 @@ async def admin_stats(_: bool = Depends(require_admin)):
     }
 
 
+@router.get("/admin/cron-health", dependencies=[Depends(require_admin)])
+async def admin_cron_health():
+    """Last 7 daily-task cron runs, most recent first."""
+    docs = (
+        await db.cron_runs.find(
+            {"name": "daily_tasks"},
+            {"_id": 0},
+        )
+        .sort("date", -1)
+        .to_list(7)
+    )
+    return docs
+
+
 @router.post("/admin/run-daily-tasks")
 async def admin_run_daily_tasks(_: bool = Depends(require_admin)):
     """Manual trigger for the daily cron Ã¢ÂÂ useful for testing without waiting until 2am MT."""

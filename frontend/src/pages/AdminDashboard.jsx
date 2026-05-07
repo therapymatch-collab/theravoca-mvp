@@ -73,6 +73,7 @@ import ProviderPreviewCard from "@/pages/admin/panels/ProviderPreviewCard";
 import SimulatorPanel from "@/pages/admin/panels/SimulatorPanel";
 import ScraperTestPanel from "@/pages/admin/panels/ScraperTestPanel";
 import FeedbackTestPanel from "@/pages/admin/panels/FeedbackTestPanel";
+import CronHealthStrip from "@/pages/admin/panels/CronHealthStrip";
 import { StatBox } from "@/pages/admin/panels/_panelShared";
 
 // ─── Editor option lists (mirrors TherapistSignup) ───
@@ -1194,6 +1195,9 @@ export default function AdminDashboard() {
                 )}
               </div>
               )}
+
+              {/* Cron health strip -- operational visibility */}
+              {tab === "requests" && <CronHealthStrip client={client} />}
 
               {/* Consistent spacing between tab links and panel content */}
               {!["requests", "therapists", "all_therapists", "invited_therapists",
