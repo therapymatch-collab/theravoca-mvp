@@ -333,7 +333,7 @@ async def submit_patient_3w(
         )
 
     # ── Low confidence intervention ──
-    if payload.confidence < 75:
+    if payload.confidence is not None and payload.confidence < 75:
         await _flag_for_intervention(
             request_id, payload.chosen_therapist_id, payload.confidence
         )
