@@ -11,7 +11,7 @@ from fastapi.responses import Response
 
 from cron import (
     _run_availability_prompts, _run_daily_billing_charges,
-    _run_followup_surveys, _run_license_expiry_alerts,
+    _run_license_expiry_alerts,
 )
 from deps import (
     db, logger, ADMIN_PASSWORD, DEFAULT_THRESHOLD,
@@ -1539,8 +1539,7 @@ async def admin_run_daily_tasks(_: bool = Depends(require_admin)):
     bill = await _run_daily_billing_charges()
     lic = await _run_license_expiry_alerts()
     avail = await _run_availability_prompts()
-    follow = await _run_followup_surveys()
-    return {"ok": True, "billing": bill, "license": lic, "availability": avail, "followups": follow}
+    return {"ok": True, "billing": bill, "license": lic, "availability": avail}
 
 
 @router.get("/admin/followups")
