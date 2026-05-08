@@ -16,7 +16,6 @@ from deps import (
 import audit
 from email_service import (
     send_availability_prompt,
-    send_followup_survey,
     send_license_expiring_to_admin,
     send_license_expiring_to_therapist,
 )
