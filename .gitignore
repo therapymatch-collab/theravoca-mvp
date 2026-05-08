@@ -4,6 +4,9 @@
 .idea/
 .vscode/
 
+# Local working files (not committed)
+CURRENT_STATE.md
+
 # Dependencies
 node_modules/
 /node_modules
@@ -31,7 +34,6 @@ dist/
 dist
 
 # Environment files (comprehensive coverage)
-
 *token.json*
 *credentials.json*
 
@@ -78,77 +80,6 @@ agenthub/agents/youtube/db
 
 memory/test_credentials.md
 
-# Mobile development
-android-sdk/frontend/node_modules/.cache/default-development/21.pack
-frontend/node_modules/.cache/default-development/26.pack
-frontend/node_modules/.cache/default-development/33.pack
-frontend/node_modules/.cache/default-development/31.pack
-frontend/node_modules/.cache/default-development/31.pack
-frontend/node_modules/.cache/default-development/40.pack
-frontend/node_modules/.cache/default-development/50.pack
-frontend/node_modules/.cache/default-development/50.pack
-frontend/node_modules/.cache/default-development/39.pack
-frontend/node_modules/.cache/default-development/44.pack
-frontend/node_modules/.cache/default-development/54.pack
-frontend/node_modules/.cache/default-development/54.pack
-frontend/node_modules/.cache/default-development/0.pack
-frontend/node_modules/.cache/default-development/0.pack
-frontend/node_modules/.cache/default-development/4.pack
-frontend/node_modules/.cache/default-development/6.pack
-frontend/node_modules/.cache/default-development/7.pack
-frontend/node_modules/.cache/default-development/9.pack
-frontend/node_modules/.cache/default-development/1.pack
-frontend/node_modules/.cache/default-development/12.pack
-frontend/node_modules/.cache/default-development/13.pack
-frontend/node_modules/.cache/default-development/14.pack
-frontend/node_modules/.cache/default-development/18.pack
-frontend/node_modules/.cache/default-development/19.pack
-frontend/node_modules/.cache/default-development/25.pack
-frontend/node_modules/.cache/default-development/17.pack
-frontend/node_modules/.cache/default-development/28.pack
-frontend/node_modules/.cache/default-development/3.pack
-frontend/node_modules/.cache/default-development/5.pack
-frontend/node_modules/.cache/default-development/8.pack
-frontend/node_modules/.cache/default-development/10.pack
-frontend/node_modules/.cache/default-development/16.pack
-frontend/node_modules/.cache/default-development/2.pack
-frontend/node_modules/.cache/default-development/15.pack
-frontend/node_modules/.cache/default-development/32.pack
-frontend/node_modules/.cache/default-development/35.pack
-frontend/node_modules/.cache/default-development/22.pack
-frontend/node_modules/.cache/default-development/41.pack
-frontend/node_modules/.cache/default-development/42.pack
-frontend/node_modules/.cache/default-development/51.pack
-frontend/node_modules/.cache/default-development/45.pack
-frontend/node_modules/.cache/default-development/21.pack
--e 
-# Environment and credential files
-.env
-.env.*
-*.env
-credentials.json
-*.pem
-*.key
-.credentials
--e 
-# Environment and credential files
-.env
-.env.*
-*.env
-credentials.json
-*.pem
-*.key
-.credentials
--e 
-# Environment and credential files
-.env
-.env.*
-*.env
-credentials.json
-*.pem
-*.key
-.credentials
--e 
 # Environment and credential files
 .env
 .env.*
@@ -158,8 +89,7 @@ credentials.json
 *.key
 .credentials
 
-
-# DB exports — admin_users contains bcrypt hashes for team accounts;
+# DB exports -- admin_users contains bcrypt hashes for team accounts;
 # never push to a public repo. Other exports in /exports/ (site_copy,
 # faqs, email_templates, app_config, etc.) are safe.
 exports/admin_users_export.json
@@ -181,15 +111,7 @@ exports/followups_export.json
 exports/simulator_runs_export.json
 exports/simulator_requests_export.json
 exports/auto_recruit_cycles_export.json
-exports/cron_runs_export.json-e 
-# Environment and credential files
-.env
-.env.*
-*.env
-credentials.json
-*.pem
-*.key
-.credentials
+exports/cron_runs_export.json
 
 # Test artifacts
 .pytest_cache/
