@@ -558,10 +558,19 @@ async def submit_therapist_exception_legacy(
 async def get_patient_matches(
     request_id: str,
     token: Optional[str] = Query(None),
+    milestone: Optional[str] = Query(None),
     authorization: Optional[str] = Header(None),
 ):
-    """Return the therapists who were notified for this request,
-    so the 3w survey can populate the 'who did you contact?' dropdown."""
+    """Return therapists for the survey dropdown.
+
+    Behavior depends on milestone:
+      - 3w/9w/15w: only therapists who have APPLIED to this request
+        (one application doc per applied therapist). At these milestones
+        the patient has had a chance to hear back, so showing non-applied
+        matches just clutters the dropdown.
+      - 48h or omitted: all matched/notified therapists, since at 48h
+        the patient may not have heard back from any therapist yet.
+    """
     _verify_feedback_token(request_id, token, "patient", authorization)
     req = await db.requests.find_one(
         {"id": request_id},
@@ -570,7 +579,20 @@ async def get_patient_matches(
     if not req:
         raise HTTPException(404, "Request not found")
 
-    therapist_ids = req.get("notified_therapist_ids") or []
+    if milestone in ("3w", "9w", "15w"):
+        # Show only therapists who actually applied to this request.
+        # If none applied, return an empty array -- the frontend will
+        # render only the sentinel options, which is the correct UX.
+        therapist_ids: list[str] = []
+        async for a in db.applications.find(
+            {"request_id": request_id},
+            {"_id": 0, "therapist_id": 1},
+        ):
+            therapist_ids.append(a["therapist_id"])
+    else:
+        # 48h or unspecified -- fall back to the notified pool.
+        therapist_ids = req.get("notified_therapist_ids") or []
+
     if not therapist_ids:
         return {"matches": []}
 

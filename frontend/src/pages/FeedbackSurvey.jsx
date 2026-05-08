@@ -1143,12 +1143,15 @@ export default function FeedbackSurvey() {
     return {};
   }, [token]);
 
-  // Load therapist list for 3w milestone
+  // Load therapist list for 3w milestone. Backend filters by milestone
+  // so 3w/9w/15w return only APPLIED therapists; 48h returns all matched.
   useEffect(() => {
     if (milestone === "3w") {
       const client = getClient();
       client
-        .get(`/feedback/patient/${requestId}/matches`, authParams())
+        .get(`/feedback/patient/${requestId}/matches`, {
+          params: { ...(authParams().params || {}), milestone },
+        })
         .then((res) => {
           const matches = res.data?.matches || res.data || [];
           setTherapists(
@@ -1166,8 +1169,13 @@ export default function FeedbackSurvey() {
             }))
           );
         })
-        .catch(() => {
-          // Non-fatal — the dropdown will just be empty
+        .catch((e) => {
+          // Surface the actual error -- silent catches mask real bugs
+          // (CLAUDE.md gotcha). Empty list = either no applied therapists
+          // (correct UX for 3w/9w/15w when none applied) OR a real
+          // failure that's now visible in the console.
+          // eslint-disable-next-line no-console
+          console.error("Failed to load /feedback/.../matches:", e);
           setTherapists([]);
         });
     }
