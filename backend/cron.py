@@ -241,52 +241,6 @@ async def _run_availability_prompts() -> dict[str, int]:
     return {"sent_email": sent_email, "sent_sms": sent_sms}
 
 
-async def _run_followup_surveys() -> dict[str, int]:
-    """Send 48h / 2-week / 6-week follow-ups based on `results_sent_at`.
-    Idempotent via `followup_sent_at_<milestone>` flag on the request doc.
-    v1 only -- applies to requests whose results were sent BEFORE the
-    Phase 2 launch date. Newer requests use _run_patient_surveys_v2."""
-    audit.emit(
-        actor_type="system", actor_id="cron", action="run_followup_surveys",
-        resource="request",
-    )
-    now = datetime.now(timezone.utc)
-    testing_mode = await _get_testing_mode()
-    milestones = [
-        ("48h", 2, "followup_sent_48h"),
-        ("2wk", 14, "followup_sent_2wk"),
-        ("6wk", 42, "followup_sent_6wk"),
-    ]
-    sent: dict[str, int] = {}
-    for code, days, flag in milestones:
-        effective_days = 0 if testing_mode else days
-        cutoff = (now - timedelta(days=effective_days)).isoformat()
-        cur = db.requests.find(
-            {
-                "results_sent_at": {"$ne": None, "$lte": cutoff,
-                                    "$lt": PHASE_2_LAUNCH_DATE},
-                flag: {"$exists": False},
-                "email": {"$ne": None},
-            },
-            {"_id": 0, "id": 1, "email": 1},
-        )
-        count = 0
-        async for r in cur:
-            try:
-                await send_followup_survey(r["email"], r["id"], code)
-                await db.requests.update_one(
-                    {"id": r["id"]},
-                    {"$set": {flag: _now_iso()}},
-                )
-                count += 1
-            except Exception as e:
-                logger.warning("Followup %s failed for %s: %s", code, r["id"], e)
-        if count:
-            logger.info("Follow-up %s surveys sent: %d", code, count)
-        sent[code] = count
-    return sent
-
-
 async def _run_gap_recruitment() -> dict[str, int]:
     """Daily gap-fill: keep the directory healthy by recruiting therapists for
     the most-in-demand specialties/cities/age groups we're thin on. Pre-launch
@@ -297,50 +251,6 @@ async def _run_gap_recruitment() -> dict[str, int]:
     except Exception as e:
         logger.warning("Daily gap recruit failed: %s", e)
         return {"error": str(e)}
-
-
-async def _run_patient_structured_followups() -> dict[str, int]:
-    """Phase-2 patient follow-ups with links to a structured 3-question form.
-    Separate from `_run_followup_surveys` (which sends an unstructured NPS
-    survey) -- this sends the new `patient_followup_48h` and
-    `patient_followup_2w` templates.
-    Flags: `structured_followup_48h_sent_at`, `structured_followup_2w_sent_at`.
-    v1 only -- applies to requests before PHASE_2_LAUNCH_DATE.
-    """
-    audit.emit(
-        actor_type="system", actor_id="cron", action="run_structured_followups",
-        resource="request",
-    )
-    from email_service import send_patient_followup_48h, send_patient_followup_2w
-    now = datetime.now(timezone.utc)
-    milestones = [
-        ("48h", 2, "structured_followup_48h_sent_at", send_patient_followup_48h),
-        ("2w", 14, "structured_followup_2w_sent_at", send_patient_followup_2w),
-    ]
-    out: dict[str, int] = {}
-    for code, days, flag, sender in milestones:
-        cutoff = (now - timedelta(days=days)).isoformat()
-        cur = db.requests.find(
-            {
-                "results_sent_at": {"$ne": None, "$lte": cutoff,
-                                    "$lt": PHASE_2_LAUNCH_DATE},
-                flag: {"$exists": False},
-                "email": {"$ne": None},
-            },
-            {"_id": 0, "id": 1, "email": 1},
-        )
-        count = 0
-        async for r in cur:
-            try:
-                await sender(r["email"], r["id"])
-                await db.requests.update_one(
-                    {"id": r["id"]}, {"$set": {flag: _now_iso()}},
-                )
-                count += 1
-            except Exception as e:
-                logger.warning("Structured follow-up %s failed for %s: %s", code, r["id"], e)
-        out[code] = count
-    return out
 
 
 async def _run_patient_surveys_v2() -> dict[str, int]:
@@ -570,8 +480,6 @@ async def _daily_loop() -> None:
                     bill = await _run_daily_billing_charges()
                     lic = await _run_license_expiry_alerts()
                     avail = await _run_availability_prompts()
-                    follow = await _run_followup_surveys()
-                    structured = await _run_patient_structured_followups()
                     t_follow = await _run_therapist_2w_followups()
                     stale = await _run_stale_profile_nag()
                     recruit = await _run_gap_recruitment()
@@ -590,7 +498,6 @@ async def _daily_loop() -> None:
                         {"$set": {
                             "completed_at": _now_iso(),
                             "billing": bill, "license": lic, "availability": avail,
-                            "followups": follow, "structured_followups": structured,
                             "therapist_followups": t_follow,
                             "stale_profile_nag": stale,
                             "gap_recruit": recruit,
