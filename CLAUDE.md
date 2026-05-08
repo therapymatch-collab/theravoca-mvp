@@ -70,6 +70,14 @@ These rules govern all code changes. No exceptions.
 - **Repo**: `therapymatch-collab/theravoca-mvp`, branches: `main` (prod),
   `staging`.
 
+### Environment URLs
+
+- Staging service URL: https://theravoca-production.onrender.com (despite
+  name, this IS staging -- only env)
+- GitHub: `therapymatch-collab/theravoca-mvp`, branch `staging` is source of
+  truth
+- `main` branch unused -- no production env exists yet
+
 ### CI / E2E Tests
 
 - GitHub Actions workflows: `.github/workflows/e2e-tests.yml` and
@@ -84,6 +92,12 @@ These rules govern all code changes. No exceptions.
 - Radix UI Select portals dropdown content to `document.body` -- use `waitFor`
   after clicking the trigger to let the portal render.
 
+### Test commands
+
+- Backend: from `/backend`, `pytest`
+- Frontend: from `/frontend`, `npm test`
+- E2E: `cd e2e && npx playwright test`
+
 ### Key Gotchas
 
 - `canNext()` in IntakeForm.jsx validates each step -- if submit button is
@@ -93,3 +107,9 @@ These rules govern all code changes. No exceptions.
   will silently produce broken URLs.
 - `.catch(() => setX([]))` patterns in the frontend swallow API errors silently
   -- if data is missing, check network calls first.
+
+### Do not touch
+
+- `/scripts` directory (historical backfill scripts; keep for forensics)
+- `backend/audit.py` (production audit log; never modify)
+- `/alembic` and any migration files (fragile; let Josh handle)
