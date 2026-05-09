@@ -77,7 +77,7 @@ async def _sweep_pending_outreach() -> None:
     for req in pending:
         try:
             res = await run_outreach_for_request(req["id"])
-            logger.info("Outreach-retry for %s → %s", req["id"][:8], res)
+            logger.info("Outreach-retry for %s -> %s", req["id"][:8], res)
         except Exception as e:
             logger.exception("Outreach-retry failed for %s: %s", req["id"], e)
 
@@ -446,7 +446,7 @@ async def _run_stale_profile_nag() -> dict[str, int]:
 
 
 async def _run_auto_recruit_weekly() -> dict[str, Any]:
-    """Weekly self-healing recruiter cycle — runs simulator, builds plan,
+    """Weekly self-healing recruiter cycle -- runs simulator, builds plan,
     calls gap recruiter, stamps drafts for admin approval. Skipped if
     disabled in config or if the target zero-pool rate is already met."""
     try:

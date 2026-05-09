@@ -205,9 +205,9 @@ DEFAULTS: dict[str, dict[str, str]] = {
     "patient_survey_v2_48h": {
         "title": "48-hour check-in (v2)",
         "description": "Sent 48 hours after patient receives matches. Quick pulse on process.",
-        "subject": "Quick check-in on your therapist matches",
+        "subject": "[48-Hour Check-in] How did your matches feel?",
         "heading": "How did your matches feel?",
-        "greeting": "Hi --",
+        "greeting": "Hello,",
         "intro": (
             "It's been a couple of days since we sent your therapist matches. "
             "We'd love a quick 15-second check-in -- your answers help us "
@@ -225,9 +225,9 @@ DEFAULTS: dict[str, dict[str, str]] = {
     "patient_survey_v2_3w": {
         "title": "3-week check-in (v2)",
         "description": "Sent 3 weeks after matches. Selection + first impressions.",
-        "subject": "Three weeks in -- how's your therapist match?",
+        "subject": "[Week 3 Check-in] How are things going?",
         "heading": "How are things going?",
-        "greeting": "Hi --",
+        "greeting": "Hello,",
         "intro": (
             "It's been about three weeks since we matched you. Whether you've "
             "started sessions or are still deciding, we'd love to hear how "
@@ -245,9 +245,9 @@ DEFAULTS: dict[str, dict[str, str]] = {
     "patient_survey_v2_9w": {
         "title": "9-week check-in (v2)",
         "description": "Sent 9 weeks after matches. Retention + Match Strength.",
-        "subject": "Nine weeks in -- how's therapy going?",
+        "subject": "[Week 9 Check-in] How is therapy going?",
         "heading": "How's it going with your therapist?",
-        "greeting": "Hi --",
+        "greeting": "Hello,",
         "intro": (
             "It's been about two months since we connected you with your "
             "therapist. We'd love to hear how the relationship is developing "
@@ -266,9 +266,9 @@ DEFAULTS: dict[str, dict[str, str]] = {
     "patient_survey_v2_15w": {
         "title": "15-week outcome check-in (v2)",
         "description": "Sent 15 weeks after matches. Final outcome + referral.",
-        "subject": "One last check-in",
+        "subject": "[Week 15 Check-in] Final reflection on your experience",
         "heading": "Looking back",
-        "greeting": "Hi --",
+        "greeting": "Hello,",
         "intro": (
             "It's been a few months since we matched you with a therapist. "
             "This is our last check-in -- we'd love to know how things have "
@@ -288,9 +288,9 @@ DEFAULTS: dict[str, dict[str, str]] = {
     "patient_survey_v2_48h_reminder": {
         "title": "48-hour check-in reminder",
         "description": "One reminder 3 days after the 48h survey email. Final ask.",
-        "subject": "Quick follow-up on your matches",
+        "subject": "[48-Hour Check-in] How did your matches feel? — quick reminder",
         "heading": "Quick follow-up",
-        "greeting": "Hi --",
+        "greeting": "Hello,",
         "intro": (
             "Checking back on the quick feedback we sent a few days ago about "
             "your matches. Three questions, 60 seconds. Whatever you share "
@@ -308,9 +308,9 @@ DEFAULTS: dict[str, dict[str, str]] = {
     "patient_survey_v2_3w_reminder": {
         "title": "3-week check-in reminder",
         "description": "One reminder 3 days after the 3w survey email. Final ask.",
-        "subject": "How's your therapist match going?",
+        "subject": "[Week 3 Check-in] How are things going? — quick reminder",
         "heading": "Quick follow-up",
-        "greeting": "Hi --",
+        "greeting": "Hello,",
         "intro": (
             "Checking back on the check-in we sent a few days ago. A few "
             "quick questions about how your therapist match is going -- "
@@ -329,9 +329,9 @@ DEFAULTS: dict[str, dict[str, str]] = {
     "patient_survey_v2_9w_reminder": {
         "title": "9-week check-in reminder",
         "description": "One reminder 3 days after the 9w survey email. Final ask.",
-        "subject": "Two months in -- still love to hear from you",
+        "subject": "[Week 9 Check-in] How is therapy going? — quick reminder",
         "heading": "Quick follow-up",
-        "greeting": "Hi --",
+        "greeting": "Hello,",
         "intro": (
             "Checking back on the therapy check-in we sent a few days ago. "
             "Your honest answers about how things are going -- about 2 "
@@ -350,9 +350,9 @@ DEFAULTS: dict[str, dict[str, str]] = {
     "patient_survey_v2_15w_reminder": {
         "title": "15-week outcome reminder",
         "description": "One reminder 3 days after the 15w survey email. Final ask.",
-        "subject": "Last check-in -- your TheraVoca outcome",
+        "subject": "[Week 15 Check-in] Final reflection on your experience — quick reminder",
         "heading": "Final follow-up",
-        "greeting": "Hi --",
+        "greeting": "Hello,",
         "intro": (
             "Checking back on the final check-in we sent a few days ago. "
             "Your reflections on how things turned out -- about 2 minutes "
