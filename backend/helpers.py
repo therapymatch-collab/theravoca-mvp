@@ -729,7 +729,7 @@ async def _deliver_results(request_id: str) -> dict[str, Any]:
     # Writes the v2_survey_{code}_sent_at flag that the v2 cron checks,
     # so cron correctly skips already-sent milestones.
     testing_doc = await db.app_config.find_one({"key": "feedback_testing"}, {"_id": 0})
-    if (testing_doc or {}).get("enabled"):
+    if (testing_doc or {}).get("enabled") and not req.get("surveys_test_fired"):
         from email_service import (
             send_patient_survey_v2_48h, send_patient_survey_v2_3w,
             send_patient_survey_v2_9w, send_patient_survey_v2_15w,
@@ -750,6 +750,15 @@ async def _deliver_results(request_id: str) -> dict[str, Any]:
                 )
             except Exception:
                 pass  # logged by email_service
+        # Stamp the request so the admin fire-test-surveys endpoint
+        # (and any other re-delivery path) won't double-fire these emails.
+        await db.requests.update_one(
+            {"id": request_id},
+            {"$set": {
+                "surveys_test_fired": True,
+                "surveys_test_fired_at": now_iso,
+            }},
+        )
 
     return {"sent_to": req["email"], "count": len(enriched)}
 

@@ -4561,7 +4561,7 @@ async def fire_test_surveys(
         raise HTTPException(400, "Enable testing mode in Settings first")
 
     req = await db.requests.find_one(
-        {"id": request_id}, {"_id": 0, "email": 1, "id": 1}
+        {"id": request_id}, {"_id": 0, "email": 1, "id": 1, "surveys_test_fired": 1}
     )
     if not req:
         raise HTTPException(404, "Request not found")
@@ -4569,6 +4569,8 @@ async def fire_test_surveys(
     email = req.get("email")
     if not email:
         raise HTTPException(400, "Request has no patient email")
+    if req.get("surveys_test_fired"):
+        raise HTTPException(409, "Test surveys already fired for this request")
 
     from email_service import (
         send_patient_survey_v2_48h,
