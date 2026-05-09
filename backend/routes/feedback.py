@@ -29,7 +29,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -265,10 +265,21 @@ async def submit_patient_48h(
     if not req:
         raise HTTPException(404, "Request not found")
 
+    # Idempotency: one submission per (request_id, milestone). 409 on
+    # double-click Submit or revisit-after-submit. Replay UI on the
+    # frontend uses the GET endpoint to render read-only.
+    existing = await db.feedback.find_one(
+        {"request_id": request_id, "milestone": "48h"},
+        {"_id": 1},
+    )
+    if existing:
+        raise HTTPException(409, "Already submitted")
+
     doc = {
         "id": str(uuid.uuid4()),
         "kind": "patient_48h",
         "milestone": "48h",
+        "role": "patient",
         "request_id": request_id,
         "patient_email": req.get("email"),
         **payload.model_dump(),
@@ -291,10 +302,19 @@ async def submit_patient_3w(
     if not req:
         raise HTTPException(404, "Request not found")
 
+    # Idempotency -- see 48h handler comment.
+    existing = await db.feedback.find_one(
+        {"request_id": request_id, "milestone": "3w"},
+        {"_id": 1},
+    )
+    if existing:
+        raise HTTPException(409, "Already submitted")
+
     doc = {
         "id": str(uuid.uuid4()),
         "kind": "patient_3w",
         "milestone": "3w",
+        "role": "patient",
         "request_id": request_id,
         "patient_email": req.get("email"),
         **payload.model_dump(),
@@ -352,6 +372,14 @@ async def submit_patient_9w(
     if not req:
         raise HTTPException(404, "Request not found")
 
+    # Idempotency -- see 48h handler comment.
+    existing = await db.feedback.find_one(
+        {"request_id": request_id, "milestone": "9w"},
+        {"_id": 1},
+    )
+    if existing:
+        raise HTTPException(409, "Already submitted")
+
     # Look up the chosen therapist from the 3w survey
     therapist_id = await _get_therapist_for_request(request_id)
 
@@ -366,6 +394,7 @@ async def submit_patient_9w(
         "id": str(uuid.uuid4()),
         "kind": "patient_9w",
         "milestone": "9w",
+        "role": "patient",
         "request_id": request_id,
         "patient_email": req.get("email"),
         "therapist_id": therapist_id,
@@ -395,6 +424,14 @@ async def submit_patient_15w(
     if not req:
         raise HTTPException(404, "Request not found")
 
+    # Idempotency -- see 48h handler comment.
+    existing = await db.feedback.find_one(
+        {"request_id": request_id, "milestone": "15w"},
+        {"_id": 1},
+    )
+    if existing:
+        raise HTTPException(409, "Already submitted")
+
     therapist_id = await _get_therapist_for_request(request_id)
 
     # Build full Match Strength data from all milestones
@@ -408,6 +445,7 @@ async def submit_patient_15w(
         "id": str(uuid.uuid4()),
         "kind": "patient_15w",
         "milestone": "15w",
+        "role": "patient",
         "request_id": request_id,
         "patient_email": req.get("email"),
         "therapist_id": therapist_id,
@@ -629,6 +667,39 @@ async def get_patient_matches(
         })
 
     return {"matches": therapists}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# REPLAY -- read previously submitted feedback for a milestone
+# ═══════════════════════════════════════════════════════════════════════
+
+@router.get("/feedback/patient/{request_id}/{milestone}")
+async def get_patient_submission(
+    request_id: str,
+    milestone: Literal["48h", "3w", "9w", "15w"],
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
+):
+    """Return the existing patient feedback submission for {request_id,
+    milestone} if it exists, else null.
+
+    Used by the frontend to render replay-mode (read-only) surveys when
+    the patient revisits a survey link they already submitted. Returns
+    200 with body `null` when no doc exists -- the frontend uses null to
+    distinguish 'not submitted yet' (200 + null) from 'auth failed' (401).
+
+    Path-param order matters: this route is registered AFTER
+    `/feedback/patient/{request_id}/matches` so /matches reaches that
+    handler first. Literal validation on `milestone` also rejects any
+    non-milestone path segment (matches, etc.) with a 422 even if order
+    were swapped.
+    """
+    _verify_feedback_token(request_id, token, "patient", authorization)
+    doc = await db.feedback.find_one(
+        {"request_id": request_id, "milestone": milestone},
+        {"_id": 0},
+    )
+    return doc
 
 
 # ═══════════════════════════════════════════════════════════════════════

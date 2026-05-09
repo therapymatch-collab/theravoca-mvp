@@ -223,6 +223,23 @@ function PrivacyBanner({ long = false }) {
   );
 }
 
+function ReplayBanner({ submission }) {
+  if (!submission) return null;
+  const date = new Date(submission.submitted_at).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  return (
+    <div
+      className="bg-[#F5F3EF] border border-[#E8E5DF] rounded-xl px-4 py-3 text-sm text-[#6D6A65]"
+      data-testid="replay-banner"
+    >
+      Submitted on {date}
+    </div>
+  );
+}
+
 /* ────────────────────────────────────────────────────────────────── */
 /*  Milestone headings                                               */
 /* ────────────────────────────────────────────────────────────────── */
@@ -643,8 +660,9 @@ function Milestone15w({ answers, setAnswer }) {
 /*  v2 milestone: 48h                                                */
 /* ────────────────────────────────────────────────────────────────── */
 
-function V2Milestone48h({ answers, setAnswer }) {
-  return (
+function V2Milestone48h({ answers, setAnswer, existingSubmission }) {
+  const readOnly = !!existingSubmission;
+  const content = (
     <>
       <PrivacyBanner />
       <QuestionCard number={1} label="How do you feel about the therapists matched to you?">
@@ -691,6 +709,17 @@ function V2Milestone48h({ answers, setAnswer }) {
       </QuestionCard>
     </>
   );
+  if (readOnly) {
+    return (
+      <>
+        <ReplayBanner submission={existingSubmission} />
+        <div className="pointer-events-none opacity-60 select-none space-y-5">
+          {content}
+        </div>
+      </>
+    );
+  }
+  return content;
 }
 
 /* ────────────────────────────────────────────────────────────────── */
@@ -714,8 +743,9 @@ function TherapistAvatar({ name, color }) {
   );
 }
 
-function V2Milestone3w({ answers, setAnswer, therapists }) {
+function V2Milestone3w({ answers, setAnswer, therapists, existingSubmission }) {
   // Multi-select therapists + sentinel options
+  const readOnly = !!existingSubmission;
   const selected = answers.selected_therapists || [];
 
   const toggleTherapist = (id) => {
@@ -737,7 +767,7 @@ function V2Milestone3w({ answers, setAnswer, therapists }) {
     }
   };
 
-  return (
+  const content = (
     <>
       <PrivacyBanner />
       <QuestionCard number={1} label="Which therapists have you contacted or started seeing?">
@@ -825,14 +855,26 @@ function V2Milestone3w({ answers, setAnswer, therapists }) {
       </QuestionCard>
     </>
   );
+  if (readOnly) {
+    return (
+      <>
+        <ReplayBanner submission={existingSubmission} />
+        <div className="pointer-events-none opacity-60 select-none space-y-5">
+          {content}
+        </div>
+      </>
+    );
+  }
+  return content;
 }
 
 /* ────────────────────────────────────────────────────────────────── */
 /*  v2 milestone: 9w                                                 */
 /* ────────────────────────────────────────────────────────────────── */
 
-function V2Milestone9w({ answers, setAnswer }) {
-  return (
+function V2Milestone9w({ answers, setAnswer, existingSubmission }) {
+  const readOnly = !!existingSubmission;
+  const content = (
     <>
       <PrivacyBanner long />
       <QuestionCard number={1} label="Are you still seeing a therapist from your matches?">
@@ -908,14 +950,26 @@ function V2Milestone9w({ answers, setAnswer }) {
       </QuestionCard>
     </>
   );
+  if (readOnly) {
+    return (
+      <>
+        <ReplayBanner submission={existingSubmission} />
+        <div className="pointer-events-none opacity-60 select-none space-y-5">
+          {content}
+        </div>
+      </>
+    );
+  }
+  return content;
 }
 
 /* ────────────────────────────────────────────────────────────────── */
 /*  v2 milestone: 15w                                                */
 /* ────────────────────────────────────────────────────────────────── */
 
-function V2Milestone15w({ answers, setAnswer }) {
-  return (
+function V2Milestone15w({ answers, setAnswer, existingSubmission }) {
+  const readOnly = !!existingSubmission;
+  const content = (
     <>
       <PrivacyBanner long />
       <QuestionCard number={1} label="Are you still seeing a therapist from your matches?">
@@ -1001,6 +1055,17 @@ function V2Milestone15w({ answers, setAnswer }) {
       </QuestionCard>
     </>
   );
+  if (readOnly) {
+    return (
+      <>
+        <ReplayBanner submission={existingSubmission} />
+        <div className="pointer-events-none opacity-60 select-none space-y-5">
+          {content}
+        </div>
+      </>
+    );
+  }
+  return content;
 }
 
 /* ────────────────────────────────────────────────────────────────── */
@@ -1116,6 +1181,7 @@ export default function FeedbackSurvey() {
 
   const [answers, setAnswers] = useState({});
   const [therapists, setTherapists] = useState([]);
+  const [existingSubmission, setExistingSubmission] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -1181,6 +1247,31 @@ export default function FeedbackSurvey() {
     }
     setLoading(false);
   }, [milestone, requestId, getClient, authParams]);
+
+  // Replay mode: check for an existing submission. If one exists, the
+  // form renders read-only with a "Submitted on ..." banner and the
+  // Submit button is hidden. Only v2 surveys support replay; v1 forms
+  // continue as-is.
+  useEffect(() => {
+    if (!["48h", "3w", "9w", "15w"].includes(milestone)) return;
+    if (surveyVersion !== 2) return;
+    const client = getClient();
+    client
+      .get(`/feedback/patient/${requestId}/${milestone}`, {
+        params: { ...(authParams().params || {}) },
+      })
+      .then((res) => {
+        // null body = not submitted yet; doc body = replay mode.
+        if (res.data) {
+          setExistingSubmission(res.data);
+          setAnswers(res.data);
+        }
+      })
+      .catch((e) => {
+        // eslint-disable-next-line no-console
+        console.error("Failed to load existing submission:", e);
+      });
+  }, [milestone, requestId, getClient, authParams, surveyVersion]);
 
   const setAnswer = useCallback((key, value) => {
     setAnswers((prev) => ({ ...prev, [key]: value }));
@@ -1326,16 +1417,16 @@ export default function FeedbackSurvey() {
             {surveyVersion === 2 ? (
               <>
                 {milestone === "48h" && (
-                  <V2Milestone48h answers={answers} setAnswer={setAnswer} />
+                  <V2Milestone48h answers={answers} setAnswer={setAnswer} existingSubmission={existingSubmission} />
                 )}
                 {milestone === "3w" && (
-                  <V2Milestone3w answers={answers} setAnswer={setAnswer} therapists={therapists} />
+                  <V2Milestone3w answers={answers} setAnswer={setAnswer} therapists={therapists} existingSubmission={existingSubmission} />
                 )}
                 {milestone === "9w" && (
-                  <V2Milestone9w answers={answers} setAnswer={setAnswer} />
+                  <V2Milestone9w answers={answers} setAnswer={setAnswer} existingSubmission={existingSubmission} />
                 )}
                 {milestone === "15w" && (
-                  <V2Milestone15w answers={answers} setAnswer={setAnswer} />
+                  <V2Milestone15w answers={answers} setAnswer={setAnswer} existingSubmission={existingSubmission} />
                 )}
               </>
             ) : (
@@ -1356,20 +1447,22 @@ export default function FeedbackSurvey() {
             )}
           </div>
 
-          {/* Submit */}
-          <div className="mt-8 flex justify-end">
-            <button
-              type="button"
-              onClick={submit}
-              disabled={submitting}
-              className="bg-[#2D4A3E] text-white rounded-xl px-6 py-3 text-sm font-medium
-                hover:bg-[#3A5E50] disabled:opacity-50 transition inline-flex items-center gap-2"
-              data-testid="survey-submit"
-            >
-              {submitting && <Loader2 size={14} className="animate-spin" />}
-              Submit feedback
-            </button>
-          </div>
+          {/* Submit (hidden in replay mode) */}
+          {!existingSubmission && (
+            <div className="mt-8 flex justify-end">
+              <button
+                type="button"
+                onClick={submit}
+                disabled={submitting}
+                className="bg-[#2D4A3E] text-white rounded-xl px-6 py-3 text-sm font-medium
+                  hover:bg-[#3A5E50] disabled:opacity-50 transition inline-flex items-center gap-2"
+                data-testid="survey-submit"
+              >
+                {submitting && <Loader2 size={14} className="animate-spin" />}
+                Submit feedback
+              </button>
+            </div>
+          )}
         </div>
       </main>
       <Footer />
