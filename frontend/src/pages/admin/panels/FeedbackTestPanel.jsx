@@ -125,7 +125,7 @@ export default function FeedbackTestPanel() {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4">
                 {MILESTONES.map((ms) => {
-                  const sent = r[`structured_followup_${ms.code}_sent_at`] || r[`followup_sent_${ms.code}`];
+                  const sent = r[`v2_survey_${ms.code}_sent_at`];
                   const hasFb = fb.some((f) => f.milestone === ms.code);
                   const key = `${r.id}-${ms.code}`;
                   return (

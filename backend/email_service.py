@@ -609,34 +609,6 @@ async def render_template_preview(
     return {"subject": subject, "html": _wrap(heading or "Preview", inner)}
 
 
-async def send_patient_followup_48h(to: str, request_id: str) -> None:
-    from routes.feedback import generate_feedback_token
-    token = generate_feedback_token(request_id, "patient")
-    url = f"{_get_app_url()}/feedback/{request_id}/48h?token={token}"
-    await _send_simple_cta_template("patient_followup_48h", to, url, {"request_id": request_id})
-
-
-async def send_patient_followup_3w(to: str, request_id: str) -> None:
-    from routes.feedback import generate_feedback_token
-    token = generate_feedback_token(request_id, "patient")
-    url = f"{_get_app_url()}/feedback/{request_id}/3w?token={token}"
-    await _send_simple_cta_template("patient_followup_3w", to, url, {"request_id": request_id})
-
-
-async def send_patient_followup_9w(to: str, request_id: str) -> None:
-    from routes.feedback import generate_feedback_token
-    token = generate_feedback_token(request_id, "patient")
-    url = f"{_get_app_url()}/feedback/{request_id}/9w?token={token}"
-    await _send_simple_cta_template("patient_followup_9w", to, url, {"request_id": request_id})
-
-
-async def send_patient_followup_15w(to: str, request_id: str) -> None:
-    from routes.feedback import generate_feedback_token
-    token = generate_feedback_token(request_id, "patient")
-    url = f"{_get_app_url()}/feedback/{request_id}/15w?token={token}"
-    await _send_simple_cta_template("patient_followup_15w", to, url, {"request_id": request_id})
-
-
 # ── v2 patient survey senders ────────────────────────────────────────
 
 async def send_patient_survey_v2_48h(to: str, request_id: str) -> None:
@@ -809,42 +781,6 @@ async def send_license_expiring_to_admin(
     </p>
     """
     await _send(to, subject, _wrap("License renewal alert", inner))
-
-
-async def send_followup_survey(
-    to: str, request_id: str, milestone: str
-) -> None:
-    """48h / 3-week / 9-week / 15-week post-results survey email to the patient."""
-    portal_url = f"{_get_app_url()}/followup/{request_id}/{milestone}"
-    titles = {
-        "48h": ("48 hours in — how's it going?", "Just a quick check-in"),
-        "3wk": ("3 weeks in — quick check-in", "How are sessions going?"),
-        "9wk": ("9 weeks in — how's therapy?", "Checking in"),
-        "15wk": ("15 weeks in — measuring progress", "Final check-in"),
-    }
-    subject, heading = titles.get(milestone, ("How's therapy going?", "Quick check-in"))
-    time_desc = {
-        "48h": "a few days", "3wk": "a few weeks",
-        "9wk": "a couple months", "15wk": "a few months",
-    }
-    inner = f"""
-    <p style="font-size:16px;line-height:1.6;">Hi there,</p>
-    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-      It's been {time_desc.get(milestone, 'some time')}
-      since we sent you matches. We'd love to know how it's going so we can keep
-      improving for everyone.
-    </p>
-    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-      It's a 30-second form — totally anonymous to your therapist.
-    </p>
-    <p style="margin:28px 0;">
-      <a href="{portal_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">Share an update</a>
-    </p>
-    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">
-      If you didn't end up working with anyone, that's useful too — let us know what got in the way.
-    </p>
-    """
-    await _send(to, subject, _wrap(heading, inner))
 
 
 async def send_availability_prompt(to: str, therapist_name: str) -> None:

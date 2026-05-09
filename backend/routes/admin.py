@@ -3990,8 +3990,8 @@ async def admin_set_feedback_testing(payload: dict) -> dict[str, Any]:
 async def admin_trigger_test_feedback(payload: dict) -> dict[str, Any]:
     """Manually trigger a specific milestone email for a request."""
     from email_service import (
-        send_patient_followup_48h, send_patient_followup_3w,
-        send_patient_followup_9w, send_patient_followup_15w,
+        send_patient_survey_v2_48h, send_patient_survey_v2_3w,
+        send_patient_survey_v2_9w, send_patient_survey_v2_15w,
     )
     request_id = payload.get("request_id")
     milestone = payload.get("milestone")
@@ -4003,10 +4003,10 @@ async def admin_trigger_test_feedback(payload: dict) -> dict[str, Any]:
     if not req or not req.get("email"):
         raise HTTPException(404, "Request not found or missing email")
     senders = {
-        "48h": send_patient_followup_48h,
-        "3w": send_patient_followup_3w,
-        "9w": send_patient_followup_9w,
-        "15w": send_patient_followup_15w,
+        "48h": send_patient_survey_v2_48h,
+        "3w": send_patient_survey_v2_3w,
+        "9w": send_patient_survey_v2_9w,
+        "15w": send_patient_survey_v2_15w,
     }
     sender = senders.get(milestone)
     if not sender:
@@ -4263,33 +4263,6 @@ async def list_scraper_jobs():
             "completed_at": j.get("completed_at"),
         })
     return {"jobs": jobs}
-
-
-@router.post("/admin/trigger-feedback-email", dependencies=[Depends(require_admin)])
-async def trigger_feedback_email(payload: dict):
-    """Manually trigger a feedback survey email for testing."""
-    from email_service import (
-        send_patient_followup_48h, send_patient_followup_3w,
-        send_patient_followup_9w, send_patient_followup_15w,
-    )
-    request_id = payload.get("request_id")
-    milestone = payload.get("milestone")
-    if not request_id or not milestone:
-        raise HTTPException(400, "request_id and milestone required")
-    req = await db.requests.find_one({"id": request_id}, {"_id": 0, "email": 1})
-    if not req:
-        raise HTTPException(404, "Request not found")
-    senders = {
-        "48h": send_patient_followup_48h,
-        "3w": send_patient_followup_3w,
-        "9w": send_patient_followup_9w,
-        "15w": send_patient_followup_15w,
-    }
-    sender = senders.get(milestone)
-    if not sender:
-        raise HTTPException(400, f"Invalid milestone: {milestone}")
-    await sender(req["email"], request_id)
-    return {"ok": True, "sent_to": req["email"], "milestone": milestone}
 
 
 # ── Provider directory import (real data over backfill placeholders) ──────
