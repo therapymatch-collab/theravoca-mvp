@@ -372,6 +372,109 @@ async def _run_patient_survey_v2_reminders() -> dict[str, int]:
     return out
 
 
+async def _run_therapist_surveys() -> dict[str, int]:
+    """Phase 3 therapist surveys -- match fit + NPS + ongoing-client conversion.
+
+    Fires one email per eligible therapist when EITHER trigger is met since
+    `last_therapist_survey_sent_at` (or since `created_at` if never sent):
+      - 10+ new applications (db.applications.created_at after the anchor), OR
+      - 14+ days have passed since the anchor.
+
+    Skip rules:
+      - Therapist has zero ever-applications (no signal to give yet)
+      - Not active / pending approval / canceled / rejected subscription
+      - No email, or unsubscribed/hard_bounced (forward-compat flags)
+      - Not yet due (neither trigger met)
+
+    On fire: increment survey_number via `_next_therapist_survey_number`, send
+    the email, then stamp `last_therapist_survey_sent_at` + `_sent_number`
+    atomically on the therapist doc."""
+    audit.emit(
+        actor_type="system", actor_id="cron", action="run_therapist_surveys",
+        resource="therapist",
+    )
+    from email_service import send_therapist_survey
+    from helpers import _next_therapist_survey_number
+
+    REFERRAL_THRESHOLD = 10
+    DAYS_THRESHOLD = 14
+    now = datetime.now(timezone.utc)
+    cutoff_14d = (now - timedelta(days=DAYS_THRESHOLD)).isoformat()
+
+    cur = db.therapists.find(
+        {
+            "is_active": {"$ne": False},
+            "pending_approval": {"$ne": True},
+            "subscription_status": {"$nin": ["canceled", "rejected"]},
+            "email": {"$ne": None},
+            "unsubscribed": {"$ne": True},
+            "hard_bounced": {"$ne": True},
+        },
+        {"_id": 0, "id": 1, "email": 1, "name": 1,
+         "created_at": 1, "last_therapist_survey_sent_at": 1},
+    )
+    sent = 0
+    skipped_no_apps = 0
+    skipped_not_due = 0
+    async for t in cur:
+        tid = t["id"]
+        last_sent = t.get("last_therapist_survey_sent_at")
+        signup = t.get("created_at")
+
+        # Skip if therapist has zero ever-applications -- nothing to ask about.
+        total_apps = await db.applications.count_documents({"therapist_id": tid})
+        if total_apps == 0:
+            skipped_no_apps += 1
+            continue
+
+        # Days-based trigger: 14+ days since anchor.
+        date_anchor = last_sent or signup
+        days_ok = (date_anchor is not None and date_anchor <= cutoff_14d)
+
+        # Referrals-based trigger: 10+ new apps since anchor.
+        # When last_sent is null, spec says count ALL applications -- which
+        # equals total_apps we already computed above.
+        if last_sent:
+            new_apps = await db.applications.count_documents(
+                {"therapist_id": tid, "created_at": {"$gt": last_sent}}
+            )
+        else:
+            new_apps = total_apps
+        referral_ok = new_apps >= REFERRAL_THRESHOLD
+
+        if not (days_ok or referral_ok):
+            skipped_not_due += 1
+            continue
+
+        try:
+            survey_number = await _next_therapist_survey_number(tid)
+            await send_therapist_survey(
+                t["email"], t.get("name", ""), tid, survey_number,
+            )
+            now_iso = _now_iso()
+            await db.therapists.update_one(
+                {"id": tid},
+                {"$set": {
+                    "last_therapist_survey_sent_at": now_iso,
+                    "last_therapist_survey_sent_number": survey_number,
+                }},
+            )
+            sent += 1
+        except Exception as e:
+            logger.warning("Therapist survey failed for %s: %s", tid, e)
+
+    if sent or skipped_no_apps or skipped_not_due:
+        logger.info(
+            "Therapist surveys: sent=%d skipped_no_apps=%d skipped_not_due=%d",
+            sent, skipped_no_apps, skipped_not_due,
+        )
+    return {
+        "sent": sent,
+        "skipped_no_apps": skipped_no_apps,
+        "skipped_not_due": skipped_not_due,
+    }
+
+
 async def _run_therapist_2w_followups() -> dict[str, int]:
     """Two weeks after a therapist's first referral, ask them 3 questions
     about referral quality so we can tighten matching. Flag:
@@ -481,6 +584,7 @@ async def _daily_loop() -> None:
                     lic = await _run_license_expiry_alerts()
                     avail = await _run_availability_prompts()
                     t_follow = await _run_therapist_2w_followups()
+                    t_surveys = await _run_therapist_surveys()
                     stale = await _run_stale_profile_nag()
                     recruit = await _run_gap_recruitment()
                     v2_surveys = await _run_patient_surveys_v2()
@@ -499,6 +603,7 @@ async def _daily_loop() -> None:
                             "completed_at": _now_iso(),
                             "billing": bill, "license": lic, "availability": avail,
                             "therapist_followups": t_follow,
+                            "therapist_surveys": t_surveys,
                             "stale_profile_nag": stale,
                             "gap_recruit": recruit,
                             "v2_surveys": v2_surveys,

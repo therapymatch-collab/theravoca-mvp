@@ -748,3 +748,16 @@ async def _backfill_therapist_geo() -> None:
         count += 1
     if count:
         logger.info("Backfilled office_geos for %d therapists", count)
+
+
+async def _next_therapist_survey_number(therapist_id: str) -> int:
+    """Return the next survey_number for this therapist (max + 1, or 1 if
+    none submitted yet). Keeps survey_number monotonic per-therapist across
+    both the cron path (`_run_therapist_surveys`) and the admin manual
+    trigger (`/admin/therapists/{tid}/fire-test-survey`)."""
+    latest = await db.therapist_surveys.find_one(
+        {"therapist_id": therapist_id},
+        {"_id": 0, "survey_number": 1},
+        sort=[("survey_number", -1)],
+    )
+    return ((latest or {}).get("survey_number") or 0) + 1

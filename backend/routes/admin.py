@@ -4599,5 +4599,52 @@ async def fire_test_surveys(
     return {"count": 4, "request_id": request_id, "patient_email": email}
 
 
+# ── Phase 3: fire a therapist survey on-demand ───────────────────────
+
+@router.post("/admin/therapists/{therapist_id}/fire-test-survey")
+async def fire_test_therapist_survey(
+    therapist_id: str,
+    _admin: bool = Depends(require_admin),
+):
+    """Admin manual trigger: fire one Phase 3 therapist survey email for
+    {therapist_id}, bypassing the cron's referral-count and time-based
+    eligibility checks. Increments survey_number atomically the same way
+    the cron path does (`_next_therapist_survey_number` shared helper),
+    so cron and admin paths can't collide.
+
+    Useful for QA-ing the survey email + frontend flow on a real therapist
+    account. Does NOT require feedback_testing mode -- one-at-a-time fires
+    are low blast radius and the admin click is an intentional signal."""
+    from helpers import _next_therapist_survey_number
+    from email_service import send_therapist_survey
+
+    t = await db.therapists.find_one(
+        {"id": therapist_id},
+        {"_id": 0, "id": 1, "email": 1, "name": 1},
+    )
+    if not t:
+        raise HTTPException(404, "Therapist not found")
+    email = t.get("email")
+    if not email:
+        raise HTTPException(400, "Therapist has no email")
+
+    survey_number = await _next_therapist_survey_number(therapist_id)
+    await send_therapist_survey(email, t.get("name", ""), therapist_id, survey_number)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.therapists.update_one(
+        {"id": therapist_id},
+        {"$set": {
+            "last_therapist_survey_sent_at": now_iso,
+            "last_therapist_survey_sent_number": survey_number,
+        }},
+    )
+    return {
+        "ok": True,
+        "survey_number": survey_number,
+        "therapist_id": therapist_id,
+        "therapist_email": email,
+    }
+
+
 # Suppress unused-import warnings on logger (kept for future logging)
 void = logger
