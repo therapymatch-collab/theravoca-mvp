@@ -948,16 +948,25 @@ function V2Milestone3w({ answers, setAnswer, therapists, existingSubmission }) {
 /*  v2 milestone: 9w                                                 */
 /* ────────────────────────────────────────────────────────────────── */
 
-function V2Milestone9w({ answers, setAnswer, therapists, existingSubmission }) {
+function V2Milestone9w({ answers, setAnswer, therapists, allAppliedTherapists, existingSubmission }) {
   const readOnly = !!existingSubmission;
-  // Q1b shows only if patient is still seeing one of their matches.
-  // Hidden when patient went outside, stopped, or never started.
+  // Q1b source list depends on Q1 answer:
+  //   "yes_same_weekly" / "yes_same_less_often" -> 3wk picks (still
+  //     with one of the originally selected therapists)
+  //   "yes_different" -> ALL applied therapists (the patient switched,
+  //     so they need to see the full pool, not just their old picks)
+  const q1bList =
+    answers.still_seeing === "yes_different"
+      ? (allAppliedTherapists || [])
+      : (therapists || []);
+  // Q1b shows only if patient is still seeing one of their matches AND
+  // the appropriate source list has entries. Hidden when patient went
+  // outside, stopped, never started, or both lists are empty.
   const showQ1b =
     (answers.still_seeing === "yes_same_weekly" ||
       answers.still_seeing === "yes_same_less_often" ||
       answers.still_seeing === "yes_different") &&
-    therapists &&
-    therapists.length > 0;
+    q1bList.length > 0;
   const content = (
     <>
       <PrivacyBanner long />
@@ -986,7 +995,7 @@ function V2Milestone9w({ answers, setAnswer, therapists, existingSubmission }) {
       {showQ1b && (
         <QuestionCard number="1b" label="Which therapist?">
           <div className="space-y-2">
-            {therapists.map((t) => {
+            {q1bList.map((t) => {
               const isSelected = answers.selected_therapist_9w === t.therapist_id;
               return (
                 <button
@@ -1085,15 +1094,22 @@ function V2Milestone9w({ answers, setAnswer, therapists, existingSubmission }) {
 /*  v2 milestone: 15w                                                */
 /* ────────────────────────────────────────────────────────────────── */
 
-function V2Milestone15w({ answers, setAnswer, therapists, existingSubmission }) {
+function V2Milestone15w({ answers, setAnswer, therapists, allAppliedTherapists, existingSubmission }) {
   const readOnly = !!existingSubmission;
-  // Q1b shows only if patient is still seeing one of their matches.
+  // Q1b source list depends on Q1 answer:
+  //   "yes_same_weekly" / "yes_same_less_often" -> 3wk picks
+  //   "yes_different" -> ALL applied therapists (patient switched)
+  const q1bList =
+    answers.still_seeing === "yes_different"
+      ? (allAppliedTherapists || [])
+      : (therapists || []);
+  // Q1b shows only if patient is still seeing one of their matches AND
+  // the appropriate source list has entries.
   const showQ1b =
     (answers.still_seeing === "yes_same_weekly" ||
       answers.still_seeing === "yes_same_less_often" ||
       answers.still_seeing === "yes_different") &&
-    therapists &&
-    therapists.length > 0;
+    q1bList.length > 0;
   const content = (
     <>
       <PrivacyBanner long />
@@ -1122,7 +1138,7 @@ function V2Milestone15w({ answers, setAnswer, therapists, existingSubmission }) 
       {showQ1b && (
         <QuestionCard number="1b" label="Which therapist?">
           <div className="space-y-2">
-            {therapists.map((t) => {
+            {q1bList.map((t) => {
               const isSelected = answers.selected_therapist_15w === t.therapist_id;
               return (
                 <button
@@ -1340,6 +1356,7 @@ export default function FeedbackSurvey() {
 
   const [answers, setAnswers] = useState({});
   const [therapists, setTherapists] = useState([]);
+  const [allAppliedTherapists, setAllAppliedTherapists] = useState([]);
   const [existingSubmission, setExistingSubmission] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -1380,21 +1397,25 @@ export default function FeedbackSurvey() {
           params: { ...(authParams().params || {}), milestone },
         })
         .then((res) => {
+          const normalize = (m) => ({
+            id: m.therapist_id || m.id,
+            therapist_id: m.therapist_id || m.id,
+            name: m.therapist_name || m.name || "Therapist",
+            therapist_name: m.therapist_name || m.name || "Therapist",
+            score: m.match_score || m.score,
+            match_score: m.match_score || m.score,
+            credential_type: m.credential_type,
+            years_experience: m.years_experience,
+            modality_offering: m.modality_offering,
+            avatar_color: m.avatar_color,
+          });
+          // 9w/15w return both `matches` (3w picks or fallback) AND
+          // `all_applied` (full applied list). 48h/3w return only
+          // `matches`. all_applied defaults to [] when absent.
           const matches = res.data?.matches || res.data || [];
-          setTherapists(
-            matches.map((m) => ({
-              id: m.therapist_id || m.id,
-              therapist_id: m.therapist_id || m.id,
-              name: m.therapist_name || m.name || "Therapist",
-              therapist_name: m.therapist_name || m.name || "Therapist",
-              score: m.match_score || m.score,
-              match_score: m.match_score || m.score,
-              credential_type: m.credential_type,
-              years_experience: m.years_experience,
-              modality_offering: m.modality_offering,
-              avatar_color: m.avatar_color,
-            }))
-          );
+          const allApplied = res.data?.all_applied || [];
+          setTherapists(matches.map(normalize));
+          setAllAppliedTherapists(allApplied.map(normalize));
         })
         .catch((e) => {
           // Surface the actual error -- silent catches mask real bugs
@@ -1584,10 +1605,10 @@ export default function FeedbackSurvey() {
                   <V2Milestone3w answers={answers} setAnswer={setAnswer} therapists={therapists} existingSubmission={existingSubmission} />
                 )}
                 {milestone === "9w" && (
-                  <V2Milestone9w answers={answers} setAnswer={setAnswer} therapists={therapists} existingSubmission={existingSubmission} />
+                  <V2Milestone9w answers={answers} setAnswer={setAnswer} therapists={therapists} allAppliedTherapists={allAppliedTherapists} existingSubmission={existingSubmission} />
                 )}
                 {milestone === "15w" && (
-                  <V2Milestone15w answers={answers} setAnswer={setAnswer} therapists={therapists} existingSubmission={existingSubmission} />
+                  <V2Milestone15w answers={answers} setAnswer={setAnswer} therapists={therapists} allAppliedTherapists={allAppliedTherapists} existingSubmission={existingSubmission} />
                 )}
               </>
             ) : (

@@ -622,69 +622,79 @@ async def get_patient_matches(
     if not req:
         raise HTTPException(404, "Request not found")
 
-    if milestone in ("48h", "3w"):
-        therapist_ids: list[str] = []
+    async def _applied_ids() -> list[str]:
+        ids: list[str] = []
         async for a in db.applications.find(
             {"request_id": request_id},
             {"_id": 0, "therapist_id": 1},
         ):
-            therapist_ids.append(a["therapist_id"])
-    elif milestone in ("9w", "15w"):
-        # Prefer the 3w-picked therapists, dropping any sentinels.
+            ids.append(a["therapist_id"])
+        return ids
+
+    async def _hydrate(therapist_ids: list[str]) -> list[dict]:
+        """Enrich a list of therapist IDs with match score, profile, and
+        a deterministic avatar color. Empty input -> empty output."""
+        if not therapist_ids:
+            return []
+        apps: dict[str, float | None] = {}
+        async for a in db.applications.find(
+            {"request_id": request_id, "therapist_id": {"$in": therapist_ids}},
+            {"_id": 0, "therapist_id": 1, "match_score": 1},
+        ):
+            apps[a["therapist_id"]] = a.get("match_score")
+        out: list[dict] = []
+        _colors = [
+            "#4F46E5", "#7C3AED", "#2563EB", "#0891B2",
+            "#059669", "#D97706", "#DC2626", "#DB2777",
+        ]
+        async for t in db.therapists.find(
+            {"id": {"$in": therapist_ids}},
+            {"_id": 0, "id": 1, "name": 1,
+             "credential_type": 1, "years_experience": 1,
+             "modality_offering": 1},
+        ):
+            tid = t["id"]
+            _hash = sum(ord(c) for c in tid) % len(_colors)
+            out.append({
+                "therapist_id": tid,
+                "therapist_name": t.get("name", "Therapist"),
+                "match_score": apps.get(tid),
+                "credential_type": t.get("credential_type"),
+                "years_experience": t.get("years_experience"),
+                "modality_offering": t.get("modality_offering"),
+                "avatar_color": _colors[_hash],
+            })
+        return out
+
+    if milestone in ("48h", "3w"):
+        return {"matches": await _hydrate(await _applied_ids())}
+
+    if milestone in ("9w", "15w"):
+        # `matches` = primary list: 3w-picked therapists (sentinels
+        # filtered), falling back to applied if 3w was sentinel-only or
+        # missing.
+        # `all_applied` = the full applied list, used by the frontend
+        # when the patient picks "yes_different" at Q1 (they switched,
+        # so they need to see the full pool, not just the 3w picks).
+        # Both arrays may be empty when no applications exist; the
+        # frontend hides Q1b in that case.
         fb_3w = await db.feedback.find_one(
             {"request_id": request_id, "milestone": "3w"},
             {"_id": 0, "selected_therapists": 1},
         )
         selected = (fb_3w or {}).get("selected_therapists") or []
-        therapist_ids = [tid for tid in selected if not tid.startswith("_")]
-        if not therapist_ids:
-            # Fall back to applied therapists when 3w selection was
-            # sentinel-only or absent.
-            async for a in db.applications.find(
-                {"request_id": request_id},
-                {"_id": 0, "therapist_id": 1},
-            ):
-                therapist_ids.append(a["therapist_id"])
-    else:
-        # Unspecified milestone -- preserve old behavior (notified pool).
-        therapist_ids = req.get("notified_therapist_ids") or []
+        primary_ids = [tid for tid in selected if not tid.startswith("_")]
+        all_applied_ids = await _applied_ids()
+        if not primary_ids:
+            primary_ids = list(all_applied_ids)
+        return {
+            "matches": await _hydrate(primary_ids),
+            "all_applied": await _hydrate(all_applied_ids),
+        }
 
-    if not therapist_ids:
-        return {"matches": []}
-
-    # Pull match scores from applications
-    apps: dict[str, float | None] = {}
-    async for a in db.applications.find(
-        {"request_id": request_id, "therapist_id": {"$in": therapist_ids}},
-        {"_id": 0, "therapist_id": 1, "match_score": 1},
-    ):
-        apps[a["therapist_id"]] = a.get("match_score")
-
-    therapists: list[dict] = []
-    async for t in db.therapists.find(
-        {"id": {"$in": therapist_ids}},
-        {"_id": 0, "id": 1, "name": 1,
-         "credential_type": 1, "years_experience": 1,
-         "modality_offering": 1},
-    ):
-        # Deterministic avatar color from therapist_id hash
-        _colors = [
-            "#4F46E5", "#7C3AED", "#2563EB", "#0891B2",
-            "#059669", "#D97706", "#DC2626", "#DB2777",
-        ]
-        tid = t["id"]
-        _hash = sum(ord(c) for c in tid) % len(_colors)
-        therapists.append({
-            "therapist_id": tid,
-            "therapist_name": t.get("name", "Therapist"),
-            "match_score": apps.get(tid),
-            "credential_type": t.get("credential_type"),
-            "years_experience": t.get("years_experience"),
-            "modality_offering": t.get("modality_offering"),
-            "avatar_color": _colors[_hash],
-        })
-
-    return {"matches": therapists}
+    # Unspecified milestone -- preserve old behavior (notified pool).
+    therapist_ids = req.get("notified_therapist_ids") or []
+    return {"matches": await _hydrate(therapist_ids)}
 
 
 # ═══════════════════════════════════════════════════════════════════════
