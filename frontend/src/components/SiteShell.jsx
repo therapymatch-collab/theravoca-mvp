@@ -92,7 +92,7 @@ export function Header({ minimal = false }) {
           <>
             {/* Desktop nav */}
             <nav
-              className="hidden md:flex items-center gap-7 text-sm text-[#6D6A65]"
+              className="hidden lg:flex items-center gap-7 text-sm text-[#6D6A65]"
               data-testid="desktop-nav"
             >
               <a href="/#how" className="hover:text-[#2D4A3E] transition" data-testid="nav-how">
@@ -204,7 +204,7 @@ export function Header({ minimal = false }) {
             <button
               type="button"
               onClick={() => setMobileOpen((s) => !s)}
-              className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-full text-[#2D4A3E] hover:bg-[#E8E5DF]/50 transition"
+              className="lg:hidden inline-flex items-center justify-center w-10 h-10 rounded-full text-[#2D4A3E] hover:bg-[#E8E5DF]/50 transition"
               aria-label={mobileOpen ? "Close menu" : "Open menu"}
               aria-expanded={mobileOpen}
               data-testid="mobile-menu-trigger"
@@ -218,7 +218,7 @@ export function Header({ minimal = false }) {
       {/* Mobile drawer — slides down under the sticky header */}
       {!minimal && mobileOpen && (
         <div
-          className="md:hidden border-t border-[#E8E5DF] bg-[#FDFBF7]"
+          className="lg:hidden border-t border-[#E8E5DF] bg-[#FDFBF7]"
           data-testid="mobile-nav"
         >
           <nav className="max-w-7xl mx-auto px-5 py-5 flex flex-col gap-1 text-base text-[#2B2A29]">

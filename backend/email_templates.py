@@ -18,7 +18,7 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "description": "Sent to a patient after they submit the intake form.",
         "subject": "Confirm your TheraVoca request",
         "heading": "Almost there",
-        "greeting": "",
+        "greeting": "Hello,",
         "intro": "Thank you for trusting TheraVoca to help you find the right therapist. Please confirm your email so we can begin matching you.",
         "cta_label": "Confirm my request",
         "footer_note": "If the button doesn't work, paste the link into your browser.",
