@@ -21,7 +21,7 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "greeting": "Hello,",
         "intro": "Thank you for trusting TheraVoca to help you find the right therapist. Please confirm your email so we can begin matching you.",
         "cta_label": "Confirm my request",
-        "footer_note": "If the button doesn't work, paste the link into your browser.",
+        "footer_note": "If the button doesn't work, paste the link into your browser.<br/><br/>To stop receiving these emails, reply STOP or email support@theravoca.com.",
         "available_vars": "verify_url",
     },
     "therapist_notification": {
@@ -43,7 +43,7 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "greeting": "",
         "intro": "Your personalized therapist matches are ready. These therapists read your anonymous referral and want to work with you. Tap <strong>View full profile &amp; contact</strong> on any match below to see their bio and reach out — many offer a free 15-minute consult.",
         "cta_label": "View full matches",
-        "footer_note": "",
+        "footer_note": "To stop receiving these emails, reply STOP or email support@theravoca.com.",
         "available_vars": "count, results_url",
     },
     "patient_results_empty": {
@@ -54,7 +54,7 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "greeting": "",
         "intro": "Just a quick update — we're actively reaching out to additional therapists who fit your needs. Great matches are worth getting right, so we'd rather take a little longer than send you someone who isn't a strong fit. We'll follow up the moment we hear back.",
         "cta_label": "",
-        "footer_note": "Nothing to do on your end — we'll email you as soon as we have more for you. Reply to this email any time if you want to adjust your preferences.",
+        "footer_note": "Nothing to do on your end — we'll email you as soon as we have more for you. Reply to this email any time if you want to adjust your preferences.<br/><br/>To stop receiving these emails, reply STOP or email support@theravoca.com.",
         "available_vars": "",
     },
     "therapist_signup_received": {
@@ -132,7 +132,7 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "greeting": "",
         "intro": "Use this code to sign in. It expires in {ttl_minutes} minutes.",
         "cta_label": "",
-        "footer_note": "If you didn't request this, you can safely ignore this email.",
+        "footer_note": "If you didn't request this, you can safely ignore this email.<br/><br/>To stop receiving these emails, reply STOP or email support@theravoca.com.",
         "available_vars": "code, ttl_minutes",
     },
     "new_referral_inquiry": {
@@ -219,7 +219,7 @@ DEFAULTS: dict[str, dict[str, str]] = {
             "We use them to improve our matching for the next time you or "
             "someone else needs us. Thanks for paying it forward!"
         ),
-        "footer_note": "Just 2 questions. Your responses are private and never shared with your therapist.",
+        "footer_note": "Just 2 questions. Your responses are private and never shared with your therapist.<br/><br/>To stop receiving these emails, reply STOP or email support@theravoca.com.",
         "available_vars": "request_id",
     },
     "patient_survey_v2_3w": {
@@ -239,7 +239,7 @@ DEFAULTS: dict[str, dict[str, str]] = {
             "We use them to improve our matching for the next time you or "
             "someone else needs us. Thanks for paying it forward!"
         ),
-        "footer_note": "A few quick questions about your experience. Your feedback directly shapes how we match future patients.",
+        "footer_note": "A few quick questions about your experience. Your feedback directly shapes how we match future patients.<br/><br/>To stop receiving these emails, reply STOP or email support@theravoca.com.",
         "available_vars": "request_id",
     },
     "patient_survey_v2_9w": {
@@ -260,7 +260,7 @@ DEFAULTS: dict[str, dict[str, str]] = {
             "our matching for the next time you or someone else needs us. "
             "Thanks for paying it forward!"
         ),
-        "footer_note": "Your answers are private and never shared with your therapist. They help us improve the matching experience for everyone.",
+        "footer_note": "Your answers are private and never shared with your therapist. They help us improve the matching experience for everyone.<br/><br/>To stop receiving these emails, reply STOP or email support@theravoca.com.",
         "available_vars": "request_id",
     },
     "patient_survey_v2_15w": {
@@ -281,7 +281,7 @@ DEFAULTS: dict[str, dict[str, str]] = {
             "our matching for the next time you or someone else needs us. "
             "Thanks for paying it forward!"
         ),
-        "footer_note": "This is the last survey we'll send. Your responses are completely private and help us improve outcomes for future patients.",
+        "footer_note": "This is the last survey we'll send. Your responses are completely private and help us improve outcomes for future patients.<br/><br/>To stop receiving these emails, reply STOP or email support@theravoca.com.",
         "available_vars": "request_id",
     },
     # ── v2 reminder emails (day +3 after original, one per milestone) ──
@@ -302,7 +302,7 @@ DEFAULTS: dict[str, dict[str, str]] = {
             "We use them to improve our matching for the next time you or "
             "someone else needs us. Thanks for paying it forward!"
         ),
-        "footer_note": "Three quick questions. Takes 60 seconds.",
+        "footer_note": "Three quick questions. Takes 60 seconds.<br/><br/>To stop receiving these emails, reply STOP or email support@theravoca.com.",
         "available_vars": "request_id",
     },
     "patient_survey_v2_3w_reminder": {
@@ -323,7 +323,7 @@ DEFAULTS: dict[str, dict[str, str]] = {
             "We use them to improve our matching for the next time you or "
             "someone else needs us. Thanks for paying it forward!"
         ),
-        "footer_note": "A few quick questions about your experience. Your feedback directly shapes how we match future patients.",
+        "footer_note": "A few quick questions about your experience. Your feedback directly shapes how we match future patients.<br/><br/>To stop receiving these emails, reply STOP or email support@theravoca.com.",
         "available_vars": "request_id",
     },
     "patient_survey_v2_9w_reminder": {
@@ -344,7 +344,7 @@ DEFAULTS: dict[str, dict[str, str]] = {
             "our matching for the next time you or someone else needs us. "
             "Thanks for paying it forward!"
         ),
-        "footer_note": "Your answers are private and never shared with your therapist. They help us improve the matching experience for everyone.",
+        "footer_note": "Your answers are private and never shared with your therapist. They help us improve the matching experience for everyone.<br/><br/>To stop receiving these emails, reply STOP or email support@theravoca.com.",
         "available_vars": "request_id",
     },
     "patient_survey_v2_15w_reminder": {
@@ -365,7 +365,7 @@ DEFAULTS: dict[str, dict[str, str]] = {
             "our matching for the next time you or someone else needs us. "
             "Thanks for paying it forward!"
         ),
-        "footer_note": "This is the last survey we'll send. Your responses are completely private and help us improve outcomes for future patients.",
+        "footer_note": "This is the last survey we'll send. Your responses are completely private and help us improve outcomes for future patients.<br/><br/>To stop receiving these emails, reply STOP or email support@theravoca.com.",
         "available_vars": "request_id",
     },
 }
