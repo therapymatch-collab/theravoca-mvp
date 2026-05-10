@@ -703,6 +703,32 @@ async def send_therapist_followup_2w(to: str, name: str, therapist_id: str) -> N
     )
 
 
+async def send_therapist_survey(
+    to: str, name: str, therapist_id: str, survey_number: int,
+) -> None:
+    """Phase 3 therapist survey -- match fit + NPS + ongoing-client conversion.
+    Cron triggers every 10 referrals OR 14 days (whichever first).
+
+    URL points at the frontend route /therapist-feedback/{tid}/{n}, which on
+    load fetches GET /api/feedback/therapist/{tid}/survey/{n}. Same HMAC token
+    scheme as patient surveys (entity_type='therapist').
+    """
+    from routes.feedback import generate_feedback_token
+    token = generate_feedback_token(therapist_id, "therapist")
+    url = (
+        f"{_get_app_url()}/therapist-feedback/{therapist_id}/{survey_number}"
+        f"?token={token}"
+    )
+    await _send_simple_cta_template(
+        "therapist_survey", to, url,
+        {
+            "first_name": _first_name(name),
+            "therapist_id": therapist_id,
+            "survey_number": survey_number,
+        },
+    )
+
+
 async def send_therapist_stale_profile_nag(to: str, name: str, days_stale: int) -> None:
     url = f"{_get_app_url()}/portal/therapist/edit"
     await _send_simple_cta_template(

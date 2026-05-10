@@ -31,7 +31,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Path, Query
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from deps import db, JWT_SECRET, PHASE_2_LAUNCH_DATE, _decode_session_from_authorization
@@ -240,6 +240,17 @@ class TherapistWeeklyPulse(BaseModel):
     satisfaction: int = Field(ge=1, le=5)
     feedback_text: Optional[str] = None
     adjust_preferences: bool = False
+
+
+class TherapistSurveyV3(BaseModel):
+    """Phase 3 therapist survey -- match fit + NPS + ongoing-client conversion.
+    One survey per (therapist_id, survey_number); cron increments survey_number
+    each fire."""
+    model_config = ConfigDict(extra="ignore")
+    match_fit: int = Field(ge=1, le=4)            # 1=poor, 2=fair, 3=good, 4=excellent
+    nps: int = Field(ge=0, le=10)
+    new_patients: int = Field(ge=0)               # ongoing clients since last survey
+    improvement_text: Optional[str] = Field(None, max_length=2000)
 
 
 class WidgetFeedback(BaseModel):
@@ -510,6 +521,82 @@ async def submit_therapist_pulse(
             f"<p>Feedback: {payload.feedback_text or 'N/A'}</p>",
         )
 
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# THERAPIST SURVEY (Phase 3) -- match fit + NPS + ongoing-client conversion
+# ═══════════════════════════════════════════════════════════════════════
+
+@router.get("/feedback/therapist/{therapist_id}/survey/{survey_number}")
+async def get_therapist_survey(
+    therapist_id: str,
+    survey_number: int = Path(..., ge=1),
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
+):
+    """Return the existing therapist survey submission for {therapist_id,
+    survey_number} if it exists, else null.
+
+    Used by the frontend to render replay-mode (read-only) when the therapist
+    revisits a survey link they already submitted. Returns 200 with body
+    `null` when no doc exists -- frontend distinguishes 'not submitted yet'
+    (200 + null) from 'auth failed' (401)."""
+    _verify_feedback_token(therapist_id, token, "therapist", authorization)
+    doc = await db.therapist_surveys.find_one(
+        {"therapist_id": therapist_id, "survey_number": survey_number},
+        {"_id": 0},
+    )
+    return doc
+
+
+@router.post("/feedback/therapist/{therapist_id}/survey/{survey_number}")
+async def submit_therapist_survey(
+    therapist_id: str,
+    payload: TherapistSurveyV3,
+    survey_number: int = Path(..., ge=1),
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
+):
+    """Submit a Phase 3 therapist survey response.
+
+    Idempotent: one submission per (therapist_id, survey_number). Returns 409
+    on duplicate (e.g. double-click Submit, or revisit-after-submit -- though
+    the frontend renders read-only replay UI to prevent the latter).
+
+    Side effect: updates `last_therapist_survey_submitted_at` on the therapist
+    doc so the admin dashboard can see who has and hasn't responded. The
+    paired `last_therapist_survey_sent_at` is set by the daily cron when it
+    fires the survey email (C3, separate commit)."""
+    _verify_feedback_token(therapist_id, token, "therapist", authorization)
+    t = await db.therapists.find_one(
+        {"id": therapist_id}, {"_id": 0, "id": 1, "email": 1, "name": 1},
+    )
+    if not t:
+        raise HTTPException(404, "Therapist not found")
+
+    existing = await db.therapist_surveys.find_one(
+        {"therapist_id": therapist_id, "survey_number": survey_number},
+        {"_id": 1},
+    )
+    if existing:
+        raise HTTPException(409, "Already submitted")
+
+    now = _now_iso()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "therapist_id": therapist_id,
+        "survey_number": survey_number,
+        "survey_version": 3,
+        "role": "therapist",
+        **payload.model_dump(),
+        "submitted_at": now,
+    }
+    await db.therapist_surveys.insert_one(doc)
+    await db.therapists.update_one(
+        {"id": therapist_id},
+        {"$set": {"last_therapist_survey_submitted_at": now}},
+    )
     return {"ok": True}
 
 

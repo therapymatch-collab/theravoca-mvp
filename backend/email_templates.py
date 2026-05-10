@@ -102,6 +102,17 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "footer_note": "Three quick questions. Your input tightens how we filter specialties and availability for every future referral.",
         "available_vars": "first_name",
     },
+    "therapist_survey": {
+        "title": "Therapist survey (Phase 3)",
+        "description": "Sent every 10 referrals OR 14 days (whichever first) to gauge match fit + NPS + ongoing-client conversion.",
+        "subject": "Quick check-in on your TheraVoca matches",
+        "heading": "How are your matches working out?",
+        "greeting": "Hi {first_name},",
+        "intro": "It's been a few weeks since your recent matches. We'd love a quick check-in to help us send you better-fit patients.",
+        "cta_label": "Share quick feedback",
+        "footer_note": "Takes about 60 seconds. Your responses help us improve match quality for you and other therapists.",
+        "available_vars": "first_name, therapist_id, survey_number",
+    },
     "therapist_weekly_pulse": {
         "title": "Therapist weekly pulse survey",
         "description": "Sent weekly to active therapists with at least one referral to gauge platform satisfaction.",
