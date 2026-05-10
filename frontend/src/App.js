@@ -23,6 +23,7 @@ import BlogPost from "@/pages/BlogPost";
 import FeedbackForm from "@/pages/FeedbackForm";
 import FeedbackSurvey from "@/pages/FeedbackSurvey";
 import TherapistPulse from "@/pages/TherapistPulse";
+import TherapistSurvey from "@/pages/TherapistSurvey";
 import FeedbackWidget from "@/components/FeedbackWidget";
 import PreviewBanner from "@/components/PreviewBanner";
 import ScrollManager from "@/components/ScrollManager";
@@ -82,6 +83,10 @@ function App() {
               element={<FeedbackSurvey />}
             />
             <Route path="/therapist/pulse" element={<TherapistPulse />} />
+            <Route
+              path="/therapist-feedback/:therapistId/:surveyNumber"
+              element={<TherapistSurvey />}
+            />
             <Route
               path="/feedback/patient/:requestId"
               element={<FeedbackForm kind="patient" />}
