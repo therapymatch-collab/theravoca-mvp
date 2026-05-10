@@ -660,8 +660,33 @@ function Milestone15w({ answers, setAnswer }) {
 /*  v2 milestone: 48h                                                */
 /* ────────────────────────────────────────────────────────────────── */
 
-function V2Milestone48h({ answers, setAnswer, existingSubmission }) {
+function V2Milestone48h({ answers, setAnswer, therapists, existingSubmission }) {
   const readOnly = !!existingSubmission;
+  // Q2b state: multi-select therapists the patient reached out to.
+  const selected48h = answers.selected_therapists_48h || [];
+  const toggle48h = (id) => {
+    if (id === "_outside") {
+      if (selected48h.includes(id)) {
+        setAnswer("selected_therapists_48h", []);
+      } else {
+        setAnswer("selected_therapists_48h", [id]);
+      }
+      return;
+    }
+    const without = selected48h.filter((s) => s !== "_outside");
+    if (without.includes(id)) {
+      setAnswer("selected_therapists_48h", without.filter((s) => s !== id));
+    } else {
+      setAnswer("selected_therapists_48h", [...without, id]);
+    }
+  };
+  // Q2b shows only if patient indicated they actually reached out AND
+  // there are therapists to pick from. Hide entirely otherwise.
+  const showQ2b =
+    (answers.reached_out === "yes_contacted" ||
+      answers.reached_out === "yes_multiple") &&
+    therapists &&
+    therapists.length > 0;
   const content = (
     <>
       <PrivacyBanner />
@@ -698,6 +723,57 @@ function V2Milestone48h({ answers, setAnswer, existingSubmission }) {
           ))}
         </div>
       </QuestionCard>
+
+      {showQ2b && (
+        <QuestionCard number="2b" label="Which one(s) did you reach out to?">
+          <div className="space-y-2">
+            {therapists.map((t) => {
+              const isSelected = selected48h.includes(t.therapist_id);
+              return (
+                <button
+                  key={t.therapist_id}
+                  type="button"
+                  onClick={() => toggle48h(t.therapist_id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left text-sm transition ${
+                    isSelected
+                      ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
+                      : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+                  }`}
+                  data-testid={`q2b-therapist-${t.therapist_id}`}
+                >
+                  <TherapistAvatar name={t.therapist_name} color={isSelected ? "#ffffff30" : t.avatar_color} />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{t.therapist_name}</div>
+                    <div className={`text-xs ${isSelected ? "text-white/70" : "text-[#6D6A65]"}`}>
+                      {[
+                        t.credential_type,
+                        t.years_experience ? `${t.years_experience} yrs` : null,
+                      ].filter(Boolean).join(" · ") || "Therapist"}
+                    </div>
+                  </div>
+                  {t.match_score != null && (
+                    <span className={`text-xs font-medium ${isSelected ? "text-white/70" : "text-[#6D6A65]"}`}>
+                      {Math.round(t.match_score)}%
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => toggle48h("_outside")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left text-sm transition ${
+                selected48h.includes("_outside")
+                  ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
+                  : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+              }`}
+              data-testid="q2b-therapist-outside"
+            >
+              Found someone outside my matches
+            </button>
+          </div>
+        </QuestionCard>
+      )}
 
       <QuestionCard number={3} label="Anything we could improve about the matching process?" required={false}>
         <TextArea
@@ -872,8 +948,16 @@ function V2Milestone3w({ answers, setAnswer, therapists, existingSubmission }) {
 /*  v2 milestone: 9w                                                 */
 /* ────────────────────────────────────────────────────────────────── */
 
-function V2Milestone9w({ answers, setAnswer, existingSubmission }) {
+function V2Milestone9w({ answers, setAnswer, therapists, existingSubmission }) {
   const readOnly = !!existingSubmission;
+  // Q1b shows only if patient is still seeing one of their matches.
+  // Hidden when patient went outside, stopped, or never started.
+  const showQ1b =
+    (answers.still_seeing === "yes_same_weekly" ||
+      answers.still_seeing === "yes_same_less_often" ||
+      answers.still_seeing === "yes_different") &&
+    therapists &&
+    therapists.length > 0;
   const content = (
     <>
       <PrivacyBanner long />
@@ -898,6 +982,40 @@ function V2Milestone9w({ answers, setAnswer, existingSubmission }) {
           ))}
         </div>
       </QuestionCard>
+
+      {showQ1b && (
+        <QuestionCard number="1b" label="Which therapist?">
+          <div className="space-y-2">
+            {therapists.map((t) => {
+              const isSelected = answers.selected_therapist_9w === t.therapist_id;
+              return (
+                <button
+                  key={t.therapist_id}
+                  type="button"
+                  onClick={() => setAnswer("selected_therapist_9w", t.therapist_id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left text-sm transition ${
+                    isSelected
+                      ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
+                      : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+                  }`}
+                  data-testid={`q1b-therapist-${t.therapist_id}`}
+                >
+                  <TherapistAvatar name={t.therapist_name} color={isSelected ? "#ffffff30" : t.avatar_color} />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{t.therapist_name}</div>
+                    <div className={`text-xs ${isSelected ? "text-white/70" : "text-[#6D6A65]"}`}>
+                      {[
+                        t.credential_type,
+                        t.years_experience ? `${t.years_experience} yrs` : null,
+                      ].filter(Boolean).join(" · ") || "Therapist"}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </QuestionCard>
+      )}
 
       <QuestionCard number={2} label="Do you feel understood by your therapist?">
         <FourButtonScale
@@ -967,8 +1085,15 @@ function V2Milestone9w({ answers, setAnswer, existingSubmission }) {
 /*  v2 milestone: 15w                                                */
 /* ────────────────────────────────────────────────────────────────── */
 
-function V2Milestone15w({ answers, setAnswer, existingSubmission }) {
+function V2Milestone15w({ answers, setAnswer, therapists, existingSubmission }) {
   const readOnly = !!existingSubmission;
+  // Q1b shows only if patient is still seeing one of their matches.
+  const showQ1b =
+    (answers.still_seeing === "yes_same_weekly" ||
+      answers.still_seeing === "yes_same_less_often" ||
+      answers.still_seeing === "yes_different") &&
+    therapists &&
+    therapists.length > 0;
   const content = (
     <>
       <PrivacyBanner long />
@@ -993,6 +1118,40 @@ function V2Milestone15w({ answers, setAnswer, existingSubmission }) {
           ))}
         </div>
       </QuestionCard>
+
+      {showQ1b && (
+        <QuestionCard number="1b" label="Which therapist?">
+          <div className="space-y-2">
+            {therapists.map((t) => {
+              const isSelected = answers.selected_therapist_15w === t.therapist_id;
+              return (
+                <button
+                  key={t.therapist_id}
+                  type="button"
+                  onClick={() => setAnswer("selected_therapist_15w", t.therapist_id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left text-sm transition ${
+                    isSelected
+                      ? "bg-[#2D4A3E] text-white border-[#2D4A3E]"
+                      : "bg-[#FDFBF7] text-[#2B2A29] border-[#E8E5DF] hover:border-[#2D4A3E]"
+                  }`}
+                  data-testid={`q1b-therapist-${t.therapist_id}`}
+                >
+                  <TherapistAvatar name={t.therapist_name} color={isSelected ? "#ffffff30" : t.avatar_color} />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{t.therapist_name}</div>
+                    <div className={`text-xs ${isSelected ? "text-white/70" : "text-[#6D6A65]"}`}>
+                      {[
+                        t.credential_type,
+                        t.years_experience ? `${t.years_experience} yrs` : null,
+                      ].filter(Boolean).join(" · ") || "Therapist"}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </QuestionCard>
+      )}
 
       <QuestionCard number={2} label="Do you feel understood by your therapist?">
         <FourButtonScale
@@ -1209,10 +1368,12 @@ export default function FeedbackSurvey() {
     return {};
   }, [token]);
 
-  // Load therapist list for 3w milestone. Backend filters by milestone
-  // so 3w/9w/15w return only APPLIED therapists; 48h returns all matched.
+  // Load therapist list for v2 milestones. Backend filters by milestone:
+  // 48h/3w return APPLIED therapists; 9w/15w prefer the patient's 3w
+  // selection, falling back to applied. Used by 3w Q1, 48h Q2b, and
+  // 9w/15w Q1b conditional dropdowns.
   useEffect(() => {
-    if (milestone === "3w") {
+    if (["48h", "3w", "9w", "15w"].includes(milestone)) {
       const client = getClient();
       client
         .get(`/feedback/patient/${requestId}/matches`, {
@@ -1417,16 +1578,16 @@ export default function FeedbackSurvey() {
             {surveyVersion === 2 ? (
               <>
                 {milestone === "48h" && (
-                  <V2Milestone48h answers={answers} setAnswer={setAnswer} existingSubmission={existingSubmission} />
+                  <V2Milestone48h answers={answers} setAnswer={setAnswer} therapists={therapists} existingSubmission={existingSubmission} />
                 )}
                 {milestone === "3w" && (
                   <V2Milestone3w answers={answers} setAnswer={setAnswer} therapists={therapists} existingSubmission={existingSubmission} />
                 )}
                 {milestone === "9w" && (
-                  <V2Milestone9w answers={answers} setAnswer={setAnswer} existingSubmission={existingSubmission} />
+                  <V2Milestone9w answers={answers} setAnswer={setAnswer} therapists={therapists} existingSubmission={existingSubmission} />
                 )}
                 {milestone === "15w" && (
-                  <V2Milestone15w answers={answers} setAnswer={setAnswer} existingSubmission={existingSubmission} />
+                  <V2Milestone15w answers={answers} setAnswer={setAnswer} therapists={therapists} existingSubmission={existingSubmission} />
                 )}
               </>
             ) : (

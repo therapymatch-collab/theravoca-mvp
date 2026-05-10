@@ -602,12 +602,17 @@ async def get_patient_matches(
     """Return therapists for the survey dropdown.
 
     Behavior depends on milestone:
-      - 3w/9w/15w: only therapists who have APPLIED to this request
-        (one application doc per applied therapist). At these milestones
-        the patient has had a chance to hear back, so showing non-applied
-        matches just clutters the dropdown.
-      - 48h or omitted: all matched/notified therapists, since at 48h
-        the patient may not have heard back from any therapist yet.
+      - 48h: APPLIED therapists only (drives the optional Q2b dropdown
+        on the 48h survey for patients who chose 'yes_contacted' or
+        'yes_multiple'). Empty if no applications -- frontend hides Q2b.
+      - 3w: APPLIED therapists.
+      - 9w/15w: prefer the therapists the patient picked at 3w. Pull
+        `selected_therapists` from the patient's 3w feedback doc,
+        filter out sentinel values (anything starting with '_', e.g.
+        '_outside' / '_not_started'). If real IDs remain, return only
+        those. Otherwise fall back to APPLIED therapists. If both are
+        empty, return an empty matches array (frontend hides Q1b).
+      - Unspecified milestone: notified pool (legacy fallback).
     """
     _verify_feedback_token(request_id, token, "patient", authorization)
     req = await db.requests.find_one(
@@ -617,18 +622,31 @@ async def get_patient_matches(
     if not req:
         raise HTTPException(404, "Request not found")
 
-    if milestone in ("3w", "9w", "15w"):
-        # Show only therapists who actually applied to this request.
-        # If none applied, return an empty array -- the frontend will
-        # render only the sentinel options, which is the correct UX.
+    if milestone in ("48h", "3w"):
         therapist_ids: list[str] = []
         async for a in db.applications.find(
             {"request_id": request_id},
             {"_id": 0, "therapist_id": 1},
         ):
             therapist_ids.append(a["therapist_id"])
+    elif milestone in ("9w", "15w"):
+        # Prefer the 3w-picked therapists, dropping any sentinels.
+        fb_3w = await db.feedback.find_one(
+            {"request_id": request_id, "milestone": "3w"},
+            {"_id": 0, "selected_therapists": 1},
+        )
+        selected = (fb_3w or {}).get("selected_therapists") or []
+        therapist_ids = [tid for tid in selected if not tid.startswith("_")]
+        if not therapist_ids:
+            # Fall back to applied therapists when 3w selection was
+            # sentinel-only or absent.
+            async for a in db.applications.find(
+                {"request_id": request_id},
+                {"_id": 0, "therapist_id": 1},
+            ):
+                therapist_ids.append(a["therapist_id"])
     else:
-        # 48h or unspecified -- fall back to the notified pool.
+        # Unspecified milestone -- preserve old behavior (notified pool).
         therapist_ids = req.get("notified_therapist_ids") or []
 
     if not therapist_ids:
