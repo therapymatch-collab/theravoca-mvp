@@ -724,42 +724,13 @@ async def _deliver_results(request_id: str) -> dict[str, Any]:
         }},
     )
 
-    # In testing mode, fire all 4 milestone survey emails immediately
-    # so the admin doesn't have to wait for the daily cron cycle.
-    # Writes the v2_survey_{code}_sent_at flag that the v2 cron checks,
-    # so cron correctly skips already-sent milestones.
-    testing_doc = await db.app_config.find_one({"key": "feedback_testing"}, {"_id": 0})
-    if (testing_doc or {}).get("enabled") and not req.get("surveys_test_fired"):
-        from email_service import (
-            send_patient_survey_v2_48h, send_patient_survey_v2_3w,
-            send_patient_survey_v2_9w, send_patient_survey_v2_15w,
-        )
-        email = req["email"]
-        for code, sender in [
-            ("48h", send_patient_survey_v2_48h),
-            ("3w", send_patient_survey_v2_3w),
-            ("9w", send_patient_survey_v2_9w),
-            ("15w", send_patient_survey_v2_15w),
-        ]:
-            flag = f"v2_survey_{code}_sent_at"
-            try:
-                await sender(email, request_id)
-                await db.requests.update_one(
-                    {"id": request_id},
-                    {"$set": {flag: now_iso}},
-                )
-            except Exception:
-                pass  # logged by email_service
-        # Stamp the request so the admin fire-test-surveys endpoint
-        # (and any other re-delivery path) won't double-fire these emails.
-        await db.requests.update_one(
-            {"id": request_id},
-            {"$set": {
-                "surveys_test_fired": True,
-                "surveys_test_fired_at": now_iso,
-            }},
-        )
-
+    # Surveys are NOT auto-fired here. At match-release time the
+    # therapists haven't applied yet, so 3w Q1 and 48h Q2b dropdowns
+    # would be empty. Surveys are sent only via:
+    #   - Daily cron (`_run_patient_surveys_v2`) at the real milestone
+    #     windows (48h / 3w / 9w / 15w after results_sent_at).
+    #   - Admin "Fire test surveys" button: POST
+    #     /admin/requests/{request_id}/fire-test-surveys.
     return {"sent_to": req["email"], "count": len(enriched)}
 
 
