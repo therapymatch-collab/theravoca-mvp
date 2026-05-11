@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Loader2, RotateCw } from "lucide-react";
+import { toast } from "sonner";
+import useAdminClient from "@/lib/useAdminClient";
 import {
   ResponsiveContainer,
   LineChart, Line,
@@ -50,6 +52,37 @@ function formatDate(iso) {
 export default function OutcomesPanel({ data, loading, onReload }) {
   const [tab, setTab] = useState("marketing");
   const [range, setRange] = useState("90d");
+
+  // -- Testing-mode toggle (moved here from the old FeedbackTracking
+  //    panel so admins have one consolidated place to control it). --
+  const client = useAdminClient();
+  const [testingEnabled, setTestingEnabled] = useState(false);
+  const [testingBusy, setTestingBusy] = useState(false);
+
+  useEffect(() => {
+    client
+      .get("/admin/feedback-testing")
+      .then((r) => setTestingEnabled(Boolean(r.data?.enabled)))
+      .catch(() => {});
+  }, [client]);
+
+  const toggleTesting = async () => {
+    if (testingBusy) return;
+    setTestingBusy(true);
+    const next = !testingEnabled;
+    try {
+      const res = await client.put("/admin/feedback-testing", { enabled: next });
+      // Defensive: trust local state if backend response shape is unexpected.
+      const serverState =
+        typeof res?.data?.enabled === "boolean" ? res.data.enabled : next;
+      setTestingEnabled(serverState);
+      toast.success(serverState ? "Testing mode ON" : "Testing mode OFF");
+    } catch {
+      toast.error("Failed to toggle testing mode");
+    } finally {
+      setTestingBusy(false);
+    }
+  };
 
   // On first mount, fetch with the default 90d range so initial load matches.
   // If parent already loaded data with no params, the backend would have
@@ -112,13 +145,29 @@ export default function OutcomesPanel({ data, loading, onReload }) {
                 </p>
               )}
             </div>
-            <button onClick={handleRefresh}
-                    disabled={loading}
-                    className="inline-flex items-center gap-2 text-sm text-[#2D4A3E] hover:underline disabled:opacity-50"
-                    data-testid="outcomes-reload">
-              <RotateCw size={14} className={loading ? "animate-spin" : ""} />
-              Refresh
-            </button>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2" title="When ON, follow-up survey emails can be fired on-demand for any request (for testing). Turn OFF before launch.">
+                <span className="text-xs text-[#6D6A65]">Testing mode</span>
+                <button onClick={toggleTesting}
+                        disabled={testingBusy}
+                        data-testid="feedback-testing-toggle"
+                        aria-pressed={testingEnabled}
+                        className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
+                          testingEnabled ? "bg-[#2D4A3E]" : "bg-[#D3D1C7]"
+                        }`}>
+                  <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 mt-0.5 ${
+                    testingEnabled ? "translate-x-5" : "translate-x-0.5"
+                  }`} />
+                </button>
+              </div>
+              <button onClick={handleRefresh}
+                      disabled={loading}
+                      className="inline-flex items-center gap-2 text-sm text-[#2D4A3E] hover:underline disabled:opacity-50"
+                      data-testid="outcomes-reload">
+                <RotateCw size={14} className={loading ? "animate-spin" : ""} />
+                Refresh
+              </button>
+            </div>
           </div>
 
           <div className="mt-4 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Date range">
