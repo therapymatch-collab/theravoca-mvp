@@ -68,6 +68,7 @@ import RecruitDraftsPanel from "@/pages/admin/panels/RecruitDraftsPanel";
 import PatientsByEmailPanel from "@/pages/admin/panels/PatientsByEmailPanel";
 import FeedbackPanel from "@/pages/admin/panels/FeedbackPanel";
 import FeedbackTrackingPanel from "@/pages/admin/panels/FeedbackTrackingPanel";
+import OutcomesPanel from "@/pages/admin/panels/OutcomesPanel";
 import AuditLogPanel from "@/pages/admin/panels/AuditLogPanel";
 import WaitlistPanel from "@/pages/admin/panels/WaitlistPanel";
 import ProviderPreviewCard from "@/pages/admin/panels/ProviderPreviewCard";
@@ -202,6 +203,8 @@ export default function AdminDashboard() {
   const [optOutsLoading, setOptOutsLoading] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [outcomes, setOutcomes] = useState(null);
+  const [outcomesLoading, setOutcomesLoading] = useState(false);
   const [team, setTeam] = useState(null);
   const [completion, setCompletion] = useState(null);
   const [showOnlyReapproval, setShowOnlyReapproval] = useState(false);
@@ -861,6 +864,18 @@ export default function AdminDashboard() {
     }
   }, [client]);
 
+  const loadOutcomes = useCallback(async () => {
+    setOutcomesLoading(true);
+    try {
+      const res = await client.get("/admin/feedback-dashboard");
+      setOutcomes(res.data);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Couldn't load outcomes dashboard");
+    } finally {
+      setOutcomesLoading(false);
+    }
+  }, [client]);
+
   const loadPatientsByEmail = useCallback(async () => {
     try {
       const res = await client.get("/admin/patients");
@@ -1158,6 +1173,10 @@ export default function AdminDashboard() {
                 feedback={feedback}
                 onLoadFeedback={() => {
                   if (!feedback) loadFeedback();
+                }}
+                outcomes={outcomes}
+                onLoadOutcomes={() => {
+                  if (!outcomes) loadOutcomes();
                 }}
                 patientsByEmail={patientsByEmail}
                 onLoadPatients={() => {
@@ -1663,6 +1682,14 @@ export default function AdminDashboard() {
                   loading={feedbackLoading}
                   onReload={loadFeedback}
                   filter={search}
+                />
+              )}
+
+              {tab === "outcomes" && (
+                <OutcomesPanel
+                  data={outcomes}
+                  loading={outcomesLoading}
+                  onReload={loadOutcomes}
                 />
               )}
 
@@ -3054,6 +3081,8 @@ function AdminTabsBar({
   onLoadOptOuts,
   feedback,
   onLoadFeedback,
+  outcomes,
+  onLoadOutcomes,
   patientsByEmail,
   onLoadPatients,
   team,
@@ -3138,6 +3167,12 @@ function AdminTabsBar({
       icon: <MessageSquare size={14} />,
       count: feedback?.total ?? null,
       onClick: onLoadFeedback,
+    },
+    {
+      id: "outcomes",
+      label: "Outcomes",
+      icon: <Activity size={14} />,
+      onClick: onLoadOutcomes,
     },
     {
       id: "referrals",
