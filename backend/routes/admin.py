@@ -1743,6 +1743,412 @@ async def admin_outcome_tracking(_: bool = Depends(require_admin)):
     }
 
 
+# ===========================================================
+# Outcomes dashboard -- aggregated data for the 4-tab feedback
+# dashboard (Marketing / Recruiting / Satisfaction / Matching).
+# Returns one JSON blob with everything the dashboard needs.
+# ===========================================================
+
+# Minimum sample sizes before we show a number rather than "needs more data".
+_MIN_N_PATIENT_NPS = 10
+_MIN_N_THERAPIST_NPS = 5
+_MIN_N_PROGRESS = 10
+_MIN_N_CORRELATION = 50
+
+# How many months of trend data to return.
+_TREND_MONTHS = 7
+
+
+def _calc_nps(scores: list[int]) -> Optional[int]:
+    """NPS = % promoters (9-10) - % detractors (0-6), rounded to int."""
+    if not scores:
+        return None
+    n = len(scores)
+    promoters = sum(1 for s in scores if s >= 9)
+    detractors = sum(1 for s in scores if s <= 6)
+    return round((promoters - detractors) * 100 / n)
+
+
+def _month_key(iso_str: Optional[str]) -> str:
+    """Extract YYYY-MM from an ISO timestamp. Empty string if missing/bad."""
+    if not iso_str or len(iso_str) < 7:
+        return ""
+    return iso_str[:7]
+
+
+def _last_n_months(n: int) -> list[str]:
+    """Return last n month keys oldest-first, e.g. ['2025-11', ..., '2026-05']."""
+    today = datetime.now(timezone.utc)
+    out = []
+    y, m = today.year, today.month
+    for _ in range(n):
+        out.append(f"{y:04d}-{m:02d}")
+        m -= 1
+        if m == 0:
+            m = 12
+            y -= 1
+    return list(reversed(out))
+
+
+def _pearson(xs: list[float], ys: list[float]) -> Optional[float]:
+    """Pearson correlation. Returns None if undefined."""
+    n = len(xs)
+    if n < 2:
+        return None
+    mean_x = sum(xs) / n
+    mean_y = sum(ys) / n
+    cov = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys))
+    sx2 = sum((x - mean_x) ** 2 for x in xs)
+    sy2 = sum((y - mean_y) ** 2 for y in ys)
+    if sx2 == 0 or sy2 == 0:
+        return None
+    return cov / ((sx2 * sy2) ** 0.5)
+
+
+def _hero(value, n, min_n) -> dict:
+    """Hero KPI envelope. value=None when not enough data."""
+    return {
+        "value": value if (value is not None and n >= min_n) else None,
+        "n": n,
+        "min_n": min_n,
+    }
+
+
+@router.get("/admin/feedback-dashboard")
+async def admin_feedback_dashboard(_: bool = Depends(require_admin)):
+    """Aggregated data for the Outcomes admin dashboard. One round-trip,
+    one JSON blob -- no per-chart endpoints. See render at /admin -> Outcomes."""
+
+    feedback = await db.feedback.find({}, {"_id": 0}).to_list(5000)
+    therapist_surveys = await db.therapist_surveys.find({}, {"_id": 0}).to_list(2000)
+    months = _last_n_months(_TREND_MONTHS)
+    months_set = set(months)
+
+    # -------------------------------------------------------
+    # Patient NPS -- pulled from 3w/9w/15w feedback that has an nps field.
+    # -------------------------------------------------------
+    patient_nps_docs = [
+        f for f in feedback
+        if f.get("milestone") in ("3w", "9w", "15w") and f.get("nps") is not None
+    ]
+    patient_nps_all = [int(f["nps"]) for f in patient_nps_docs]
+    patient_nps_value = _calc_nps(patient_nps_all)
+
+    # NPS trend by month (last N months only).
+    patient_nps_by_month: dict[str, list[int]] = {m: [] for m in months}
+    for f in patient_nps_docs:
+        mk = _month_key(f.get("submitted_at") or f.get("created_at"))
+        if mk in months_set:
+            patient_nps_by_month[mk].append(int(f["nps"]))
+    patient_nps_trend = [
+        {"month": m, "nps": _calc_nps(patient_nps_by_month[m]),
+         "n": len(patient_nps_by_month[m])}
+        for m in months
+    ]
+
+    # Delta over 6 months: latest month NPS vs ~6 months ago.
+    delta_6mo = None
+    if (patient_nps_trend[0]["nps"] is not None
+            and patient_nps_trend[-1]["nps"] is not None):
+        delta_6mo = patient_nps_trend[-1]["nps"] - patient_nps_trend[0]["nps"]
+
+    # NPS distribution (0-10 histogram).
+    patient_nps_distribution = [0] * 11
+    for s in patient_nps_all:
+        if 0 <= s <= 10:
+            patient_nps_distribution[s] += 1
+
+    # -------------------------------------------------------
+    # Therapist NPS -- from Phase 3 therapist surveys.
+    # -------------------------------------------------------
+    t_nps_all = [int(s["nps"]) for s in therapist_surveys if s.get("nps") is not None]
+    t_nps_value = _calc_nps(t_nps_all)
+
+    t_nps_by_month: dict[str, list[int]] = {m: [] for m in months}
+    for s in therapist_surveys:
+        if s.get("nps") is None:
+            continue
+        mk = _month_key(s.get("submitted_at"))
+        if mk in months_set:
+            t_nps_by_month[mk].append(int(s["nps"]))
+    t_nps_trend = [
+        {"month": m, "nps": _calc_nps(t_nps_by_month[m]),
+         "n": len(t_nps_by_month[m])}
+        for m in months
+    ]
+    t_delta_6mo = None
+    if (t_nps_trend[0]["nps"] is not None
+            and t_nps_trend[-1]["nps"] is not None):
+        t_delta_6mo = t_nps_trend[-1]["nps"] - t_nps_trend[0]["nps"]
+
+    t_nps_distribution = [0] * 11
+    for s in t_nps_all:
+        if 0 <= s <= 10:
+            t_nps_distribution[s] += 1
+
+    # Match Fit distribution (1=poor, 2=fair, 3=good, 4=excellent).
+    match_fit_dist = {"poor": 0, "fair": 0, "good": 0, "excellent": 0}
+    fit_labels = {1: "poor", 2: "fair", 3: "good", 4: "excellent"}
+    match_fit_values = []
+    for s in therapist_surveys:
+        mf = s.get("match_fit")
+        if mf in fit_labels:
+            match_fit_dist[fit_labels[mf]] += 1
+            match_fit_values.append(mf)
+    match_fit_avg = round(sum(match_fit_values) / len(match_fit_values), 1) if match_fit_values else None
+
+    # New patients per month (therapist-reported).
+    new_patients_by_month: dict[str, int] = {m: 0 for m in months}
+    for s in therapist_surveys:
+        np_count = s.get("new_patients")
+        if np_count is None:
+            continue
+        mk = _month_key(s.get("submitted_at"))
+        if mk in months_set:
+            new_patients_by_month[mk] += int(np_count)
+    new_patients_trend = [{"month": m, "count": new_patients_by_month[m]} for m in months]
+
+    # Therapist coverage: how many active therapists were surveyed?
+    total_therapists = await db.therapists.count_documents(
+        {"status": {"$in": ["approved", "active"]}}
+    )
+    surveyed_therapist_ids = {s.get("therapist_id") for s in therapist_surveys if s.get("therapist_id")}
+
+    # -------------------------------------------------------
+    # Patient progress at 15w (1-10 self-rating from v1) AND v2 nps presence.
+    # -------------------------------------------------------
+    progress_values = [
+        int(f["progress"]) for f in feedback
+        if f.get("milestone") == "15w" and isinstance(f.get("progress"), (int, float))
+    ]
+    progress_avg = round(sum(progress_values) / len(progress_values), 1) if progress_values else None
+
+    # -------------------------------------------------------
+    # Conversion funnel (all-time).
+    # -------------------------------------------------------
+    matches_sent = await db.requests.count_documents(
+        {"notified_therapist_ids": {"$exists": True, "$ne": []}}
+    )
+    responded_48h = sum(1 for f in feedback if f.get("milestone") == "48h")
+    picked_3w = sum(
+        1 for f in feedback
+        if f.get("milestone") == "3w" and f.get("chosen_status") == "picked"
+    )
+    still_seeing_9w = sum(
+        1 for f in feedback
+        if f.get("milestone") == "9w" and f.get("still_seeing") == "yes"
+    )
+    fb_15w = [f for f in feedback if f.get("milestone") == "15w"]
+    still_seeing_15w = sum(1 for f in fb_15w if f.get("still_seeing") == "yes")
+
+    # -------------------------------------------------------
+    # Match volume per month (requests created).
+    # -------------------------------------------------------
+    match_volume_by_month: dict[str, int] = {m: 0 for m in months}
+    request_dates = await db.requests.find(
+        {}, {"_id": 0, "created_at": 1}
+    ).to_list(20000)
+    for r in request_dates:
+        mk = _month_key(r.get("created_at"))
+        if mk in months_set:
+            match_volume_by_month[mk] += 1
+    match_volume_trend = [{"month": m, "count": match_volume_by_month[m]} for m in months]
+
+    # -------------------------------------------------------
+    # Match Strength distribution + trend + scatter vs retention.
+    # -------------------------------------------------------
+    ms_docs = []
+    for f in feedback:
+        score = f.get("match_strength_score") if f.get("match_strength_score") is not None else f.get("tai_score")
+        if score is not None and score >= 0:
+            ms_docs.append({
+                "request_id": f.get("request_id"),
+                "milestone": f.get("milestone"),
+                "score": float(score),
+                "submitted_at": f.get("submitted_at") or f.get("created_at"),
+            })
+
+    # Distribution (10-point buckets: 0-9, 10-19, ..., 90+).
+    ms_dist = [0] * 10
+    for d in ms_docs:
+        bucket = min(int(d["score"] // 10), 9)
+        ms_dist[bucket] += 1
+
+    ms_values_all = [d["score"] for d in ms_docs]
+    ms_mean = round(sum(ms_values_all) / len(ms_values_all), 1) if ms_values_all else None
+    ms_sorted = sorted(ms_values_all)
+    ms_median = ms_sorted[len(ms_sorted) // 2] if ms_sorted else None
+
+    # Trend: avg per month (latest score per request used to avoid double-count).
+    ms_by_request: dict[str, dict] = {}
+    for d in ms_docs:
+        rid = d["request_id"]
+        if not rid:
+            continue
+        existing = ms_by_request.get(rid)
+        if existing is None or (d["submitted_at"] or "") > (existing["submitted_at"] or ""):
+            ms_by_request[rid] = d
+    ms_per_month: dict[str, list[float]] = {m: [] for m in months}
+    for d in ms_by_request.values():
+        mk = _month_key(d["submitted_at"])
+        if mk in months_set:
+            ms_per_month[mk].append(d["score"])
+    ms_trend = [
+        {"month": m, "avg": round(sum(v) / len(v), 1) if v else None, "n": len(v)}
+        for m, v in ((m, ms_per_month[m]) for m in months)
+    ]
+
+    # Scatter: pair each 15w feedback with the patient's best-available
+    # match_strength_score. Retained = still_seeing == "yes".
+    # Index ms scores by request_id (use 9w first, then 15w override).
+    ms_lookup: dict[str, float] = {}
+    for d in ms_docs:
+        ms_lookup[d["request_id"]] = d["score"]
+    scatter = []
+    retention_xs = []
+    retention_ys = []
+    for f in fb_15w:
+        rid = f.get("request_id")
+        score = ms_lookup.get(rid)
+        if score is None:
+            continue
+        retained = 1 if f.get("still_seeing") == "yes" else 0
+        scatter.append({"match_strength": round(score, 1), "retained": bool(retained)})
+        retention_xs.append(score)
+        retention_ys.append(retained)
+    correlation = _pearson(retention_xs, retention_ys)
+    correlation_value = round(correlation, 2) if correlation is not None else None
+
+    # -------------------------------------------------------
+    # Satisfaction: confidence (3w) trend + recent quotes.
+    # -------------------------------------------------------
+    conf_3w_all = [
+        int(f["confidence"]) for f in feedback
+        if f.get("milestone") == "3w" and isinstance(f.get("confidence"), (int, float))
+    ]
+    conf_3w_avg = round(sum(conf_3w_all) / len(conf_3w_all)) if conf_3w_all else None
+
+    conf_by_month: dict[str, list[int]] = {m: [] for m in months}
+    for f in feedback:
+        if f.get("milestone") != "3w":
+            continue
+        if not isinstance(f.get("confidence"), (int, float)):
+            continue
+        mk = _month_key(f.get("submitted_at") or f.get("created_at"))
+        if mk in months_set:
+            conf_by_month[mk].append(int(f["confidence"]))
+    conf_3w_trend = [
+        {"month": m,
+         "avg": round(sum(conf_by_month[m]) / len(conf_by_month[m])) if conf_by_month[m] else None,
+         "n": len(conf_by_month[m])}
+        for m in months
+    ]
+
+    # Recent free-text quotes (patient + therapist), newest first.
+    def _quote_from_patient(f):
+        for key in ("final_reflection", "improvement_text", "notes", "what_changed"):
+            txt = f.get(key)
+            if txt and isinstance(txt, str) and len(txt.strip()) >= 30:
+                return txt.strip()
+        return None
+
+    patient_quotes = []
+    for f in sorted(feedback, key=lambda x: x.get("submitted_at") or "", reverse=True):
+        if f.get("role") != "patient":
+            continue
+        q = _quote_from_patient(f)
+        if q:
+            patient_quotes.append({
+                "text": q[:240],
+                "milestone": f.get("milestone"),
+                "submitted_at": f.get("submitted_at"),
+            })
+            if len(patient_quotes) >= 4:
+                break
+
+    therapist_quotes = []
+    for s in sorted(therapist_surveys, key=lambda x: x.get("submitted_at") or "", reverse=True):
+        txt = s.get("improvement_text") or s.get("feedback_text")
+        if txt and isinstance(txt, str) and len(txt.strip()) >= 30:
+            therapist_quotes.append({
+                "text": txt.strip()[:240],
+                "submitted_at": s.get("submitted_at"),
+            })
+            if len(therapist_quotes) >= 4:
+                break
+
+    return {
+        "generated_at": _now_iso(),
+        "data_sufficiency": {
+            "patient_nps_n": len(patient_nps_all),
+            "therapist_nps_n": len(t_nps_all),
+            "match_strength_n": len(ms_docs),
+            "retention_15w_n": len(fb_15w),
+            "scatter_n": len(scatter),
+        },
+        "hero": {
+            "patient_nps": {
+                **_hero(patient_nps_value, len(patient_nps_all), _MIN_N_PATIENT_NPS),
+                "delta_6mo": delta_6mo,
+            },
+            "therapist_nps": {
+                **_hero(t_nps_value, len(t_nps_all), _MIN_N_THERAPIST_NPS),
+                "delta_6mo": t_delta_6mo,
+            },
+            "patient_progress_15w": _hero(progress_avg, len(progress_values), _MIN_N_PROGRESS),
+            "match_correlation": _hero(correlation_value, len(scatter), _MIN_N_CORRELATION),
+        },
+        "marketing": {
+            "patient_nps_trend": patient_nps_trend,
+            "funnel": {
+                "matches_sent": matches_sent,
+                "responded_48h": responded_48h,
+                "picked_3w": picked_3w,
+                "still_seeing_9w": still_seeing_9w,
+                "still_seeing_15w": still_seeing_15w,
+            },
+            "match_volume_monthly": match_volume_trend,
+        },
+        "recruiting": {
+            "therapist_nps_trend": t_nps_trend,
+            "new_patients_monthly": new_patients_trend,
+            "match_fit_distribution": match_fit_dist,
+            "match_fit_avg": match_fit_avg,
+        },
+        "satisfaction": {
+            "patient": {
+                "nps": patient_nps_value if len(patient_nps_all) >= _MIN_N_PATIENT_NPS else None,
+                "confidence_3w_avg": conf_3w_avg,
+                "progress_15w_avg": progress_avg,
+                "nps_distribution": patient_nps_distribution,
+                "n_nps": len(patient_nps_all),
+                "recent_quotes": patient_quotes,
+            },
+            "therapist": {
+                "nps": t_nps_value if len(t_nps_all) >= _MIN_N_THERAPIST_NPS else None,
+                "match_fit_avg": match_fit_avg,
+                "surveyed_count": len(surveyed_therapist_ids),
+                "total_count": total_therapists,
+                "nps_distribution": t_nps_distribution,
+                "n_nps": len(t_nps_all),
+                "recent_quotes": therapist_quotes,
+            },
+            "confidence_3w_trend": conf_3w_trend,
+        },
+        "matching": {
+            "scatter": scatter,
+            "correlation": correlation_value,
+            "distribution": ms_dist,
+            "trend": ms_trend,
+            "stats": {
+                "mean": ms_mean,
+                "median": round(ms_median, 1) if ms_median is not None else None,
+                "n": len(ms_values_all),
+            },
+        },
+    }
+
+
 @router.get("/admin/patients")
 async def admin_list_patients_by_email(request: Request, _: bool = Depends(require_admin)):
     """Aggregate every email that has submitted a request and how many
