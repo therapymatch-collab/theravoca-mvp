@@ -435,12 +435,16 @@ async def admin_request_detail(request_id: str, request: Request, _: bool = Depe
     invited = await db.outreach_invites.find(
         {"request_id": request_id}, {"_id": 0},
     ).sort("created_at", -1).to_list(200)
-    # When fewer than 30 directory matches were notified, surface a gap
-    # explanation so admins can see which axis (specialty, age group,
-    # format, insurance, state) constrained the result count.
+    # When fewer matches were notified than the configured max_invites
+    # target, surface a gap explanation so admins can see which axis
+    # (specialty, age group, format, insurance, state) constrained the
+    # result count. The target is read from app_config so admins who
+    # changed it (e.g. to 20) see the right number in the alert.
     match_gap = None
-    if len(notified_ids) < 30:
-        match_gap = await _explain_match_gap(req, len(notified_ids))
+    _mcfg = await db.app_config.find_one({"key": "matching_defaults"}, {"_id": 0})
+    _target = int((_mcfg or {}).get("max_invites") or 30)
+    if len(notified_ids) < _target:
+        match_gap = await _explain_match_gap(req, len(notified_ids), _target)
     return {
         "request": req,
         "notified": notified,
@@ -450,13 +454,17 @@ async def admin_request_detail(request_id: str, request: Request, _: bool = Depe
     }
 
 
-async def _explain_match_gap(req: dict, notified_count: int) -> dict:
+async def _explain_match_gap(req: dict, notified_count: int, target: int = 30) -> dict:
     """Counts how many ACTIVE, APPROVED, BILLABLE therapists pass each
     individual filter from the request, so the admin can see which axis
     is the bottleneck. Returns `{notified, target, axes:[{label, count,
     target, severity}], summary}`. `severity` is 'critical' if count==0,
-    'warning' if count<target, else 'ok'."""
-    target = 30
+    'warning' if count<target, else 'ok'.
+
+    `target` should be the configured max_invites for this deployment
+    so the alert headline ("Why we couldn't fill N matches") matches
+    what the matcher actually tried to do. Defaults to 30 for
+    backward compat with older callers."""
     base_match = {
         "is_active": {"$ne": False},
         "pending_approval": {"$ne": True},
