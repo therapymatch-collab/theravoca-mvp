@@ -1942,17 +1942,51 @@ async def admin_feedback_dashboard(_: bool = Depends(require_admin)):
     still_seeing_15w = sum(1 for f in fb_15w if f.get("still_seeing") == "yes")
 
     # -------------------------------------------------------
-    # Match volume per month (requests created).
+    # Match volume per month + referral source lookup (single request load).
     # -------------------------------------------------------
     match_volume_by_month: dict[str, int] = {m: 0 for m in months}
-    request_dates = await db.requests.find(
-        {}, {"_id": 0, "created_at": 1}
+    request_docs = await db.requests.find(
+        {}, {"_id": 0, "id": 1, "created_at": 1, "referral_source": 1}
     ).to_list(20000)
-    for r in request_dates:
+    # Index requests by id so we can look up referral_source from feedback docs.
+    req_by_id: dict[str, dict] = {r.get("id"): r for r in request_docs if r.get("id")}
+    for r in request_docs:
         mk = _month_key(r.get("created_at"))
         if mk in months_set:
             match_volume_by_month[mk] += 1
     match_volume_trend = [{"month": m, "count": match_volume_by_month[m]} for m in months]
+
+    # -------------------------------------------------------
+    # NPS by referral source -- which channels bring the best patients?
+    # Buckets each patient NPS response under its request's referral_source.
+    # Sources with fewer than _MIN_N_SOURCE responses are hidden ("other")
+    # so a single rating can't skew a channel.
+    # -------------------------------------------------------
+    _MIN_N_SOURCE = 3
+    nps_by_source: dict[str, list[int]] = {}
+    for f in patient_nps_docs:
+        rid = f.get("request_id")
+        req = req_by_id.get(rid) if rid else None
+        src = (req.get("referral_source") if req else "") or "unknown"
+        src = src.strip().lower() or "unknown"
+        nps_by_source.setdefault(src, []).append(int(f["nps"]))
+    nps_source_rows = []
+    other_scores: list[int] = []
+    for src, scores in nps_by_source.items():
+        if len(scores) >= _MIN_N_SOURCE:
+            nps_source_rows.append({
+                "source": src, "nps": _calc_nps(scores), "n": len(scores),
+            })
+        else:
+            other_scores.extend(scores)
+    if other_scores:
+        nps_source_rows.append({
+            "source": "other (low-volume sources)",
+            "nps": _calc_nps(other_scores),
+            "n": len(other_scores),
+        })
+    # Sort descending by NPS so winners show up first.
+    nps_source_rows.sort(key=lambda x: (x["nps"] is None, -(x["nps"] or 0)))
 
     # -------------------------------------------------------
     # Match Strength distribution + trend + scatter vs retention.
@@ -2077,6 +2111,39 @@ async def admin_feedback_dashboard(_: bool = Depends(require_admin)):
             if len(therapist_quotes) >= 4:
                 break
 
+    # -------------------------------------------------------
+    # Detractor alert list -- patients who scored 0-6 NPS, newest first.
+    # Lets admin reach out personally and save the relationship.
+    # -------------------------------------------------------
+    detractors = []
+    for f in sorted(patient_nps_docs, key=lambda x: x.get("submitted_at") or "", reverse=True):
+        try:
+            score = int(f["nps"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if score > 6:
+            continue
+        # Pick the most relevant free-text comment for context.
+        comment = None
+        for key in ("final_reflection", "improvement_text", "notes", "what_changed", "surprises"):
+            v = f.get(key)
+            if v and isinstance(v, str) and v.strip():
+                comment = v.strip()[:300]
+                break
+        rid = f.get("request_id")
+        req = req_by_id.get(rid) if rid else None
+        detractors.append({
+            "request_id": rid,
+            "patient_email": f.get("patient_email"),
+            "milestone": f.get("milestone"),
+            "nps": score,
+            "submitted_at": f.get("submitted_at"),
+            "comment": comment,
+            "referral_source": (req.get("referral_source") if req else "") or "",
+        })
+        if len(detractors) >= 50:
+            break
+
     return {
         "generated_at": _now_iso(),
         "data_sufficiency": {
@@ -2108,6 +2175,7 @@ async def admin_feedback_dashboard(_: bool = Depends(require_admin)):
                 "still_seeing_15w": still_seeing_15w,
             },
             "match_volume_monthly": match_volume_trend,
+            "nps_by_source": nps_source_rows,
         },
         "recruiting": {
             "therapist_nps_trend": t_nps_trend,
@@ -2134,6 +2202,7 @@ async def admin_feedback_dashboard(_: bool = Depends(require_admin)):
                 "recent_quotes": therapist_quotes,
             },
             "confidence_3w_trend": conf_3w_trend,
+            "detractors": detractors,
         },
         "matching": {
             "scatter": scatter,

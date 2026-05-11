@@ -213,6 +213,53 @@ function MarketingTab({ d }) {
           )}
         </Card>
       </div>
+
+      <Card title="NPS by referral source"
+            subtitle="Which channels bring the patients who recommend us? Direct ROI signal for marketing spend. Sources with fewer than 3 responses are pooled into 'other'.">
+        <NpsBySource rows={d.nps_by_source || []} />
+      </Card>
+    </div>
+  );
+}
+
+function NpsBySource({ rows }) {
+  if (!rows || rows.length === 0) {
+    return <EmptyChart message="No NPS responses linkable to a referral source yet." />;
+  }
+  const chartData = rows.map((r) => ({
+    source: r.source.length > 24 ? r.source.slice(0, 22) + "..." : r.source,
+    nps: r.nps,
+    n: r.n,
+  }));
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(160, 50 + chartData.length * 40)}>
+      <BarChart layout="vertical" data={chartData} margin={{ top: 10, right: 60, left: 10, bottom: 10 }}>
+        <CartesianGrid stroke={C.border} strokeDasharray="3 3" horizontal={false} />
+        <XAxis type="number" domain={[-100, 100]} tick={{ fill: C.muted, fontSize: 12 }} />
+        <YAxis dataKey="source" type="category" tick={{ fill: C.muted, fontSize: 12 }} width={170} />
+        <Tooltip content={<SourceTooltip />} />
+        <ReferenceLine x={0} stroke={C.border} />
+        <Bar dataKey="nps" radius={[0, 4, 4, 0]}>
+          {chartData.map((e, i) => (
+            <Cell key={i} fill={e.nps >= 30 ? C.primary : e.nps >= 0 ? C.warn : C.error} />
+          ))}
+          <LabelList dataKey="nps" position="right"
+                     formatter={(v) => v !== null ? (v >= 0 ? `+${v}` : v) : ""}
+                     style={{ fill: C.text, fontSize: 12, fontWeight: 600 }} />
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function SourceTooltip({ active, payload }) {
+  if (!active || !payload || !payload.length) return null;
+  const p = payload[0].payload;
+  return (
+    <div className="bg-white border border-[#E8E5DF] rounded-md p-2 text-xs shadow-sm">
+      <div className="font-medium text-[#2B2A29]">{p.source}</div>
+      <div className="text-[#6D6A65]">NPS: <span className="font-semibold text-[#2D4A3E]">{p.nps !== null ? npsFmt(p.nps) : "no data"}</span></div>
+      <div className="text-[#6D6A65]">Responses: {p.n}</div>
     </div>
   );
 }
@@ -383,6 +430,74 @@ function SatisfactionTab({ d }) {
           <EmptyChart message="No 3-week confidence data yet." />
         )}
       </Card>
+
+      <DetractorAlertCard detractors={d.detractors || []} />
+    </div>
+  );
+}
+
+function DetractorAlertCard({ detractors }) {
+  return (
+    <div className="bg-white border border-[#E8E5DF] rounded-xl overflow-hidden" data-testid="detractor-card">
+      <div className="p-5 border-b border-[#E8E5DF] flex items-start gap-3">
+        <div className="mt-1 w-2 h-2 rounded-full bg-[#D45D5D] flex-shrink-0" />
+        <div>
+          <h4 className="font-serif-display text-xl text-[#2D4A3E]">Detractor alerts</h4>
+          <p className="text-sm text-[#6D6A65] mt-1">
+            Patients who rated us 0-6 on any NPS survey, newest first. These are the people you want to reach out to personally - a save here is often worth more than acquiring a new patient.
+          </p>
+          {detractors.length > 0 && (
+            <div className="text-xs text-[#6D6A65] mt-2">
+              <span className="font-semibold text-[#D45D5D]">{detractors.length}</span> detractor{detractors.length === 1 ? "" : "s"} to follow up with
+            </div>
+          )}
+        </div>
+      </div>
+      {detractors.length === 0 ? (
+        <div className="p-8 text-center text-sm text-[#6D6A65] italic">
+          No detractors yet. Good sign.
+        </div>
+      ) : (
+        <div className="divide-y divide-[#E8E5DF]">
+          {detractors.map((d, i) => <DetractorRow key={i} d={d} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DetractorRow({ d }) {
+  const scoreColor = d.nps <= 3 ? C.error : d.nps <= 6 ? C.warn : C.muted;
+  const when = d.submitted_at ? new Date(d.submitted_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
+  return (
+    <div className="p-4 flex gap-4 items-start hover:bg-[#FDFBF7]">
+      <div className="flex flex-col items-center justify-center w-14 flex-shrink-0">
+        <div className="text-3xl font-serif font-semibold leading-none" style={{ color: scoreColor }}>
+          {d.nps}
+        </div>
+        <div className="text-[10px] text-[#6D6A65] uppercase tracking-wide mt-1">NPS</div>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap text-sm">
+          <span className="font-medium text-[#2B2A29] truncate">{d.patient_email || "(no email)"}</span>
+          <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-[#F2EFE8] text-[#6D6A65] rounded">
+            {d.milestone}
+          </span>
+          {d.referral_source && (
+            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-[#FBEFE9] text-[#C87965] rounded">
+              src: {d.referral_source}
+            </span>
+          )}
+          <span className="text-xs text-[#6D6A65] ml-auto">{when}</span>
+        </div>
+        {d.comment ? (
+          <div className="mt-2 text-xs text-[#2B2A29] leading-relaxed bg-[#FDFBF7] border border-[#E8E5DF] rounded-md p-2.5">
+            "{d.comment}"
+          </div>
+        ) : (
+          <div className="mt-2 text-xs text-[#6D6A65] italic">No written comment.</div>
+        )}
+      </div>
     </div>
   );
 }
