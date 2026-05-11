@@ -126,3 +126,4 @@ htmlcov/
 # Provider directory imports (contain real therapist PII)
 backend/imports/
 imports/
+frontend/package-lock.json
