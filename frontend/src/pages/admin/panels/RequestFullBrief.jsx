@@ -307,28 +307,24 @@ export default function RequestFullBrief({ request }) {
         </div>
       </div>
 
-      {/* Patient's free-text "Anything else?" — surfaced verbatim so the
-          admin sees the full picture. The matching engine doesn't yet
-          consume this field for ranking (it only feeds the apply-fit
-          grader), so this is also a debugging clue when match quality
-          looks lower than expected. */}
-      <div className="border-t border-[#E8E5DF] pt-3 text-sm">
-        <FieldLabel
-          hint="Legacy field — removed from intake. Shown here for historical requests that included it."
-        >
-          Patient note (free text)
-        </FieldLabel>
-        <div
-          className={`mt-1 leading-relaxed whitespace-pre-wrap rounded-lg px-3 py-2 ${
-            otherIssue
-              ? "bg-[#F8F4EB] text-[#2B2A29]"
-              : "italic text-[#9C9893] bg-[#FDFBF7] border border-dashed border-[#E8E5DF]"
-          }`}
-          data-testid="request-other-issue"
-        >
-          {otherIssue || "(patient left this blank)"}
+      {/* Legacy "Anything else?" free-text was removed from intake.
+          Only render when an older request actually has a value -- new
+          requests skip this section entirely. */}
+      {otherIssue && (
+        <div className="border-t border-[#E8E5DF] pt-3 text-sm">
+          <FieldLabel
+            hint="Legacy field -- removed from intake. Shown here for historical requests that included it."
+          >
+            Patient note (free text)
+          </FieldLabel>
+          <div
+            className="mt-1 leading-relaxed whitespace-pre-wrap rounded-lg px-3 py-2 bg-[#F8F4EB] text-[#2B2A29]"
+            data-testid="request-other-issue"
+          >
+            {otherIssue}
+          </div>
         </div>
-      </div>
+      )}
 
       {request.prior_therapy_notes && (
         <div className="border-t border-[#E8E5DF] pt-3 text-sm">

@@ -345,6 +345,13 @@ async def create_request(payload: RequestCreate, request: Request):
         if coords:
             patient_geo = {"lat": coords[0], "lng": coords[1], "source": "city"}
 
+    # Threshold is read from the admin-configurable app_config doc so
+    # changing it in /admin/matching-defaults takes effect for the next
+    # new request. Falls back to DEFAULT_THRESHOLD (env var) if no admin
+    # override has been saved.
+    _mcfg = await db.app_config.find_one({"key": "matching_defaults"}, {"_id": 0})
+    _threshold = float((_mcfg or {}).get("threshold") or DEFAULT_THRESHOLD)
+
     doc = {
         "id": rid,
         **payload.model_dump(),
@@ -354,7 +361,7 @@ async def create_request(payload: RequestCreate, request: Request):
         "view_token": secrets.token_urlsafe(24),
         "verified": False,
         "status": "pending_verification",
-        "threshold": DEFAULT_THRESHOLD,
+        "threshold": _threshold,
         "notified_therapist_ids": [],
         "notified_scores": {},
         "notified_distances": {},

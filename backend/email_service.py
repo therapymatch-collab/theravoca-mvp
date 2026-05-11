@@ -114,6 +114,10 @@ async def _send(to: str, subject: str, html: str) -> dict[str, Any] | None:
 async def send_verification_email(to: str, request_id: str, token: str) -> None:
     tpl = await get_template(_db(), "verification")
     verify_url = f"{_get_app_url()}/verify/{token}"
+    # Include the template's greeting (e.g. "Hello,") on its own line --
+    # matches the pattern used by other emails. Without this, the
+    # greeting field on the template renders blank in the actual email.
+    greeting = render(tpl.get("greeting", ""), verify_url=verify_url)
     intro = render(tpl["intro"], verify_url=verify_url)
     cta_label = render(tpl["cta_label"], verify_url=verify_url)
     footer_note = render(tpl["footer_note"], verify_url=verify_url)
@@ -123,6 +127,7 @@ async def send_verification_email(to: str, request_id: str, token: str) -> None:
         f'</p>'
     ) if cta_label else ""
     inner = f"""
+    {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
     <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">{intro}</p>
     {cta_html}
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">{footer_note}<br/>

@@ -25,14 +25,23 @@ relevant section.
 - Notice of Privacy Practices (NPP) document at intake
 - Encryption at rest verified end-to-end
 
-### 2. Patient unsubscribe flow (legally required CAN-SPAM)
-- HMAC-signed unsubscribe URL in email footer
-- One-click unsubscribe page (no login)
-- Sets `unsubscribed: True` flag on request doc
-- All cron senders + `_deliver_results` skip if unsubscribed
-- Admin dashboard view of unsubscribed patients
+### 2. Universal unsubscribe flow (legally required CAN-SPAM)
+**Scope expanded 2026-05-11: applies to therapist emails too, not
+just patient emails.** Therapist surveys, weekly pulse, recruiting
+emails -- anything recurring/promotional -- needs the same
+unsubscribe affordance. Pure transactional emails (verification,
+match-released, password reset) are exempt under CAN-SPAM.
+
+- HMAC-signed unsubscribe URL in email footer for ALL recurring emails
+- One-click unsubscribe page (no login) -- two flavors:
+  - patient unsubscribe -> sets `unsubscribed: True` on request doc
+  - therapist unsubscribe -> sets `unsubscribed: True` on therapist doc
+- All cron senders + `_deliver_results` skip patients with unsubscribed
+- All therapist senders (Phase 3 survey, weekly pulse, recruiting)
+  skip therapists with unsubscribed
+- Admin dashboard view of unsubscribed patients AND therapists
 - Re-subscribe option
-- Currently: only have temporary "reply STOP" text footer
+- Currently: only have temporary "reply STOP" text footer on patient emails
 
 ### 3. Outcomes dashboard -- remaining sub-features (was Phase 5)
 *The core dashboard ships 2026-05-11. These are follow-on additions.*
@@ -61,6 +70,18 @@ relevant section.
 
 ## 🟠 High priority
 
+### NEW. Admin console UI re-org / declutter (raised 2026-05-11)
+Josh flagged the admin console has too many buttons, dropdowns, pages,
+tabs. Needs a deliberate cleanup pass when reorganizing:
+- Inventory every tab in the secondary nav and judge each (keep / merge /
+  hide). The Outcomes tab replaced Feedback + Feedback tracking already.
+- Inventory all action buttons on rows (Edit, Preview, Archive,
+  Delete, Deep research, Test survey, etc.) -- group into a single
+  "..." menu where possible.
+- Inventory dropdowns and modals; collapse redundant ones.
+- Likely scope: 4-6 hours. Best done as one focused session after MVP
+  launch, not piecemeal.
+
 ### 6. Patient match history view
 - Let patients re-login (HMAC link) and see past matches
 - List who they were matched with, dates, application status
@@ -75,10 +96,13 @@ relevant section.
 
 ## 🟡 Medium priority
 
-### 8. `exports/cron_runs_export.json` security audit
-- Was almost committed due to gitignore corruption
-- Verify never made it to git history: `git log --all -- exports/cron_runs_export.json` should be empty
-- If committed, use git filter-branch or BFG to scrub
+### 8. `exports/cron_runs_export.json` security audit -- DONE 2026-05-11
+- Audit result: file WAS committed once (commit `77ef6e2` on 2026-04-30)
+  but contained `[]` (empty array). No sensitive data leaked.
+- Added `exports/cron_runs_export.json`, `exports/feedback_export.json`,
+  and `exports/therapist_surveys_export.json` to `.gitignore` to prevent
+  future accidental commits.
+- No filter-branch/BFG scrub needed -- contents were empty.
 
 ### 9. Stale v1 flag cleanup
 - Old test requests have `structured_followup_*_sent_at` fields from v1 era
@@ -98,7 +122,10 @@ relevant section.
 - `send_therapist_weekly_pulse` defined in `email_service.py` but never called
 - `submit_therapist_pulse` endpoint exists but no corresponding cron trigger
 - `weekly_pulse` template exists in `email_templates.py`
-- Cleanup commit to delete all three
+- **Scope is larger than first estimated (2026-05-11 review):**
+  also touches `frontend/src/pages/TherapistPulse.jsx` (305 lines),
+  `/therapist/pulse` route in `App.js`, and the `gen_pulse` helper in
+  `scripts/simulate_feedback.py`. Plan ~45-60 min for a clean delete.
 
 ---
 

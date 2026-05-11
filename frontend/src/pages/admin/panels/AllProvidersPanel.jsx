@@ -29,6 +29,7 @@ export default function AllProvidersPanel({
   onRestore,
   onDelete,
   onDeepResearch,
+  onFireTestSurvey,
 }) {
   // "Active only" toggle — defaults to true so archived providers don't
   // clutter the daily view. Admin can flip to see archived rows.
@@ -124,6 +125,7 @@ export default function AllProvidersPanel({
                   onDeepResearch={
                     onDeepResearch ? () => onDeepResearch(t) : undefined
                   }
+                  onFireTestSurvey={onFireTestSurvey}
                   visibleCols={visibleCols}
                 />
               ))}

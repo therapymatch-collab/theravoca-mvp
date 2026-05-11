@@ -105,6 +105,9 @@ exports/outreach_invites_export.json
 exports/outreach_opt_outs_export.json
 exports/recruit_drafts_export.json
 exports/intake_ip_log_export.json
+exports/cron_runs_export.json
+exports/feedback_export.json
+exports/therapist_surveys_export.json
 exports/feedback_export.json
 exports/declines_export.json
 exports/followups_export.json

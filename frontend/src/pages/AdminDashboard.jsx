@@ -532,6 +532,23 @@ export default function AdminDashboard() {
     }
   };
 
+  const fireTestTherapistSurvey = async (t) => {
+    // Fires one Phase 3 therapist survey email, bypassing cron eligibility.
+    // Useful for QA-ing the survey email + frontend flow on a real account.
+    try {
+      const res = await client.post(`/admin/therapists/${t.id}/fire-test-survey`);
+      toast.success(
+        `Test survey sent to ${res.data?.email || t.email}`
+      );
+      return res.data;
+    } catch (e) {
+      toast.error(
+        e?.response?.data?.detail || e.message || "Test survey failed",
+      );
+      return null;
+    }
+  };
+
   const saveTherapist = async () => {
     if (!editTherapist) return;
     setSavingTherapist(true);
@@ -1287,6 +1304,7 @@ export default function AdminDashboard() {
                   onRestore={restoreTherapist}
                   onDelete={deleteTherapist}
                   onDeepResearch={deepResearchTherapist}
+                  onFireTestSurvey={fireTestTherapistSurvey}
                 />
               )}
               {tab === "referral_sources" && (
@@ -3211,11 +3229,9 @@ function AdminTabsBar({
       label: "Waitlist",
       icon: <MapPin size={14} />,
     },
-    {
-      id: "feedback_tracking",
-      label: "Feedback tracking",
-      icon: <TrendingUp size={14} />,
-    },
+    // 'Feedback tracking' tab hidden -- superseded by the Outcomes
+    // dashboard. The render block for tab === 'feedback_tracking' is
+    // left intact so direct links still work.
     {
       id: "settings",
       label: "Settings",
@@ -4045,13 +4061,20 @@ function useProviderColumnPrefs() {
 }
 
 function ProviderRow({
-  t, onEdit, onPreview, onArchive, onRestore, onDelete, onDeepResearch, visibleCols,
+  t, onEdit, onPreview, onArchive, onRestore, onDelete, onDeepResearch, onFireTestSurvey, visibleCols,
 }) {
   const cols = PROVIDER_COLUMNS.filter((c) => visibleCols.includes(c.key));
   const archived = t.is_active === false;
   const [drExpanded, setDrExpanded] = useState(false);
   const [drBusy, setDrBusy] = useState(false);
   const [drResult, setDrResult] = useState(null);
+  const [fireBusy, setFireBusy] = useState(false);
+
+  const runFireTestSurvey = async () => {
+    if (!onFireTestSurvey || fireBusy) return;
+    setFireBusy(true);
+    try { await onFireTestSurvey(t); } finally { setFireBusy(false); }
+  };
 
   const runDeep = async () => {
     if (!onDeepResearch) return;
@@ -4113,6 +4136,18 @@ function ProviderRow({
                 <Sparkles size={12} />
               )}{" "}
               {drBusy ? "Researching" : "Deep research"}
+            </button>
+          ) : null}
+          {onFireTestSurvey && !archived ? (
+            <button
+              className="text-[#6D6A65] hover:text-[#2D4A3E] hover:underline text-xs inline-flex items-center gap-1 disabled:opacity-50"
+              onClick={runFireTestSurvey}
+              disabled={fireBusy}
+              title="Send one Phase 3 therapist survey email to this provider, bypassing the cron eligibility checks. Useful for QA."
+              data-testid={`fire-test-survey-${t.id}`}
+            >
+              {fireBusy ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+              {fireBusy ? "Sending" : "Test survey"}
             </button>
           ) : null}
           {archived ? (
