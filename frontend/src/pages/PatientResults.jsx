@@ -12,6 +12,7 @@ import {
   P1_OPTIONS,
   P2_OPTIONS,
 } from "@/components/intake/deepMatchOptions";
+import { EXPECTATION_OPTIONS } from "@/components/intake/steps/intakeOptions";
 
 // Friendly labels for each scoring axis. Each entry maps axis -> { max, label }.
 // We surface the top 3 axes (where score > 50% of max) on the patient result card.
@@ -556,6 +557,15 @@ function YourReferralPanel({ request }) {
               </>
             );
           })()}
+          {(request.session_expectations || []).length > 0 && (
+            <RefDetail
+              label="What you want sessions to feel like"
+              value={(request.session_expectations || [])
+                .map((v) => EXPECTATION_OPTIONS.find((o) => o.v === v)?.l || v)
+                .join(" · ")}
+              span={2}
+            />
+          )}
           {(request.preferred_modalities || request.modality_preferences || []).length > 0 && (
             <RefDetail
               label="Preferred therapy approaches"
