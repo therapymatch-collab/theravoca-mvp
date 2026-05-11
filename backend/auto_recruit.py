@@ -1,7 +1,7 @@
 """
 Auto-recruit — the closed-loop recruiter that binds together:
   * `simulator.py`       — audits the current pool and surfaces zero-pool
-                           hotspots (group × child, couples × older_adult, etc.)
+                           hotspots (group x child, couples x older_adult, etc.)
   * `_compute_coverage_gap_analysis` (routes/admin.py) — dimensional deltas
                            vs calibrated targets (child_teen<5, group<11, ...)
   * `gap_recruiter.py`    — turns each gap into verified LLM/Places candidate

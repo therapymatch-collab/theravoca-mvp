@@ -194,9 +194,10 @@ function HeroRow({ hero }) {
                 <span className="font-serif text-[2.5rem] font-semibold text-[#2D4A3E] leading-none">
                   {c.fmt(c.kpi.value)}
                 </span>
-                {c.kpi.delta_6mo !== undefined && c.kpi.delta_6mo !== null && (
-                  <span className={`text-xs font-medium ${c.kpi.delta_6mo >= 0 ? "text-[#4A6B5D]" : "text-[#D45D5D]"}`}>
-                    {c.kpi.delta_6mo >= 0 ? "↑" : "↓"} {Math.abs(c.kpi.delta_6mo)} in 6mo
+                {c.kpi.delta_period !== undefined && c.kpi.delta_period !== null && (
+                  <span className={`text-xs font-medium ${c.kpi.delta_period >= 0 ? "text-[#4A6B5D]" : "text-[#D45D5D]"}`}
+                        title="Change from first month to last month of selected period">
+                    {c.kpi.delta_period >= 0 ? "↑" : "↓"} {Math.abs(c.kpi.delta_period)} in period
                   </span>
                 )}
               </div>
@@ -235,8 +236,8 @@ function MarketingTab({ d }) {
 
   return (
     <div className="space-y-4">
-      <Card title="Patient NPS - last 6 months"
-            subtitle="Net Promoter Score across all post-match surveys. Rising = more patients recommending us = cheaper acquisition.">
+      <Card title="Patient NPS over time"
+            subtitle="Net Promoter Score across all post-match surveys for the selected period. Rising = more patients recommending us = cheaper acquisition.">
         {npsHasData ? (
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={npsData} margin={{ top: 20, right: 30, left: 0, bottom: 10 }}>
@@ -256,7 +257,7 @@ function MarketingTab({ d }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card title="Conversion funnel"
-              subtitle="From match release to long-term retention. Where do patients drop off?">
+              subtitle="Events in the selected period at each stage. Note: these aren't strictly the same cohort -- a 9w response counted here belongs to a patient matched 9+ weeks before. Use a wider period for cleaner ratios.">
           <Funnel d={d.funnel} />
         </Card>
 
@@ -380,8 +381,8 @@ function RecruitingTab({ d }) {
 
   return (
     <div className="space-y-4">
-      <Card title="Therapist NPS - last 6 months"
-            subtitle="Will therapists refer other therapists? Strong recruiting flywheel signal.">
+      <Card title="Therapist NPS over time"
+            subtitle="Will therapists refer other therapists? Strong recruiting flywheel signal. Scope: selected period.">
         {hasNps ? (
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={nps} margin={{ top: 20, right: 30, left: 0, bottom: 10 }}>

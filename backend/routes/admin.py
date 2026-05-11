@@ -1750,9 +1750,12 @@ async def admin_outcome_tracking(_: bool = Depends(require_admin)):
 # ===========================================================
 
 # Minimum sample sizes before we show a number rather than "needs more data".
-_MIN_N_PATIENT_NPS = 10
-_MIN_N_THERAPIST_NPS = 5
-_MIN_N_PROGRESS = 10
+# Tuned conservatively: NPS becomes directionally meaningful around n>=5,
+# but the correlation between Match Strength and retention needs ~50 pairs
+# before it stops being statistical noise.
+_MIN_N_PATIENT_NPS = 5
+_MIN_N_THERAPIST_NPS = 3
+_MIN_N_PROGRESS = 5
 _MIN_N_CORRELATION = 50
 
 # How many months of trend data to return.
@@ -1902,11 +1905,12 @@ async def admin_feedback_dashboard(
         for m in months
     ]
 
-    # Delta over 6 months: latest month NPS vs ~6 months ago.
-    delta_6mo = None
+    # Delta over the selected period: last month NPS minus first month NPS
+    # within the active date range. None if either endpoint has no data.
+    delta_period = None
     if (patient_nps_trend[0]["nps"] is not None
             and patient_nps_trend[-1]["nps"] is not None):
-        delta_6mo = patient_nps_trend[-1]["nps"] - patient_nps_trend[0]["nps"]
+        delta_period = patient_nps_trend[-1]["nps"] - patient_nps_trend[0]["nps"]
 
     # NPS distribution (0-10 histogram).
     patient_nps_distribution = [0] * 11
@@ -1932,10 +1936,10 @@ async def admin_feedback_dashboard(
          "n": len(t_nps_by_month[m])}
         for m in months
     ]
-    t_delta_6mo = None
+    t_delta_period = None
     if (t_nps_trend[0]["nps"] is not None
             and t_nps_trend[-1]["nps"] is not None):
-        t_delta_6mo = t_nps_trend[-1]["nps"] - t_nps_trend[0]["nps"]
+        t_delta_period = t_nps_trend[-1]["nps"] - t_nps_trend[0]["nps"]
 
     t_nps_distribution = [0] * 11
     for s in t_nps_all:
@@ -2221,11 +2225,11 @@ async def admin_feedback_dashboard(
         "hero": {
             "patient_nps": {
                 **_hero(patient_nps_value, len(patient_nps_all), _MIN_N_PATIENT_NPS),
-                "delta_6mo": delta_6mo,
+                "delta_period": delta_period,
             },
             "therapist_nps": {
                 **_hero(t_nps_value, len(t_nps_all), _MIN_N_THERAPIST_NPS),
-                "delta_6mo": t_delta_6mo,
+                "delta_period": t_delta_period,
             },
             "patient_progress_15w": _hero(progress_avg, len(progress_values), _MIN_N_PROGRESS),
             "match_correlation": _hero(correlation_value, len(scatter), _MIN_N_CORRELATION),

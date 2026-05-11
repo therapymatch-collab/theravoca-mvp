@@ -19,8 +19,13 @@ These rules govern all code changes. No exceptions.
    while fixing the requested one, mention it and add it to a list -- don't fix
    it in the same commit.
 
-5. **No git commands**: Don't run `git add`, `git commit`, or `git push`. Josh
-   runs all git commands from PowerShell. You prepare the changes, he commits.
+5. **Git from chat**: Josh does not use PowerShell. Run `git add`, `git
+   commit`, `git push`, `git merge`, and `git checkout` yourself via the
+   Bash tool. Confirm with Josh in chat before any action that affects the
+   live staging site (push to `staging`, merge into `staging`, anything
+   that triggers a Render deploy). Never use `--no-verify`, `--force`, or
+   `reset --hard` without an explicit ask. For feature-branch work (no
+   live impact), just do it and report what happened.
 
 6. **No marking "done"**: Never say "fixed" or "completed" until Josh has
    verified the change is live on the deployed staging site

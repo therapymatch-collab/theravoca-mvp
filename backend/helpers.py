@@ -130,7 +130,7 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-# ââ Background task registry ââââââââââââââââââââââââââââââââââââââââââââââââ
+# -- Background task registry ------------------------------------------------
 # `asyncio.create_task()` only holds a weak reference to the resulting task,
 # so a fire-and-forget task can be garbage-collected mid-execution. We keep a
 # strong reference here so background outreach + email + SMS dispatches always
@@ -263,7 +263,7 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
         "Prior therapy": (req.get("prior_therapy") or "").replace("_", " ").title(),
         "Style preference": style_display,
     }
-    # âââ Deep match answers (P1/P2/P3) âââââââââââââââââââââââââââââââââ
+    # --- Deep match answers (P1/P2/P3) ---------------------------------
     if req.get("deep_match_opt_in"):
         p1 = req.get("p1_communication") or []
         p2 = req.get("p2_change") or []
@@ -295,7 +295,7 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
         if p3:
             summary["What therapist should already get (deep match)"] = p3[:1500]
 
-    # âââ Gender & experience preferences ââââââââââââââââââââââââââââââ
+    # --- Gender & experience preferences ------------------------------
     gender_pref = req.get("gender_preference") or "no_pref"
     if gender_pref and gender_pref != "no_pref":
         summary["Gender preference"] = gender_pref.replace("_", " ").title()
@@ -307,7 +307,7 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
             e.replace("_", " ").title() for e in exp_pref if e
         )
 
-    # âââ Priority factors âââââââââââââââââââââââââââââââââââââââââââââ
+    # --- Priority factors ---------------------------------------------
     pf = req.get("priority_factors") or []
     if pf:
         summary["Priority factors"] = ", ".join(

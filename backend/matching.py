@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-# âââ Constants ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# --- Constants ----------------------------------------------------------------
 MAX_ISSUES = 35.0
 MAX_AVAILABILITY = 20.0
 MAX_MODALITY = 15.0
@@ -45,7 +45,7 @@ MAX_OTHER_ISSUE_BONUS = 0.0  # deprecated: other_issue textarea removed from int
 # don't want to double-count when both are filled in.
 MAX_PRIOR_THERAPY_BONUS = 4.0
 
-# âââ Expectation alignment âââââââââââââââââââââââââââââââââââââââââââââ
+# --- Expectation alignment ---------------------------------------------
 # Overlap between patient session_expectations and therapist
 # t6_session_expectations. THE #1 ranking signal. Both pick up to 2
 # from 5 options (same slugs). Special handling: "not_sure" (patient)
@@ -55,7 +55,7 @@ MAX_EXPECTATION_ALIGNMENT = 30.0
 # therapist T6 early-session description. Tie-breaker when tag
 # overlap is identical.
 MAX_EXPECTATION_EMBED_BONUS = 0.0  # deprecated: session_expectations_notes textarea removed from intake
-# âââ Therapist reliability âââââââââââââââââââââââââââââââââââââââââââââ
+# --- Therapist reliability ---------------------------------------------
 # Built from passive behavior data:
 #   response_rate:    % of referrals responded to (applied or declined)
 #   selection_rate:   % of times patients chose them
@@ -76,7 +76,7 @@ URGENCY_ORDER = ["asap", "within_2_3_weeks", "within_month", "flexible"]
 THERAPIST_URGENCY_ORDER = ["asap", "within_2_3_weeks", "within_month", "full"]
 
 
-# âââ Hard filter helpers ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# --- Hard filter helpers ------------------------------------------------------
 
 def _state_pass(t: dict, r: dict) -> bool:
     licensed = [s.upper() for s in t.get("licensed_states") or []]
@@ -296,7 +296,7 @@ def _gender_pass(t: dict, r: dict) -> bool:
     return (t.get("gender") or "").lower() == pref
 
 
-# âââ Weighted scoring helpers âââââââââââââââââââââââââââââââââââââââââââââââââ
+# --- Weighted scoring helpers -------------------------------------------------
 
 def _score_issue_one(t: dict, issue: str) -> float:
     issue = issue.lower()
@@ -531,7 +531,7 @@ def _score_modality_pref(t: dict, r: dict) -> float:
     return MAX_MODALITY_PREF * 0.6
 
 
-# âââ Public API âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# --- Public API ---------------------------------------------------------------
 
 # Maps the patient-facing "priority factor" keys to the scoring axes they
 # emphasise. When the patient picks one of these on intake, the listed
@@ -599,7 +599,7 @@ def _patient_expressed_axis(r: dict, axis: str) -> bool:
     return False
 
 
-# âââ Expectation alignment scoring âââââââââââââââââââââââââââââââââââââââ
+# --- Expectation alignment scoring ---------------------------------------
 # Patient picks 2-3 from EXPECTATION_OPTIONS (session_expectations),
 # therapist picks 2-3 from the same set (t6_session_expectations).
 # Score = overlap / max(len(patient), len(therapist)) * MAX_EXPECTATION_ALIGNMENT
@@ -643,7 +643,7 @@ def _score_expectation_embed_bonus(t: dict, r: dict) -> float:
     return round(sim * MAX_EXPECTATION_EMBED_BONUS, 2)
 
 
-# âââ Therapist reliability scoring ââââââââââââââââââââââââââââââââââââââââ
+# --- Therapist reliability scoring ----------------------------------------
 
 _RELIABILITY_WEIGHTS = {
     "response_rate": 0.25,
@@ -740,17 +740,17 @@ def calculate_match_strength(feedback_data: dict) -> float:
     return round(bond * 0.40 + tasks * 0.30 + goals * 0.30, 1)
 
 
-# âââ Deep-match scoring (Iter-89 v2) âââââââââââââââââââââââââââââââââââ
+# --- Deep-match scoring (Iter-89 v2) -----------------------------------
 # Three axes activated only when the patient opted into the deep flow
 # (request.deep_match_opt_in is True) AND the therapist has answered
-# the corresponding T-fields. Each axis returns a 0â1 sub-score; the
+# the corresponding T-fields. Each axis returns a 0-1 sub-score; the
 # bonus added to the total is `weight * sub_score * DEEP_MATCH_SCALE`.
 #
 # Default weights match the founder's v2 spec:
 #   relationship_style 0.40 / way_of_working 0.35 / contextual_resonance 0.25
 # Admins can override these in `app_config.deep_match_weights`. The
 # scale factor pegs the maximum total deep bonus to 30 score points
-# (â a 30% lift over baseline)  --  large enough that deep answers can
+# (- a 30% lift over baseline)  --  large enough that deep answers can
 # meaningfully reorder results, small enough that they can't swamp
 # hard-requirement axes like specialty and licensure.
 _DEEP_MATCH_DEFAULT_WEIGHTS = {
@@ -758,7 +758,7 @@ _DEEP_MATCH_DEFAULT_WEIGHTS = {
     "way_of_working": 0.35,
     "contextual_resonance": 0.25,
 }
-_DEEP_MATCH_SCALE = 30.0  # max bonus per axis â weight * 30
+_DEEP_MATCH_SCALE = 30.0  # max bonus per axis - weight * 30
 
 # NOTE: T1 (stuck_ranked) and T3 (breakthrough) are deprecated in the
 # new survey timeline but the scoring logic still works with existing
@@ -1006,7 +1006,7 @@ def score_therapist(
     sees on the results page. No LLM calls happen here  --  it's pure set
     arithmetic over the cached themes + the patient's brief.
     """
-    # ââ Hard filters (always-on) ââââââââââââââââââââââââââââââââââââââ
+    # -- Hard filters (always-on) --------------------------------------
     if not _state_pass(t, r):
         return {"total": -1, "filter_failed": "state", "filtered": True}
     if not _client_type_pass(t, r):
@@ -1019,7 +1019,7 @@ def score_therapist(
             "filter_failed": "primary_concern",
             "filtered": True,
         }
-    # ââ Patient-toggleable hard filters (soft by default) âââââââââââââ
+    # -- Patient-toggleable hard filters (soft by default) -------------
     if not _payment_pass(t, r):
         return {"total": -1, "filter_failed": "payment", "filtered": True}
     if not _modality_pass(t, r):
@@ -1078,12 +1078,12 @@ def score_therapist(
     #
     # Worked example: patient picks 3 axes (specialty/schedule/payment)
     # and a therapist scores 140 raw across the boosted axes. We
-    # multiply every axis by 100/140 â 0.714, so the therapist now
+    # multiply every axis by 100/140 - 0.714, so the therapist now
     # scores 100. A weaker therapist whose raw total is 110 gets
-    # 110*0.714 â 78.6  --  they're still meaningfully behind the top.
+    # 110*0.714 - 78.6  --  they're still meaningfully behind the top.
     weights = _priority_weights(priority_factors)
     breakdown = {ax: round(v * weights[ax], 2) for ax, v in raw.items()}
-    # Reputation boost  --  verified online reviews â¥ 4.5â adds +5 (out of 100).
+    # Reputation boost  --  verified online reviews -¥ 4.5- adds +5 (out of 100).
     review_avg = float(t.get("review_avg") or 0)
     review_count = int(t.get("review_count") or 0)
     if review_avg >= 4.5 and review_count >= 3:
@@ -1133,7 +1133,7 @@ def score_therapist(
     # end to produce a human-friendly 0-97 display score.
     total = round(raw_total, 2)
 
-    # ââ Research-cache bonus (folded directly into the live score) ââââ
+    # -- Research-cache bonus (folded directly into the live score) ----
     # When the therapist has a warm pre-warm cache, we project it through
     # the patient's brief now (cheap set arithmetic, no LLM call) so the
     # final score reflects evidence-graded specialty match + style/modality
@@ -1156,7 +1156,7 @@ def score_therapist(
         except Exception:
             # Defensive: a malformed cache should never break scoring.
             research_axes = {}
-    # ââ Deep-match bonus (Iter-89) ââââââââââââââââââââââââââââââââââââ
+    # -- Deep-match bonus (Iter-89) ------------------------------------
     # Three additional axes activated when the patient opted in. Each
     # sub-score is in [0,1]; we multiply by configurable weights and
     # _DEEP_MATCH_SCALE before adding to the total. Always recorded in
@@ -1171,7 +1171,7 @@ def score_therapist(
         if deep["bonus"]:
             breakdown["deep_match"] = deep["bonus"]
             total = round(min(150.0, total + deep["bonus"]), 2)
-    # ââ Patient `other_issue` free-text resonance bonus âââââââââââââ
+    # -- Patient `other_issue` free-text resonance bonus -------------
     # When the patient filled in *Anything else?* on intake, we
     # embedded their text at request creation. Cosine similarity vs the
     # therapist's T5 lived-experience and T2 progress-story embeddings
@@ -1197,7 +1197,7 @@ def score_therapist(
             }
         except Exception:
             other_issue_axes = {}
-    # ââ Patient `prior_therapy_notes` free-text resonance bonus âââââ
+    # -- Patient `prior_therapy_notes` free-text resonance bonus -----
     # Patients describe what worked / didn't work in past therapy
     # ("liked her style, took time to know us both"). Embed at request
     # creation, cosine-compare against therapist T5/T2, soft-bonus when
@@ -1399,7 +1399,7 @@ def gap_axes(
         "modality_pref":(MAX_MODALITY_PREF,"Preferred therapy approach"),
     }
 
-    # âââ Per-axis explanation generators âââââââââââââââââââââââââââââââââââ
+    # --- Per-axis explanation generators -----------------------------------
     def _issues() -> Optional[tuple[str, str]]:
         patient_issues = [i.lower() for i in (request.get("presenting_issues") or []) if i]
         if not patient_issues:
