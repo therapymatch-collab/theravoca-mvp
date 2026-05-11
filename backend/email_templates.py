@@ -113,17 +113,6 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "footer_note": "Takes about 60 seconds. Your responses help us improve match quality for you and other therapists.",
         "available_vars": "first_name, therapist_id, survey_number",
     },
-    "therapist_weekly_pulse": {
-        "title": "Therapist weekly pulse survey",
-        "description": "Sent weekly to active therapists with at least one referral to gauge platform satisfaction.",
-        "subject": "Your weekly TheraVoca pulse check",
-        "heading": "Quick weekly pulse",
-        "greeting": "Hi {first_name},",
-        "intro": "A 30-second check-in on how TheraVoca is working for you this week. Your answers stay anonymous and help us send you better-fit referrals.",
-        "cta_label": "Share this week's pulse (30 seconds)",
-        "footer_note": "Five quick ratings. Never about specific patients — just your overall satisfaction with the platform.",
-        "available_vars": "first_name",
-    },
     "therapist_stale_profile_nag": {
         "title": "Stale profile nudge (90-day)",
         "description": "Sent when a therapist hasn't logged in or updated their profile in 90+ days. Cron: daily sweep.",

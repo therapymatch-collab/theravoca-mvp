@@ -233,15 +233,6 @@ class PatientFeedback15w(BaseModel):
     final_reflection: Optional[str] = Field(None, max_length=2000)
 
 
-class TherapistWeeklyPulse(BaseModel):
-    """Weekly therapist pulse — general satisfaction, never about specific patients."""
-    referral_quality: int = Field(ge=1, le=5)
-    match_accuracy: int = Field(ge=1, le=5)
-    satisfaction: int = Field(ge=1, le=5)
-    feedback_text: Optional[str] = None
-    adjust_preferences: bool = False
-
-
 class TherapistSurveyV3(BaseModel):
     """Phase 3 therapist survey -- match fit + NPS + ongoing-client conversion.
     One survey per (therapist_id, survey_number); cron increments survey_number
@@ -475,58 +466,13 @@ async def submit_patient_15w(
     return {"ok": True}
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# THERAPIST FEEDBACK — weekly pulse
-# ═══════════════════════════════════════════════════════════════════════
-
-@router.post("/feedback/therapist/{therapist_id}/pulse")
-async def submit_therapist_pulse(
-    therapist_id: str, payload: TherapistWeeklyPulse,
-    token: Optional[str] = Query(None), authorization: Optional[str] = Header(None),
-):
-    """Weekly therapist pulse — general satisfaction, never about specific patients."""
-    _verify_feedback_token(therapist_id, token, "therapist", authorization)
-    t = await db.therapists.find_one(
-        {"id": therapist_id}, {"_id": 0, "email": 1, "name": 1}
-    )
-    if not t:
-        raise HTTPException(404, "Therapist not found")
-
-    doc = {
-        "id": str(uuid.uuid4()),
-        "kind": "therapist_pulse",
-        "therapist_id": therapist_id,
-        "therapist_email": t.get("email"),
-        "therapist_name": t.get("name"),
-        **payload.model_dump(),
-        "submitted_at": _now_iso(),
-    }
-    await db.therapist_pulse.insert_one(doc)
-
-    # ── Churn risk flag ──
-    if payload.satisfaction < 3:
-        await _flag_admin(
-            f"Therapist churn risk: {t.get('name', therapist_id)}",
-            f"<p>Satisfaction score: <strong>{payload.satisfaction}/5</strong></p>"
-            f"<p>Referral quality: {payload.referral_quality}/5</p>"
-            f"<p>Match accuracy: {payload.match_accuracy}/5</p>"
-            f"<p>Feedback: {payload.feedback_text or 'N/A'}</p>",
-        )
-
-    # ── Preference adjustment flag ──
-    if payload.adjust_preferences:
-        await _flag_admin(
-            f"Therapist wants preference update: {t.get('name', therapist_id)}",
-            f"<p>{t.get('name', therapist_id)} has requested to adjust their matching preferences.</p>"
-            f"<p>Feedback: {payload.feedback_text or 'N/A'}</p>",
-        )
-
-    return {"ok": True}
-
-
-# ═══════════════════════════════════════════════════════════════════════
+# =======================================================================
 # THERAPIST SURVEY (Phase 3) -- match fit + NPS + ongoing-client conversion
-# ═══════════════════════════════════════════════════════════════════════
+# =======================================================================
+# (Weekly pulse feature deleted 2026-05-11 -- was never wired into a cron
+# trigger and the front-end form was orphaned. See git history for the
+# previous TherapistWeeklyPulse model + /pulse endpoint if it needs to be
+# resurrected later.)
 
 @router.get("/feedback/therapist/{therapist_id}/survey/{survey_number}")
 async def get_therapist_survey(

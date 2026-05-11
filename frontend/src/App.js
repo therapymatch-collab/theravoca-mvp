@@ -22,7 +22,6 @@ import BlogList from "@/pages/BlogList";
 import BlogPost from "@/pages/BlogPost";
 import FeedbackForm from "@/pages/FeedbackForm";
 import FeedbackSurvey from "@/pages/FeedbackSurvey";
-import TherapistPulse from "@/pages/TherapistPulse";
 import TherapistSurvey from "@/pages/TherapistSurvey";
 import FeedbackWidget from "@/components/FeedbackWidget";
 import PreviewBanner from "@/components/PreviewBanner";
@@ -30,6 +29,7 @@ import ScrollManager from "@/components/ScrollManager";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import NotFound from "@/pages/NotFound";
 import PromisePreview from "@/pages/PromisePreview";
+import Unsubscribe from "@/pages/Unsubscribe";
 
 function App() {
   useEffect(() => {
@@ -79,10 +79,17 @@ function App() {
             <Route path="/blog/:slug" element={<BlogPost />} />
             <Route path="/preview/promise" element={<PromisePreview />} />
             <Route
+              path="/unsubscribe/patient/:id"
+              element={<Unsubscribe role="patient" />}
+            />
+            <Route
+              path="/unsubscribe/therapist/:id"
+              element={<Unsubscribe role="therapist" />}
+            />
+            <Route
               path="/feedback/:requestId/:milestone"
               element={<FeedbackSurvey />}
             />
-            <Route path="/therapist/pulse" element={<TherapistPulse />} />
             <Route
               path="/therapist-feedback/:therapistId/:surveyNumber"
               element={<TherapistSurvey />}

@@ -1,6 +1,6 @@
 """Simulate realistic feedback data for TheraVoca's feedback pipeline.
 
-Generates patient feedback (48h/3w/9w/15w) and therapist pulse data,
+Generates patient feedback (48h/3w/9w/15w) data,
 then updates therapist reliability subdocuments and calculates Match Strength scores.
 
 Usage:
@@ -224,39 +224,6 @@ def gen_15w(request_id: str, patient_email: str, therapist_id: str | None,
     }
 
 
-def gen_pulse(therapist_id: str, therapist_email: str, therapist_name: str,
-              submit_time: datetime) -> dict:
-    referral_quality = _weighted_choice([
-        (5, 0.25), (4, 0.40), (3, 0.25), (2, 0.07), (1, 0.03),
-    ])
-    match_accuracy = _weighted_choice([
-        (5, 0.20), (4, 0.40), (3, 0.30), (2, 0.07), (1, 0.03),
-    ])
-    satisfaction = _weighted_choice([
-        (5, 0.30), (4, 0.40), (3, 0.20), (2, 0.07), (1, 0.03),
-    ])
-    feedback_texts = [
-        None, None, None,  # most don't leave text
-        "Great matches lately, keep it up!",
-        "Would appreciate more clients with anxiety focus.",
-        "The referral process is smooth.",
-        "Scheduling is sometimes tricky with telehealth clients.",
-    ]
-    return {
-        "id": str(uuid.uuid4()),
-        "kind": "therapist_pulse",
-        "therapist_id": therapist_id,
-        "therapist_email": therapist_email,
-        "therapist_name": therapist_name,
-        "referral_quality": referral_quality,
-        "match_accuracy": match_accuracy,
-        "satisfaction": satisfaction,
-        "feedback_text": _RNG.choice(feedback_texts),
-        "adjust_preferences": _RNG.random() < 0.05,
-        "submitted_at": submit_time.isoformat(),
-    }
-
-
 # ---------------------------------------------------------------------------
 # Match Strength calculation (mirrors matching.py calculate_match_strength)
 # ---------------------------------------------------------------------------
@@ -358,7 +325,7 @@ async def main(dry_run: bool = False) -> None:
     # ── Counters ──
     stats = {
         "patient_48h": 0, "patient_3w": 0, "patient_9w": 0, "patient_15w": 0,
-        "therapist_pulse": 0, "ms_computed": 0, "skipped_existing": 0,
+        "ms_computed": 0, "skipped_existing": 0,
     }
 
     # Track which therapists got chosen / shown for reliability updates
@@ -369,7 +336,6 @@ async def main(dry_run: bool = False) -> None:
     therapist_expectation: dict[str, list[float]] = {}
 
     all_feedback_docs: list[dict] = []
-    all_pulse_docs: list[dict] = []
 
     for req in requests:
         request_id = req["id"]
@@ -467,29 +433,12 @@ async def main(dry_run: bool = False) -> None:
             ret_val = 1.0 if fb_15w["still_seeing"] == "yes" else 0.0
             therapist_retention_15w.setdefault(chosen_tid, []).append(ret_val)
 
-    # ── Therapist pulse (2-3 per therapist) ──
-    now = datetime.now(timezone.utc)
-    for tid, t_info in therapist_map.items():
-        # Check idempotency
-        existing_pulse = await db.therapist_pulse.count_documents({"therapist_id": tid})
-        if existing_pulse > 0:
-            continue
-
-        pulse_count = _RNG.randint(2, 3)
-        for i in range(pulse_count):
-            submit_time = now - timedelta(weeks=pulse_count - i, days=_RNG.randint(0, 2))
-            pulse = gen_pulse(
-                tid,
-                t_info.get("email", ""),
-                t_info.get("name", ""),
-                submit_time,
-            )
-            all_pulse_docs.append(pulse)
-            stats["therapist_pulse"] += 1
+    # (Therapist pulse simulation removed 2026-05-11 with the weekly pulse
+    #  feature deletion. See git history if you need to resurrect it.)
 
     # ── Summary before insert ──
     print(f"\nGenerated feedback documents:")
-    for kind in ["patient_48h", "patient_3w", "patient_9w", "patient_15w", "therapist_pulse"]:
+    for kind in ["patient_48h", "patient_3w", "patient_9w", "patient_15w"]:
         print(f"  {kind}: {stats[kind]}")
     print(f"  Match Strength scores computed: {stats['ms_computed']}")
     print(f"  Skipped (already exists): {stats['skipped_existing']}")
@@ -527,10 +476,6 @@ async def main(dry_run: bool = False) -> None:
     if all_feedback_docs:
         await db.feedback.insert_many(all_feedback_docs)
         print(f"\nInserted {len(all_feedback_docs)} feedback docs.")
-
-    if all_pulse_docs:
-        await db.therapist_pulse.insert_many(all_pulse_docs)
-        print(f"Inserted {len(all_pulse_docs)} pulse docs.")
 
     # ── Update therapist reliability subdocuments ──
     print("\nUpdating therapist reliability scores...")
@@ -586,7 +531,6 @@ async def main(dry_run: bool = False) -> None:
     print("SIMULATION SUMMARY")
     print("=" * 60)
     print(f"Feedback docs inserted:  {len(all_feedback_docs)}")
-    print(f"Pulse docs inserted:     {len(all_pulse_docs)}")
     print(f"Therapists updated:      {len(updated_therapists)}")
     print(f"Match Strength computed: {stats['ms_computed']}")
     print(f"Requests skipped:        {stats['skipped_existing']}")

@@ -2295,6 +2295,37 @@ async def admin_feedback_dashboard(
     }
 
 
+@router.post("/admin/cleanup-v1-followup-flags", dependencies=[Depends(require_admin)])
+async def admin_cleanup_v1_followup_flags() -> dict[str, Any]:
+    """One-shot cleanup: strips legacy `structured_followup_*_sent_at` and
+    `v1_*_sent_at` fields from request docs. These were written by the v1
+    survey path which has been deleted; current code never reads them.
+
+    Idempotent -- safe to call multiple times. Returns the count of
+    requests that had at least one legacy field removed."""
+    legacy_fields = {
+        "structured_followup_48h_sent_at": "",
+        "structured_followup_3w_sent_at": "",
+        "structured_followup_9w_sent_at": "",
+        "structured_followup_15w_sent_at": "",
+        "v1_survey_48h_sent_at": "",
+        "v1_survey_3w_sent_at": "",
+        "v1_survey_9w_sent_at": "",
+        "v1_survey_15w_sent_at": "",
+    }
+    # Build a match that finds docs with at least one of these fields.
+    match_clauses = [{f: {"$exists": True}} for f in legacy_fields.keys()]
+    candidates = await db.requests.count_documents({"$or": match_clauses})
+    result = await db.requests.update_many(
+        {"$or": match_clauses}, {"$unset": legacy_fields},
+    )
+    return {
+        "candidates": candidates,
+        "modified": result.modified_count,
+        "matched": result.matched_count,
+    }
+
+
 @router.get("/admin/patients")
 async def admin_list_patients_by_email(request: Request, _: bool = Depends(require_admin)):
     """Aggregate every email that has submitted a request and how many

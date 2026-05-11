@@ -58,7 +58,17 @@ BRAND = {
 }
 
 
-def _wrap(title: str, inner_html: str) -> str:
+def _wrap(title: str, inner_html: str, unsubscribe_url: Optional[str] = None) -> str:
+    # CAN-SPAM: any recurring/promotional email gets a one-click unsubscribe
+    # link in the footer. Transactional emails (verification, results) pass
+    # unsubscribe_url=None to omit the link.
+    unsub_line = ""
+    if unsubscribe_url:
+        unsub_line = (
+            f'<br/>Don\'t want these emails? '
+            f'<a href="{unsubscribe_url}" style="color:{BRAND["primary"]};text-decoration:underline;">'
+            f'Unsubscribe with one click</a>.'
+        )
     return f"""
 <!DOCTYPE html>
 <html><body style="margin:0;padding:0;background:{BRAND['bg']};font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;color:{BRAND['text']};">
@@ -74,7 +84,7 @@ def _wrap(title: str, inner_html: str) -> str:
         </td></tr>
         <tr><td style="padding:20px 32px;background:{BRAND['bg']};color:{BRAND['muted']};font-size:12px;line-height:1.6;border-top:1px solid {BRAND['border']};">
           You received this email from TheraVoca. If this wasn't you, please ignore this message.<br/>
-          Questions? Reach us at <a href="mailto:support@theravoca.com" style="color:{BRAND['primary']};text-decoration:underline;">support@theravoca.com</a>.
+          Questions? Reach us at <a href="mailto:support@theravoca.com" style="color:{BRAND['primary']};text-decoration:underline;">support@theravoca.com</a>.{unsub_line}
         </td></tr>
       </table>
     </td></tr>
@@ -501,11 +511,22 @@ async def send_therapist_rejected(to: str, name: str) -> None:
     await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner))
 
 
-async def _send_simple_cta_template(template_key: str, to: str, cta_url: str, vars_: dict) -> None:
-    """Shared helper for short CTA-only emails (follow-ups, profile nags)."""
+async def _send_simple_cta_template(
+    template_key: str,
+    to: str,
+    cta_url: str,
+    vars_: dict,
+    unsubscribe_url: Optional[str] = None,
+) -> None:
+    """Shared helper for short CTA-only emails (follow-ups, profile nags).
+
+    Pass `unsubscribe_url` to embed a one-click CAN-SPAM unsubscribe link
+    in the footer. Promotional/recurring senders should always pass it;
+    transactional senders (verification, password reset, results
+    delivery) leave it None."""
     tpl = await get_template(_db(), template_key)
     inner, subject, heading = _build_cta_email_html(tpl, cta_url, vars_)
-    await _send(to, subject, _wrap(heading, inner))
+    await _send(to, subject, _wrap(heading, inner, unsubscribe_url=unsubscribe_url))
 
 
 def _build_cta_email_html(
@@ -568,7 +589,6 @@ _PREVIEW_VARS: dict[str, dict[str, Any]] = {
     "patient_followup_3w":       {"request_id": "sample-id"},
     "patient_followup_9w":       {"request_id": "sample-id"},
     "patient_followup_15w":      {"request_id": "sample-id"},
-    "therapist_weekly_pulse":    {"first_name": "Alex"},
     "therapist_followup_2w":     {"first_name": "Alex"},
     "therapist_stale_profile_nag": {"first_name": "Alex", "days_stale": 14},
     "license_expiring_therapist": {"first_name": "Alex", "expires_at": "2026-12-31"},
@@ -616,12 +636,23 @@ async def render_template_preview(
 
 # ── v2 patient survey senders ────────────────────────────────────────
 
+def _patient_unsub_url(request_id: str) -> str:
+    from routes.unsubscribe import build_unsubscribe_url
+    return build_unsubscribe_url(_get_app_url(), request_id, "patient")
+
+
+def _therapist_unsub_url(therapist_id: str) -> str:
+    from routes.unsubscribe import build_unsubscribe_url
+    return build_unsubscribe_url(_get_app_url(), therapist_id, "therapist")
+
+
 async def send_patient_survey_v2_48h(to: str, request_id: str) -> None:
     from routes.feedback import generate_feedback_token
     token = generate_feedback_token(request_id, "patient")
     url = f"{_get_app_url()}/feedback/{request_id}/48h?token={token}&v=2"
     await _send_simple_cta_template(
         "patient_survey_v2_48h", to, url, {"request_id": request_id},
+        unsubscribe_url=_patient_unsub_url(request_id),
     )
 
 
@@ -631,6 +662,7 @@ async def send_patient_survey_v2_3w(to: str, request_id: str) -> None:
     url = f"{_get_app_url()}/feedback/{request_id}/3w?token={token}&v=2"
     await _send_simple_cta_template(
         "patient_survey_v2_3w", to, url, {"request_id": request_id},
+        unsubscribe_url=_patient_unsub_url(request_id),
     )
 
 
@@ -640,6 +672,7 @@ async def send_patient_survey_v2_9w(to: str, request_id: str) -> None:
     url = f"{_get_app_url()}/feedback/{request_id}/9w?token={token}&v=2"
     await _send_simple_cta_template(
         "patient_survey_v2_9w", to, url, {"request_id": request_id},
+        unsubscribe_url=_patient_unsub_url(request_id),
     )
 
 
@@ -649,6 +682,7 @@ async def send_patient_survey_v2_15w(to: str, request_id: str) -> None:
     url = f"{_get_app_url()}/feedback/{request_id}/15w?token={token}&v=2"
     await _send_simple_cta_template(
         "patient_survey_v2_15w", to, url, {"request_id": request_id},
+        unsubscribe_url=_patient_unsub_url(request_id),
     )
 
 
@@ -660,6 +694,7 @@ async def send_patient_survey_v2_48h_reminder(to: str, request_id: str) -> None:
     url = f"{_get_app_url()}/feedback/{request_id}/48h?token={token}&v=2"
     await _send_simple_cta_template(
         "patient_survey_v2_48h_reminder", to, url, {"request_id": request_id},
+        unsubscribe_url=_patient_unsub_url(request_id),
     )
 
 
@@ -669,6 +704,7 @@ async def send_patient_survey_v2_3w_reminder(to: str, request_id: str) -> None:
     url = f"{_get_app_url()}/feedback/{request_id}/3w?token={token}&v=2"
     await _send_simple_cta_template(
         "patient_survey_v2_3w_reminder", to, url, {"request_id": request_id},
+        unsubscribe_url=_patient_unsub_url(request_id),
     )
 
 
@@ -678,6 +714,7 @@ async def send_patient_survey_v2_9w_reminder(to: str, request_id: str) -> None:
     url = f"{_get_app_url()}/feedback/{request_id}/9w?token={token}&v=2"
     await _send_simple_cta_template(
         "patient_survey_v2_9w_reminder", to, url, {"request_id": request_id},
+        unsubscribe_url=_patient_unsub_url(request_id),
     )
 
 
@@ -687,15 +724,7 @@ async def send_patient_survey_v2_15w_reminder(to: str, request_id: str) -> None:
     url = f"{_get_app_url()}/feedback/{request_id}/15w?token={token}&v=2"
     await _send_simple_cta_template(
         "patient_survey_v2_15w_reminder", to, url, {"request_id": request_id},
-    )
-
-
-async def send_therapist_weekly_pulse(to: str, name: str, therapist_id: str) -> None:
-    from routes.feedback import generate_feedback_token
-    token = generate_feedback_token(therapist_id, "therapist")
-    url = f"{_get_app_url()}/therapist/pulse?token={token}"
-    await _send_simple_cta_template(
-        "therapist_weekly_pulse", to, url, {"first_name": _first_name(name)},
+        unsubscribe_url=_patient_unsub_url(request_id),
     )
 
 
@@ -731,6 +760,7 @@ async def send_therapist_survey(
             "therapist_id": therapist_id,
             "survey_number": survey_number,
         },
+        unsubscribe_url=_therapist_unsub_url(therapist_id),
     )
 
 

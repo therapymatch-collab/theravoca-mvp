@@ -82,10 +82,14 @@ tabs. Needs a deliberate cleanup pass when reorganizing:
 - Likely scope: 4-6 hours. Best done as one focused session after MVP
   launch, not piecemeal.
 
-### 6. Patient match history view
-- Let patients re-login (HMAC link) and see past matches
-- List who they were matched with, dates, application status
-- Useful for re-matching scenarios
+### 6. Patient match history view -- ALREADY DONE (verified 2026-05-11)
+- Lives at `/portal/patient` (`frontend/src/pages/PatientPortal.jsx`).
+- Backed by `GET /api/portal/patient/requests` which returns all
+  requests for the signed-in patient, newest first, with application
+  counts and notified counts.
+- Login is via magic-code (6-digit email code) or password if set.
+- No additional work needed for MVP. Could add deeper drilldowns
+  later but the core history list is functional.
 
 ### 7. Wire admin button for "Fire test therapist survey"
 - Backend endpoint exists (`POST /admin/therapists/{tid}/fire-test-survey`)

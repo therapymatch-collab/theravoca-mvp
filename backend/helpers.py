@@ -682,6 +682,13 @@ async def _deliver_results(request_id: str) -> dict[str, Any]:
     req = await db.requests.find_one({"id": request_id}, {"_id": 0})
     if not req:
         raise HTTPException(404, "Request not found")
+    # Honor the patient's CAN-SPAM unsubscribe flag. Once a patient has
+    # unsubscribed we never send the results email (or any follow-up).
+    if req.get("unsubscribed"):
+        logger.info(
+            f"_deliver_results: skipping unsubscribed patient request={request_id}"
+        )
+        return {"skipped": "unsubscribed", "request_id": request_id}
     apps = await db.applications.find({"request_id": request_id}, {"_id": 0}).to_list(50)
     research_scores = req.get("research_scores") or {}
     # Single source of truth — same formula the patient + admin views use.
