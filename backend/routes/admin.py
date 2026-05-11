@@ -1814,14 +1814,70 @@ def _hero(value, n, min_n) -> dict:
     }
 
 
-@router.get("/admin/feedback-dashboard")
-async def admin_feedback_dashboard(_: bool = Depends(require_admin)):
-    """Aggregated data for the Outcomes admin dashboard. One round-trip,
-    one JSON blob -- no per-chart endpoints. See render at /admin -> Outcomes."""
+# Default date range when caller omits the params.
+_DEFAULT_RANGE_DAYS = 90
 
-    feedback = await db.feedback.find({}, {"_id": 0}).to_list(5000)
-    therapist_surveys = await db.therapist_surveys.find({}, {"_id": 0}).to_list(2000)
-    months = _last_n_months(_TREND_MONTHS)
+
+def _months_in_range(start_iso: str, end_iso: str) -> list[str]:
+    """Return YYYY-MM strings from start through end, oldest first.
+    Cap at 24 months to keep payloads bounded."""
+    if not start_iso or not end_iso or len(start_iso) < 7 or len(end_iso) < 7:
+        return _last_n_months(_TREND_MONTHS)
+    try:
+        y, m = int(start_iso[:4]), int(start_iso[5:7])
+        end_y, end_m = int(end_iso[:4]), int(end_iso[5:7])
+    except ValueError:
+        return _last_n_months(_TREND_MONTHS)
+    out = []
+    while (y, m) <= (end_y, end_m) and len(out) < 24:
+        out.append(f"{y:04d}-{m:02d}")
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+    return out or _last_n_months(_TREND_MONTHS)
+
+
+def _in_range(iso_ts: Optional[str], start_iso: str, end_iso: str) -> bool:
+    """True if iso_ts (or empty/None) falls within [start, end] inclusive."""
+    if not iso_ts:
+        return False
+    return start_iso <= iso_ts <= end_iso
+
+
+@router.get("/admin/feedback-dashboard")
+async def admin_feedback_dashboard(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    _: bool = Depends(require_admin),
+):
+    """Aggregated data for the Outcomes admin dashboard. One round-trip,
+    one JSON blob -- no per-chart endpoints. See render at /admin -> Outcomes.
+
+    Query params:
+      start_date, end_date -- ISO 8601 timestamps. If omitted, defaults to
+                              the last 90 days. Filters all source data
+                              (feedback, therapist_surveys, requests).
+    """
+    today = datetime.now(timezone.utc)
+    end_iso = end_date if end_date else today.isoformat()
+    start_iso = start_date if start_date else (today - timedelta(days=_DEFAULT_RANGE_DAYS)).isoformat()
+    # Guard: if start > end (caller confused), swap so we still return data.
+    if start_iso > end_iso:
+        start_iso, end_iso = end_iso, start_iso
+
+    feedback_all = await db.feedback.find({}, {"_id": 0}).to_list(5000)
+    therapist_surveys_all = await db.therapist_surveys.find({}, {"_id": 0}).to_list(2000)
+    # Filter by submitted_at (or created_at fallback) being in the range.
+    feedback = [
+        f for f in feedback_all
+        if _in_range(f.get("submitted_at") or f.get("created_at"), start_iso, end_iso)
+    ]
+    therapist_surveys = [
+        s for s in therapist_surveys_all
+        if _in_range(s.get("submitted_at"), start_iso, end_iso)
+    ]
+    months = _months_in_range(start_iso, end_iso)
     months_set = set(months)
 
     # -------------------------------------------------------
@@ -1924,11 +1980,31 @@ async def admin_feedback_dashboard(_: bool = Depends(require_admin)):
     progress_avg = round(sum(progress_values) / len(progress_values), 1) if progress_values else None
 
     # -------------------------------------------------------
-    # Conversion funnel (all-time).
+    # Match volume per month + referral source lookup.
+    # Load ALL requests so we can resolve referral_source for any feedback
+    # doc (even when its request is older than the date range). Use a
+    # filtered subset for funnel + monthly-volume calculations.
     # -------------------------------------------------------
-    matches_sent = await db.requests.count_documents(
-        {"notified_therapist_ids": {"$exists": True, "$ne": []}}
-    )
+    request_docs = await db.requests.find(
+        {}, {"_id": 0, "id": 1, "created_at": 1, "referral_source": 1, "notified_therapist_ids": 1}
+    ).to_list(20000)
+    req_by_id: dict[str, dict] = {r.get("id"): r for r in request_docs if r.get("id")}
+    requests_in_range = [
+        r for r in request_docs
+        if _in_range(r.get("created_at"), start_iso, end_iso)
+    ]
+
+    match_volume_by_month: dict[str, int] = {m: 0 for m in months}
+    for r in requests_in_range:
+        mk = _month_key(r.get("created_at"))
+        if mk in months_set:
+            match_volume_by_month[mk] += 1
+    match_volume_trend = [{"month": m, "count": match_volume_by_month[m]} for m in months]
+
+    # -------------------------------------------------------
+    # Conversion funnel (scoped to selected date range).
+    # -------------------------------------------------------
+    matches_sent = sum(1 for r in requests_in_range if (r.get("notified_therapist_ids") or []))
     responded_48h = sum(1 for f in feedback if f.get("milestone") == "48h")
     picked_3w = sum(
         1 for f in feedback
@@ -1940,21 +2016,6 @@ async def admin_feedback_dashboard(_: bool = Depends(require_admin)):
     )
     fb_15w = [f for f in feedback if f.get("milestone") == "15w"]
     still_seeing_15w = sum(1 for f in fb_15w if f.get("still_seeing") == "yes")
-
-    # -------------------------------------------------------
-    # Match volume per month + referral source lookup (single request load).
-    # -------------------------------------------------------
-    match_volume_by_month: dict[str, int] = {m: 0 for m in months}
-    request_docs = await db.requests.find(
-        {}, {"_id": 0, "id": 1, "created_at": 1, "referral_source": 1}
-    ).to_list(20000)
-    # Index requests by id so we can look up referral_source from feedback docs.
-    req_by_id: dict[str, dict] = {r.get("id"): r for r in request_docs if r.get("id")}
-    for r in request_docs:
-        mk = _month_key(r.get("created_at"))
-        if mk in months_set:
-            match_volume_by_month[mk] += 1
-    match_volume_trend = [{"month": m, "count": match_volume_by_month[m]} for m in months]
 
     # -------------------------------------------------------
     # NPS by referral source -- which channels bring the best patients?
@@ -2146,6 +2207,10 @@ async def admin_feedback_dashboard(_: bool = Depends(require_admin)):
 
     return {
         "generated_at": _now_iso(),
+        "range": {
+            "start_date": start_iso,
+            "end_date": end_iso,
+        },
         "data_sufficiency": {
             "patient_nps_n": len(patient_nps_all),
             "therapist_nps_n": len(t_nps_all),

@@ -23,8 +23,45 @@ const C = {
   text: "#2B2A29",
 };
 
+// Preset date ranges (in days from today). "all" means no params.
+const RANGE_PRESETS = [
+  { id: "30d",  label: "30d",  days: 30 },
+  { id: "90d",  label: "90d",  days: 90 },
+  { id: "6mo", label: "6 months", days: 183 },
+  { id: "1y",  label: "1 year", days: 365 },
+  { id: "all", label: "All time", days: null },
+];
+
+function computeRangeParams(rangeId) {
+  const preset = RANGE_PRESETS.find((p) => p.id === rangeId);
+  if (!preset || preset.days === null) return null;
+  const end = new Date();
+  const start = new Date(end.getTime() - preset.days * 24 * 60 * 60 * 1000);
+  return { start_date: start.toISOString(), end_date: end.toISOString() };
+}
+
+function formatDate(iso) {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  } catch { return iso.slice(0, 10); }
+}
+
 export default function OutcomesPanel({ data, loading, onReload }) {
   const [tab, setTab] = useState("marketing");
+  const [range, setRange] = useState("90d");
+
+  // On first mount, fetch with the default 90d range so initial load matches.
+  // If parent already loaded data with no params, the backend would have
+  // defaulted to 90 days anyway, so the values agree.
+  const handleRangeChange = (newRangeId) => {
+    setRange(newRangeId);
+    onReload(computeRangeParams(newRangeId));
+  };
+
+  const handleRefresh = () => {
+    onReload(computeRangeParams(range));
+  };
 
   if (loading && !data) {
     return (
@@ -55,23 +92,53 @@ export default function OutcomesPanel({ data, loading, onReload }) {
     { id: "matching",     label: "Matching Algorithm" },
   ];
 
+  const rangeStart = data?.range?.start_date;
+  const rangeEnd = data?.range?.end_date;
+
   return (
     <div className="mt-6" data-testid="outcomes-panel">
       <div className="bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
-        <div className="flex items-center justify-between gap-3 p-5 border-b border-[#E8E5DF] flex-wrap">
-          <div>
-            <h3 className="font-serif-display text-2xl text-[#2D4A3E]">Outcomes</h3>
-            <p className="text-sm text-[#6D6A65] mt-1">
-              Four business questions, four tabs. Each tells you whether one part of the business is working.
-            </p>
+        <div className="p-5 border-b border-[#E8E5DF]">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <h3 className="font-serif-display text-2xl text-[#2D4A3E]">Outcomes</h3>
+              <p className="text-sm text-[#6D6A65] mt-1">
+                Four business questions, four tabs. Each tells you whether one part of the business is working.
+              </p>
+              {rangeStart && rangeEnd && (
+                <p className="text-xs text-[#6D6A65] mt-2" data-testid="outcomes-range">
+                  Showing data from <span className="font-medium text-[#2B2A29]">{formatDate(rangeStart)}</span>
+                  {" "}to <span className="font-medium text-[#2B2A29]">{formatDate(rangeEnd)}</span>
+                </p>
+              )}
+            </div>
+            <button onClick={handleRefresh}
+                    disabled={loading}
+                    className="inline-flex items-center gap-2 text-sm text-[#2D4A3E] hover:underline disabled:opacity-50"
+                    data-testid="outcomes-reload">
+              <RotateCw size={14} className={loading ? "animate-spin" : ""} />
+              Refresh
+            </button>
           </div>
-          <button onClick={onReload}
-                  disabled={loading}
-                  className="inline-flex items-center gap-2 text-sm text-[#2D4A3E] hover:underline disabled:opacity-50"
-                  data-testid="outcomes-reload">
-            <RotateCw size={14} className={loading ? "animate-spin" : ""} />
-            Refresh
-          </button>
+
+          <div className="mt-4 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Date range">
+            <span className="text-xs uppercase tracking-wider text-[#6D6A65] self-center mr-1">Period:</span>
+            {RANGE_PRESETS.map((p) => (
+              <button key={p.id}
+                      role="radio"
+                      aria-checked={range === p.id}
+                      onClick={() => handleRangeChange(p.id)}
+                      disabled={loading}
+                      data-testid={`range-${p.id}`}
+                      className={`text-xs px-3 py-1 rounded-full font-medium transition disabled:opacity-50 ${
+                        range === p.id
+                          ? "bg-[#2D4A3E] text-white"
+                          : "bg-[#F2EFE8] text-[#6D6A65] hover:bg-[#E8E5DF]"
+                      }`}>
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="p-5">

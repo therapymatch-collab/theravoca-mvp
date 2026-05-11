@@ -864,10 +864,12 @@ export default function AdminDashboard() {
     }
   }, [client]);
 
-  const loadOutcomes = useCallback(async () => {
+  const loadOutcomes = useCallback(async (params) => {
     setOutcomesLoading(true);
     try {
-      const res = await client.get("/admin/feedback-dashboard");
+      const res = await client.get("/admin/feedback-dashboard", {
+        params: params || undefined,
+      });
       setOutcomes(res.data);
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Couldn't load outcomes dashboard");
@@ -3161,13 +3163,9 @@ function AdminTabsBar({
       count: optOuts?.total ?? null,
       onClick: onLoadOptOuts,
     },
-    {
-      id: "feedback",
-      label: "Feedback",
-      icon: <MessageSquare size={14} />,
-      count: feedback?.total ?? null,
-      onClick: onLoadFeedback,
-    },
+    // Legacy raw-feedback tab hidden -- superseded by the Outcomes dashboard.
+    // The FeedbackPanel render block below is left intact so the route
+    // tab === "feedback" still works if someone deep-links to it.
     {
       id: "outcomes",
       label: "Outcomes",
