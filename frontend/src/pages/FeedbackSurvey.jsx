@@ -1361,6 +1361,7 @@ export default function FeedbackSurvey() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [crisisFlagged, setCrisisFlagged] = useState(false);
   const [error, setError] = useState(null);
 
   const meta = MILESTONE_META[milestone] || MILESTONE_META["48h"];
@@ -1473,11 +1474,17 @@ export default function FeedbackSurvey() {
     setSubmitting(true);
     try {
       const client = getClient();
-      await client.post(
+      const res = await client.post(
         `/feedback/patient/${requestId}/${milestone}`,
         { milestone, survey_version: surveyVersion, ...answers },
         authParams()
       );
+      // Backend returns crisis_flagged=true when the response triggered
+      // a self-harm / suicide alert. Show the 988 resources prominently
+      // alongside the thank-you state.
+      if (res?.data?.crisis_flagged) {
+        setCrisisFlagged(true);
+      }
       setSubmitted(true);
     } catch (e) {
       const detail = e?.response?.data?.detail;
@@ -1539,23 +1546,88 @@ export default function FeedbackSurvey() {
       <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
         <Header />
         <main className="flex-1 px-5 py-12 md:py-16">
-          <div className="max-w-xl mx-auto text-center py-16">
-            <CheckCircle2 className="mx-auto text-[#2D4A3E]" size={48} strokeWidth={1.5} />
-            <h1 className="font-serif-display text-4xl text-[#2D4A3E] mt-5">Thank you</h1>
-            <p className="text-[#6D6A65] mt-3 text-pretty leading-relaxed">
-              {CLOSING_MESSAGES[milestone]}
-            </p>
-            <p className="text-[#6D6A65] mt-2 text-sm">
-              Your answers go directly to the TheraVoca team. They genuinely
-              shape how we match the next person.
-            </p>
-            <button
-              onClick={() => navigate("/")}
-              className="mt-8 inline-flex items-center gap-2 text-[#2D4A3E] hover:underline text-sm font-medium"
-              data-testid="survey-back-home"
-            >
-              Back to TheraVoca <ArrowRight size={14} />
-            </button>
+          <div className="max-w-xl mx-auto py-12">
+            {crisisFlagged && (
+              <div
+                className="mb-10 bg-[#FDF1EF] border-2 border-[#D45D5D] rounded-2xl p-6 sm:p-7"
+                role="alert"
+                data-testid="crisis-resources"
+              >
+                <h2 className="font-serif-display text-2xl text-[#8B3220]">
+                  We're here, and so are these resources
+                </h2>
+                <p className="text-sm text-[#2B2A29] mt-3 leading-relaxed">
+                  Some of what you shared sounded heavy, and we want you to
+                  have people on the other end right now if you need them.
+                  These are free, confidential, and answer 24/7:
+                </p>
+                <div className="mt-5 space-y-4 text-sm">
+                  <div>
+                    <div className="font-semibold text-[#2D4A3E]">
+                      988 Suicide &amp; Crisis Lifeline
+                    </div>
+                    <div className="text-[#2B2A29] mt-1">
+                      Call or text{" "}
+                      <a
+                        href="tel:988"
+                        className="text-[#8B3220] font-semibold underline"
+                        data-testid="crisis-988-link"
+                      >
+                        988
+                      </a>
+                      {" "}- 24/7, free, confidential.
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-[#2D4A3E]">
+                      Crisis Text Line
+                    </div>
+                    <div className="text-[#2B2A29] mt-1">
+                      Text <strong>HOME</strong> to{" "}
+                      <a
+                        href="sms:741741"
+                        className="text-[#8B3220] font-semibold underline"
+                      >
+                        741741
+                      </a>
+                      {" "}from anywhere in the US.
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-[#2D4A3E]">
+                      If you're in immediate danger
+                    </div>
+                    <div className="text-[#2B2A29] mt-1">
+                      Call <a href="tel:911" className="text-[#8B3220] font-semibold underline">911</a>{" "}
+                      or go to your nearest emergency room.
+                    </div>
+                  </div>
+                </div>
+                <p className="text-xs text-[#6D6A65] mt-5 leading-relaxed">
+                  Someone from our team will also reach out within 24 hours.
+                  Your therapist can be part of this too - please tell them
+                  what you shared with us.
+                </p>
+              </div>
+            )}
+            <div className="text-center">
+              <CheckCircle2 className="mx-auto text-[#2D4A3E]" size={48} strokeWidth={1.5} />
+              <h1 className="font-serif-display text-4xl text-[#2D4A3E] mt-5">Thank you</h1>
+              <p className="text-[#6D6A65] mt-3 text-pretty leading-relaxed">
+                {CLOSING_MESSAGES[milestone]}
+              </p>
+              <p className="text-[#6D6A65] mt-2 text-sm">
+                Your answers go directly to the TheraVoca team. They genuinely
+                shape how we match the next person.
+              </p>
+              <button
+                onClick={() => navigate("/")}
+                className="mt-8 inline-flex items-center gap-2 text-[#2D4A3E] hover:underline text-sm font-medium"
+                data-testid="survey-back-home"
+              >
+                Back to TheraVoca <ArrowRight size={14} />
+              </button>
+            </div>
           </div>
         </main>
         <Footer />

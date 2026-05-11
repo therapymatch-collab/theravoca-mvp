@@ -290,7 +290,10 @@ async def submit_patient_48h(
         "submitted_at": _now_iso(),
     }
     await db.feedback.insert_one(doc)
-    return {"ok": True}
+    crisis = await _handle_crisis_flag(
+        request_id, payload.model_dump(), "48h", doc["id"], req.get("email"),
+    )
+    return {"ok": True, "crisis_flagged": crisis}
 
 
 @router.post("/feedback/patient/{request_id}/3w")
@@ -360,7 +363,10 @@ async def submit_patient_3w(
             request_id, payload.chosen_therapist_id, payload.confidence
         )
 
-    return {"ok": True}
+    crisis = await _handle_crisis_flag(
+        request_id, payload.model_dump(), "3w", doc["id"], req.get("email"),
+    )
+    return {"ok": True, "crisis_flagged": crisis}
 
 
 @router.post("/feedback/patient/{request_id}/9w")
@@ -412,7 +418,10 @@ async def submit_patient_9w(
     if therapist_id:
         await _update_therapist_retention(therapist_id, "retention_9w", payload.still_seeing)
 
-    return {"ok": True}
+    crisis = await _handle_crisis_flag(
+        request_id, payload.model_dump(), "9w", doc["id"], req.get("email"),
+    )
+    return {"ok": True, "crisis_flagged": crisis}
 
 
 @router.post("/feedback/patient/{request_id}/15w")
@@ -463,7 +472,137 @@ async def submit_patient_15w(
     if therapist_id:
         await _update_therapist_retention(therapist_id, "retention_15w", payload.still_seeing)
 
-    return {"ok": True}
+    crisis = await _handle_crisis_flag(
+        request_id, payload.model_dump(), "15w", doc["id"], req.get("email"),
+    )
+    return {"ok": True, "crisis_flagged": crisis}
+
+
+# =======================================================================
+# CRISIS DETECTION
+# =======================================================================
+# When a patient's free-text mentions self-harm/suicide keywords OR they
+# rate NPS=0, OR they say they're no longer seeing the therapist with
+# negative sentiment, flag the doc and email admin. The patient's
+# frontend is also notified (response carries crisis_flagged: true) so
+# the survey thank-you page can surface the 988 hotline.
+
+# Keep these patterns conservative -- false positives are fine; false
+# negatives are not. Lower-cased before matching.
+_CRISIS_KEYWORDS = (
+    "suicide", "suicidal", "kill myself", "end my life", "end it all",
+    "want to die", "wish i was dead", "wish i were dead",
+    "self harm", "self-harm", "hurt myself", "harm myself",
+    "no reason to live", "nothing to live for",
+    "better off dead", "can't go on", "cant go on",
+    "give up on life", "ending things", "take my life",
+)
+
+
+def _matched_crisis_keywords(text: Optional[str]) -> list[str]:
+    if not text:
+        return []
+    lo = text.lower()
+    return [kw for kw in _CRISIS_KEYWORDS if kw in lo]
+
+
+def _check_crisis_indicators(payload_dict: dict, milestone: str) -> dict:
+    """Return crisis-flag metadata for a submitted survey payload.
+
+    Output shape:
+      {triggered: bool, reasons: [str], matched_keywords: [str]}
+
+    Triggers:
+      - Any free-text field contains a crisis keyword
+      - NPS == 0
+      - 9w / 15w with still_seeing == 'no' AND negative free-text
+    """
+    reasons: list[str] = []
+    matched: list[str] = []
+
+    # 1. Keyword scan across every plausible free-text field.
+    text_fields = (
+        "improvement_text", "notes", "surprises", "what_changed",
+        "final_reflection", "working_well", "not_working",
+        "feedback_text", "issues",
+    )
+    combined = " ".join(
+        str(payload_dict.get(f) or "") for f in text_fields
+    ).strip()
+    keyword_hits = _matched_crisis_keywords(combined)
+    if keyword_hits:
+        reasons.append("crisis_keyword_in_free_text")
+        matched = keyword_hits
+
+    # 2. NPS == 0 (most extreme detractor).
+    nps = payload_dict.get("nps")
+    if isinstance(nps, (int, float)) and int(nps) == 0:
+        reasons.append("nps_zero")
+
+    # 3. Dropped therapy with negative-leaning context (9w/15w).
+    if milestone in ("9w", "15w") and payload_dict.get("still_seeing") == "no":
+        # Any free-text at this milestone counts as worth surfacing.
+        if combined and len(combined) > 20:
+            reasons.append("dropped_with_comment")
+
+    return {
+        "triggered": bool(reasons),
+        "reasons": reasons,
+        "matched_keywords": matched,
+    }
+
+
+async def _handle_crisis_flag(
+    request_id: str,
+    payload_dict: dict,
+    milestone: str,
+    feedback_id: str,
+    patient_email: Optional[str],
+) -> bool:
+    """If crisis indicators are present, persist the flag on the
+    feedback doc and email admin. Returns True when flagged.
+    Failures (email send, db update) are logged but don't break the
+    survey submission -- the patient's response still gets saved."""
+    check = _check_crisis_indicators(payload_dict, milestone)
+    if not check["triggered"]:
+        return False
+    try:
+        await db.feedback.update_one(
+            {"id": feedback_id},
+            {"$set": {
+                "crisis_flagged": True,
+                "crisis_reasons": check["reasons"],
+                "crisis_matched_keywords": check["matched_keywords"],
+                "crisis_flagged_at": _now_iso(),
+            }},
+        )
+    except Exception as e:
+        logger.exception("Crisis flag DB update failed: %s", e)
+    try:
+        reason_str = ", ".join(check["reasons"])
+        kw_str = ", ".join(check["matched_keywords"]) or "(none)"
+        await _flag_admin(
+            subject=f"CRISIS FLAG -- patient {patient_email or request_id}",
+            body_html=(
+                f"<p><strong>A patient survey response triggered crisis "
+                f"escalation rules.</strong></p>"
+                f"<p>Patient email: {patient_email or '(unknown)'}<br/>"
+                f"Request ID: {request_id}<br/>"
+                f"Milestone: {milestone}<br/>"
+                f"Reasons: {reason_str}<br/>"
+                f"Matched keywords: {kw_str}</p>"
+                f"<p>The patient was shown the 988 Suicide &amp; Crisis "
+                f"Lifeline + Crisis Text Line resources on the thank-you "
+                f"page. Reach out within 24 hours.</p>"
+            ),
+        )
+    except Exception as e:
+        logger.exception("Crisis flag admin email failed: %s", e)
+    logger.info(
+        f"CRISIS_FLAG request={request_id} milestone={milestone} "
+        f"reasons={check['reasons']}"
+    )
+    return True
 
 
 # =======================================================================
