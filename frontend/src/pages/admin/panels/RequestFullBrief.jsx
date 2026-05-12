@@ -5,6 +5,13 @@
 // admin can see at a glance which inputs caused a small notify_count
 // (e.g. only 3 therapists notified because age_group=teen filtered most
 // of the pool out).
+import { EXPECTATION_OPTIONS } from "@/components/intake/steps/intakeOptions";
+import { P1_OPTIONS, P2_OPTIONS } from "@/components/intake/deepMatchOptions";
+
+const expectationLabel = (slug) =>
+  EXPECTATION_OPTIONS.find((o) => o.v === slug)?.l || slug;
+const p1Label = (slug) => P1_OPTIONS.find((o) => o.v === slug)?.l || slug;
+const p2Label = (slug) => P2_OPTIONS.find((o) => o.v === slug)?.l || slug;
 
 // Hard-filter axes per `matching._score_one` (in the order they're
 // applied). Each axis tags the field below; combined with patient-side
@@ -96,6 +103,14 @@ export default function RequestFullBrief({ request }) {
       key: "client_type",
     },
     { label: "Age group", value: request.age_group || "—", key: "age_group" },
+    {
+      label: "Session expectations",
+      value: Array.isArray(request.session_expectations) && request.session_expectations.length
+        ? request.session_expectations.map(expectationLabel).join(" · ")
+        : "—",
+      key: "session_expectations",
+      hint: "#1 matching signal -- matched against therapist T6 picks (same slug set).",
+    },
     {
       label: "Session format",
       value: (() => {
@@ -248,7 +263,7 @@ export default function RequestFullBrief({ request }) {
           );
           return (
             <div key={f.label}>
-              <FieldLabel hard={alwaysHard || f.hard}>{f.label}</FieldLabel>
+              <FieldLabel hard={alwaysHard || f.hard} hint={f.hint}>{f.label}</FieldLabel>
               <div className="text-[#2B2A29] break-words">{f.value || "—"}</div>
             </div>
           );
@@ -333,6 +348,52 @@ export default function RequestFullBrief({ request }) {
           </FieldLabel>
           <div className="mt-1 leading-relaxed whitespace-pre-wrap rounded-lg px-3 py-2 bg-[#F8F4EB] text-[#2B2A29]">
             {request.prior_therapy_notes}
+          </div>
+        </div>
+      )}
+
+      {/* Deep-match answers (P1/P2/P3). Only rendered when the patient
+          opted in. Visually separated so the admin can see which extra
+          signals are feeding the deep-match scoring axes. */}
+      {request.deep_match_opt_in && (
+        <div
+          className="border-t border-[#E8E5DF] pt-3"
+          data-testid="request-deep-match-section"
+        >
+          <div className="text-[10px] uppercase tracking-[0.2em] text-[#C8412B] font-semibold mb-2">
+            &#10022; Deep match &middot; 3 extra answers (opted in)
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            <div data-testid="request-p1">
+              <FieldLabel hint="Maps 1:1 to therapist T1 ranking -- feeds the Communication Style axis.">
+                Relationship style (P1)
+              </FieldLabel>
+              <div className="text-[#2B2A29] mt-0.5 leading-snug">
+                {Array.isArray(request.p1_communication) && request.p1_communication.length
+                  ? request.p1_communication.map(p1Label).join(" · ")
+                  : "—"}
+              </div>
+            </div>
+            <div data-testid="request-p2">
+              <FieldLabel hint="Maps 1:1 to therapist T3 picks -- feeds the Theory of Change axis.">
+                Way of working (P2)
+              </FieldLabel>
+              <div className="text-[#2B2A29] mt-0.5 leading-snug">
+                {Array.isArray(request.p2_change) && request.p2_change.length
+                  ? request.p2_change.map(p2Label).join(" · ")
+                  : "—"}
+              </div>
+            </div>
+            <div className="md:col-span-2" data-testid="request-p3">
+              <FieldLabel hint="Free text -- feeds the Contextual Resonance axis (semantic match against therapist T5+T2).">
+                What they should already get (P3)
+              </FieldLabel>
+              <div className="text-[#2B2A29] mt-0.5 leading-relaxed whitespace-pre-wrap rounded-lg px-3 py-2 bg-[#F8F4EB]">
+                {(request.p3_resonance || "").trim() || (
+                  <span className="text-[#9C9893] italic">Skipped</span>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
