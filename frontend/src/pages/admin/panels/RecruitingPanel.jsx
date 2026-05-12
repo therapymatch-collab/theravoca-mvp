@@ -1,4 +1,5 @@
 import { Send, Sparkles, Search, AlertTriangle, CheckCircle2, ArrowRight, Inbox, Target, MapPin, Zap } from "lucide-react";
+import ScraperTestPanel from "@/pages/admin/panels/ScraperTestPanel";
 
 // Recruiting tab -- plain-English explainer of how TheraVoca grows its
 // therapist directory. Organized around the two distinct tracks the
@@ -9,7 +10,7 @@ import { Send, Sparkles, Search, AlertTriangle, CheckCircle2, ArrowRight, Inbox,
 //
 // Pure documentation panel -- no live API fetches. Pointers send the
 // admin to the existing data tabs (Invited therapists, Coverage gaps).
-export default function RecruitingPanel() {
+export default function RecruitingPanel({ client }) {
   return (
     <div className="mt-6 space-y-5" data-testid="recruiting-panel">
       {/* ============= HEADER ============= */}
@@ -138,27 +139,13 @@ export default function RecruitingPanel() {
         />
       </Section>
 
-      {/* ============= TEST HOW-TO ============= */}
+      {/* ============= LIVE TEST ============= */}
       <Section
         icon={<Search size={18} className="text-[#2D4A3E]" />}
-        title="How to test without sending real emails"
+        title="Live test -- run the pipeline against a real city right now"
         accent="#F2F4F0"
       >
-        <p className="text-sm text-[#2B2A29] leading-relaxed">
-          The admin <strong>scraper-test endpoint</strong> runs the full
-          discovery + enrichment pipeline against a city/state/specialty
-          combo and returns the exact candidates + real contact info that
-          would be found -- without sending anything. Useful for verifying
-          a new market, sanity-checking after adding the Places API key,
-          or confirming a newly-registered external scrape source works.
-        </p>
-        <p className="text-xs text-[#6D6A65] italic mt-3 leading-relaxed">
-          Endpoint: <code>POST /api/admin/scraper-test</code> with{" "}
-          <code>&#123; city, state, presenting_issues, count &#125;</code>.
-          Poll <code>GET /api/admin/scraper-jobs/&#123;job_id&#125;</code>{" "}
-          for status + final candidate list. (API-only today -- ask if you
-          want a UI button for it.)
-        </p>
+        <ScraperTestPanel client={client} />
       </Section>
     </div>
   );

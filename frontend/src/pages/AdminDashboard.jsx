@@ -1710,7 +1710,7 @@ export default function AdminDashboard() {
                 />
               )}
 
-              {tab === "recruiting" && <RecruitingPanel />}
+              {tab === "recruiting" && <RecruitingPanel client={client} />}
 
               {tab === "coverage_gap" && (
                 <>
