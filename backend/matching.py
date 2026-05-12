@@ -616,6 +616,13 @@ def _patient_expressed_axis(r: dict, axis: str) -> bool:
         return (r.get("gender_preference") or "").lower() not in ("", "no_pref")
     if axis == "style":
         return bool([s for s in (r.get("style_preference") or []) if s and s != "no_pref"])
+    if axis == "experience":
+        # Patient may pass either a list or a legacy string. Treat
+        # empty list / empty string / "no_pref" as "didn't express".
+        raw_pref = r.get("experience_preference") or []
+        if isinstance(raw_pref, str):
+            raw_pref = [raw_pref]
+        return bool([p for p in raw_pref if p and p != "no_pref"])
     return False
 
 
@@ -1315,12 +1322,41 @@ def rank_therapists(
     """
     research_caches = research_caches or {}
     decline_history = decline_history or {}
+
+    def _score_pass(req: dict) -> tuple[list[dict], list[dict]]:
+        """Run one scoring pass over `therapists` with the given request.
+        Returns (scored, filtered_out) -- filtered_out includes the raw
+        score result so callers can detect why everyone got dropped."""
+        kept: list[dict] = []
+        dropped: list[dict] = []
+        for t in therapists:
+            cache = research_caches.get(t.get("id"))
+            result = score_therapist(t, req, research_cache=cache)
+            if result["filtered"]:
+                dropped.append(result)
+                continue
+            kept.append((t, result))
+        return kept, dropped
+
+    kept, dropped = _score_pass(request)
+
+    # Strict-priorities silent-zero guard (added 2026-05-12). If the
+    # strict-priorities filter eliminated EVERY therapist, fall back to
+    # a non-strict re-score so the patient still gets some matches with
+    # a clear "your strict filter ate everyone -- here are the closest
+    # available" flag, instead of silently sending zero matches.
+    strict_relaxed = False
+    if not kept and request.get("strict_priorities") and any(
+        (d.get("filter_failed") or "").startswith("strict_priority_")
+        for d in dropped
+    ):
+        relaxed_req = dict(request)
+        relaxed_req["strict_priorities"] = False
+        kept, _ = _score_pass(relaxed_req)
+        strict_relaxed = True
+
     scored = []
-    for t in therapists:
-        cache = research_caches.get(t.get("id"))
-        result = score_therapist(t, request, research_cache=cache)
-        if result["filtered"]:
-            continue
+    for t, result in kept:
         # Decline-history penalty (soft re-rank, not a strict filter).
         # We don't filter outright  --  capacity may have changed since the
         # decline  --  but the -10pt penalty re-ranks them lower. NOTE: a
@@ -1340,6 +1376,12 @@ def rank_therapists(
             "research_axes": result.get("research_axes") or {},
             "other_issue_axes": result.get("other_issue_axes") or {},
             "prior_therapy_axes": result.get("prior_therapy_axes") or {},
+            # True when these results came from the relaxed re-pass
+            # because the strict-priorities filter wiped everyone.
+            # Frontend can use this to show "your strict filter found
+            # nobody; here are the closest matches" rather than a
+            # silent zero.
+            "strict_priorities_relaxed": strict_relaxed,
         })
 
     scored.sort(
