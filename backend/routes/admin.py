@@ -5266,5 +5266,3 @@ async def fire_test_therapist_survey(
     }
 
 
-# Suppress unused-import warnings on logger (kept for future logging)
-void = logger
