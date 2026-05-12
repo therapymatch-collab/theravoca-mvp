@@ -621,21 +621,7 @@ export default function TherapistSignup() {
     setCheckoutLoading(true);
     try {
       const res = await api.post(`/therapists/${therapistId}/subscribe-checkout`, {});
-      if (res.data?.demo_mode) {
-        // Stripe Emergent proxy returns unreachable URLs — fast-forward the
-        // sync step locally so the UX is fully testable today. Switch to a
-        // real Stripe key in /app/backend/.env to enable hosted Checkout.
-        toast.info("Demo mode — fast-forwarding card setup");
-        const sync = await api.post(`/therapists/${therapistId}/sync-payment-method`, {
-          session_id: `demo_${therapistId}_${Date.now()}`,
-        });
-        if (sync.data?.ok) {
-          setTrialActivated(true);
-          window.history.replaceState({}, "", "/therapists/join");
-        } else {
-          toast.error("Could not finalize trial in demo mode");
-        }
-      } else if (res.data?.url) {
+      if (res.data?.url) {
         window.location.href = res.data.url;
       } else {
         toast.error("Could not create checkout session");

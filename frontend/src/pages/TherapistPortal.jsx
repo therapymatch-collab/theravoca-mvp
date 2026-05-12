@@ -243,17 +243,7 @@ export default function TherapistPortal() {
     if (!tid) return;
     try {
       const res = await api.post(`/therapists/${tid}/subscribe-checkout`, {});
-      if (res.data?.demo_mode) {
-        toast.info("Demo mode — fast-forwarding card setup");
-        const sync = await api.post(`/therapists/${tid}/sync-payment-method`, {
-          session_id: `demo_${tid}_${Date.now()}`,
-        });
-        if (sync.data?.ok) {
-          toast.success("Free trial started!");
-          const s = await api.get(`/therapists/${tid}/subscription`);
-          setSub(s.data);
-        }
-      } else if (res.data?.url) {
+      if (res.data?.url) {
         window.location.href = res.data.url;
       }
     } catch (e) {

@@ -4,15 +4,8 @@ DESIGN: We use Stripe Checkout in **setup mode** to collect a card upfront,
 then track the trial + subscription state ourselves in MongoDB. We charge
 $45 via a PaymentIntent on day 31 (recurring monthly).
 
-Why setup mode? The Emergent shared Stripe proxy (`sk_test_emergent`) supports
-the standard Checkout flow but does NOT persist Subscription/Price objects
-across requests. Setup mode + manual charge cycles work reliably.
-
-When a real Stripe key is later swapped in, this same flow remains valid;
-the Subscription object would just be optional sugar.
-
 Lifecycle states stored on therapist.subscription_status:
-  incomplete → trialing → active → past_due → canceled
+  incomplete -> trialing -> active -> past_due -> canceled
   legacy_free (grandfathered, never charged)
 """
 from __future__ import annotations
@@ -24,33 +17,23 @@ from typing import Any, Optional
 import stripe
 from dotenv import load_dotenv
 
-# `override=True` ensures the real key in /app/backend/.env wins over any stale
-# `sk_test_emergent` left in the supervisor process environment.
+# `override=True` ensures the real key in /app/backend/.env wins over any
+# stale value left in the supervisor process environment.
 load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
 
 
 def _configure() -> bool:
-    """Idempotent — set api_key + api_base each call so hot-reload picks up env changes."""
-    # Re-load .env on every call with override=True so the real key in
-    # /app/backend/.env consistently wins over any stale `sk_test_emergent`
-    # left in the supervisor process environment.
+    """Idempotent -- set api_key each call so hot-reload picks up env changes."""
     from pathlib import Path
     load_dotenv(Path(__file__).parent / ".env", override=True)
     key = os.environ.get("STRIPE_API_KEY", "").strip()
     if not key:
         return False
     stripe.api_key = key
-    if "sk_test_emergent" in key:
-        stripe.api_base = "https://integrations.emergentagent.com/stripe"
-    else:
-        stripe.api_base = stripe.DEFAULT_API_BASE
+    stripe.api_base = stripe.DEFAULT_API_BASE
     return True
-
-
-def _is_emergent_proxy() -> bool:
-    return "sk_test_emergent" in (os.environ.get("STRIPE_API_KEY") or "")
 
 
 def is_configured() -> bool:

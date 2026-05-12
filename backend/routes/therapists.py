@@ -250,7 +250,6 @@ async def therapist_subscribe_checkout(therapist_id: str):
     except Exception as e:
         logger.exception("Stripe checkout creation failed: %s", e)
         raise HTTPException(502, f"Stripe error: {e}")
-    result["demo_mode"] = stripe_service._is_emergent_proxy()
     return result
 
 
@@ -263,25 +262,16 @@ async def therapist_sync_payment_method(therapist_id: str, payload: dict):
     if not t:
         raise HTTPException(404)
 
-    is_demo = session_id.startswith("demo_") and _ENV != "production"
-    if is_demo:
-        info = {
-            "status": "complete",
-            "customer": f"cus_demo_{therapist_id[:10]}",
-            "setup_intent_id": f"seti_demo_{therapist_id[:10]}",
-            "payment_method": f"pm_demo_{therapist_id[:10]}",
-        }
-    else:
-        info = stripe_service.retrieve_session(session_id)
-        if not info:
-            raise HTTPException(502, "Could not retrieve Stripe session")
-        if info.get("status") != "complete":
-            return {"ok": False, "status": info.get("status")}
-        # Verify this Stripe session was created for THIS therapist
-        if info.get("client_reference_id") != therapist_id:
-            raise HTTPException(
-                403, "Stripe session does not belong to this therapist"
-            )
+    info = stripe_service.retrieve_session(session_id)
+    if not info:
+        raise HTTPException(502, "Could not retrieve Stripe session")
+    if info.get("status") != "complete":
+        return {"ok": False, "status": info.get("status")}
+    # Verify this Stripe session was created for THIS therapist
+    if info.get("client_reference_id") != therapist_id:
+        raise HTTPException(
+            403, "Stripe session does not belong to this therapist"
+        )
 
     trial_end = datetime.now(timezone.utc) + timedelta(days=30)
     await db.therapists.update_one(
@@ -307,7 +297,6 @@ async def therapist_sync_payment_method(therapist_id: str, payload: dict):
         "ok": True,
         "subscription_status": "trialing",
         "trial_ends_at": trial_end.isoformat(),
-        "demo_mode": is_demo,
         "session_token": session_token,
     }
 
