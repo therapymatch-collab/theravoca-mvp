@@ -212,7 +212,7 @@
           <span class="text-xs text-[#6D6A65]">click to expand</span>
         </div>
         <div class="fold-body text-sm text-[#6D6A65] leading-relaxed pt-3">
-          When a patient submits intake and the matcher returns fewer than <code>min_results</code> therapists above the threshold, a recruiting run fires for that request. Sources cascade: Google Places &rarr; Psychology Today &rarr; admin-registered directories &rarr; backup HTML scrapers. Email enricher pulls real contacts off the therapist's website. Email-ready candidates get a templated invite that mentions the patient's specific brief; SMS-ready get the SMS fallback. The run keeps state on the request itself, so a later patient with the same need won't re-poke the same therapists for 14 days.
+          When a patient submits intake and the matcher returns fewer than <code>min_results</code> therapists above the threshold, a recruiting run fires for that request. Sources cascade: Google Places &rarr; Psychology Today &rarr; admin-registered directories &rarr; backup HTML scrapers. Email enricher pulls real contacts off the therapist's website. Email-ready candidates get a templated invite that mentions the patient's specific brief; SMS-ready get the SMS fallback. <strong>Per-therapist cooldown:</strong> any therapist invited (by either Track A or B) within the last 30 days is skipped, plus anyone who unsubscribed or is already on the platform. After 30 days they're eligible to be re-invited if they haven't unsubscribed.
         </div>
       </div>
 

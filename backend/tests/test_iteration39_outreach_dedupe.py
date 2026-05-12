@@ -60,16 +60,18 @@ def test_filter_drops_existing_therapist_email():
     _run(go())
 
 
-def test_filter_drops_prior_invite_email():
-    """A candidate whose email shows up in `outreach_invites` (any past request)
-    is filtered out."""
+def test_filter_drops_recent_prior_invite_email():
+    """A candidate whose email shows up in `outreach_invites` within the
+    30-day cooldown window is filtered out."""
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from datetime import datetime, timezone
     from deps import db
     from outreach_agent import _filter_existing_emails
 
     prior_email = f"prior_{uuid.uuid4().hex[:8]}@example.com"
     invite_id = str(uuid.uuid4())
+    recent_iso = datetime.now(timezone.utc).isoformat()
 
     async def go():
         await db.outreach_invites.insert_one({
@@ -77,7 +79,7 @@ def test_filter_drops_prior_invite_email():
             "request_id": str(uuid.uuid4()),
             "candidate": {"name": "Prior", "email": prior_email},
             "email_sent": True,
-            "created_at": "2026-02-01T00:00:00+00:00",
+            "created_at": recent_iso,
         })
         try:
             cands = [
@@ -89,6 +91,39 @@ def test_filter_drops_prior_invite_email():
             assert kept[0]["name"] == "Fresh2"
             assert stats["skipped_prior_invite"] == 1
             assert stats["skipped_existing_therapist"] == 0
+        finally:
+            await db.outreach_invites.delete_one({"id": invite_id})
+
+    _run(go())
+
+
+def test_filter_allows_stale_prior_invite_email():
+    """A candidate whose only prior invite is older than the 30-day cooldown
+    is allowed through (so we can re-invite once per month)."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from datetime import datetime, timedelta, timezone
+    from deps import db
+    from outreach_agent import _filter_existing_emails
+
+    stale_email = f"stale_{uuid.uuid4().hex[:8]}@example.com"
+    invite_id = str(uuid.uuid4())
+    stale_iso = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+
+    async def go():
+        await db.outreach_invites.insert_one({
+            "id": invite_id,
+            "request_id": str(uuid.uuid4()),
+            "candidate": {"name": "Stale", "email": stale_email},
+            "email_sent": True,
+            "created_at": stale_iso,
+        })
+        try:
+            cands = [{"name": "Retry", "email": stale_email}]
+            kept, stats = await _filter_existing_emails(cands)
+            assert len(kept) == 1
+            assert kept[0]["name"] == "Retry"
+            assert stats["skipped_prior_invite"] == 0
         finally:
             await db.outreach_invites.delete_one({"id": invite_id})
 

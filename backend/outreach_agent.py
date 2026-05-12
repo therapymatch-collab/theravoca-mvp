@@ -37,7 +37,7 @@ import asyncio
 import logging
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 
@@ -539,13 +539,27 @@ async def _filter_existing_contacts(candidates: list[dict]) -> tuple[list[dict],
     }
     therapist_phones.discard(None)
 
-    invite_query = {"$or": []}
+    # Per-therapist re-invite cooldown: a prior invite within the last
+    # INVITE_COOLDOWN_DAYS blocks a re-send. Older invites don't block --
+    # if they didn't unsubscribe (caught by the opt-out check above) and
+    # didn't sign up (caught by the existing-therapist check above), we
+    # try them again. Replies and bounces aren't tracked yet (no Resend
+    # webhook), so a "no thanks" reply within the window can still get
+    # re-pinged after 30 days. Tracked as a follow-up.
+    INVITE_COOLDOWN_DAYS = 30
+    cooldown_cutoff = (
+        datetime.now(timezone.utc) - timedelta(days=INVITE_COOLDOWN_DAYS)
+    ).isoformat()
+
+    invite_query: dict = {"$or": []}
     if emails:
         invite_query["$or"].append({"candidate.email": {"$in": emails}})
     if phones:
         invite_query["$or"].append({"candidate.phone": {"$in": phones}})
+    invite_query["created_at"] = {"$gte": cooldown_cutoff}
     invite_rows = await db.outreach_invites.find(
-        invite_query, {"_id": 0, "candidate.email": 1, "candidate.phone": 1},
+        invite_query,
+        {"_id": 0, "candidate.email": 1, "candidate.phone": 1, "created_at": 1},
     ).to_list(length=5000)
     invite_emails = {
         ((r.get("candidate") or {}).get("email") or "").lower() for r in invite_rows
