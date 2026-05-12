@@ -171,11 +171,16 @@ async def create_request(payload: RequestCreate, request: Request):
     #    with a generic 400 so scrapers don't learn what tripped them.
     if (payload.fax_number or "").strip():
         raise HTTPException(400, "Submission rejected.")
+    # Master testing-mode short-circuit: bypass timing + rate-limit
+    # barriers when an admin has flipped the master toggle. Honeypot
+    # stays on (real bots fill it, tests don't).
+    import testing_mode
+    _testing_active = await testing_mode.is_active()
     # 2. Timing heuristic: humans take >2s to fill the form, bots fire
     #    instantly. We compare the client timestamp against now; if the
     #    delta is <2s OR the client clock is wildly off (>1h skew),
     #    drop the request.
-    if payload.form_started_at_ms is not None:
+    if not _testing_active and payload.form_started_at_ms is not None:
         try:
             started_ms = int(payload.form_started_at_ms)
             now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
@@ -199,15 +204,16 @@ async def create_request(payload: RequestCreate, request: Request):
     rate_cfg_doc = await db.app_config.find_one(
         {"key": "intake_rate_limit"}, {"_id": 0},
     )
-    test_mode_active = False
-    test_until = (rate_cfg_doc or {}).get("test_mode_until")
-    if test_until:
-        try:
-            until_dt = _parse_iso(test_until)
-            if until_dt and until_dt > datetime.now(timezone.utc):
-                test_mode_active = True
-        except Exception:
-            pass
+    test_mode_active = _testing_active  # master toggle wins
+    if not test_mode_active:
+        test_until = (rate_cfg_doc or {}).get("test_mode_until")
+        if test_until:
+            try:
+                until_dt = _parse_iso(test_until)
+                if until_dt and until_dt > datetime.now(timezone.utc):
+                    test_mode_active = True
+            except Exception:
+                pass
     if client_ip and not test_mode_active:
         ip_cutoff_iso = (
             datetime.now(timezone.utc) - timedelta(hours=1)

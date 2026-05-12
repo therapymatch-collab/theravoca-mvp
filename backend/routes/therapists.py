@@ -132,6 +132,11 @@ async def _embed_therapist_signals(
 @router.post("/therapists/signup", response_model=dict)
 async def therapist_signup(payload: TherapistSignup, request: Request):
     # ─── Bot defenses (run before anything expensive) ──────────────────
+    # Master testing-mode bypass: when an admin has flipped the master
+    # toggle, skip timing + IP rate-limit gates. Honeypot stays on.
+    import testing_mode
+    _testing_active = await testing_mode.is_active()
+
     # 1. Honeypot: a hidden form field bots auto-fill. Real users never
     #    see it, so any non-empty value is a clear bot signal. Mirrors
     #    the patient intake defense.
@@ -141,7 +146,7 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
     #    instantly. If form_started_at_ms is missing we just skip the
     #    check (older clients).
     started_ms = getattr(payload, "form_started_at_ms", None)
-    if started_ms is not None:
+    if not _testing_active and started_ms is not None:
         try:
             now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
             delta_s = (now_ms - int(started_ms)) / 1000.0
@@ -157,7 +162,7 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
     #    Reuses the intake_ip_log collection so the same admin-tunable
     #    cap protects both flows. Therapist signups are rare so we use
     #    a tighter cap.
-    if client_ip:
+    if not _testing_active and client_ip:
         ip_cutoff_iso = (
             datetime.now(timezone.utc) - timedelta(hours=1)
         ).isoformat()

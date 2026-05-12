@@ -3986,6 +3986,64 @@ async def admin_set_turnstile_settings(payload: dict) -> dict[str, Any]:
     return {"ok": True, "disabled": disabled}
 
 
+@router.get("/admin/master-testing-mode", dependencies=[Depends(require_admin)])
+async def admin_get_master_testing_mode() -> dict[str, Any]:
+    """Current state of the master testing-mode toggle. See testing_mode.py
+    for what it bypasses + safety semantics."""
+    import testing_mode
+    return await testing_mode.status()
+
+
+@router.put("/admin/master-testing-mode", dependencies=[Depends(require_admin)])
+async def admin_set_master_testing_mode(payload: dict) -> dict[str, Any]:
+    """Flip the master testing-mode toggle. Payload:
+        {"enabled": true, "hours": 1, "reason": "playwright e2e"}
+    or {"enabled": false} to turn off immediately.
+
+    `hours` is server-clamped to the configured maximum so an admin
+    can't leave testing mode on indefinitely by setting a huge number.
+    """
+    import testing_mode
+    enabled = bool(payload.get("enabled"))
+    reason = (payload.get("reason") or "").strip()[:240]
+    if not enabled:
+        await db.app_config.update_one(
+            {"key": "master_testing_mode"},
+            {"$set": {
+                "enabled": False,
+                "enabled_until": None,
+                "disabled_at": _now_iso(),
+            },
+             "$setOnInsert": {"key": "master_testing_mode"}},
+            upsert=True,
+        )
+        return await testing_mode.status()
+    # Enabling -- clamp the window
+    try:
+        hours = float(payload.get("hours") or 1)
+    except (TypeError, ValueError):
+        hours = 1.0
+    hours = max(0.1, min(hours, float(testing_mode.MASTER_TESTING_MAX_HOURS)))
+    until = datetime.now(timezone.utc) + timedelta(hours=hours)
+    await db.app_config.update_one(
+        {"key": "master_testing_mode"},
+        {"$set": {
+            "enabled": True,
+            "enabled_until": until.isoformat(),
+            "enabled_at": _now_iso(),
+            "enabled_by": "admin",
+            "enabled_reason": reason or "manual",
+        },
+         "$setOnInsert": {"key": "master_testing_mode"}},
+        upsert=True,
+    )
+    logger.warning(
+        "Master testing mode ENABLED until %s -- reason=%s",
+        until.isoformat(), reason or "(none)",
+    )
+    return await testing_mode.status()
+
+
 # --- Outreach opt-out  --  public, no auth ---------------------------------
 def _render_opt_out_page(*, success: bool, email: str | None, phone: str | None,
                         already: bool = False) -> str:

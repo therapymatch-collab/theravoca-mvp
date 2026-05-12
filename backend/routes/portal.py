@@ -131,12 +131,17 @@ async def auth_request_code(payload: MagicCodeRequest):
         raise HTTPException(400, "Invalid role")
     email = payload.email.lower()
 
-    one_hour_ago = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
-    recent = await db.magic_codes.count_documents({
-        "email": email, "role": payload.role, "created_at": {"$gte": one_hour_ago}
-    })
-    if recent >= MAGIC_CODE_MAX_PER_HOUR:
-        raise HTTPException(429, "Too many code requests. Try again in an hour.")
+    # Master testing-mode bypass: skip the 5/hour cap so test runs can
+    # request as many codes as they need. Honeypot/auth gates remain.
+    import testing_mode
+    _testing_active = await testing_mode.is_active()
+    if not _testing_active:
+        one_hour_ago = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        recent = await db.magic_codes.count_documents({
+            "email": email, "role": payload.role, "created_at": {"$gte": one_hour_ago}
+        })
+        if recent >= MAGIC_CODE_MAX_PER_HOUR:
+            raise HTTPException(429, "Too many code requests. Try again in an hour.")
 
     if payload.role == "therapist":
         therapist = await db.therapists.find_one(
@@ -176,9 +181,14 @@ async def auth_verify_code(payload: MagicCodeVerify, request: Request):
     # 30-min TTL window.
     ip = _client_ip(request)
     attempt_key = f"code:{ip}:{email}"
-    locked = await _password_lockout_remaining(attempt_key)
-    if locked is not None:
-        raise HTTPException(429, f"Too many failed attempts. Try again in {locked // 60 + 1} min.")
+    # Master testing-mode bypass: skip the per-(ip, email) lockout so
+    # test runs that intentionally probe wrong codes don't get locked.
+    import testing_mode
+    _testing_active = await testing_mode.is_active()
+    if not _testing_active:
+        locked = await _password_lockout_remaining(attempt_key)
+        if locked is not None:
+            raise HTTPException(429, f"Too many failed attempts. Try again in {locked // 60 + 1} min.")
 
     now_iso = _now_iso()
     rec = await db.magic_codes.find_one({
@@ -189,7 +199,10 @@ async def auth_verify_code(payload: MagicCodeVerify, request: Request):
         "expires_at": {"$gte": now_iso},
     }, {"_id": 0})
     if not rec:
-        await _password_record_failure(attempt_key)
+        # Only record the failure when lockout is enforced -- don't
+        # accumulate counts during testing mode.
+        if not _testing_active:
+            await _password_record_failure(attempt_key)
         raise HTTPException(401, "Invalid or expired code")
     await _password_reset_failures(attempt_key)
     await db.magic_codes.update_one(

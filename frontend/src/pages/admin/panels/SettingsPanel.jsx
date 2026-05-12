@@ -164,6 +164,190 @@ function TurnstileToggleCard({ client: clientProp }) {
   );
 }
 
+// Master testing-mode toggle. ONE switch that bypasses Turnstile +
+// timing heuristic + per-IP/per-email rate limits + magic-code limits
+// across the entire backend, so AI/E2E test runs aren't blocked.
+// Auto-expires server-side after `max_hours`.
+function MasterTestingCard({ client: clientProp }) {
+  const ctxClient = useAdminClient();
+  const client = clientProp || ctxClient;
+  const [state, setState] = useState(null);
+  const [hours, setHours] = useState(1);
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [tick, setTick] = useState(0);
+
+  const load = async () => {
+    try {
+      const r = await _adminGetWithRetry(client, "/admin/master-testing-mode");
+      setState(r.data || null);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to load testing mode");
+    }
+  };
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+
+  // Tick a local clock once per second so the countdown updates without
+  // a network round-trip. Server is the source of truth on expiry.
+  useEffect(() => {
+    if (!state?.enabled) return;
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [state?.enabled]);
+
+  const remaining = (() => {
+    if (!state?.enabled || !state.enabled_until) return 0;
+    const ms = new Date(state.enabled_until).getTime() - Date.now();
+    return Math.max(0, Math.floor(ms / 1000));
+  })();
+  // Note: `tick` is referenced so React re-renders every second while
+  // the timer is active.
+  void tick;
+
+  const fmt = (secs) => {
+    if (secs <= 0) return "expired";
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    return h > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${m}m ${s}s` : `${s}s`;
+  };
+
+  const enable = async () => {
+    setSaving(true);
+    try {
+      const r = await client.put("/admin/master-testing-mode", {
+        enabled: true,
+        hours: Math.max(0.1, Math.min(hours, state?.max_hours || 8)),
+        reason: reason.trim() || "manual",
+      });
+      setState(r.data);
+      toast.success(
+        `Testing mode ON for ${fmt(r.data?.remaining_seconds || 0)} -- ` +
+        `all bot defenses bypassed`,
+      );
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to enable");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const disable = async () => {
+    setSaving(true);
+    try {
+      const r = await client.put("/admin/master-testing-mode", { enabled: false });
+      setState(r.data);
+      toast.success("Testing mode OFF -- bot defenses restored");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to disable");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const active = !!state?.enabled && remaining > 0;
+  const cardCls = active
+    ? "bg-[#FDF1EF] border-[#D45D5D]"
+    : "bg-white border-[#E8E5DF]";
+  const iconBg = active ? "bg-[#F4C7BE]" : "bg-[#EAF2E8]";
+  const iconColor = active ? "text-[#8B3220]" : "text-[#2D4A3E]";
+
+  return (
+    <div
+      className={`border-2 rounded-2xl p-6 ${cardCls}`}
+      data-testid="master-testing-card"
+    >
+      <div className="flex items-start gap-3 flex-wrap">
+        <div className={`rounded-full p-2.5 ${iconBg}`}>
+          {active ? <ShieldOff size={20} className={iconColor} /> :
+                    <Shield size={20} className={iconColor} />}
+        </div>
+        <div className="flex-1 min-w-[200px]">
+          <h3 className="font-serif-display text-2xl text-[#2D4A3E]">
+            Master testing mode {active && (
+              <span className="text-base font-normal text-[#8B3220]">
+                &nbsp;-- ON
+              </span>
+            )}
+          </h3>
+          <p className="text-sm text-[#6D6A65] mt-2 max-w-2xl leading-relaxed">
+            ONE toggle that bypasses every bot/rate-limit defense at
+            once: Turnstile, intake + signup IP rate limits, per-email
+            cap, timing heuristic, magic-code 5/hr cap, and magic-code
+            wrong-attempt lockout. Honeypot, HMAC tokens, admin login
+            lockout, and crisis triggers stay active.
+          </p>
+          <p className="text-xs text-[#6D6A65] mt-2 italic">
+            Auto-expires server-side after the chosen window (max{" "}
+            {state?.max_hours || 8}h) so you can't leave it on by
+            accident.
+          </p>
+          {active && (
+            <div className="mt-4 bg-[#FBE9E5] border border-[#F4C7BE] rounded-lg p-3 text-sm">
+              <div className="font-semibold text-[#8B3220]">
+                Bot defenses are OFF -- treat any traffic right now as untrusted.
+              </div>
+              <div className="text-xs text-[#6D6A65] mt-1">
+                Expires in <strong>{fmt(remaining)}</strong>
+                {state?.enabled_reason ? (
+                  <> &middot; reason: <em>{state.enabled_reason}</em></>
+                ) : null}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          {active ? (
+            <button
+              onClick={disable}
+              disabled={saving}
+              className="bg-[#2D4A3E] text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+              data-testid="master-testing-disable"
+            >
+              {saving ? "Working..." : "Turn OFF now"}
+            </button>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-[#6D6A65]">Hours:</label>
+                <Input
+                  type="number"
+                  step="0.5"
+                  min="0.1"
+                  max={state?.max_hours || 8}
+                  value={hours}
+                  onChange={(e) => setHours(parseFloat(e.target.value) || 1)}
+                  className="w-20 text-sm"
+                  data-testid="master-testing-hours"
+                />
+              </div>
+              <Input
+                type="text"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Reason (optional)"
+                maxLength={120}
+                className="w-56 text-sm"
+                data-testid="master-testing-reason"
+              />
+              <button
+                onClick={enable}
+                disabled={saving}
+                className="bg-[#D45D5D] text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                data-testid="master-testing-enable"
+              >
+                {saving ? "Working..." : "Enable testing mode"}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // Platform-wide settings the admin can tune at runtime. Currently exposes
 // the patient-intake rate limit (X requests per Y minutes per email).
 // Backend: GET/PUT /api/admin/intake-rate-limit.
@@ -383,6 +567,7 @@ export default function SettingsPanel({ client: clientProp }) {
 
   return (
     <div className="mt-6 space-y-6" data-testid="settings-panel">
+      <MasterTestingCard client={client} />
       <TurnstileToggleCard client={client} />
 
       <div className="bg-white border border-[#E8E5DF] rounded-2xl p-6">

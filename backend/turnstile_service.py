@@ -75,6 +75,12 @@ async def verify_token(
     Cloudflare outage; the caller decides whether to reject or fall
     back to other defenses.
     """
+    # Master testing-mode toggle short-circuits ALL bot defenses,
+    # including Turnstile. Used by end-to-end test runs against
+    # staging. Auto-expires after a few hours -- see testing_mode.py.
+    import testing_mode
+    if await testing_mode.is_active():
+        return True, None
     # Admin-controllable runtime disable (Settings → "Disable Turnstile
     # during AI testing"). Checked BEFORE the key lookup so we don't
     # even require a network call when verification is off.
