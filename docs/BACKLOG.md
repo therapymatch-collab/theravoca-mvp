@@ -88,34 +88,26 @@ match-released, password reset) are exempt under CAN-SPAM.
 
 ## 🟠 High priority
 
-### NEW-2. Centralized LLM PHI sanitizer (raised 2026-05-12 audit)
-Today, individual LLM callers (research_enrichment, gap_recruiter,
-outreach_agent, master_query) each decide what gets passed to Claude.
-master_query is hardened (hashed emails); research_enrichment is
-documented but not enforced. There's no single chokepoint that says
-"no patient names / emails / phones / exact ZIPs ever leave the
-server."
+### NEW-2. Centralized LLM PHI sanitizer (raised 2026-05-12 audit) -- DONE
+`llm_client.ask_claude()` now passes every prompt + system message
+through `_sanitize_prompt()` before sending. Regex-redacts:
+- Email addresses -> `[REDACTED_EMAIL]`
+- US phone numbers -> `[REDACTED_PHONE]`
+- 5-digit ZIP / ZIP+4 -> `[REDACTED_ZIP]`
+Opt-out flag `allow_pii=True` for legitimate cases (no caller uses it
+as of 2026-05-12).
 
-**Fix:** add `llm_client._sanitize_prompt(text)` that runs every prompt
-through a regex pass that redacts email addresses, US phone numbers,
-and 5-digit ZIPs. Default-on; opt-out flag for prompts that
-legitimately need a phone (none today). ~30 min. Catches new LLM
-callers we add later.
-
-### NEW-3. Audit log coverage on admin patient-data reads (raised 2026-05-12)
-The `backend/audit.py` framework is solid but several admin endpoints
-that READ patient data don't emit. Hippocratic minimum is: every
-admin view of identifiable patient info gets logged with the admin's
-identity, the patient's hashed email, the resource, and the action.
-
-**Fix:** add `audit.emit()` to these endpoints:
-- `GET /admin/requests/{id}` (full patient brief)
-- `GET /admin/feedback-dashboard` (already audits? double-check)
-- `GET /admin/outcome-tracking`
-- `GET /admin/feedback`
-- `GET /admin/patients` (already audits, line ~1758)
-- Therapist view endpoints that include any patient identifier
-~20 min total. Add a regression test that every admin GET emits.
+### NEW-3. Audit log coverage on admin patient-data reads -- DONE 2026-05-12
+Added `audit.emit()` to the previously-uncovered admin GETs:
+- `GET /admin/feedback` -- list_feedback
+- `GET /admin/outcome-tracking` -- view_outcome_tracking
+- `GET /admin/feedback-dashboard` -- view_feedback_dashboard
+- `GET /admin/therapists` -- list_therapists
+- `GET /admin/therapists/{therapist_id}` -- view_therapist_detail
+Previously-audited GETs were already correct
+(`/admin/requests`, `/admin/requests/{id}`, `/admin/patients`,
+`/admin/audit-log`). Still TODO: add a regression test that every
+admin GET emits, so we catch new endpoints that forget the call.
 
 ### NEW. Admin console UI re-org / declutter (raised 2026-05-11)
 Josh flagged the admin console has too many buttons, dropdowns, pages,
@@ -319,6 +311,12 @@ we scoped together but pushed to post-MVP.
   - MongoDB TLS enforced in production (deps.py refuses to start with
     plaintext URI).
   - CORS allow_methods / allow_headers no longer wildcards (server.py).
+  - LLM PHI sanitizer: every prompt through ask_claude() now strips
+    emails, phone numbers, ZIPs before reaching the Anthropic API.
+    Default-on; opt-out flag for callers that need raw PII (none today).
+  - Audit log coverage extended: GET /admin/feedback,
+    /admin/outcome-tracking, /admin/feedback-dashboard,
+    /admin/therapists, /admin/therapists/{id} all emit now.
   - research_enrichment grader documented for PHI flow (Anthropic BAA
     required before prod).
   - Untracked the empty exports/cron_runs_export.json (was gitignored

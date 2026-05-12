@@ -707,10 +707,19 @@ async def admin_update_threshold(
 
 @router.get("/admin/therapists", response_model=list)
 async def admin_list_therapists(
-    pending: Optional[bool] = None, _: bool = Depends(require_admin),
+    request: Request,
+    pending: Optional[bool] = None,
+    _: bool = Depends(require_admin),
 ):
     from license_verify import compute_license_status, dopl_verification_url
 
+    audit.emit(
+        actor_type="admin", actor_id="admin", action="list_therapists",
+        resource="therapist_list",
+        detail=f"pending={pending}" if pending is not None else "",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     query: dict[str, Any] = {}
     if pending is True:
         query["pending_approval"] = True
@@ -875,10 +884,18 @@ async def _attach_value_tags(pending_rows: list[dict]) -> None:
 
 
 @router.get("/admin/therapists/{therapist_id}")
-async def admin_therapist_detail(therapist_id: str, _: bool = Depends(require_admin)):
+async def admin_therapist_detail(
+    therapist_id: str, request: Request, _: bool = Depends(require_admin),
+):
     """Return the full therapist document (minus password_hash) for admin
     debugging. Unlike the list endpoint this includes _backfill_audit,
     embeddings, and every other field on the doc."""
+    audit.emit(
+        actor_type="admin", actor_id="admin", action="view_therapist_detail",
+        resource="therapist", resource_id=therapist_id,
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     t = await db.therapists.find_one(
         {"id": therapist_id}, {"_id": 0, "password_hash": 0, "password_set_at": 0},
     )
@@ -1837,14 +1854,26 @@ async def admin_list_opt_outs(_: bool = Depends(require_admin)):
 
 
 @router.get("/admin/feedback")
-async def admin_list_feedback(_: bool = Depends(require_admin)):
+async def admin_list_feedback(request: Request, _: bool = Depends(require_admin)):
+    audit.emit(
+        actor_type="admin", actor_id="admin", action="list_feedback",
+        resource="feedback", detail="limit=1000",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     docs = await db.feedback.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return {"feedback": docs, "total": len(docs)}
 
 
 @router.get("/admin/outcome-tracking")
-async def admin_outcome_tracking(_: bool = Depends(require_admin)):
+async def admin_outcome_tracking(request: Request, _: bool = Depends(require_admin)):
     """Aggregated feedback data: responses by milestone, Match Strength scores, therapist reliability."""
+    audit.emit(
+        actor_type="admin", actor_id="admin", action="view_outcome_tracking",
+        resource="feedback_aggregate", detail="limit=2000",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     # All feedback grouped by milestone
     feedback = await db.feedback.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
     by_milestone = {}
@@ -1999,6 +2028,7 @@ def _in_range(iso_ts: Optional[str], start_iso: str, end_iso: str) -> bool:
 
 @router.get("/admin/feedback-dashboard")
 async def admin_feedback_dashboard(
+    request: Request,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     _: bool = Depends(require_admin),
@@ -2011,6 +2041,13 @@ async def admin_feedback_dashboard(
                               the last 90 days. Filters all source data
                               (feedback, therapist_surveys, requests).
     """
+    audit.emit(
+        actor_type="admin", actor_id="admin", action="view_feedback_dashboard",
+        resource="feedback_aggregate",
+        detail=f"range={start_date or 'default'}..{end_date or 'now'}",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     today = datetime.now(timezone.utc)
     end_iso = end_date if end_date else today.isoformat()
     start_iso = start_date if start_date else (today - timedelta(days=_DEFAULT_RANGE_DAYS)).isoformat()
