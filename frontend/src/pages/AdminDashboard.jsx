@@ -1715,6 +1715,8 @@ export default function AdminDashboard() {
 
               {tab === "test_actions" && (
                 <TestActionsPanel
+                  client={client}
+                  adminEmail={adminEmail}
                   refresh={refresh}
                   runBackfill={runBackfill}
                   stripBackfill={stripBackfill}

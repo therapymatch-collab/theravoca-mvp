@@ -1252,6 +1252,93 @@ async def admin_preview_email_template(
     return await render_template_preview(key, draft)
 
 
+@router.post("/admin/email-templates/{key}/send-test")
+async def admin_send_test_email(
+    key: str, payload: dict, _: bool = Depends(require_admin),
+):
+    """Render a template with realistic sample data and actually email it
+    to the address in `payload.to` (typically the admin themselves) so
+    they can see the email exactly as a recipient would. Subject is
+    prefixed with [TEST] so the admin's inbox flags it clearly."""
+    if key not in EMAIL_TEMPLATE_DEFAULTS:
+        raise HTTPException(404, f"Unknown template key: {key}")
+    to = (payload or {}).get("to", "").strip()
+    if not to or "@" not in to:
+        raise HTTPException(400, "Valid 'to' email required in payload")
+    from email_service import render_template_preview, _send
+    rendered = await render_template_preview(key)
+    result = await _send(to, f"[TEST] {rendered['subject']}", rendered["html"])
+    if not result:
+        raise HTTPException(
+            502, "Send failed -- RESEND_API_KEY may not be configured",
+        )
+    return {
+        "ok": True, "to": to, "subject": rendered["subject"],
+        "resend_id": result.get("id"),
+    }
+
+
+# ─── Manual cron triggers (for the Testing > Test Actions panel) ───────
+# Allowlist of cron functions admins can fire on demand. Maps a stable
+# UI key to (display label, function name on the cron module). New
+# entries here are the only way to expose more crons to the admin UI;
+# arbitrary getattr is intentionally NOT supported.
+_ADMIN_CRON_ALLOWLIST: dict[str, tuple[str, str]] = {
+    "daily_billing_charges":      ("Charge monthly subscriptions",     "_run_daily_billing_charges"),
+    "license_expiry_alerts":      ("License-expiry alerts",            "_run_license_expiry_alerts"),
+    "availability_prompts":       ("Availability nudge prompts",       "_run_availability_prompts"),
+    "gap_recruitment":            ("Coverage-gap recruiting",          "_run_gap_recruitment"),
+    "patient_surveys_v2":         ("Send v2 patient surveys",          "_run_patient_surveys_v2"),
+    "patient_survey_v2_reminders":("Send v2 patient survey reminders", "_run_patient_survey_v2_reminders"),
+    "therapist_surveys":          ("Send therapist surveys",           "_run_therapist_surveys"),
+    "therapist_2w_followups":     ("Therapist 2-week follow-ups",      "_run_therapist_2w_followups"),
+    "stale_profile_nag":          ("Stale-profile nag",                "_run_stale_profile_nag"),
+    "auto_recruit_weekly":        ("Auto-recruit weekly",              "_run_auto_recruit_weekly"),
+}
+
+
+@router.get("/admin/cron/list")
+async def admin_list_crons(_: bool = Depends(require_admin)):
+    """Return the allowlisted cron jobs an admin can fire manually."""
+    return {
+        "crons": [
+            {"key": k, "label": v[0]}
+            for k, v in _ADMIN_CRON_ALLOWLIST.items()
+        ],
+    }
+
+
+@router.post("/admin/cron/run")
+async def admin_run_cron(payload: dict, _: bool = Depends(require_admin)):
+    """Manually fire one of the allowlisted cron functions. Useful when
+    verifying a fix shipped to staging without waiting for the next
+    scheduled tick. Synchronous -- the response includes whatever the
+    cron returned (typically counts of items processed)."""
+    name = (payload or {}).get("name", "").strip()
+    if name not in _ADMIN_CRON_ALLOWLIST:
+        raise HTTPException(
+            400,
+            f"Unknown or non-allowlisted cron: {name!r}. "
+            f"Valid: {', '.join(sorted(_ADMIN_CRON_ALLOWLIST.keys()))}",
+        )
+    label, func_name = _ADMIN_CRON_ALLOWLIST[name]
+    import cron as _cron_mod
+    func = getattr(_cron_mod, func_name, None)
+    if func is None:
+        raise HTTPException(500, f"Cron handler {func_name} not found in cron module")
+    started = datetime.now(timezone.utc).isoformat()
+    try:
+        result = await func()
+    except Exception as e:
+        logger.exception("Manual cron %s failed", name)
+        raise HTTPException(500, f"Cron failed: {e}")
+    audit.emit(
+        actor_type="admin", actor_id="admin", action="run_cron",
+        resource="cron", resource_id=name,
+    )
+    return {"name": name, "label": label, "started_at": started, "result": result}
+
+
 @router.get("/admin/declines")
 async def admin_list_declines(_: bool = Depends(require_admin)):
     declines = await db.declines.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
