@@ -65,6 +65,7 @@ import PendingSignupRow from "@/pages/admin/panels/PendingSignupRow";
 import ReferralAnalyticsPanel from "@/pages/admin/panels/ReferralAnalyticsPanel";
 import CoverageGapPanel from "@/pages/admin/panels/CoverageGapPanel";
 import RecruitDraftsPanel from "@/pages/admin/panels/RecruitDraftsPanel";
+import RecruitingPanel from "@/pages/admin/panels/RecruitingPanel";
 import PatientsByEmailPanel from "@/pages/admin/panels/PatientsByEmailPanel";
 import FeedbackPanel from "@/pages/admin/panels/FeedbackPanel";
 import FeedbackTrackingPanel from "@/pages/admin/panels/FeedbackTrackingPanel";
@@ -1709,6 +1710,8 @@ export default function AdminDashboard() {
                 />
               )}
 
+              {tab === "recruiting" && <RecruitingPanel />}
+
               {tab === "coverage_gap" && (
                 <>
                   <CoverageGapPanel
@@ -3275,6 +3278,7 @@ function AdminTabsBar({
       icon: <Users size={14} />,
       subs: [
         { id: "all_therapists", label: "All providers", count: allTherapists },
+        { id: "recruiting", label: "Recruiting" },
         {
           id: "patients",
           label: "Patients (by email)",
