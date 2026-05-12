@@ -20,9 +20,26 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from deps import db, require_admin, logger
+from deps import db, require_admin, logger, JWT_SECRET
 
 router = APIRouter()
+
+
+def _hash_email(email: str) -> str:
+    """One-way HMAC of a patient email so the snapshot can mention
+    repeat submitters without leaking the address itself to the LLM
+    (HIPAA hygiene). Stable across calls for the same email -- so the
+    LLM can still answer 'which patient submitted the most requests'
+    in terms of the hash. Uses JWT_SECRET as the HMAC key, same as
+    audit.py."""
+    import hmac
+    import hashlib
+    digest = hmac.new(
+        JWT_SECRET.encode("utf-8"),
+        (email or "").lower().encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"patient_{digest[:12]}"
 
 _SNAPSHOT_TTL_SECS = 60
 _snapshot_cache: dict[str, Any] = {"at": 0.0, "data": None}
@@ -75,7 +92,9 @@ async def _build_snapshot() -> dict:
     ]):
         referral_breakdown.append({"source": row["_id"], "count": row["n"]})
 
-    # Top emails by request count (could be repeat patients)
+    # Top repeat submitters by request count. Emails are HMAC-hashed
+    # before they enter the snapshot so the downstream LLM call only
+    # ever sees stable opaque identifiers, not real patient addresses.
     top_emails: list[dict] = []
     async for row in db.requests.aggregate([
         {"$group": {"_id": {"$toLower": "$email"}, "n": {"$sum": 1}}},
@@ -83,7 +102,10 @@ async def _build_snapshot() -> dict:
         {"$sort": {"n": -1}},
         {"$limit": 10},
     ]):
-        top_emails.append({"email": row["_id"], "request_count": row["n"]})
+        top_emails.append({
+            "patient_id": _hash_email(row["_id"] or ""),
+            "request_count": row["n"],
+        })
 
     # Geo coverage — patient requests
     geo: list[dict] = []
