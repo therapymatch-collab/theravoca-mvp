@@ -1079,6 +1079,7 @@ export default function AdminDashboard() {
     <AdminClientProvider password={pwd}>
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
       <Header />
+      <MasterTestingBanner client={client} />
       <main className="flex-1 px-5 py-10 md:py-14" data-testid="admin-dashboard">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -3058,6 +3059,107 @@ function SectionHeader({ color, label }) {
   );
 }
 
+
+
+// Persistent red banner shown at the top of the admin console while
+// master testing mode is active. Visible from every tab so an admin
+// can't accidentally treat live-looking data as production state.
+// Polls /admin/master-testing-mode every 30s + ticks a local clock
+// once per second for the countdown. One-click "Turn OFF" flips the
+// flag without leaving the current tab.
+function MasterTestingBanner({ client }) {
+  const [state, setState] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const r = await client.get("/admin/master-testing-mode");
+        if (alive) setState(r.data || null);
+      } catch (_) {
+        // soft-fail -- banner just won't appear
+      }
+    };
+    load();
+    const id = setInterval(load, 30000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [client]);
+
+  const remaining = (() => {
+    if (!state?.enabled || !state.enabled_until) return 0;
+    const ms = new Date(state.enabled_until).getTime() - Date.now();
+    return Math.max(0, Math.floor(ms / 1000));
+  })();
+
+  // Tick local clock for live countdown while banner is shown.
+  useEffect(() => {
+    if (!state?.enabled || remaining <= 0) return;
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [state?.enabled, remaining]);
+  void tick;
+
+  if (!state?.enabled || remaining <= 0) return null;
+
+  const fmt = (s) => {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    return h > 0 ? `${h}h ${m}m ${sec}s` : m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+  };
+
+  const disable = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await client.put("/admin/master-testing-mode", { enabled: false });
+      setState(r.data);
+      toast.success("Testing mode OFF -- bot defenses restored");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to disable");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="bg-[#D45D5D] text-white px-5 py-3 sticky top-0 z-50 shadow-md"
+      data-testid="master-testing-banner"
+      role="alert"
+    >
+      <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-xl leading-none flex-shrink-0">&#9888;&#65039;</span>
+          <div className="min-w-0">
+            <div className="font-semibold text-sm">
+              TESTING MODE ACTIVE -- bot defenses are OFF
+            </div>
+            <div className="text-xs opacity-90 mt-0.5 truncate">
+              Auto-expires in <strong>{fmt(remaining)}</strong>
+              {state.enabled_reason ? (
+                <> &middot; reason: <em>{state.enabled_reason}</em></>
+              ) : null}
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={disable}
+          disabled={busy}
+          className="text-sm font-medium bg-white text-[#8B3220] px-3 py-1.5 rounded-md hover:bg-[#FDF1EF] disabled:opacity-60 flex-shrink-0"
+          data-testid="master-testing-banner-disable"
+        >
+          {busy ? "Working..." : "Turn OFF now"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 
 function TabBtn({ active, onClick, icon, label, count, testid, highlight }) {
