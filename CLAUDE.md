@@ -104,9 +104,19 @@ These rules govern all code changes. No exceptions.
 
 ### Test commands
 
-- Backend: from `/backend`, `pytest`
-- Frontend: from `/frontend`, `npm test`
-- E2E: `cd e2e && npx playwright test`
+- **Encoding check**: `bash scripts/check_encoding.sh` (always run before push)
+- **Frontend build**: from `/frontend`, `CI=false REACT_APP_BACKEND_URL=http://localhost:10000 npx craco build`
+  -- catches compile errors. Run after non-trivial frontend edits.
+- **Backend unit tests**: from `/backend`, set env vars first:
+  `MONGO_URL=mongodb://localhost:27017 DB_NAME=theravoca_test JWT_SECRET=test-jwt-secret-for-local CORS_ORIGINS="*" ADMIN_PASSWORD=test-admin-pass python -m pytest tests/<file> --no-header -q`
+  -- works for unit tests that import matching/helpers/etc. without a
+  live server. Integration tests (anything POSTing to /api/...) still
+  need a running uvicorn + Mongo, which we don't have locally.
+- **Post-deploy smoke test**: `bash scripts/smoke_test.sh [commit-prefix]`
+  -- polls /api/version until commit lands, then hits 3 public
+  endpoints. Run after every push.
+- **E2E**: `cd e2e && npx playwright test` (CI only -- needs the
+  full uvicorn + mongo + playwright stack).
 
 ### Key Gotchas
 
