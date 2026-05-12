@@ -11,6 +11,7 @@ import {
   EXPERIENCE,
   GENDERS,
   STYLES,
+  EXPECTATION_OPTIONS,
 } from "@/components/intake/steps/intakeOptions";
 
 /**
@@ -101,6 +102,10 @@ export default function ReviewPreviewModal({
       });
       return parts.join(", ") || "—";
     })()],
+    [
+      "What sessions should feel like",
+      lookupMany(EXPECTATION_OPTIONS, data.session_expectations) || "—",
+    ],
     ["Session format", lookup(MODALITY, data.modality_preference)],
     ["Insurance", insurance],
     ["Cash budget", cash],
