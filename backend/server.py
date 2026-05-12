@@ -110,6 +110,38 @@ async def lifespan(_app: FastAPI):
         # HIPAA audit trail -- TTL + query indexes for PHI access log.
         from audit import ensure_indexes as _ensure_audit_indexes
         await _ensure_audit_indexes()
+
+        # Additional indexes (BACKLOG #21, audited 2026-05-12). Each
+        # wrapped individually so a single failure (e.g. a unique
+        # constraint that can't be satisfied because of historical
+        # duplicates) doesn't stop the rest from being created.
+        async def _safe_idx(coll, *args, **kwargs):
+            try:
+                await coll.create_index(*args, **kwargs)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(
+                    "Optional index on %s failed: %s",
+                    getattr(coll, "name", "?"), e,
+                )
+
+        # Requests: cron sweeps query by results_sent_at (null/old) and
+        # unsubscribed; admin direct-lookup by app-level `id` UUID.
+        await _safe_idx(db.requests, "id")
+        await _safe_idx(db.requests, "results_sent_at")
+        await _safe_idx(db.requests, "unsubscribed")
+        # Applications: recent-first lookups across all therapists.
+        await _safe_idx(db.applications, "created_at")
+        # Feedback: one row per (request, milestone). Unique to prevent
+        # double-fires from cron/race conditions.
+        await _safe_idx(
+            db.feedback, [("request_id", 1), ("milestone", 1)], unique=True,
+        )
+        # Therapist surveys: one row per (therapist, survey number).
+        await _safe_idx(
+            db.therapist_surveys,
+            [("therapist_id", 1), ("survey_number", 1)],
+            unique=True,
+        )
     except Exception as _idx_err:  # noqa: BLE001
         logger.warning("Index setup encountered an error: %s", _idx_err)
     sweep_interval = int(os.environ.get("SWEEP_INTERVAL_SECONDS", "300"))
