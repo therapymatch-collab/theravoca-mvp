@@ -5291,6 +5291,143 @@ async def get_scraper_job(job_id: str):
     return job
 
 
+@router.post("/admin/places-test", dependencies=[Depends(require_admin)])
+async def places_test(payload: dict | None = None):
+    """Diagnostic ping of Google Places API (New).
+
+    Hits Places Text Search + Place Details for a single known
+    therapist (defaults to a real Boise name from PT) and returns the
+    EXACT response, including HTTP status codes and error text from
+    GCP. Use this to debug 'why are emails/phones blank in the live
+    test' -- almost always it's a GCP-side config issue (API not
+    enabled, billing off, key restricted).
+    """
+    import httpx
+    import os as _os
+    payload = payload or {}
+    name = (payload.get("name") or "Sunny Rourke").strip()
+    city = (payload.get("city") or "Boise").strip()
+    state = (payload.get("state") or "ID").strip()
+    api_key = _os.environ.get("GOOGLE_PLACES_API_KEY", "")
+    result: dict[str, Any] = {
+        "env_var_set": bool(api_key),
+        "env_var_length": len(api_key) if api_key else 0,
+        "query": f"{name} therapist {city}, {state}",
+        "search": None,
+        "details": None,
+        "diagnosis": None,
+    }
+    if not api_key:
+        result["diagnosis"] = (
+            "GOOGLE_PLACES_API_KEY env var is not set on this service. "
+            "Add it in Render -> Environment, then redeploy."
+        )
+        return result
+
+    base_url = "https://places.googleapis.com/v1"
+    # Step 1: Text Search
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            search_resp = await client.post(
+                f"{base_url}/places:searchText",
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Goog-Api-Key": api_key,
+                    "X-Goog-FieldMask": (
+                        "places.id,places.displayName,places.formattedAddress,"
+                        "places.types,places.websiteUri,places.internationalPhoneNumber"
+                    ),
+                },
+                json={"textQuery": result["query"], "maxResultCount": 3},
+            )
+        except Exception as e:
+            result["search"] = {"error": f"network: {e}"}
+            result["diagnosis"] = "Network error reaching Places API. Check Render egress."
+            return result
+        search_body = {}
+        try:
+            search_body = search_resp.json()
+        except Exception:
+            search_body = {"raw": search_resp.text[:500]}
+        result["search"] = {
+            "status_code": search_resp.status_code,
+            "body": search_body,
+        }
+        if search_resp.status_code != 200:
+            err = (search_body.get("error") or {}) if isinstance(search_body, dict) else {}
+            status = err.get("status") or ""
+            message = err.get("message") or ""
+            if search_resp.status_code == 403 and "PERMISSION_DENIED" in str(status):
+                result["diagnosis"] = (
+                    "GCP returned 403 PERMISSION_DENIED. Most likely causes:\n"
+                    "  1. 'Places API (New)' is not enabled in your GCP project. "
+                    "Enable it at https://console.cloud.google.com/apis/library/places.googleapis.com\n"
+                    "  2. The API key has an HTTP-referrer or IP restriction that "
+                    "blocks server-side calls. Remove the restriction or whitelist "
+                    "Render egress IPs.\n"
+                    "  3. Billing is not enabled on the GCP project (Places API "
+                    "requires billing even though the first $200/month is free)."
+                )
+            elif search_resp.status_code == 400 and "API_KEY_INVALID" in str(message).upper():
+                result["diagnosis"] = (
+                    "GCP returned API_KEY_INVALID. The key value in "
+                    "GOOGLE_PLACES_API_KEY is malformed or expired. Generate a "
+                    "fresh key in GCP Console -> Credentials and update the env."
+                )
+            else:
+                result["diagnosis"] = (
+                    f"Places search failed (HTTP {search_resp.status_code}). "
+                    f"Error: {message or status or 'unknown'}. "
+                    "Check the full body above for the exact GCP error."
+                )
+            return result
+
+        places = search_body.get("places") or []
+        if not places:
+            result["diagnosis"] = (
+                "Places search returned HTTP 200 but zero matches for this "
+                "name. The API key WORKS. Try a different name to confirm, "
+                "or this specific therapist may not have a Google Business "
+                "Profile (in which case SMS fallback won't be available "
+                "for them either)."
+            )
+            return result
+
+        top = places[0]
+        result["details"] = {
+            "place_id": top.get("id"),
+            "display_name": (top.get("displayName") or {}).get("text"),
+            "formatted_address": top.get("formattedAddress"),
+            "website_uri": top.get("websiteUri") or "",
+            "phone": top.get("internationalPhoneNumber") or "",
+        }
+        has_phone = bool(top.get("internationalPhoneNumber"))
+        has_website = bool(top.get("websiteUri"))
+        if has_phone and has_website:
+            result["diagnosis"] = (
+                "Places API is working end-to-end. Got real phone + website. "
+                "Outreach pipeline should be producing real contacts for "
+                "this profile. If the live test is still showing blanks, "
+                "check Render logs for contact_enricher warnings."
+            )
+        elif has_website and not has_phone:
+            result["diagnosis"] = (
+                "API works; this place has a website but no phone listed "
+                "in Google. Website scrape will still find email if exposed."
+            )
+        elif has_phone and not has_website:
+            result["diagnosis"] = (
+                "API works; this place has a phone but no website. "
+                "SMS fallback will work for outreach to this person."
+            )
+        else:
+            result["diagnosis"] = (
+                "API works; this place has neither phone nor website in "
+                "Google. Candidate would be dropped at send-time."
+            )
+        return result
+
+
 @router.get("/admin/scraper-jobs", dependencies=[Depends(require_admin)])
 async def list_scraper_jobs():
     """List recent scraper jobs."""

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Search, ExternalLink, Phone, Mail, Globe } from "lucide-react";
+import { Loader2, Search, ExternalLink, Phone, Mail, Globe, Zap, CheckCircle2, XCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 // Scraper test panel -- runs the live recruiting pipeline (discovery
@@ -20,7 +20,25 @@ export default function ScraperTestPanel({ client }) {
   const [job, setJob] = useState(null);
   const [phase, setPhase] = useState(""); // "starting" | "scraping" | "enriching" | "complete" | "error"
   const [error, setError] = useState("");
+  const [placesTest, setPlacesTest] = useState(null);
+  const [placesLoading, setPlacesLoading] = useState(false);
   const pollTimerRef = useRef(null);
+
+  const runPlacesTest = async () => {
+    setPlacesLoading(true);
+    setPlacesTest(null);
+    try {
+      const r = await client.post("/admin/places-test", {});
+      setPlacesTest(r.data);
+    } catch (e) {
+      setPlacesTest({
+        diagnosis: e?.response?.data?.detail || e.message || "Diagnostic call failed",
+        env_var_set: false,
+      });
+    } finally {
+      setPlacesLoading(false);
+    }
+  };
 
   useEffect(() => () => {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current);
@@ -98,6 +116,82 @@ export default function ScraperTestPanel({ client }) {
           this to verify the system actually finds real therapists with real
           contact info before you trust auto-outreach to do its job.
         </p>
+      </div>
+
+      {/* Step 0: Diagnostic ping of Google Places API */}
+      <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-[#6D6A65] font-semibold">
+              Step 0 -- diagnose first
+            </div>
+            <div className="font-semibold text-[#2D4A3E] mt-0.5">
+              Test the Google Places API key
+            </div>
+            <p className="text-xs text-[#6D6A65] mt-1 leading-relaxed max-w-2xl">
+              Phones come from Google Places. Emails come from websites we
+              find via Google Places. If this diagnostic fails, the live test
+              below will return blank emails/phones no matter what city you
+              enter -- so run this first.
+            </p>
+          </div>
+          <button
+            onClick={runPlacesTest}
+            disabled={placesLoading}
+            className="px-3 py-2 bg-[#2D4A3E] text-white rounded-lg text-sm font-medium hover:bg-[#3A5E50] disabled:opacity-50 flex items-center gap-2"
+          >
+            {placesLoading
+              ? <Loader2 size={14} className="animate-spin" />
+              : <Zap size={14} />}
+            {placesLoading ? "Testing..." : "Test Places API"}
+          </button>
+        </div>
+
+        {placesTest && (
+          <div className="border border-[#E8E5DF] rounded-lg bg-white p-3 space-y-2">
+            <div className="flex items-center gap-2 text-sm">
+              {placesTest.details?.phone || placesTest.details?.website_uri ? (
+                <span className="inline-flex items-center gap-1 text-[#2D4A3E] font-semibold">
+                  <CheckCircle2 size={16} className="text-[#4A6B5D]" /> Places API working
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[#8B3220] font-semibold">
+                  <XCircle size={16} className="text-[#D45D5D]" /> Places API not returning data
+                </span>
+              )}
+            </div>
+            <div className="text-xs text-[#6D6A65]">
+              Env var set: <strong>{placesTest.env_var_set ? "yes" : "NO"}</strong>
+              {placesTest.env_var_set && (
+                <> &middot; key length: {placesTest.env_var_length}</>
+              )}
+              {placesTest.search?.status_code != null && (
+                <> &middot; HTTP {placesTest.search.status_code}</>
+              )}
+            </div>
+            {placesTest.details && (
+              <div className="text-xs text-[#2B2A29] bg-[#FDFBF7] rounded p-2 space-y-0.5">
+                <div><strong>Matched:</strong> {placesTest.details.display_name || "(none)"}</div>
+                <div><strong>Address:</strong> {placesTest.details.formatted_address || "—"}</div>
+                <div><strong>Website:</strong> {placesTest.details.website_uri || <span className="italic text-[#9C9893]">none returned</span>}</div>
+                <div><strong>Phone:</strong> {placesTest.details.phone || <span className="italic text-[#9C9893]">none returned</span>}</div>
+              </div>
+            )}
+            {placesTest.diagnosis && (
+              <div className="text-xs text-[#2B2A29] leading-relaxed whitespace-pre-line bg-[#FBEFE9] border border-[#F4C7BE] rounded p-2">
+                {placesTest.diagnosis}
+              </div>
+            )}
+            {placesTest.search?.body?.error && (
+              <details className="text-xs text-[#6D6A65]">
+                <summary className="cursor-pointer">Raw GCP error response</summary>
+                <pre className="mt-1 bg-[#F2EFE8] p-2 rounded overflow-x-auto">
+                  {JSON.stringify(placesTest.search.body.error, null, 2)}
+                </pre>
+              </details>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-3 items-end">
