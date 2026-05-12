@@ -473,11 +473,11 @@ def _score_payment_alignment(t: dict, r: dict) -> float:
     path is actually viable with this therapist.
 
     Returns MAX_PAYMENT_ALIGNMENT (full credit) when at least one viable
-    payment route exists; 0 when the patient asked for a specific
-    insurance / cash-budget path and the therapist can't meet any of
-    them. Without this axis a soft-insurance mismatch shows ~96% match
-    even when the therapist doesn't take the patient's plan and the
-    patient gave no cash budget  --  misleading the patient.
+    payment route exists. Returns a PARTIAL credit (50%) when the
+    patient signaled flexibility (sliding_scale_ok, or a cash budget)
+    but no concrete path lands -- they're at least open to compromise,
+    so we shouldn't fully penalize them with 0. Returns 0 only when the
+    patient asked for a specific path AND signaled no flexibility.
 
     Logic:
       * `payment_type = either` -> full credit (no specific demand).
@@ -485,11 +485,15 @@ def _score_payment_alignment(t: dict, r: dict) -> float:
           - therapist accepts it -> full
           - patient OK'd sliding-scale + therapist offers it -> full
           - patient gave a cash budget that fits -> full
-          - none of the above -> 0
+          - patient signaled flexibility (sliding_scale_ok or any
+            budget) but no path works -> partial (50%)
+          - patient gave no flexibility -> 0
       * `payment_type = cash`:
           - no budget given -> full (not enough info to penalize)
           - budget fits therapist's rate (<= 1.2x or <= 2x w/ sliding) -> full
-          - rate exceeds budget -> 0
+          - rate exceeds budget but patient flagged sliding_scale_ok
+            (signaling willingness to negotiate) -> partial (50%)
+          - rate exceeds budget, no flexibility signaled -> 0
     """
     pay = (r.get("payment_type") or "either").lower()
     if pay == "either":
@@ -508,13 +512,25 @@ def _score_payment_alignment(t: dict, r: dict) -> float:
             return MAX_PAYMENT_ALIGNMENT
         if r.get("budget") and _cash_match(t, r):
             return MAX_PAYMENT_ALIGNMENT
+        # Patient signaled willingness to flex (sliding-scale or budget)
+        # but no path actually works. Half credit acknowledges the
+        # flexibility without inflating the fit.
+        if r.get("sliding_scale_ok") or r.get("budget"):
+            return round(MAX_PAYMENT_ALIGNMENT * 0.5, 2)
         return 0.0
 
     # Cash path.
     if pay == "cash":
         if not r.get("budget"):
             return MAX_PAYMENT_ALIGNMENT
-        return MAX_PAYMENT_ALIGNMENT if _cash_match(t, r) else 0.0
+        if _cash_match(t, r):
+            return MAX_PAYMENT_ALIGNMENT
+        # Budget doesn't fit. If patient said sliding_scale_ok, that's
+        # a softer signal than a hard "I can only afford X" -- give
+        # half credit instead of zero.
+        if r.get("sliding_scale_ok"):
+            return round(MAX_PAYMENT_ALIGNMENT * 0.5, 2)
+        return 0.0
 
     return MAX_PAYMENT_ALIGNMENT
 
