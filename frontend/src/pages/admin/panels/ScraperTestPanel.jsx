@@ -184,7 +184,7 @@ export default function ScraperTestPanel({ client }) {
           {placesTest && (
             <div className="border border-[#E8E5DF] rounded-lg bg-white p-3 space-y-2">
               <div className="flex items-center gap-2 text-sm">
-                {placesTest.details?.phone || placesTest.details?.website_uri ? (
+                {placesTest.details?.total_results > 0 ? (
                   <span className="inline-flex items-center gap-1 text-[#2D4A3E] font-semibold">
                     <CheckCircle2 size={16} className="text-[#4A6B5D]" /> Places API working
                   </span>
@@ -202,9 +202,12 @@ export default function ScraperTestPanel({ client }) {
               </div>
               {placesTest.details && (
                 <div className="text-xs text-[#2B2A29] bg-[#FDFBF7] rounded p-2 space-y-0.5">
-                  <div><strong>Matched:</strong> {placesTest.details.display_name || "(none)"}</div>
-                  <div><strong>Website:</strong> {placesTest.details.website_uri || <span className="italic text-[#9C9893]">none</span>}</div>
-                  <div><strong>Phone:</strong> {placesTest.details.phone || <span className="italic text-[#9C9893]">none</span>}</div>
+                  <div><strong>Results:</strong> {placesTest.details.total_results || 0}</div>
+                  <div><strong>With phone:</strong> {placesTest.details.with_phone ?? 0} / {placesTest.details.total_results || 0}</div>
+                  <div><strong>With website:</strong> {placesTest.details.with_website ?? 0} / {placesTest.details.total_results || 0}</div>
+                  <div className="pt-1 border-t border-[#E8E5DF]">
+                    <strong>Top match:</strong> {placesTest.details.display_name || "(none)"}
+                  </div>
                 </div>
               )}
               {placesTest.diagnosis && (

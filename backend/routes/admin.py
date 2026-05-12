@@ -5317,24 +5317,25 @@ async def get_scraper_job(job_id: str):
 async def places_test(payload: dict | None = None):
     """Diagnostic ping of Google Places API (New).
 
-    Hits Places Text Search + Place Details for a single known
-    therapist (defaults to a real Boise name from PT) and returns the
-    EXACT response, including HTTP status codes and error text from
-    GCP. Use this to debug 'why are emails/phones blank in the live
-    test' -- almost always it's a GCP-side config issue (API not
-    enabled, billing off, key restricted).
+    Uses a generic city-based search ('therapists in {city}, {state}')
+    rather than a specific person's name -- the API key working is the
+    dominant signal here, not whether some specific therapist happens
+    to have a Google Business Profile. A city search returns 10-20
+    results in any decently-populated market.
+
+    Returns the exact HTTP response so config issues (API not enabled,
+    billing off, key restricted) surface clearly.
     """
     import httpx
     import os as _os
     payload = payload or {}
-    name = (payload.get("name") or "Sunny Rourke").strip()
     city = (payload.get("city") or "Boise").strip()
     state = (payload.get("state") or "ID").strip()
     api_key = _os.environ.get("GOOGLE_PLACES_API_KEY", "")
     result: dict[str, Any] = {
         "env_var_set": bool(api_key),
         "env_var_length": len(api_key) if api_key else 0,
-        "query": f"{name} therapist {city}, {state}",
+        "query": f"therapists in {city}, {state}",
         "search": None,
         "details": None,
         "diagnosis": None,
@@ -5360,7 +5361,7 @@ async def places_test(payload: dict | None = None):
                         "places.types,places.websiteUri,places.internationalPhoneNumber"
                     ),
                 },
-                json={"textQuery": result["query"], "maxResultCount": 3},
+                json={"textQuery": result["query"], "maxResultCount": 10},
             )
         except Exception as e:
             result["search"] = {"error": f"network: {e}"}
@@ -5407,14 +5408,16 @@ async def places_test(payload: dict | None = None):
         places = search_body.get("places") or []
         if not places:
             result["diagnosis"] = (
-                "Places search returned HTTP 200 but zero matches for this "
-                "name. The API key WORKS. Try a different name to confirm, "
-                "or this specific therapist may not have a Google Business "
-                "Profile (in which case SMS fallback won't be available "
-                "for them either)."
+                f"API key works (HTTP 200) but no therapist Business Profiles "
+                f"found for {city}, {state}. Try a larger nearby city to "
+                "confirm coverage."
             )
             return result
 
+        # Count how many of the top results have phone + website. This is
+        # the actual signal for 'will real outreach work here'.
+        with_phone = sum(1 for p in places if p.get("internationalPhoneNumber"))
+        with_website = sum(1 for p in places if p.get("websiteUri"))
         top = places[0]
         result["details"] = {
             "place_id": top.get("id"),
@@ -5422,31 +5425,17 @@ async def places_test(payload: dict | None = None):
             "formatted_address": top.get("formattedAddress"),
             "website_uri": top.get("websiteUri") or "",
             "phone": top.get("internationalPhoneNumber") or "",
+            "total_results": len(places),
+            "with_phone": with_phone,
+            "with_website": with_website,
         }
-        has_phone = bool(top.get("internationalPhoneNumber"))
-        has_website = bool(top.get("websiteUri"))
-        if has_phone and has_website:
-            result["diagnosis"] = (
-                "Places API is working end-to-end. Got real phone + website. "
-                "Outreach pipeline should be producing real contacts for "
-                "this profile. If the live test is still showing blanks, "
-                "check Render logs for contact_enricher warnings."
-            )
-        elif has_website and not has_phone:
-            result["diagnosis"] = (
-                "API works; this place has a website but no phone listed "
-                "in Google. Website scrape will still find email if exposed."
-            )
-        elif has_phone and not has_website:
-            result["diagnosis"] = (
-                "API works; this place has a phone but no website. "
-                "SMS fallback will work for outreach to this person."
-            )
-        else:
-            result["diagnosis"] = (
-                "API works; this place has neither phone nor website in "
-                "Google. Candidate would be dropped at send-time."
-            )
+        result["diagnosis"] = (
+            f"Places API is working. Found {len(places)} therapist business "
+            f"profiles for {city}, {state} -- {with_phone} have phone, "
+            f"{with_website} have website. Email finding rate depends on "
+            "what each therapist's website exposes (mailto: links), but "
+            "the API tier is healthy."
+        )
         return result
 
 
