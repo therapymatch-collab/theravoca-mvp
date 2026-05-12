@@ -222,18 +222,9 @@ class TestResearchScoring:
 
 # ────────────────────── BACKEND: matching tiebreaker / differentiator ─────
 class TestMatchingDifferentiator:
-    def test_tiebreaker_prefers_higher_review_signal(self):
-        import sys
-        sys.path.insert(0, "/app/backend")
-        from matching import _tiebreaker
-        a = {"id": "a", "review_avg": 4.8, "review_count": 50,
-             "years_experience": 5}
-        b = {"id": "b", "review_avg": 3.0, "review_count": 1,
-             "years_experience": 5}
-        ta = _tiebreaker(a)
-        tb = _tiebreaker(b)
-        # higher review_signal MUST sort first (desc-sort, so larger wins)
-        assert ta[0] > tb[0], (ta, tb)
+    # Note: the previous test_tiebreaker_prefers_higher_review_signal
+    # was removed when the LLM review-research feature was retired.
+    # _tiebreaker now uses (years_experience, recency, salt) only.
 
     def test_rank_therapists_diverges_match_scores(self):
         """Pull ≥10 therapists from live DB, run rank_therapists, verify

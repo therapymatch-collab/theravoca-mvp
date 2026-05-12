@@ -833,12 +833,12 @@ To reach ≤5% zero-pool rate: **~40 more therapists** focused on child/teen spe
   - **Google Places API (New) integrated** (`places_client.py`). Two-call
     workflow (Text Search → Place Details) with field-mask cost control.
     `GOOGLE_PLACES_API_KEY` set in `/app/backend/.env`.
-  - **Review research now Places-first**: `review_research_for_therapist`
-    queries Google Places before falling back to LLM. Real-data hits land
-    `review_research_source="google_places"`, with `review_avg`, `review_count`,
-    and `google_place_id` persisted on the therapist row. Smoke test:
-    "Whitney Hebbert" → 5.0★ from 3 Google reviews, auto-folded into
-    matching ranking.
+  - ~~Review research now Places-first~~ — **RETIRED 2026-05-12**: the
+    Places-first review research path was removed alongside the rest of
+    the review-research feature. `places_client.py` itself remains and
+    is still used by `contact_enricher.py` for therapist phone-number
+    lookup (search_therapist_business). The reviews-related calls
+    (`get_place_reviews`, `lookup_therapist_reviews`) are now dead code.
   - **Gap recruiter Places-first**: every LLM-proposed candidate is now
     grounded against Google Places. Drafts that get a Place hit are flagged
     `google_verified=true` with the real business address (`google_place`).
@@ -934,23 +934,23 @@ To reach ≤5% zero-pool rate: **~40 more therapists** focused on child/teen spe
   - End-to-end smoke test: a patient request for `anxiety + trauma_ptsd +
     EMDR + Boise + cash $200` matched 30/30 therapists with scores 80–87%,
     notifications sent via Resend + Twilio.
-- **Iter-41 (Feb 2026)**:
-  - **LLM review-research agent** (`review_research_agent.py`) — Claude
-    Sonnet 4.5 is asked to recall *high-confidence* public review data for a
-    therapist across Psychology Today / Google / Yelp / Healthgrades. We
-    sanitize aggressively: drop sources with `count < 10`, weight-average
-    rating by count, persist `review_avg`, `review_count`, `review_sources`,
-    `review_research_source: "llm_estimate"`. The matching engine's existing
-    `reviews` axis (+5 max) automatically picks them up — top-rated
-    therapists get a small ranking boost.
-  - Admin endpoints: `POST /admin/therapists/{id}/research-reviews` (single)
-    and `POST /admin/therapists/research-reviews-all` (cron-friendly bulk).
-  - Admin "Research reviews" toolbar button wired to bulk run.
-  - Patient match cards now show a small `4.7★ · 80 reviews` badge under the
-    therapist name when `review_count >= 10` and `review_avg >= 4.0`.
-  - Tests: `tests/test_iteration41_review_research.py` (5 cases — weight
-    averaging, low-volume drop, empty input, invalid rating, matching axis
-    integration).
+- **Iter-41 (Feb 2026)** — **RETIRED 2026-05-12**:
+  - The LLM review-research feature (`review_research_agent.py`, the
+    `review_avg` / `review_count` / `review_sources` fields, the
+    matching algo `reviews` axis +5/+2 bonus, the patient profile review
+    badge, the admin "Research reviews" button, and
+    `tests/test_iteration41_review_research.py`) was removed end-to-end.
+    Reason: high complexity for low signal, Google Places API costs,
+    and risk of LLM hallucinating reviews.
+  - Historical context preserved below for reference; none of these
+    code paths exist in the current codebase.
+  - ~~LLM review-research agent (`review_research_agent.py`) — Claude
+    Sonnet 4.5 was asked to recall *high-confidence* public review data
+    for a therapist across Psychology Today / Google / Yelp / Healthgrades.~~
+  - ~~Admin endpoints: `POST /admin/therapists/{id}/research-reviews` (single)
+    and `POST /admin/therapists/research-reviews-all` (bulk).~~
+  - ~~Patient match cards showed a small `4.7★ · 80 reviews` badge.~~
+  - ~~Tests: `tests/test_iteration41_review_research.py`.~~
 - **Iter-40 (Feb 2026)**:
   - **Patient refer-a-friend** attribution: every new request gets a unique
     8-char `patient_referral_code` issued on creation. The `?ref=` query param
@@ -1886,7 +1886,7 @@ User asked for 8 changes; all shipped in one batch.
 
 ### Deep-research warmup
 - `POST /admin/research-enrichment/warmup {count:N}` queues sequential
-  deep research on top N therapists (by review_count desc, capped 1-200).
+  deep research on top N therapists (by years_experience desc, capped 1-200).
 - `GET /admin/research-enrichment/warmup` returns
   `{running, total, done, failed, current_name, completed_at}`.
 - `POST /admin/research-enrichment/warmup/cancel` flips running=false

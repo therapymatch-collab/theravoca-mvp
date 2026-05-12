@@ -114,11 +114,6 @@ export default function MatchedProviderCard({ t, onEdit, deepMatch }) {
                 </span>
               )
             )}
-            {t.review_count >= 10 && t.review_avg >= 4.0 && (
-              <span className="text-[10px] text-[#C87965]">
-                ★{t.review_avg.toFixed(1)} · {t.review_count}
-              </span>
-            )}
           </div>
           <div className="text-xs text-[#6D6A65] mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
             <span>{t.email}</span>

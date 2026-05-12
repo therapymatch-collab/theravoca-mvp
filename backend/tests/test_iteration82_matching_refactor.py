@@ -59,8 +59,6 @@ def _therapist(**overrides) -> dict:
         "urgency_capacity": "within_2_3_weeks",
         "style_tags": [],
         "gender": "female",
-        "review_avg": 0,
-        "review_count": 0,
         "created_at": "2025-01-01T00:00:00",
         "updated_at": "2025-01-01T00:00:00",
     }
@@ -347,7 +345,7 @@ class TestMinResultsFallback:
             # Give each a unique email to avoid any dedup.
             _therapist(id="t-match", email="match@test.com",
                        primary_specialties=["anxiety"],
-                       years_experience=20, review_avg=5.0, review_count=50),
+                       years_experience=20),
             _therapist(id="t-low1", email="low1@test.com",
                        primary_specialties=["anxiety"],
                        years_experience=1, modality_offering="in_person"),

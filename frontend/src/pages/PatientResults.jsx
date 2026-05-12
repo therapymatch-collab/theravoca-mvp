@@ -133,12 +133,6 @@ const WHY_GENERATORS = {
     if (!yrs || isNaN(yrs)) return null;
     return `${yrs}+ yrs experience`;
   },
-  reviews: (t) => {
-    const avg = parseFloat(t.review_avg);
-    const cnt = parseInt(t.review_count, 10);
-    if (!avg || avg < 4.0 || !cnt || cnt < 3) return null;
-    return `${avg.toFixed(1)}★ verified`;
-  },
   gender: (t, r) => {
     const want = (r?.gender_preference || "").toLowerCase();
     if (!want || want === "no_pref") return null;
@@ -977,16 +971,6 @@ export default function PatientResults() {
                             : !t.credential_type && "Experience: —"}{" "}
                           {(t.years_experience || t.credential_type) && (t.modalities || []).length > 0 && "• "}
                           {(t.modalities || []).slice(0, 3).join(" · ")}
-                          {t.review_count >= 10 && t.review_avg >= 4.0 && (
-                            <span
-                              className="ml-2 inline-flex items-center gap-1 text-[10px] text-[#C87965] bg-[#FDFBF7] border border-[#E8E5DF] rounded-full px-1.5 py-0.5 align-middle"
-                              data-testid={`review-badge-${i}`}
-                              title={`Aggregated from ${(t.review_sources || []).map((s) => s.platform).join(", ") || "online sources"}`}
-                            >
-                              <Star size={9} fill="currentColor" />
-                              {t.review_avg.toFixed(1)} · {t.review_count} reviews
-                            </span>
-                          )}
                         </div>
                         {app.research_rationale ? (
                           <div
