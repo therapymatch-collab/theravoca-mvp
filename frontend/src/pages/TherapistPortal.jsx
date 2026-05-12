@@ -1281,10 +1281,10 @@ function PortalAnalyticsCard({ analytics }) {
   // The 4 headline KPIs (Match avg, Apply rate, Total received, etc.)
   // now live in the top-of-page <KpiStrip />. This card is repurposed
   // as a smaller "Insights" block — only the qualitative bits worth a
-  // second look (top topics, public reviews, refer-code redemptions).
-  // If there's nothing qualitative to show, render nothing so we don't
-  // waste a row of vertical space.
-  const hasInsights = topics.length > 0 || (a.review_count || 0) > 0;
+  // second look (top topics, refer-code redemptions). If there's
+  // nothing qualitative to show, render nothing so we don't waste a
+  // row of vertical space.
+  const hasInsights = topics.length > 0;
   if (!hasInsights) return null;
   return (
     <section
@@ -1309,25 +1309,6 @@ function PortalAnalyticsCard({ analytics }) {
                 </li>
               ))}
             </ul>
-          </div>
-        )}
-        {a.review_count > 0 && (
-          <div>
-            <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-2">
-              Public reviews on your profile
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="font-serif-display text-3xl text-[#C87965]">
-                {a.review_avg.toFixed(1)}★
-              </span>
-              <span className="text-sm text-[#6D6A65]">
-                from {a.review_count} review{a.review_count === 1 ? "" : "s"}
-              </span>
-            </div>
-            <p className="text-xs text-[#6D6A65] mt-1">
-              Source: {a.review_source === "google_places" ? "Google Business Profile" : "—"}.
-              Higher review counts boost your match ranking by up to +5 pts.
-            </p>
           </div>
         )}
       </div>

@@ -49,7 +49,7 @@ def test_referral_analytics_endpoint_shape():
 def test_admin_request_detail_includes_breakdown():
     """Pick any request that has notified therapists and confirm the new
     enriched fields (match_breakdown, primary_specialties, modalities,
-    cash_rate, review_count, etc.) are returned per therapist."""
+    cash_rate, etc.) are returned per therapist."""
     res = requests.get(f"{API}/admin/requests", headers=ADMIN_HEADERS, timeout=10)
     assert res.status_code == 200
     rows = res.json()

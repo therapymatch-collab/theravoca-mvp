@@ -290,7 +290,6 @@ export default function AdminDashboard() {
         t.urgency_capacity,
         t.research_summary,
         t.research_depth_signal,
-        t.review_research_source,
         t.website,
         t.google_place_name,
         t.google_place_address,
@@ -726,27 +725,6 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (tab === "master_query") setMasterQueryOpen(true);
   }, [tab]);
-
-  const [researchingReviews, setResearchingReviews] = useState(false);
-  const runReviewResearch = async () => {
-    if (!confirm(
-      "Run LLM review research across all active therapists who haven't been researched in 30+ days?\n\n" +
-      "This calls Claude Sonnet 4.5 to recall public review data across the open web. " +
-      "It can take several minutes for large batches. Found data is folded into the matching score automatically."
-    )) return;
-    setResearchingReviews(true);
-    try {
-      const res = await client.post("/admin/therapists/research-reviews-all", { limit: 100 });
-      toast.success(
-        `Researched ${res.data.researched} therapists — ${res.data.with_data} had verifiable review data.`,
-      );
-      refresh();
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || "Review research failed");
-    } finally {
-      setResearchingReviews(false);
-    }
-  };
 
   const releaseResults = async (rid) => {
     try {
@@ -3783,30 +3761,6 @@ const PROVIDER_COLUMNS = [
     render: (t) => (
       <td className="p-4 whitespace-nowrap">
         <LicenseBadge t={t} />
-      </td>
-    ),
-  },
-  {
-    key: "reviews",
-    label: "Reviews",
-    render: (t) => (
-      <td className="p-4 whitespace-nowrap">
-        {t.review_count > 0 ? (
-          <>
-            <div className="font-medium text-[#C87965] text-sm">
-              {"★".repeat(Math.round(t.review_avg || 0))}
-              <span className="text-[#E8E5DF]">
-                {"★".repeat(5 - Math.round(t.review_avg || 0))}
-              </span>
-            </div>
-            <div className="text-[11px] text-[#6D6A65]">
-              {(t.review_avg ?? 0).toFixed(1)} · {t.review_count} review
-              {t.review_count === 1 ? "" : "s"}
-            </div>
-          </>
-        ) : (
-          <span className="text-xs text-[#C8C4BB]">No reviews</span>
-        )}
       </td>
     ),
   },

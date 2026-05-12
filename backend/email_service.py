@@ -311,15 +311,7 @@ async def send_patient_results(to: str, request_id: str, applications: list[dict
         modalities_list = (t.get("modalities") or [])[:4]
         offices_list = (t.get("office_locations") or [])[:3]
         insurance_list = (t.get("insurance_accepted") or [])[:4]
-        review_avg = t.get("review_avg")
-        review_count = t.get("review_count") or 0
         reviews_line = ""
-        if review_count > 0 and review_avg:
-            reviews_line = (
-                f'<tr><td style="padding:3px 14px 3px 0;color:{BRAND["muted"]};">Reviews</td>'
-                f'<td style="padding:3px 0;">★ {review_avg:.1f} · {review_count} review'
-                f'{"" if review_count == 1 else "s"}</td></tr>'
-            )
 
         fee_parts = []
         if t.get("cash_rate"):

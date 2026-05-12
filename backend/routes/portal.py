@@ -494,9 +494,6 @@ async def portal_therapist_analytics(
         "top_referral_topics": dict(issues_seen.most_common(8)),
         "referrals_made": referrals_made,
         "referral_code": therapist.get("referral_code"),
-        "review_avg": therapist.get("review_avg") or 0,
-        "review_count": therapist.get("review_count") or 0,
-        "review_source": therapist.get("review_research_source"),
     }
 
 

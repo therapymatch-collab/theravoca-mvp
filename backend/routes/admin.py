@@ -406,8 +406,6 @@ async def admin_request_detail(request_id: str, request: Request, _: bool = Depe
                 "insurance_accepted": t.get("insurance_accepted", []),
                 "telehealth": t.get("telehealth"),
                 "offers_in_person": t.get("offers_in_person"),
-                "review_avg": t.get("review_avg"),
-                "review_count": t.get("review_count"),
                 "years_experience": t.get("years_experience"),
                 # Research enrichment (only populated when the toggle was on)
                 "enriched_score": rs.get("enriched_score"),
@@ -746,8 +744,7 @@ async def admin_list_therapists(
         "is_active": 1, "pending_approval": 1, "subscription_status": 1,
         "pending_reapproval": 1, "pending_reapproval_fields": 1,
         "notify_email": 1, "notify_sms": 1,
-        # Reviews + research
-        "review_count": 1, "review_avg": 1, "review_research_source": 1,
+        # Research enrichment (research_enrichment.py)
         "research_summary": 1, "research_depth_signal": 1,
         "research_style_signals": 1,
         "google_place_name": 1, "google_place_address": 1,
@@ -1033,7 +1030,6 @@ async def admin_update_therapist(
         "next_7_day_capacity", "responsiveness_score", "top_responder",
         "stripe_customer_id", "subscription_status", "trial_ends_at",
         "current_period_end",
-        "review_avg", "review_count", "review_sources",
         "referral_code", "referred_by_code",
     }
     update = {k: v for k, v in (payload or {}).items() if k in allowed}
@@ -3612,7 +3608,6 @@ async def admin_warmup_deep_research(payload: dict) -> dict[str, Any]:
         {"_id": 0, "id": 1, "name": 1, "research_refreshed_at": 1},
     ).sort([
         ("research_refreshed_at", 1),  # null/oldest first
-        ("review_count", -1),
         ("years_experience", -1),
     ]).limit(target_count)
     targets = await cursor.to_list(target_count)
@@ -3894,51 +3889,6 @@ async def outreach_opt_out(invite_id: str, reason: str | None = None):
             success=True, email=email, phone=phone, already=already,
         ),
     )
-
-
-@router.post("/admin/therapists/{therapist_id}/reviews")
-async def admin_update_therapist_reviews(
-    therapist_id: str, payload: dict, _: bool = Depends(require_admin),
-):
-    """Manually attach review data to a therapist (manual-entry stub for the
-    web-scraping pipeline). `payload`: {avg, count, sources: [{platform, url, rating}]}."""
-    avg = float(payload.get("avg") or 0)
-    cnt = int(payload.get("count") or 0)
-    sources = payload.get("sources") or []
-    if not 0 <= avg <= 5 or cnt < 0:
-        raise HTTPException(400, "Invalid review data")
-    await db.therapists.update_one(
-        {"id": therapist_id},
-        {"$set": {
-            "review_avg": avg, "review_count": cnt, "review_sources": sources,
-            "review_updated_at": _now_iso(),
-            "updated_at": _now_iso(),
-        }},
-    )
-    return {"ok": True, "review_avg": avg, "review_count": cnt}
-
-
-@router.post("/admin/therapists/{therapist_id}/research-reviews")
-async def admin_research_therapist_reviews(
-    therapist_id: str, _: bool = Depends(require_admin),
-):
-    """Run the LLM review-research agent against one therapist. Persists
-    `review_avg` / `review_count` / `review_sources` if the agent finds high-
-    confidence data; otherwise records `review_research_attempted_at` so we
-    don't re-run for 30 days."""
-    from review_research_agent import research_reviews_for_therapist
-    return await research_reviews_for_therapist(therapist_id)
-
-
-@router.post("/admin/therapists/research-reviews-all")
-async def admin_research_all_reviews(
-    payload: dict | None = None, _: bool = Depends(require_admin),
-):
-    """Bulk-run review research across all active therapists not researched in
-    the last 30 days. Optional `limit` (default 100) caps the batch."""
-    from review_research_agent import research_reviews_for_all
-    limit = int((payload or {}).get("limit") or 100)
-    return await research_reviews_for_all(limit=limit)
 
 
 @router.post("/admin/requests/{request_id}/run-outreach")
