@@ -90,9 +90,12 @@ SPECIALTY_KEYWORDS = {
     "grief": "life_transitions",
 }
 
-# Maximum profile detail fetches per outreach run  --  keeps PT happy and
-# request-handler latency bounded.
-MAX_PROFILE_FETCHES = int(os.environ.get("PT_MAX_PROFILE_FETCHES", "30"))
+# Maximum profile detail fetches per outreach run. Bumped 2026-05-12 --
+# accuracy + quantity matter more than speed for the recruiting pipeline
+# (reactive outreach has a 24h window; proactive recruit cron runs daily
+# until gaps fill). 200 profiles at 0.6s/each = ~2 minutes of scraping,
+# which is fine for both flows.
+MAX_PROFILE_FETCHES = int(os.environ.get("PT_MAX_PROFILE_FETCHES", "200"))
 REQUEST_DELAY_SEC = float(os.environ.get("PT_REQUEST_DELAY_SEC", "0.6"))
 HTTP_TIMEOUT_SEC = 15.0
 
@@ -375,7 +378,7 @@ async def scrape_pt_candidates(
     city: Optional[str],
     needed: int = 30,
     *,
-    max_pages: int = 3,
+    max_pages: int = 10,
     fetch_profiles: bool = True,
 ) -> list[dict]:
     """Returns up to `needed` therapists from Psychology Today with REAL

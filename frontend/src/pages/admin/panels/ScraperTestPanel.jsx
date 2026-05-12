@@ -72,6 +72,12 @@ export default function ScraperTestPanel({ client }) {
   const pollUntilDone = (jobId) => {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     let ticks = 0;
+    // Poll every 3s for up to 15 minutes. The scraper is now
+    // quantity-first (parallel fan-out + 200-profile PT enrichment +
+    // full-set contact enricher) and accepts longer runs in exchange
+    // for higher accuracy + more real emails.
+    const POLL_INTERVAL_MS = 3000;
+    const MAX_TICKS = 300; // 300 * 3s = 15 min
     pollTimerRef.current = setInterval(async () => {
       ticks++;
       try {
@@ -79,11 +85,11 @@ export default function ScraperTestPanel({ client }) {
         const j = r.data;
         setJob(j);
         setPhase(j?.phase || "scraping");
-        if (j?.phase === "complete" || j?.completed_at || ticks > 90) {
+        if (j?.phase === "complete" || j?.completed_at || ticks > MAX_TICKS) {
           clearInterval(pollTimerRef.current);
           pollTimerRef.current = null;
-          if (ticks > 90 && j?.phase !== "complete") {
-            setError("Job timed out after 3 minutes. Results may be partial.");
+          if (ticks > MAX_TICKS && j?.phase !== "complete") {
+            setError("Job timed out after 15 minutes. Results may be partial.");
           }
         }
       } catch (e) {
@@ -95,7 +101,7 @@ export default function ScraperTestPanel({ client }) {
           setPhase("error");
         }
       }
-    }, 2000);
+    }, POLL_INTERVAL_MS);
   };
 
   const isRunning = phase === "starting" || phase === "scraping" || phase === "enriching";

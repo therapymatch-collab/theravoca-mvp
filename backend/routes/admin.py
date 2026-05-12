@@ -5148,50 +5148,60 @@ async def auto_recruit_approve(
 # -- Scraper background job system ----------------------------------
 
 async def _run_scraper_job(job_id: str, city: str, state: str, issues: list, count: int):
-    """Background task: Phase 1 = PT scrape, Phase 2 = contact enrichment."""
+    """Background task: parallel multi-source fan-out + full-set enrichment.
+
+    Mirrors the live outreach pipeline (outreach_agent._find_candidates)
+    so the admin live-test surfaces what real outreach would actually
+    produce. Quantity-first: every source runs in parallel and
+    oversamples (count*3); enrichment runs on the full merged set."""
     from pt_scraper import scrape_pt_candidates
     from directory_scrapers import scrape_all_backup_sources
     from contact_enricher import enrich_one
     import httpx
+    import asyncio as _asyncio
 
-    results = []
-    sources_summary = {}
-    errors = []
+    sources_summary: dict[str, int] = {}
+    errors: list[str] = []
 
-    # Phase 1: PT scrape
-    try:
-        pt = await scrape_pt_candidates(state_code=state, city=city, needed=count, max_pages=3)
-        for c in pt:
-            c["source"] = c.get("source", "psychology_today")
-        results.extend(pt)
-        sources_summary["psychology_today"] = len(pt)
-    except Exception as e:
-        errors.append(f"PT scraper: {e}")
-        sources_summary["psychology_today"] = 0
-
-    # Phase 1b: Backup scrapers
-    needed_more = count - len(results)
-    if needed_more > 0:
+    # ── Fan out every source in parallel ──────────────────────────────
+    async def _safe_pt():
         try:
-            backup = await scrape_all_backup_sources(
-                state_code=state, city=city, needed=needed_more,
+            pt = await scrape_pt_candidates(
+                state_code=state, city=city, needed=count * 3, max_pages=10,
+            )
+            for c in pt:
+                c["source"] = c.get("source", "psychology_today")
+            return pt
+        except Exception as e:
+            errors.append(f"PT scraper: {e}")
+            return []
+
+    async def _safe_backup():
+        try:
+            return await scrape_all_backup_sources(
+                state_code=state, city=city, needed=count * 3,
                 presenting_issues=issues if issues else None,
             )
-            results.extend(backup)
-            for src in ("therapyden", "goodtherapy", "google_maps"):
-                sources_summary[src] = sum(1 for c in backup if c.get("source") == src)
         except Exception as e:
             errors.append(f"Backup scrapers: {e}")
+            return []
 
-    # Deduplicate by name+city
+    pt_res, backup_res = await _asyncio.gather(_safe_pt(), _safe_backup())
+    sources_summary["psychology_today"] = len(pt_res)
+    for src in ("therapyden", "goodtherapy", "google_maps"):
+        sources_summary[src] = sum(1 for c in backup_res if c.get("source") == src)
+
+    # Merge + dedup by name+city
     seen = set()
-    unique = []
-    for c in results:
-        key = f"{(c.get('name') or '').lower().strip()}|{(c.get('city') or '').lower().strip()}"
-        if key not in seen and key != "|":
+    unique: list[dict] = []
+    for source_results in (backup_res, pt_res):  # backup first -- richer contact data
+        for c in source_results:
+            key = f"{(c.get('name') or '').lower().strip()}|{(c.get('city') or '').lower().strip()}"
+            if key in seen or key == "|":
+                continue
             seen.add(key)
             unique.append(c)
-    candidates = unique[:count]
+    candidates = unique  # No `[:count]` truncation -- enrich everything
 
     # Save Phase 1 results
     await db.scraper_jobs.update_one(
@@ -5206,7 +5216,14 @@ async def _run_scraper_job(job_id: str, city: str, state: str, issues: list, cou
         }},
     )
 
-    # Phase 2: Enrich with Google Places API + website fallback
+    # Phase 2: Enrich with Google Places API + website fallback.
+    # Pre-clear backup scrapers' info@<domain> guesses so the enricher's
+    # 'skip if email already set' guard doesn't block real-email
+    # extraction from the actual website.
+    for c in candidates:
+        if (c.get("email") or "").startswith("info@"):
+            c.pop("email", None)
+
     import asyncio
     enriched = 0
     async with httpx.AsyncClient(follow_redirects=True) as client:
@@ -5227,22 +5244,27 @@ async def _run_scraper_job(job_id: str, city: str, state: str, issues: list, cou
                 )
                 await asyncio.sleep(0.4)
 
-    # Sort by completeness
+    # Sort by completeness -- real email > phone > website > license/specialty
     def _completeness(c):
         s = 0
-        if c.get("email"): s += 3
-        if c.get("phone"): s += 3
-        if c.get("website"): s += 2
-        if c.get("license_types"): s += 2
+        email = (c.get("email") or "")
+        if email and not email.startswith("info@") and "@" in email:
+            s += 100
+        if c.get("phone"): s += 30
+        if c.get("website"): s += 10
+        if c.get("license_types") or c.get("primary_license"): s += 5
+        if c.get("specialties"): s += 3
         return s
     candidates.sort(key=_completeness, reverse=True)
 
+    sendable = sum(1 for c in candidates if c.get("email") or c.get("phone"))
     await db.scraper_jobs.update_one(
         {"id": job_id},
         {"$set": {
-            "phase": "done",
+            "phase": "complete",
             "candidates": candidates,
             "enriched_count": enriched,
+            "sendable_count": sendable,
             "completed_at": datetime.now(timezone.utc).isoformat(),
         }},
     )

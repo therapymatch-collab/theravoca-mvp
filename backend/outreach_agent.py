@@ -206,89 +206,119 @@ async def _find_candidates_pt(request: dict, count: int) -> list[dict]:
 
 
 async def _find_candidates(request: dict, count: int = 30) -> list[dict]:
-    """Cascade (reordered 2026-05-12 to put Google Places FIRST):
+    """Parallel multi-source fan-out.
 
-      1. Google Places API -- primary discovery + contact. One call
-         returns real Business Profiles with name + website + phone.
-         Highest-quality source; fastest path to real emails.
-      2. Psychology Today -- catches therapists who aren't on Google but
-         are on PT, and adds specialty tags Places doesn't expose.
-      3. Admin-registered external directories.
-      4. TherapyDen + GoodTherapy (HTML scrapers; fragile).
-      5. Contact enrichment for any candidate still missing website or
-         phone. Always runs on the merged set; this is the step that
-         scrapes therapist websites for real `mailto:` / visible-text
-         emails.
+    Design (rewritten 2026-05-12 from a speed-first cascade to a
+    quantity-first parallel run):
+      - ALL discovery sources fire concurrently. No early-exit -- we
+        want as many real candidates as possible, not just enough to
+        fill `count`.
+      - Sources oversample (PT pulls 10 pages instead of 3; profile
+        details fetched for up to 200 candidates).
+      - Merge + dedup by name+city.
+      - Run contact enrichment on the FULL merged set so every
+        candidate gets a shot at having a real website/email/phone.
+      - Sort by contact-completeness (real email > phone > website)
+        and return up to `count` of the best.
 
-    Each discovery phase only runs if we still need more candidates.
-    Honours the `PT_SCRAPING_ENABLED` env flag.
+    Reactive outreach has a 24h window before delivery, so a 3-5
+    minute scrape is fine. Proactive recruit cron runs daily, same.
+    Honours PT_SCRAPING_ENABLED.
     """
-    # ── Phase 1: Google Places (primary) ──────────────────────────────
-    places_results = await _find_candidates_places(request, count=count)
-    logger.info(
-        "Google Places (primary) returned %d candidates (need %d)",
-        len(places_results), count,
-    )
-    seen: set[tuple[str, str]] = {
-        ((c.get("name") or "").lower().strip(), (c.get("city") or "").lower().strip())
-        for c in places_results
-    }
-    merged = list(places_results)
-    if len(merged) >= count:
-        # Still run enrichment to fill in emails from the websites Places
-        # returned. Places gives phone + website; emails require a
-        # website scrape.
-        await _enrich(merged, count)
-        return merged[:count]
+    state = request.get("location_state") or "ID"
+    city = request.get("location_city") or ""
 
-    # ── Phase 2: Psychology Today (secondary, catches non-Google therapists) ──
-    if PT_SCRAPING_ENABLED:
-        pt_results = await _find_candidates_pt(request, count=count)
-        logger.info("PT scrape returned %d candidates", len(pt_results))
-        for c in pt_results:
-            key = ((c.get("name") or "").lower().strip(), (c.get("city") or "").lower().strip())
-            if key in seen:
+    # Fan out every discovery source in parallel. Each handles its
+    # own errors internally and returns [] on failure.
+    async def _safe_places():
+        try:
+            return await _find_candidates_places(request, count=count * 3)
+        except Exception as e:
+            logger.warning("Places source failed: %s", e)
+            return []
+
+    async def _safe_pt():
+        if not PT_SCRAPING_ENABLED:
+            return []
+        try:
+            return await _find_candidates_pt(request, count=count * 3)
+        except Exception as e:
+            logger.warning("PT source failed: %s", e)
+            return []
+
+    async def _safe_ext():
+        try:
+            return await _find_candidates_external(request)
+        except Exception as e:
+            logger.warning("External source failed: %s", e)
+            return []
+
+    async def _safe_backup():
+        try:
+            raw = await scrape_all_backup_sources(
+                state_code=state,
+                city=city,
+                needed=count * 3,
+                presenting_issues=request.get("presenting_issues"),
+                skip_google_maps=True,
+            )
+            return [_normalize_pt_to_outreach(c, request) for c in raw]
+        except Exception as e:
+            logger.warning("Backup sources failed: %s", e)
+            return []
+
+    places_res, pt_res, ext_res, backup_res = await asyncio.gather(
+        _safe_places(), _safe_pt(), _safe_ext(), _safe_backup(),
+    )
+
+    logger.info(
+        "Discovery fan-out: places=%d pt=%d external=%d backup=%d",
+        len(places_res), len(pt_res), len(ext_res), len(backup_res),
+    )
+
+    # Merge + dedup by (name, city). Order: Places first (highest data
+    # density) so duplicates from later sources don't overwrite real
+    # website/phone with weaker data.
+    seen: set[tuple[str, str]] = set()
+    merged: list[dict] = []
+    for source_results in (places_res, pt_res, ext_res, backup_res):
+        for c in source_results:
+            key = ((c.get("name") or "").lower().strip(),
+                   (c.get("city") or "").lower().strip())
+            if not key[0] or key in seen:
                 continue
             seen.add(key)
             merged.append(c)
-        if len(merged) >= count:
-            await _enrich(merged, count)
-            return merged[:count]
 
-    # ── Phase 3: admin-registered external directories ────────────────
-    ext_results = await _find_candidates_external(request)
-    logger.info("External scrape returned %d candidates", len(ext_results))
-    for c in ext_results:
-        key = ((c.get("name") or "").lower().strip(), (c.get("city") or "").lower().strip())
-        if key in seen:
-            continue
-        seen.add(key)
-        merged.append(c)
-    if len(merged) >= count:
-        await _enrich(merged, count)
-        return merged[:count]
+    logger.info("Merged unique candidates: %d", len(merged))
 
-    # ── Phase 4: backup scrapers (TherapyDen + GoodTherapy; skip Google
-    # Maps since it already ran as Phase 1) ────────────────────────────
-    needed_backup = count - len(merged)
-    backup_results = await scrape_all_backup_sources(
-        state_code=request.get("location_state") or "ID",
-        city=request.get("location_city") or "",
-        needed=needed_backup,
-        presenting_issues=request.get("presenting_issues"),
-        skip_google_maps=True,
-    )
-    logger.info("Backup scrapers (TD+GT) returned %d candidates (needed %d more)",
-                len(backup_results), needed_backup)
-    for c in backup_results:
-        c_norm = _normalize_pt_to_outreach(c, request)
-        key = ((c_norm.get("name") or "").lower().strip(), (c_norm.get("city") or "").lower().strip())
-        if key in seen:
-            continue
-        seen.add(key)
-        merged.append(c_norm)
-
+    # Enrich the FULL merged set (not a count*2 slice) so we maximize
+    # the number of candidates that end up with real contact info.
     await _enrich(merged, count)
+
+    # Sort by completeness: real email > real phone > website > nothing.
+    def _completeness(c: dict) -> int:
+        score = 0
+        email = (c.get("email") or "")
+        if email and not email.startswith("info@") and "@" in email:
+            score += 100
+        if c.get("phone"):
+            score += 30
+        if c.get("website"):
+            score += 10
+        if c.get("license_types") or c.get("primary_license"):
+            score += 5
+        if c.get("specialties"):
+            score += 3
+        return score
+
+    merged.sort(key=_completeness, reverse=True)
+
+    sendable = sum(1 for c in merged if c.get("email") or c.get("phone"))
+    logger.info(
+        "After enrichment: %d candidates total, %d sendable (have email or phone). Returning top %d.",
+        len(merged), sendable, min(count, len(merged)),
+    )
     return merged[:count]
 
 
@@ -309,7 +339,11 @@ async def _enrich(candidates: list[dict], count: int) -> None:
             c.pop("email", None)
     try:
         from contact_enricher import enrich_batch
-        await enrich_batch(candidates, max_enrich=count * 2)
+        # Enrich the FULL merged set, not a count*2 slice. Maximizes the
+        # number of candidates that come out the other side with real
+        # contact info. Capped at 500 as a safety net against a runaway
+        # PT scrape, but typical runs are well under that.
+        await enrich_batch(candidates, max_enrich=500)
     except Exception as e:
         logger.warning("Contact enrichment failed: %s", e)
 
