@@ -49,10 +49,12 @@ MAX_PRIOR_THERAPY_BONUS = 4.0
 
 # --- Expectation alignment ---------------------------------------------
 # Overlap between patient session_expectations and therapist
-# t6_session_expectations. THE #1 ranking signal. Both pick up to 2
-# from 5 options (same slugs). Special handling: "not_sure" (patient)
-# and "depends" (therapist) are wildcards  --  they match anything.
-MAX_EXPECTATION_ALIGNMENT = 30.0
+# t6_session_expectations. THE #1 ranking signal -- weight is now
+# above MAX_ISSUES (35) so the docstring's "Expectation first" claim
+# matches the actual math. Both pick up to 2 from 5 options (same
+# slugs). Special handling: "not_sure" (patient) and "depends"
+# (therapist) are wildcards -- they match anything.
+MAX_EXPECTATION_ALIGNMENT = 40.0
 # Bonus from embedding similarity between patient free-text and
 # therapist T6 early-session description. Tie-breaker when tag
 # overlap is identical.
