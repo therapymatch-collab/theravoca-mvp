@@ -1,4 +1,4 @@
-import { Send, Sparkles, Search, AlertTriangle, CheckCircle2, ArrowRight, Inbox, Target, MapPin, Zap } from "lucide-react";
+import { Send, Sparkles, Search, AlertTriangle, CheckCircle2, ArrowRight, Inbox, Target, MapPin, Zap, Mail } from "lucide-react";
 import ScraperTestPanel from "@/pages/admin/panels/ScraperTestPanel";
 
 // Recruiting tab -- plain-English explainer of how TheraVoca grows its
@@ -67,24 +67,133 @@ export default function RecruitingPanel({ client }) {
         />
       </div>
 
+      {/* ============= WHERE REAL EMAILS COME FROM ============= */}
+      <Section
+        icon={<Mail size={18} className="text-[#2D4A3E]" />}
+        title="Where real emails actually come from (directories don't expose them)"
+        accent="#EAF2E8"
+      >
+        <p className="text-sm text-[#2B2A29] leading-relaxed">
+          Common misconception: that the recruiting system pulls emails directly
+          from the directory listing. <strong>It doesn't.</strong> Psychology
+          Today hides emails behind a contact form. Google Places API never
+          returns email. TherapyDen + GoodTherapy don't expose them either.
+          So how does the pipeline get real addresses?
+        </p>
+
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-[auto_1fr] gap-x-4 gap-y-3 text-sm">
+          <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] font-semibold pt-1">Step 1</div>
+          <div className="text-[#2B2A29]">
+            <strong>Directory gives us a name + website link.</strong> PT
+            profiles usually link to the therapist's own external site.
+            Places returns <code>websiteUri</code>. TherapyDen / GoodTherapy
+            do the same. <em>No email yet -- just a starting point.</em>
+          </div>
+
+          <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] font-semibold pt-1">Step 2</div>
+          <div className="text-[#2B2A29]">
+            <strong>We scrape the therapist's OWN website.</strong> The
+            enricher fetches the HTML and pulls emails from three sources,
+            in priority order:
+            <ol className="list-decimal pl-5 mt-1.5 space-y-0.5">
+              <li><code>mailto:</code> href links (highest signal -- intentionally placed).</li>
+              <li>Visible-text emails matching the regex on the rendered page.</li>
+              <li>Email patterns anywhere in the raw HTML (catches obfuscated/scripted addresses).</li>
+            </ol>
+            Filters: junk domains (Sentry, social media, googletagmanager),
+            <code> noreply@</code>, directory mailboxes, image/asset
+            extensions. Then prefers emails whose domain matches the website
+            domain (so <code>dr.smith@drsmithcounseling.com</code> beats
+            {" "}<code>info@webhosting-corp.com</code>).
+          </div>
+
+          <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] font-semibold pt-1">Step 3</div>
+          <div className="text-[#2B2A29]">
+            <strong>If the website doesn't have a visible email</strong>
+            {" "}(many therapist sites use contact forms only), SMS fallback
+            kicks in. If Google Places returned a real phone, the invite goes
+            out via Twilio SMS with a shorter body and the same opt-out URL.
+          </div>
+
+          <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] font-semibold pt-1">Step 4</div>
+          <div className="text-[#2B2A29]">
+            <strong>If we have neither email nor phone, the candidate is
+            silently dropped</strong> before any send. We never invent
+            {" "}<code>info@&lt;domain&gt;</code> addresses or guess.
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] font-semibold mb-2">
+            Scenario -&gt; outcome summary
+          </div>
+          <div className="border border-[#E8E5DF] rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-[#FDFBF7] text-left text-xs text-[#6D6A65] uppercase tracking-wider">
+                  <th className="px-3 py-2">Therapist has...</th>
+                  <th className="px-3 py-2">What happens</th>
+                </tr>
+              </thead>
+              <tbody>
+                <ScenarioRow
+                  scenario="Website with mailto: link"
+                  outcome="Email invite to the real address."
+                  tone="ok"
+                />
+                <ScenarioRow
+                  scenario="Website with visible email in text"
+                  outcome="Email invite to that address."
+                  tone="ok"
+                />
+                <ScenarioRow
+                  scenario="Website but no email exposed (contact form only)"
+                  outcome="SMS invite to phone from Google Places (if available)."
+                  tone="ok"
+                />
+                <ScenarioRow
+                  scenario="No website, but phone in Google Places"
+                  outcome="SMS invite to that phone."
+                  tone="ok"
+                />
+                <ScenarioRow
+                  scenario="No website AND no phone"
+                  outcome="Silently dropped -- no invite sent."
+                  tone="warn"
+                />
+                <ScenarioRow
+                  scenario="Backup scraper guessed info@<domain>"
+                  outcome="Pre-cleared before enrichment, then treated like 'no email'. Falls to SMS or drop."
+                  tone="ok"
+                />
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <p className="text-xs text-[#6D6A65] italic mt-4 leading-relaxed">
+          This is why <strong>GOOGLE_PLACES_API_KEY</strong> matters so much
+          -- without it, we lose the most reliable source of real phone
+          numbers, which is the SMS fallback when a website doesn't expose
+          an email. Many small-practice therapists fall into the
+          "website-but-no-mailto" bucket, so SMS coverage is the difference
+          between recruiting them and dropping them.
+        </p>
+      </Section>
+
       {/* ============= SHARED FUNNEL ============= */}
       <Section
         icon={<ArrowRight size={18} className="text-[#2D4A3E]" />}
-        title="What happens after a candidate is identified (both tracks)"
+        title="What happens after a candidate has real contact info"
         accent="#F5F1E8"
       >
         <FunnelStep
           n="1"
-          title="Contact enrichment"
-          body="Google Places API returns phone + website. We then scrape the website's HTML for mailto: links + visible-text emails. Junk domains (Sentry, social media, noreply@) are filtered out. If nothing real is found, the candidate is dropped before any send."
-        />
-        <FunnelStep
-          n="2"
           title="Invite sent"
           body="Personalized email (per-track template, both editable in Content -> Email templates) with a sanitized brief and a signup link pre-stamped with a recruit_code. SMS fallback via Twilio if no real email was found but phone is real."
         />
         <FunnelStep
-          n="3"
+          n="2"
           title="One of three outcomes"
           body={
             <ul className="list-disc pl-5 space-y-1 mt-1">
@@ -223,6 +332,20 @@ function Section({ icon, title, accent, children }) {
       </div>
       <div className="p-6 space-y-4">{children}</div>
     </div>
+  );
+}
+
+function ScenarioRow({ scenario, outcome, tone }) {
+  const cls = tone === "warn"
+    ? "border-t border-[#F4C7BE] bg-[#FBE9E5]"
+    : "border-t border-[#E8E5DF]";
+  return (
+    <tr className={cls}>
+      <td className="px-3 py-2 text-[#2B2A29]">{scenario}</td>
+      <td className={`px-3 py-2 ${tone === "warn" ? "text-[#8B3220] font-medium" : "text-[#2B2A29]"}`}>
+        {outcome}
+      </td>
+    </tr>
   );
 }
 
