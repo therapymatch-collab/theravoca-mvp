@@ -22,6 +22,8 @@ export default function ScraperTestPanel({ client }) {
   const [error, setError] = useState("");
   const [placesTest, setPlacesTest] = useState(null);
   const [placesLoading, setPlacesLoading] = useState(false);
+  const [twilioTest, setTwilioTest] = useState(null);
+  const [twilioLoading, setTwilioLoading] = useState(false);
   const pollTimerRef = useRef(null);
 
   const runPlacesTest = async () => {
@@ -39,6 +41,23 @@ export default function ScraperTestPanel({ client }) {
       setPlacesLoading(false);
     }
   };
+
+  const runTwilioTest = async () => {
+    setTwilioLoading(true);
+    setTwilioTest(null);
+    try {
+      const r = await client.post("/admin/twilio-test", {});
+      setTwilioTest(r.data);
+    } catch (e) {
+      setTwilioTest({
+        diagnosis: e?.response?.data?.detail || e.message || "Diagnostic call failed",
+      });
+    } finally {
+      setTwilioLoading(false);
+    }
+  };
+
+  const twilioOk = twilioTest?.api_check?.ok && twilioTest?.enabled;
 
   useEffect(() => () => {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current);
@@ -106,7 +125,18 @@ export default function ScraperTestPanel({ client }) {
 
   const isRunning = phase === "starting" || phase === "scraping" || phase === "enriching";
   const candidates = job?.candidates || [];
-  const realEmails = candidates.filter((c) => c.email && !c.email.startsWith("info@")).length;
+  // Email-ready = has a real email (not a guessed info@ placeholder).
+  // SMS-ready = has phone BUT no real email (where SMS would actually fire as fallback).
+  // Drop = no email AND no phone.
+  const emailReady = candidates.filter(
+    (c) => c.email && !c.email.startsWith("info@"),
+  ).length;
+  const smsReady = candidates.filter(
+    (c) => c.phone && !(c.email && !c.email.startsWith("info@")),
+  ).length;
+  const dropCount = candidates.filter(
+    (c) => !c.phone && !(c.email && !c.email.startsWith("info@")),
+  ).length;
   const realPhones = candidates.filter((c) => c.phone).length;
 
   return (
@@ -124,80 +154,133 @@ export default function ScraperTestPanel({ client }) {
         </p>
       </div>
 
-      {/* Step 0: Diagnostic ping of Google Places API */}
-      <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg p-4 space-y-3">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-[#6D6A65] font-semibold">
-              Step 0 -- diagnose first
+      {/* Step 0: Diagnostics -- Places + Twilio side by side */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Places API diagnostic */}
+        <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-[#6D6A65] font-semibold">
+                Step 0a -- email pipeline
+              </div>
+              <div className="font-semibold text-[#2D4A3E] mt-0.5">
+                Google Places + website scrape
+              </div>
+              <p className="text-xs text-[#6D6A65] mt-1 leading-relaxed">
+                Powers EMAIL outreach. Places returns websites; we scrape
+                them for mailto: addresses.
+              </p>
             </div>
-            <div className="font-semibold text-[#2D4A3E] mt-0.5">
-              Test the Google Places API key
-            </div>
-            <p className="text-xs text-[#6D6A65] mt-1 leading-relaxed max-w-2xl">
-              Phones come from Google Places. Emails come from websites we
-              find via Google Places. If this diagnostic fails, the live test
-              below will return blank emails/phones no matter what city you
-              enter -- so run this first.
-            </p>
+            <button
+              onClick={runPlacesTest}
+              disabled={placesLoading}
+              className="px-3 py-2 bg-[#2D4A3E] text-white rounded-lg text-sm font-medium hover:bg-[#3A5E50] disabled:opacity-50 flex items-center gap-2"
+            >
+              {placesLoading ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+              {placesLoading ? "Testing..." : "Test Places"}
+            </button>
           </div>
-          <button
-            onClick={runPlacesTest}
-            disabled={placesLoading}
-            className="px-3 py-2 bg-[#2D4A3E] text-white rounded-lg text-sm font-medium hover:bg-[#3A5E50] disabled:opacity-50 flex items-center gap-2"
-          >
-            {placesLoading
-              ? <Loader2 size={14} className="animate-spin" />
-              : <Zap size={14} />}
-            {placesLoading ? "Testing..." : "Test Places API"}
-          </button>
+
+          {placesTest && (
+            <div className="border border-[#E8E5DF] rounded-lg bg-white p-3 space-y-2">
+              <div className="flex items-center gap-2 text-sm">
+                {placesTest.details?.phone || placesTest.details?.website_uri ? (
+                  <span className="inline-flex items-center gap-1 text-[#2D4A3E] font-semibold">
+                    <CheckCircle2 size={16} className="text-[#4A6B5D]" /> Places API working
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[#8B3220] font-semibold">
+                    <XCircle size={16} className="text-[#D45D5D]" /> Places API not returning data
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-[#6D6A65]">
+                Env var: <strong>{placesTest.env_var_set ? "set" : "NOT SET"}</strong>
+                {placesTest.search?.status_code != null && (
+                  <> &middot; HTTP {placesTest.search.status_code}</>
+                )}
+              </div>
+              {placesTest.details && (
+                <div className="text-xs text-[#2B2A29] bg-[#FDFBF7] rounded p-2 space-y-0.5">
+                  <div><strong>Matched:</strong> {placesTest.details.display_name || "(none)"}</div>
+                  <div><strong>Website:</strong> {placesTest.details.website_uri || <span className="italic text-[#9C9893]">none</span>}</div>
+                  <div><strong>Phone:</strong> {placesTest.details.phone || <span className="italic text-[#9C9893]">none</span>}</div>
+                </div>
+              )}
+              {placesTest.diagnosis && (
+                <div className="text-xs text-[#2B2A29] leading-relaxed whitespace-pre-line bg-[#FBEFE9] border border-[#F4C7BE] rounded p-2">
+                  {placesTest.diagnosis}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {placesTest && (
-          <div className="border border-[#E8E5DF] rounded-lg bg-white p-3 space-y-2">
-            <div className="flex items-center gap-2 text-sm">
-              {placesTest.details?.phone || placesTest.details?.website_uri ? (
-                <span className="inline-flex items-center gap-1 text-[#2D4A3E] font-semibold">
-                  <CheckCircle2 size={16} className="text-[#4A6B5D]" /> Places API working
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 text-[#8B3220] font-semibold">
-                  <XCircle size={16} className="text-[#D45D5D]" /> Places API not returning data
-                </span>
-              )}
-            </div>
-            <div className="text-xs text-[#6D6A65]">
-              Env var set: <strong>{placesTest.env_var_set ? "yes" : "NO"}</strong>
-              {placesTest.env_var_set && (
-                <> &middot; key length: {placesTest.env_var_length}</>
-              )}
-              {placesTest.search?.status_code != null && (
-                <> &middot; HTTP {placesTest.search.status_code}</>
-              )}
-            </div>
-            {placesTest.details && (
-              <div className="text-xs text-[#2B2A29] bg-[#FDFBF7] rounded p-2 space-y-0.5">
-                <div><strong>Matched:</strong> {placesTest.details.display_name || "(none)"}</div>
-                <div><strong>Address:</strong> {placesTest.details.formatted_address || "—"}</div>
-                <div><strong>Website:</strong> {placesTest.details.website_uri || <span className="italic text-[#9C9893]">none returned</span>}</div>
-                <div><strong>Phone:</strong> {placesTest.details.phone || <span className="italic text-[#9C9893]">none returned</span>}</div>
+        {/* Twilio diagnostic */}
+        <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-[#6D6A65] font-semibold">
+                Step 0b -- SMS pipeline
               </div>
-            )}
-            {placesTest.diagnosis && (
-              <div className="text-xs text-[#2B2A29] leading-relaxed whitespace-pre-line bg-[#FBEFE9] border border-[#F4C7BE] rounded p-2">
-                {placesTest.diagnosis}
+              <div className="font-semibold text-[#2D4A3E] mt-0.5">
+                Twilio SMS config
               </div>
-            )}
-            {placesTest.search?.body?.error && (
-              <details className="text-xs text-[#6D6A65]">
-                <summary className="cursor-pointer">Raw GCP error response</summary>
-                <pre className="mt-1 bg-[#F2EFE8] p-2 rounded overflow-x-auto">
-                  {JSON.stringify(placesTest.search.body.error, null, 2)}
-                </pre>
-              </details>
-            )}
+              <p className="text-xs text-[#6D6A65] mt-1 leading-relaxed">
+                Powers SMS outreach (fallback when therapist's website
+                has no email). Doesn't send any actual SMS.
+              </p>
+            </div>
+            <button
+              onClick={runTwilioTest}
+              disabled={twilioLoading}
+              className="px-3 py-2 bg-[#2D4A3E] text-white rounded-lg text-sm font-medium hover:bg-[#3A5E50] disabled:opacity-50 flex items-center gap-2"
+            >
+              {twilioLoading ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+              {twilioLoading ? "Testing..." : "Test Twilio"}
+            </button>
           </div>
-        )}
+
+          {twilioTest && (
+            <div className="border border-[#E8E5DF] rounded-lg bg-white p-3 space-y-2">
+              <div className="flex items-center gap-2 text-sm">
+                {twilioOk ? (
+                  <span className="inline-flex items-center gap-1 text-[#2D4A3E] font-semibold">
+                    <CheckCircle2 size={16} className="text-[#4A6B5D]" /> Twilio ready to send
+                  </span>
+                ) : twilioTest?.api_check?.ok ? (
+                  <span className="inline-flex items-center gap-1 text-[#8B5A1F] font-semibold">
+                    <XCircle size={16} className="text-[#C8923A]" /> Creds OK, but disabled
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[#8B3220] font-semibold">
+                    <XCircle size={16} className="text-[#D45D5D]" /> Twilio not configured
+                  </span>
+                )}
+              </div>
+              {twilioTest?.env && (
+                <div className="text-xs text-[#2B2A29] bg-[#FDFBF7] rounded p-2 space-y-0.5">
+                  <div><strong>Enabled:</strong> {twilioTest.env.TWILIO_ENABLED}</div>
+                  <div><strong>SID:</strong> {twilioTest.env.TWILIO_ACCOUNT_SID ? twilioTest.env.TWILIO_ACCOUNT_SID_starts_with : "(unset)"}</div>
+                  <div><strong>Auth token:</strong> {twilioTest.env.TWILIO_AUTH_TOKEN ? `${twilioTest.env.TWILIO_AUTH_TOKEN_length} chars set` : "(unset)"}</div>
+                  <div><strong>From number:</strong> {twilioTest.env.TWILIO_FROM_NUMBER}</div>
+                  <div><strong>Override-to:</strong> {twilioTest.env.TWILIO_DEV_OVERRIDE_TO}</div>
+                  {twilioTest.api_check?.account_friendly_name && (
+                    <div className="pt-1 border-t border-[#E8E5DF]">
+                      <strong>Account:</strong> {twilioTest.api_check.account_friendly_name}
+                      {" "}({twilioTest.api_check.account_type} -- {twilioTest.api_check.account_status})
+                    </div>
+                  )}
+                </div>
+              )}
+              {twilioTest.diagnosis && (
+                <div className="text-xs text-[#2B2A29] leading-relaxed whitespace-pre-line bg-[#FBEFE9] border border-[#F4C7BE] rounded p-2">
+                  {twilioTest.diagnosis}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3 items-end">
@@ -280,17 +363,34 @@ export default function ScraperTestPanel({ client }) {
 
       {job && (
         <div className="space-y-4">
-          {/* Summary tiles */}
+          {/* Summary tiles -- mirrors the live outreach channel split */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <SummaryTile label="Therapists found" value={job.total || 0} accent="#2D4A3E" />
-            <SummaryTile label="Real emails extracted" value={realEmails} accent="#4A6B5D" highlight />
-            <SummaryTile label="Real phones extracted" value={realPhones} accent="#4A6B5D" />
+            <SummaryTile label="Therapists found" value={job.total || candidates.length} accent="#2D4A3E" />
             <SummaryTile
-              label="Would be invited"
-              value={candidates.filter((c) => c.email || c.phone).length}
-              accent="#C87965"
-              subtitle="have email OR phone"
+              label="Email-ready"
+              value={emailReady}
+              accent="#4A6B5D"
+              subtitle="would get email invite"
+              highlight
             />
+            <SummaryTile
+              label="SMS-ready"
+              value={smsReady}
+              accent="#C87965"
+              subtitle="no email, has phone -- SMS fallback"
+              highlight
+            />
+            <SummaryTile
+              label="Dropped"
+              value={dropCount}
+              accent="#9C9893"
+              subtitle="no email AND no phone"
+            />
+          </div>
+          <div className="text-xs text-[#6D6A65] -mt-2">
+            Real phones found: <strong>{realPhones}</strong> (some of those are
+            on Email-ready rows too -- the channel split above shows which
+            channel would actually fire).
           </div>
 
           {/* Source breakdown */}

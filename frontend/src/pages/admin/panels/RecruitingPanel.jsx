@@ -229,7 +229,12 @@ export default function RecruitingPanel({ client }) {
         <ConfigRow
           status="warn"
           label="Google Places API key"
-          detail="GOOGLE_PLACES_API_KEY must be set in Render env. Without it, the enricher falls back to direct website scraping only -- coverage drops. Action: enable 'Places API (New)' in Google Cloud Console, generate a key, add to Render env."
+          detail="GOOGLE_PLACES_API_KEY must be set in Render env. Without it, the enricher falls back to direct website scraping only -- coverage drops. Action: enable 'Places API (New)' in Google Cloud Console, generate a key, add to Render env. Use the 'Test Places' button in the Live test section to verify."
+        />
+        <ConfigRow
+          status="warn"
+          label="Twilio SMS (fallback when therapist's website has no email)"
+          detail="Needs TWILIO_ENABLED=true, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER set in Render env. Trial accounts only send to numbers you've manually verified in the Twilio console -- for testing, set TWILIO_DEV_OVERRIDE_TO to your verified number so every outreach SMS reroutes there. Use the 'Test Twilio' button in the Live test section to verify."
         />
         <ConfigRow
           status="warn"

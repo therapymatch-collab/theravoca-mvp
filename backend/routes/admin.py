@@ -5450,6 +5450,121 @@ async def places_test(payload: dict | None = None):
         return result
 
 
+@router.post("/admin/twilio-test", dependencies=[Depends(require_admin)])
+async def twilio_test(payload: dict | None = None) -> dict[str, Any]:
+    """Diagnostic for Twilio SMS configuration. Does NOT send a real SMS.
+
+    Checks every required env var, tries to authenticate against the
+    Twilio REST API by fetching the account record (zero-cost, no SMS),
+    and returns plain-English diagnosis of what's wrong if anything.
+
+    This is the 'is SMS even possible right now' answer. The existing
+    /admin/test-sms endpoint actually sends a message to a phone --
+    use this first to make sure config is right.
+    """
+    import os as _os
+    payload = payload or {}
+    sid = _os.environ.get("TWILIO_ACCOUNT_SID", "").strip()
+    token = _os.environ.get("TWILIO_AUTH_TOKEN", "").strip()
+    from_number = (
+        _os.environ.get("TWILIO_FROM_NUMBER", "").strip()
+        or _os.environ.get("TWILIO_PHONE_NUMBER", "").strip()
+    )
+    enabled_raw = _os.environ.get("TWILIO_ENABLED", "false").strip().lower()
+    enabled = enabled_raw == "true"
+    override_to = _os.environ.get("TWILIO_DEV_OVERRIDE_TO", "").strip()
+
+    result: dict[str, Any] = {
+        "env": {
+            "TWILIO_ENABLED": enabled_raw or "(unset)",
+            "TWILIO_ACCOUNT_SID": bool(sid),
+            "TWILIO_ACCOUNT_SID_starts_with": sid[:6] + "..." if sid else "(unset)",
+            "TWILIO_AUTH_TOKEN": bool(token),
+            "TWILIO_AUTH_TOKEN_length": len(token) if token else 0,
+            "TWILIO_FROM_NUMBER": from_number or "(unset)",
+            "TWILIO_DEV_OVERRIDE_TO": override_to or "(none -- prod mode)",
+        },
+        "enabled": enabled,
+        "api_check": None,
+        "diagnosis": None,
+    }
+
+    # Env var presence checks
+    missing = []
+    if not sid:
+        missing.append("TWILIO_ACCOUNT_SID")
+    if not token:
+        missing.append("TWILIO_AUTH_TOKEN")
+    if not from_number:
+        missing.append("TWILIO_FROM_NUMBER")
+    if missing:
+        result["diagnosis"] = (
+            f"Missing required env var(s): {', '.join(missing)}. "
+            "Add them in Render -> Environment for the service, then "
+            "redeploy. SMS outreach will silently no-op until all three "
+            "are set."
+        )
+        return result
+    if not enabled:
+        result["diagnosis"] = (
+            "All env vars present but TWILIO_ENABLED is not 'true'. "
+            "Set TWILIO_ENABLED=true (case-sensitive value) in Render env "
+            "to flip SMS on. Until then, every send_sms() call short-circuits."
+        )
+        # Still try the API check below to verify creds work
+    # Live API check: fetch the account record (no SMS sent, no cost)
+    try:
+        from twilio.rest import Client
+        import asyncio as _asyncio
+        client = Client(sid, token)
+        def _fetch_account():
+            return client.api.accounts(sid).fetch()
+        account = await _asyncio.to_thread(_fetch_account)
+        result["api_check"] = {
+            "ok": True,
+            "account_friendly_name": account.friendly_name,
+            "account_status": account.status,
+            "account_type": account.type,
+        }
+        if account.type and account.type.lower() == "trial":
+            result["diagnosis"] = (
+                (result["diagnosis"] or "") +
+                (" Note: this is a Twilio TRIAL account. Trial mode can "
+                 "only send to numbers you've manually verified in the "
+                 "Twilio console. Set TWILIO_DEV_OVERRIDE_TO to one of "
+                 "your verified numbers so test SMS reroutes there, or "
+                 "upgrade to a paid Twilio account for real outreach.")
+            ).strip()
+        elif enabled and not result["diagnosis"]:
+            result["diagnosis"] = (
+                "Twilio is fully configured and live. SMS outreach will "
+                "send to real phone numbers from " + from_number + ". "
+                "Use /admin/test-sms to send a test message to a real "
+                "phone."
+            )
+        elif not enabled and not result["diagnosis"]:
+            result["diagnosis"] = (
+                "Credentials work but TWILIO_ENABLED is not 'true' -- "
+                "see above."
+            )
+    except Exception as e:
+        msg = str(e)
+        result["api_check"] = {"ok": False, "error": msg}
+        if "401" in msg or "Authenticat" in msg:
+            result["diagnosis"] = (
+                "Twilio rejected the credentials (401). The SID or token "
+                "is wrong, or the auth token has been rotated. Generate "
+                "a fresh auth token in the Twilio Console and update "
+                "TWILIO_AUTH_TOKEN in Render."
+            )
+        else:
+            result["diagnosis"] = (
+                f"Couldn't reach Twilio API: {msg}. Check Render egress "
+                "and verify the SID format (should start with AC...)."
+            )
+    return result
+
+
 @router.get("/admin/scraper-jobs", dependencies=[Depends(require_admin)])
 async def list_scraper_jobs():
     """List recent scraper jobs."""
