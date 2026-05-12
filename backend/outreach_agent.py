@@ -311,8 +311,12 @@ async def _find_candidates(request: dict, count: int = 30) -> list[dict]:
     if len(merged) >= count:
         return merged[:count]
 
-    # Phase 4: LLM-generated candidates as last resort. These are plausible
-    # but unverified — real scraper data from phases 1-3 is always preferred.
+    # Phase 4: LLM-generated candidates as last resort. We KEEP the name +
+    # city + license + specialties (LLM can plausibly recall those from
+    # training data) but DROP the email field -- LLM-fabricated emails
+    # historically routed our outreach to fake addresses. The contact
+    # enrichment phase below will fill in real emails for these (or
+    # they get dropped at send-time when no real contact is found).
     needed_extra = count - len(merged)
     llm_results = await _find_candidates_llm(request, count=needed_extra)
     logger.info("LLM fallback returned %d candidates (needed %d more)",
@@ -322,7 +326,33 @@ async def _find_candidates(request: dict, count: int = 30) -> list[dict]:
         if key in seen:
             continue
         seen.add(key)
+        # Strip any LLM-fabricated contact info -- we only trust the
+        # discovery fields (name, city, license, specialties).
+        c.pop("email", None)
+        c.pop("phone", None)
+        c["source"] = "llm_discovery_only"
         merged.append(c)
+
+    # Phase 5: contact enrichment. Every candidate (PT names, external
+    # directory hits, backup-scraper records, LLM-discovered names) gets
+    # run through contact_enricher.enrich_batch -- Google Places API for
+    # phone + website, then HTML scrape of the therapist's actual website
+    # for mailto:/visible-text emails. This is the ONLY step that
+    # produces verified real emails. PT/backup/LLM all only supply the
+    # therapist's identity; contact info comes from here.
+    #
+    # Pre-clear the fake `info@<domain>` emails that backup scrapers
+    # wrote so the enricher's "skip if email already set" guard doesn't
+    # block real-email extraction.
+    for c in merged:
+        if (c.get("email") or "").startswith("info@"):
+            c.pop("email", None)
+    try:
+        from contact_enricher import enrich_batch
+        await enrich_batch(merged, max_enrich=count * 2)
+    except Exception as e:
+        logger.warning("Contact enrichment failed: %s", e)
+
     return merged[:count]
 
 
