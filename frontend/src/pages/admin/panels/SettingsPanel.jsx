@@ -102,10 +102,11 @@ function TurnstileToggleCard({ client: clientProp }) {
           </p>
           {!configured && (
             <p className="mt-2 text-xs text-[#6D6A65] italic">
-              Turnstile keys aren't configured in this environment
-              (&nbsp;<code>TURNSTILE_SITE_KEY</code> /{" "}
-              <code>TURNSTILE_SECRET_KEY</code>&nbsp;), so the widget
-              isn't rendered regardless of this toggle.
+              Turnstile keys aren't configured in this environment.
+              Set <code>REACT_APP_TURNSTILE_SITE_KEY</code> (frontend)
+              and <code>TURNSTILE_SECRET_KEY</code> (backend) in Render
+              and redeploy. Until then the widget won't render
+              regardless of this toggle.
             </p>
           )}
         </div>

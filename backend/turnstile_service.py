@@ -22,11 +22,24 @@ SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 TIMEOUT_SEC = 5.0
 
 
+def _site_key() -> str:
+    """Read the site key from either env var. CRA requires a
+    `REACT_APP_` prefix for vars baked into the frontend bundle, and
+    render.yaml + most admin setups use that prefixed name. Accept
+    either, so a single `REACT_APP_TURNSTILE_SITE_KEY` is sufficient
+    to enable Turnstile across both backend and frontend layers."""
+    return (
+        (os.environ.get("TURNSTILE_SITE_KEY") or "").strip()
+        or (os.environ.get("REACT_APP_TURNSTILE_SITE_KEY") or "").strip()
+    )
+
+
 def is_configured() -> bool:
-    """True only when both the site + secret key envs are populated."""
+    """True only when both the site + secret key envs are populated.
+    See `_site_key()` for the dual-name lookup."""
     return bool(
         (os.environ.get("TURNSTILE_SECRET_KEY") or "").strip()
-        and (os.environ.get("TURNSTILE_SITE_KEY") or "").strip()
+        and _site_key()
     )
 
 

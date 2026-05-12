@@ -3906,16 +3906,15 @@ async def public_referral_source_options() -> dict[str, Any]:
 @public_router.get("/config/turnstile")
 async def public_turnstile_config() -> dict[str, Any]:
     """Public endpoint the React app calls on mount to decide whether
-    to render the Turnstile widget. Returns `{enabled: bool}`  -- 
+    to render the Turnstile widget. Returns `{enabled: bool}`  --
     `enabled=False` when either (a) the admin has flipped the
     runtime-disable toggle (used during AI-driven E2E testing) or
-    (b) the `TURNSTILE_SITE_KEY` env isn't configured.
+    (b) neither `TURNSTILE_SITE_KEY` nor `REACT_APP_TURNSTILE_SITE_KEY`
+    env vars are configured.
     The widget only renders when `enabled=True`."""
     import turnstile_service
     disabled = await turnstile_service._is_disabled_by_admin()
-    configured = bool(
-        (os.environ.get("TURNSTILE_SITE_KEY") or "").strip()
-    )
+    configured = bool(turnstile_service._site_key())
     return {"enabled": (not disabled) and configured}
 
 
@@ -3953,14 +3952,15 @@ async def admin_get_turnstile_settings() -> dict[str, Any]:
     doc = await db.app_config.find_one(
         {"key": "turnstile_settings"}, {"_id": 0, "disabled": 1, "disabled_at": 1, "disabled_reason": 1},
     )
+    import turnstile_service
     return {
         "disabled": bool((doc or {}).get("disabled")),
         "disabled_at": (doc or {}).get("disabled_at"),
         "disabled_reason": (doc or {}).get("disabled_reason") or "",
-        "configured": bool(
-            (os.environ.get("TURNSTILE_SITE_KEY") or "").strip()
-            and (os.environ.get("TURNSTILE_SECRET_KEY") or "").strip()
-        ),
+        # Use the shared is_configured() so the admin panel and the
+        # public /api/config/turnstile endpoint agree. The helper accepts
+        # either TURNSTILE_SITE_KEY or REACT_APP_TURNSTILE_SITE_KEY.
+        "configured": turnstile_service.is_configured(),
     }
 
 
