@@ -79,7 +79,6 @@ import SimulatorPanel from "@/pages/admin/panels/SimulatorPanel";
 import ScraperTestPanel from "@/pages/admin/panels/ScraperTestPanel";
 import FeedbackTestPanel from "@/pages/admin/panels/FeedbackTestPanel";
 import TestActionsPanel from "@/pages/admin/panels/TestActionsPanel";
-import { StatBox } from "@/pages/admin/panels/_panelShared";
 
 // ─── Editor option lists (mirrors TherapistSignup) ───
 const ISSUES_LIST = [
@@ -165,7 +164,6 @@ export default function AdminDashboard() {
   // useEffect inside child panels (e.g. SettingsPanel re-loading the
   // rate-limit form mid-typing and overwriting the user's input).
   const client = useMemo(() => adminClient(pwd), [pwd]);
-  const [stats, setStats] = useState(null);
   const [requests, setRequests] = useState([]);
   const [pendingTherapists, setPendingTherapists] = useState([]);
   const [allTherapists, setAllTherapists] = useState([]);
@@ -342,13 +340,11 @@ export default function AdminDashboard() {
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const [s, r, pt, allT] = await Promise.all([
-        client.get("/admin/stats"),
+      const [r, pt, allT] = await Promise.all([
         client.get("/admin/requests"),
         client.get("/admin/therapists?pending=true"),
         client.get("/admin/therapists"),
       ]);
-      setStats(s.data);
       setRequests(r.data);
       setPendingTherapists(pt.data);
       setAllTherapists(allT.data);
@@ -1125,20 +1121,6 @@ export default function AdminDashboard() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-7 gap-4 mt-8">
-                <StatBox label="Requests" value={stats?.total_requests} />
-                <StatBox label="Pending" value={stats?.pending} />
-                <StatBox label="Open" value={stats?.open} />
-                <StatBox label="Completed" value={stats?.completed} />
-                <StatBox label="Therapists" value={stats?.therapists} />
-                <StatBox
-                  label="Pending review"
-                  value={stats?.pending_therapists}
-                  highlight={stats?.pending_therapists > 0}
-                />
-                <StatBox label="Applications" value={stats?.applications} />
-              </div>
-
               <AdminTabsBar
                 tab={tab}
                 setTab={setTab}
