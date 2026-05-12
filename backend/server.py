@@ -219,8 +219,17 @@ app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
     allow_origins=_cors_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    # Restrict to the HTTP methods + headers we actually use. Wildcards
+    # were the previous default; tightening reduces the abuse surface a
+    # CSRF-style attacker could exploit if a token leaks.
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-Admin-Password",
+        "X-Requested-With",
+        "stripe-signature",
+    ],
 )
 
 

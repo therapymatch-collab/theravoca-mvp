@@ -25,6 +25,24 @@ relevant section.
 - Notice of Privacy Practices (NPP) document at intake
 - Encryption at rest verified end-to-end
 
+**Audit update 2026-05-12 — what code now enforces:**
+- ✅ TLS-only Mongo URI in production (deps.py raises on plaintext)
+- ✅ Security headers middleware (HSTS / CSP / X-Frame-Options / nosniff)
+- ✅ JWT exp claim on admin sessions (8h)
+- ✅ Patient emails hashed before reaching the LLM in master_query
+- ✅ max_length on intake free-text fields
+- ✅ CORS no longer uses wildcard methods/headers
+**Still vendor/config work (not code-fixable):**
+- Anthropic BAA must cover ANTHROPIC_API_KEY account before production
+  patient PHI runs through research_enrichment grader (slugs only, but
+  still PHI under HIPAA)
+- Resend swap is the biggest remaining gap; Resend sees full email
+  bodies including names, presenting concerns, free-text patient notes
+
+**Still code-fixable (deferred — see new items below):**
+- Audit log coverage gaps on admin patient-data reads (item NEW-3 below)
+- LLM PHI sanitizer helper (item NEW-2 below)
+
 ### 2. Universal unsubscribe flow (legally required CAN-SPAM)
 **Scope expanded 2026-05-11: applies to therapist emails too, not
 just patient emails.** Therapist surveys, weekly pulse, recruiting
@@ -69,6 +87,35 @@ match-released, password reset) are exempt under CAN-SPAM.
 ---
 
 ## 🟠 High priority
+
+### NEW-2. Centralized LLM PHI sanitizer (raised 2026-05-12 audit)
+Today, individual LLM callers (research_enrichment, gap_recruiter,
+outreach_agent, master_query) each decide what gets passed to Claude.
+master_query is hardened (hashed emails); research_enrichment is
+documented but not enforced. There's no single chokepoint that says
+"no patient names / emails / phones / exact ZIPs ever leave the
+server."
+
+**Fix:** add `llm_client._sanitize_prompt(text)` that runs every prompt
+through a regex pass that redacts email addresses, US phone numbers,
+and 5-digit ZIPs. Default-on; opt-out flag for prompts that
+legitimately need a phone (none today). ~30 min. Catches new LLM
+callers we add later.
+
+### NEW-3. Audit log coverage on admin patient-data reads (raised 2026-05-12)
+The `backend/audit.py` framework is solid but several admin endpoints
+that READ patient data don't emit. Hippocratic minimum is: every
+admin view of identifiable patient info gets logged with the admin's
+identity, the patient's hashed email, the resource, and the action.
+
+**Fix:** add `audit.emit()` to these endpoints:
+- `GET /admin/requests/{id}` (full patient brief)
+- `GET /admin/feedback-dashboard` (already audits? double-check)
+- `GET /admin/outcome-tracking`
+- `GET /admin/feedback`
+- `GET /admin/patients` (already audits, line ~1758)
+- Therapist view endpoints that include any patient identifier
+~20 min total. Add a regression test that every admin GET emits.
 
 ### NEW. Admin console UI re-org / declutter (raised 2026-05-11)
 Josh flagged the admin console has too many buttons, dropdowns, pages,
@@ -267,7 +314,15 @@ we scoped together but pushed to post-MVP.
 
 ## ✅ Done (recent)
 
-### 2026-05-12 (autonomy-mode shipping batch)
+### 2026-05-12 (HIPAA audit pass 2 + autonomy-mode shipping batch)
+- HIPAA hardening:
+  - MongoDB TLS enforced in production (deps.py refuses to start with
+    plaintext URI).
+  - CORS allow_methods / allow_headers no longer wildcards (server.py).
+  - research_enrichment grader documented for PHI flow (Anthropic BAA
+    required before prod).
+  - Untracked the empty exports/cron_runs_export.json (was gitignored
+    but still tracked from a pre-gitignore commit).
 - Admin console reorg per approved mockup -- 5 primary tabs (Inbox /
   Directory / Outcomes / Content / Operations) + dev-only Testing.
   Master Query moved to top-right modal. Test buttons consolidated

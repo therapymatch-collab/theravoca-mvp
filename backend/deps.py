@@ -19,7 +19,31 @@ load_dotenv(ROOT_DIR / ".env", override=True)
 logger = logging.getLogger("theravoca")
 
 # ─── Mongo ────────────────────────────────────────────────────────────────────
-mongo_client = AsyncIOMotorClient(os.environ["MONGO_URL"])
+# Enforce TLS in production. PHI in transit between the API and Mongo
+# Atlas must be encrypted under HIPAA's Technical Safeguards.
+# Accept either:
+#   • `mongodb+srv://...` (Atlas standard, TLS implicit)
+#   • A `mongodb://...` URI that includes `tls=true` / `ssl=true`
+# In production we refuse to start with a non-TLS URI; in dev we just
+# warn so local Mongo (mongodb://localhost) still works.
+_mongo_url = os.environ["MONGO_URL"]
+_env_for_mongo = os.environ.get("ENV", "development").lower()
+_mongo_uses_tls = (
+    _mongo_url.startswith("mongodb+srv://")
+    or "tls=true" in _mongo_url
+    or "ssl=true" in _mongo_url
+)
+if _env_for_mongo == "production" and not _mongo_uses_tls:
+    raise RuntimeError(
+        "FATAL: MONGO_URL is not TLS-encrypted. "
+        "Production requires mongodb+srv:// or a URI with tls=true. "
+        "Refusing to start so PHI doesn't traverse the network in plaintext."
+    )
+if not _mongo_uses_tls:
+    logging.getLogger("theravoca").warning(
+        "MONGO_URL has no TLS -- OK for local dev, NEVER for production."
+    )
+mongo_client = AsyncIOMotorClient(_mongo_url)
 db = mongo_client[os.environ["DB_NAME"]]
 
 

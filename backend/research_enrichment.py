@@ -522,10 +522,21 @@ async def score_apply_fit(
     prior_notes = (request.get("prior_therapy_notes") or "")[:200]
     # Patient's free-text "Anything else?" context. Was previously not
     # passed into the grader; experiment_text_impact run showed variant E
-    # only got +0.24 lift from rich patient context — because the grader
+    # only got +0.24 lift from rich patient context -- because the grader
     # never saw it. Now we feed it in so therapists are graded on whether
     # they engage the WHOLE brief, not just the slug list.
     other_issue = (request.get("other_issue") or "").strip()[:500]
+    # HIPAA NOTE (2026-05-12 audit): the prompt below sends de-identified
+    # patient clinical context to the Anthropic API:
+    #   - presenting issues (slugs only)
+    #   - style preference (slugs)
+    #   - prior therapy enum + free-text notes (200 chars)
+    #   - other_issue free-text (500 chars)
+    # No patient name, email, phone, or location is ever sent. Anthropic
+    # offers a BAA for production tier accounts -- verify ANTHROPIC_API_KEY
+    # is on a BAA-covered account before this runs against real patients.
+    # If BAA is not in place, raise the BAA gap to the BACKLOG critical
+    # list and short-circuit this grader.
 
     extra_brief = (
         f"\n- Patient also wrote (free text): \"{other_issue}\"" if other_issue else ""
