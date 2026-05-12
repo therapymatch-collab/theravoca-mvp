@@ -3915,14 +3915,25 @@ async def public_turnstile_config() -> dict[str, Any]:
     in Render take effect on the NEXT page load -- not after a full
     rebuild.
 
-    `enabled=False` when either (a) the admin has flipped the
-    runtime-disable toggle (used during AI-driven E2E testing) or
-    (b) neither `TURNSTILE_SITE_KEY` nor `REACT_APP_TURNSTILE_SITE_KEY`
-    env vars are configured.
+    `enabled=False` when any of:
+      (a) master testing mode is on (admin opted into a global bypass
+          window -- backend would silently skip token verification, so
+          we shouldn't render a widget that the user fills out for
+          nothing)
+      (b) the admin has flipped the Turnstile-specific runtime-disable
+          toggle, OR
+      (c) neither `TURNSTILE_SITE_KEY` nor `REACT_APP_TURNSTILE_SITE_KEY`
+          env vars are configured.
 
     Site keys are PUBLIC by design (Cloudflare embeds them in the
     widget URL); the secret key never leaves the server."""
     import turnstile_service
+    import testing_mode
+    if await testing_mode.is_active():
+        # Backend will skip verification entirely -- don't render a
+        # widget that misleads the user into thinking they're proving
+        # humanity when nothing is being checked.
+        return {"enabled": False, "site_key": None}
     disabled = await turnstile_service._is_disabled_by_admin()
     site_key = turnstile_service._site_key()
     return {
