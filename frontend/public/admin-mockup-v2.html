@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TheraVoca Admin - Reorg Mockup v2 (Recruiting split)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --bg: #FDFBF7;
+    --surface: #FFFFFF;
+    --primary: #2D4A3E;
+    --primary-hover: #3A5E50;
+    --secondary: #C87965;
+    --text-main: #2B2A29;
+    --text-muted: #6D6A65;
+    --border: #E8E5DF;
+    --success: #4A6B5D;
+    --error: #D45D5D;
+    --warn: #D4A843;
+  }
+  body { background: var(--bg); color: var(--text-main); font-family: ui-sans-serif, system-ui, sans-serif; }
+  .font-serif { font-family: 'Georgia', 'Cormorant Garamond', serif; }
+  .primary-tab { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; font-size: 0.95rem; font-weight: 500; color: var(--text-muted); border-bottom: 2px solid transparent; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .primary-tab:hover { color: var(--primary); }
+  .primary-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .primary-tab.new-pill { background: #FBEFE9; border-radius: 8px 8px 0 0; }
+  .sub-pill { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.95rem; border-radius: 9999px; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+  .sub-pill.active { background: var(--primary); color: white; }
+  .sub-pill.inactive { background: #F2EFE8; color: var(--text-muted); }
+  .sub-pill.inactive:hover { background: var(--border); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  .mq-btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.55rem 1.1rem; background: var(--primary); color: white; border-radius: 9999px; font-size: 0.85rem; font-weight: 500; cursor: pointer; }
+  .mq-btn:hover { background: var(--primary-hover); }
+  .section { display: none; }
+  .section.active { display: block; }
+  .design-note { background: #FBEFE9; border: 1px solid #F4DDD2; color: #8B4F3B; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 9999px; font-weight: 500; display: inline-block; }
+  .badge-active { background: #E8F0EA; color: #2D4A3E; }
+  .badge-pending { background: #FBEFE9; color: #B8742A; }
+  .badge-warn { background: #FBE9E5; color: #C8412B; }
+  .badge-new { background: #FBEFE9; color: #B8742A; font-size: 9px; padding: 1px 6px; }
+  .fold { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+  .fold-toggle { display: flex; align-items: center; justify-content: space-between; padding: 0.875rem 1.25rem; cursor: pointer; user-select: none; }
+  .fold-toggle:hover { background: #FDFBF7; }
+  .fold-body { display: none; padding: 0 1.25rem 1.25rem 1.25rem; border-top: 1px solid var(--border); }
+  .fold.open .fold-body { display: block; }
+  .fold .chevron { transition: transform 0.15s; }
+  .fold.open .chevron { transform: rotate(90deg); }
+  .row-clickable:hover { background: #FDFBF7; cursor: pointer; }
+  .expand-row { display: none; background: #FDFBF7; }
+  .expand-row.open { display: table-row; }
+  table.data { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.data th { text-align: left; font-weight: 600; padding: 10px 14px; background: #F2EFE8; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+  table.data td { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  .pill-status { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 500; }
+  .pill-status.delivered { background: #E8F0EA; color: #2D4A3E; }
+  .pill-status.opened { background: #E8EEF6; color: #2A4F73; }
+  .pill-status.replied { background: #FBEFE9; color: #B8742A; }
+  .pill-status.signed { background: #E8F0EA; color: #2D4A3E; font-weight: 600; }
+  .pill-status.pending { background: #F2EFE8; color: #6D6A65; }
+  .pill-status.bounced { background: #FBE9E5; color: #C8412B; }
+  .severity-crit { color: #D45D5D; font-weight: 600; }
+  .severity-warn { color: #C8923A; font-weight: 600; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<div class="design-note px-6 py-2.5 text-xs">
+  <span class="font-semibold">ADMIN REORG MOCKUP v2 (recruiting split)</span> &middot; click the top tabs and sub-pills to navigate &middot; click "How &hellip; works" folds to expand &middot; click table rows to expand detail
+</div>
+
+<!-- TOP BAR -->
+<header class="bg-white border-b border-[#E8E5DF]">
+  <div class="max-w-[1600px] mx-auto px-6 py-4 flex items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-full bg-[#2D4A3E] text-white flex items-center justify-center font-serif text-lg">T</div>
+      <div>
+        <div class="text-xs uppercase tracking-widest text-[#6D6A65]">Admin</div>
+        <div class="font-serif text-xl text-[#2D4A3E] leading-tight">TheraVoca Console</div>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <button class="mq-btn">&#x2728; Master Query</button>
+      <button class="text-sm text-[#6D6A65] hover:text-[#2D4A3E]">Sign out</button>
+    </div>
+  </div>
+
+  <!-- PRIMARY NAV -->
+  <nav class="max-w-[1600px] mx-auto px-6 flex items-center gap-1 overflow-x-auto">
+    <div class="primary-tab" data-tab="inbox" onclick="setTab('inbox')">
+      &#x1F4E5; Inbox <span class="badge badge-warn">5</span>
+    </div>
+    <div class="primary-tab" data-tab="directory" onclick="setTab('directory')">
+      &#x1F465; Directory
+    </div>
+    <div class="primary-tab active new-pill" data-tab="recruiting" onclick="setTab('recruiting')">
+      &#x1F4E1; Recruiting <span class="badge badge-new">NEW PRIMARY</span>
+    </div>
+    <div class="primary-tab" data-tab="outcomes" onclick="setTab('outcomes')">
+      &#x1F4CA; Outcomes
+    </div>
+    <div class="primary-tab" data-tab="content" onclick="setTab('content')">
+      &#x270F;&#xFE0F; Content
+    </div>
+    <div class="primary-tab" data-tab="operations" onclick="setTab('operations')">
+      &#x2699;&#xFE0F; Operations
+    </div>
+    <div class="primary-tab ml-auto text-[#9C7A2C]" data-tab="testing" onclick="setTab('testing')">
+      &#x2728; Testing <span class="badge badge-pending">DEV</span>
+    </div>
+  </nav>
+</header>
+
+<main class="max-w-[1600px] mx-auto px-6 py-8 space-y-6">
+
+  <!-- ========================== INBOX ========================== -->
+  <section class="section" data-section="inbox">
+    <div class="flex items-center gap-2 mb-6">
+      <div class="sub-pill active">Active requests <span class="badge badge-warn">5</span></div>
+      <div class="sub-pill inactive">Pending therapists</div>
+      <div class="sub-pill inactive">Profile completion</div>
+    </div>
+    <div class="card p-8 text-[#6D6A65]">
+      [Unchanged from current Inbox &rarr; Active requests view.]
+    </div>
+  </section>
+
+  <!-- ========================== DIRECTORY ========================== -->
+  <section class="section" data-section="directory">
+    <div class="flex items-center gap-2 mb-6 flex-wrap">
+      <div class="sub-pill inactive" onclick="setSubInPrimary('directory','all_providers')">All providers <span class="badge badge-active">122</span></div>
+      <div class="sub-pill inactive" onclick="setSubInPrimary('directory','patients')">Patients (by email)</div>
+      <div class="sub-pill active" onclick="setSubInPrimary('directory','coverage_gaps')">Coverage gaps <span class="badge badge-warn">4</span></div>
+      <div class="sub-pill inactive" onclick="setSubInPrimary('directory','opt_outs')">Opt-outs</div>
+    </div>
+
+    <!-- Coverage gaps (trimmed -- analytical only, no outreach data) -->
+    <div data-sub="directory.coverage_gaps">
+      <div class="card p-6">
+        <div class="flex items-start justify-between gap-4 flex-wrap mb-4">
+          <div>
+            <div class="text-xs uppercase tracking-widest text-[#6D6A65]">Directory</div>
+            <h2 class="font-serif text-2xl text-[#2D4A3E] leading-tight">Coverage gaps</h2>
+            <p class="text-sm text-[#6D6A65] mt-2 max-w-2xl">
+              Where your directory is thin relative to demand. <strong>Analytical view only</strong> &mdash; for what you're actively doing about each gap, see <a class="underline text-[#2D4A3E]" onclick="setTab('recruiting');setSubInPrimary('recruiting','gap_fill')">Recruiting &rarr; General gap-fill</a>.
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="badge badge-warn">2 critical</span>
+            <span class="badge badge-pending">2 warning</span>
+          </div>
+        </div>
+
+        <table class="data">
+          <thead><tr><th>Dimension</th><th>Gap</th><th>Active providers</th><th>Demand signal</th><th>Severity</th></tr></thead>
+          <tbody>
+            <tr><td>Specialty</td><td>Eating disorders</td><td>1</td><td>8 unmatched requests / 30d</td><td class="severity-crit">CRITICAL</td></tr>
+            <tr><td>Specialty</td><td>School/teen specialty</td><td>2</td><td>5 unmatched requests / 30d</td><td class="severity-crit">CRITICAL</td></tr>
+            <tr><td>Format</td><td>Group therapy</td><td>3</td><td>3 unmatched requests / 30d</td><td class="severity-warn">WARNING</td></tr>
+            <tr><td>Format</td><td>Family therapy</td><td>4</td><td>2 unmatched requests / 30d</td><td class="severity-warn">WARNING</td></tr>
+          </tbody>
+        </table>
+
+        <div class="mt-4 text-xs text-[#6D6A65]">
+          Each row drives a corresponding "gap target" on Recruiting &rarr; General gap-fill. Click a row there to see daily outreach + per-therapist outcomes.
+        </div>
+      </div>
+    </div>
+
+    <div data-sub="directory.all_providers" style="display:none">
+      <div class="card p-8 text-[#6D6A65]">[Unchanged from current All providers view &mdash; click "Coverage gaps" to see the trimmed analytical panel.]</div>
+    </div>
+    <div data-sub="directory.patients" style="display:none">
+      <div class="card p-8 text-[#6D6A65]">[Unchanged from current Patients view.]</div>
+    </div>
+    <div data-sub="directory.opt_outs" style="display:none">
+      <div class="card p-8 text-[#6D6A65]">[Unchanged from current Opt-outs view.]</div>
+    </div>
+  </section>
+
+  <!-- ========================== RECRUITING (NEW PRIMARY) ========================== -->
+  <section class="section active" data-section="recruiting">
+    <div class="flex items-center gap-2 mb-6 flex-wrap">
+      <div class="sub-pill active" onclick="setSubInPrimary('recruiting','per_request')">Per request <span class="badge badge-active">Track A</span></div>
+      <div class="sub-pill inactive" onclick="setSubInPrimary('recruiting','gap_fill')">General gap-fill <span class="badge badge-pending">Track B &middot; dry-run</span></div>
+      <div class="sub-pill inactive" onclick="setSubInPrimary('recruiting','all_outreach')">All outreach (firehose)</div>
+      <div class="sub-pill inactive" onclick="setSubInPrimary('recruiting','how_it_works')">How recruiting works</div>
+    </div>
+
+    <!-- ===== PER REQUEST ===== -->
+    <div data-sub="recruiting.per_request">
+      <div class="card p-6 mb-4">
+        <div class="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div class="text-xs uppercase tracking-widest text-[#6D6A65]">Recruiting &middot; Track A</div>
+            <h2 class="font-serif text-2xl text-[#2D4A3E] leading-tight">Per-request outreach</h2>
+            <p class="text-sm text-[#6D6A65] mt-2 max-w-2xl">
+              Auto-fires when an incoming patient request gets fewer than the target number of matches. Outreach is scoped to that specific request.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- collapsible explainer -->
+      <div class="fold mb-4" id="fold-track-a">
+        <div class="fold-toggle" onclick="toggleFold('fold-track-a')">
+          <div class="flex items-center gap-2">
+            <span class="chevron text-[#6D6A65]">&#x25B6;</span>
+            <span class="font-medium text-[#2D4A3E]">How Track A works</span>
+          </div>
+          <span class="text-xs text-[#6D6A65]">click to expand</span>
+        </div>
+        <div class="fold-body text-sm text-[#6D6A65] leading-relaxed pt-3">
+          When a patient submits intake and the matcher returns fewer than <code>min_results</code> therapists above the threshold, a recruiting run fires for that request. Sources cascade: Google Places &rarr; Psychology Today &rarr; admin-registered directories &rarr; backup HTML scrapers. Email enricher pulls real contacts off the therapist's website. Email-ready candidates get a templated invite that mentions the patient's specific brief; SMS-ready get the SMS fallback. The run keeps state on the request itself, so a later patient with the same need won't re-poke the same therapists for 14 days.
+        </div>
+      </div>
+
+      <div class="card overflow-hidden">
+        <div class="px-5 py-4 border-b border-[#E8E5DF] flex items-center justify-between">
+          <div class="font-serif text-lg text-[#2D4A3E]">Active recruiting runs</div>
+          <div class="text-xs text-[#6D6A65]">last 30 days &middot; click row to expand</div>
+        </div>
+        <table class="data">
+          <thead>
+            <tr>
+              <th>Req #</th><th>Patient</th><th>Need</th>
+              <th class="text-right">Invited</th><th class="text-right">Opens</th><th class="text-right">Replies</th><th class="text-right">Signed</th>
+              <th>Last activity</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="row-clickable" onclick="toggleExpand('exp-r42')">
+              <td><strong>R-42</strong></td><td>jane@example.com</td><td>Eating disorders, Boise</td>
+              <td class="text-right">12</td><td class="text-right">4</td><td class="text-right">1</td><td class="text-right">0</td>
+              <td class="text-xs text-[#6D6A65]">2h ago</td>
+            </tr>
+            <tr class="expand-row" id="exp-r42">
+              <td colspan="8" style="padding: 0;">
+                <div class="px-6 py-4">
+                  <div class="text-xs uppercase tracking-wider text-[#6D6A65] mb-2">Invited therapists for R-42</div>
+                  <table class="data">
+                    <thead><tr><th>Therapist</th><th>Source</th><th>Channel</th><th>Date invited</th><th>Status</th></tr></thead>
+                    <tbody>
+                      <tr><td>Sarah Liu, LCSW</td><td>Psychology Today</td><td>Email</td><td>2026-05-12 09:14</td><td><span class="pill-status signed">SIGNED UP</span></td></tr>
+                      <tr><td>Mark Davis, PsyD</td><td>Google Places</td><td>Email</td><td>2026-05-12 09:14</td><td><span class="pill-status replied">REPLIED</span></td></tr>
+                      <tr><td>Olivia Park, LMFT</td><td>TherapyDen</td><td>Email</td><td>2026-05-12 09:14</td><td><span class="pill-status opened">OPENED</span></td></tr>
+                      <tr><td>James Cole, LPC</td><td>GoodTherapy</td><td>Email</td><td>2026-05-12 09:14</td><td><span class="pill-status delivered">DELIVERED</span></td></tr>
+                      <tr><td>Anna Bryce, LCSW</td><td>Google Places</td><td>SMS</td><td>2026-05-12 09:15</td><td><span class="pill-status delivered">DELIVERED</span></td></tr>
+                      <tr><td>+ 7 more</td><td colspan="4" class="text-[#6D6A65] italic">scroll &hellip;</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </td>
+            </tr>
+
+            <tr class="row-clickable" onclick="toggleExpand('exp-r41')">
+              <td><strong>R-41</strong></td><td>john@example.com</td><td>Couples, Meridian</td>
+              <td class="text-right">8</td><td class="text-right">3</td><td class="text-right">0</td><td class="text-right">0</td>
+              <td class="text-xs text-[#6D6A65]">5h ago</td>
+            </tr>
+            <tr class="expand-row" id="exp-r41">
+              <td colspan="8" style="padding: 0;">
+                <div class="px-6 py-4 text-sm text-[#6D6A65] italic">[per-therapist breakdown for R-41]</div>
+              </td>
+            </tr>
+
+            <tr class="row-clickable" onclick="toggleExpand('exp-r40')">
+              <td><strong>R-40</strong></td><td>sam@example.com</td><td>Trauma, Caldwell</td>
+              <td class="text-right">15</td><td class="text-right">7</td><td class="text-right">2</td><td class="text-right">1</td>
+              <td class="text-xs text-[#6D6A65]">1d ago</td>
+            </tr>
+            <tr class="expand-row" id="exp-r40">
+              <td colspan="8" style="padding: 0;">
+                <div class="px-6 py-4 text-sm text-[#6D6A65] italic">[per-therapist breakdown for R-40]</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== GENERAL GAP-FILL ===== -->
+    <div data-sub="recruiting.gap_fill" style="display:none">
+      <div class="card p-6 mb-4">
+        <div class="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div class="text-xs uppercase tracking-widest text-[#6D6A65]">Recruiting &middot; Track B</div>
+            <h2 class="font-serif text-2xl text-[#2D4A3E] leading-tight">General gap-fill</h2>
+            <p class="text-sm text-[#6D6A65] mt-2 max-w-2xl">
+              Proactive outreach driven by the Coverage gaps report. Currently <strong>dry-run</strong> &mdash; creates drafts only, sends nothing.
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="mq-btn">Run now</button>
+            <button class="px-3 py-2 rounded-full bg-[#FBEFE9] text-[#B8742A] text-sm font-medium border border-[#F4DDD2]">Flip to live &rarr;</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="fold mb-4" id="fold-track-b">
+        <div class="fold-toggle" onclick="toggleFold('fold-track-b')">
+          <div class="flex items-center gap-2">
+            <span class="chevron text-[#6D6A65]">&#x25B6;</span>
+            <span class="font-medium text-[#2D4A3E]">How Track B works</span>
+          </div>
+          <span class="text-xs text-[#6D6A65]">click to expand</span>
+        </div>
+        <div class="fold-body text-sm text-[#6D6A65] leading-relaxed pt-3">
+          A nightly cron reads the Coverage gaps report. For each critical/warning gap, it builds a target list of therapists with that specialty in cities where you have demand, runs the same enricher pipeline as Track A, and produces draft invites. While dry-run is on, drafts pile up in this view but no email goes out. "Flip to live" sets <code>dry_run=False</code> in the database (no code deploy needed) and the next nightly run will send.
+        </div>
+      </div>
+
+      <div class="card overflow-hidden mb-4">
+        <div class="px-5 py-4 border-b border-[#E8E5DF] flex items-center justify-between">
+          <div class="font-serif text-lg text-[#2D4A3E]">Outreach by gap</div>
+          <div class="text-xs text-[#6D6A65]">last 30 days &middot; click row for daily detail</div>
+        </div>
+        <table class="data">
+          <thead><tr><th>Gap</th><th>Severity</th><th class="text-right">Drafts</th><th class="text-right">Sent</th><th class="text-right">Opens</th><th class="text-right">Replies</th><th class="text-right">Signed</th></tr></thead>
+          <tbody>
+            <tr class="row-clickable" onclick="toggleExpand('exp-gap-ed')">
+              <td><strong>Eating disorders</strong></td><td><span class="severity-crit">CRITICAL</span></td>
+              <td class="text-right">24</td><td class="text-right">0</td><td class="text-right">&mdash;</td><td class="text-right">&mdash;</td><td class="text-right">&mdash;</td>
+            </tr>
+            <tr class="expand-row" id="exp-gap-ed">
+              <td colspan="7" style="padding: 0;">
+                <div class="px-6 py-4">
+                  <div class="text-xs uppercase tracking-wider text-[#6D6A65] mb-2">Daily breakdown &mdash; Eating disorders</div>
+                  <table class="data">
+                    <thead><tr><th>Date</th><th class="text-right">Drafts</th><th class="text-right">Sent</th><th class="text-right">Opens</th><th class="text-right">Signed</th></tr></thead>
+                    <tbody>
+                      <tr><td>2026-05-12</td><td class="text-right">8</td><td class="text-right">0</td><td class="text-right">&mdash;</td><td class="text-right">&mdash;</td></tr>
+                      <tr><td>2026-05-11</td><td class="text-right">9</td><td class="text-right">0</td><td class="text-right">&mdash;</td><td class="text-right">&mdash;</td></tr>
+                      <tr><td>2026-05-10</td><td class="text-right">7</td><td class="text-right">0</td><td class="text-right">&mdash;</td><td class="text-right">&mdash;</td></tr>
+                    </tbody>
+                  </table>
+                  <div class="mt-3 text-xs text-[#6D6A65] italic">Once Track B flips live, "Sent" replaces "Drafts" and the per-therapist list expands below this table.</div>
+                </div>
+              </td>
+            </tr>
+            <tr class="row-clickable" onclick="toggleExpand('exp-gap-school')">
+              <td><strong>School/teen specialty</strong></td><td><span class="severity-crit">CRITICAL</span></td>
+              <td class="text-right">18</td><td class="text-right">0</td><td class="text-right">&mdash;</td><td class="text-right">&mdash;</td><td class="text-right">&mdash;</td>
+            </tr>
+            <tr class="expand-row" id="exp-gap-school">
+              <td colspan="7" style="padding: 0;">
+                <div class="px-6 py-4 text-sm text-[#6D6A65] italic">[daily breakdown for School/teen]</div>
+              </td>
+            </tr>
+            <tr class="row-clickable" onclick="toggleExpand('exp-gap-group')">
+              <td><strong>Group therapy</strong></td><td><span class="severity-warn">WARNING</span></td>
+              <td class="text-right">9</td><td class="text-right">0</td><td class="text-right">&mdash;</td><td class="text-right">&mdash;</td><td class="text-right">&mdash;</td>
+            </tr>
+            <tr class="expand-row" id="exp-gap-group"><td colspan="7"></td></tr>
+            <tr class="row-clickable" onclick="toggleExpand('exp-gap-family')">
+              <td><strong>Family therapy</strong></td><td><span class="severity-warn">WARNING</span></td>
+              <td class="text-right">7</td><td class="text-right">0</td><td class="text-right">&mdash;</td><td class="text-right">&mdash;</td><td class="text-right">&mdash;</td>
+            </tr>
+            <tr class="expand-row" id="exp-gap-family"><td colspan="7"></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card overflow-hidden">
+        <div class="px-5 py-4 border-b border-[#E8E5DF] flex items-center justify-between">
+          <div class="font-serif text-lg text-[#2D4A3E]">Daily send log</div>
+          <div class="text-xs text-[#6D6A65]">flat list across all gaps</div>
+        </div>
+        <table class="data">
+          <thead><tr><th>Date</th><th>Gap</th><th>Therapist</th><th>City</th><th>Channel</th><th>Outcome</th></tr></thead>
+          <tbody>
+            <tr><td>2026-05-12 09:14</td><td>Eating disorders</td><td>Sarah Liu, LCSW</td><td>Boise</td><td>Email</td><td><span class="pill-status pending">DRAFT (dry-run)</span></td></tr>
+            <tr><td>2026-05-12 09:14</td><td>Eating disorders</td><td>Mark Davis, PsyD</td><td>Boise</td><td>Email</td><td><span class="pill-status pending">DRAFT (dry-run)</span></td></tr>
+            <tr><td>2026-05-12 09:14</td><td>School/teen</td><td>Olivia Park, LMFT</td><td>Meridian</td><td>Email</td><td><span class="pill-status pending">DRAFT (dry-run)</span></td></tr>
+            <tr><td>2026-05-12 09:15</td><td>Group therapy</td><td>James Cole, LPC</td><td>Caldwell</td><td>Email</td><td><span class="pill-status pending">DRAFT (dry-run)</span></td></tr>
+            <tr><td colspan="6" class="text-[#6D6A65] italic text-center">&hellip; 50+ more</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== ALL OUTREACH (firehose) ===== -->
+    <div data-sub="recruiting.all_outreach" style="display:none">
+      <div class="card p-6 mb-4">
+        <div class="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div class="text-xs uppercase tracking-widest text-[#6D6A65]">Recruiting</div>
+            <h2 class="font-serif text-2xl text-[#2D4A3E] leading-tight">All outreach (firehose)</h2>
+            <p class="text-sm text-[#6D6A65] mt-2 max-w-2xl">
+              Every send across both tracks, sortable. Useful when you don't know which track an invite came from. (This is the old "Invited therapists" tab, moved here.)
+            </p>
+          </div>
+          <input class="border border-[#E8E5DF] rounded-lg px-3 py-2 text-sm" placeholder="Search by therapist, email, request &hellip;" />
+        </div>
+      </div>
+      <div class="card overflow-hidden">
+        <table class="data">
+          <thead><tr><th>Therapist</th><th>Email</th><th>Track</th><th>Linked to</th><th>Channel</th><th>Sent</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Sarah Liu, LCSW</td><td>sarah@&hellip;</td><td><span class="badge badge-active">A</span></td><td>R-42</td><td>Email</td><td>2026-05-12 09:14</td><td><span class="pill-status signed">SIGNED UP</span></td></tr>
+            <tr><td>Mark Davis, PsyD</td><td>mark@&hellip;</td><td><span class="badge badge-active">A</span></td><td>R-42</td><td>Email</td><td>2026-05-12 09:14</td><td><span class="pill-status replied">REPLIED</span></td></tr>
+            <tr><td>Olivia Park, LMFT</td><td>olivia@&hellip;</td><td><span class="badge badge-pending">B</span></td><td>Gap: School/teen</td><td>Email</td><td>2026-05-12 09:14</td><td><span class="pill-status pending">DRAFT (dry-run)</span></td></tr>
+            <tr><td>James Cole, LPC</td><td>james@&hellip;</td><td><span class="badge badge-active">A</span></td><td>R-41</td><td>Email</td><td>2026-05-12 04:00</td><td><span class="pill-status delivered">DELIVERED</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== HOW IT WORKS (the old explainer, now folded into a single tab) ===== -->
+    <div data-sub="recruiting.how_it_works" style="display:none">
+      <div class="card p-6 mb-4">
+        <h2 class="font-serif text-2xl text-[#2D4A3E] leading-tight">How recruiting works</h2>
+        <p class="text-sm text-[#6D6A65] mt-2">
+          The two-track explainer + system config + live test panel that today crowds the top of the Recruiting tab. Lives here so the operational tabs above stay clean.
+        </p>
+      </div>
+
+      <div class="fold open mb-3" id="fold-tracks">
+        <div class="fold-toggle" onclick="toggleFold('fold-tracks')">
+          <div class="flex items-center gap-2"><span class="chevron text-[#6D6A65]">&#x25B6;</span><span class="font-medium text-[#2D4A3E]">Two tracks at a glance</span></div>
+        </div>
+        <div class="fold-body text-sm text-[#6D6A65] leading-relaxed pt-3">
+          <strong>Track A (per-request)</strong> fires when a patient request can't be filled. <strong>Track B (general gap-fill)</strong> proactively fills coverage gaps from the Coverage gaps report. Both share the same enricher and templates; they differ in trigger.
+        </div>
+      </div>
+
+      <div class="fold mb-3" id="fold-config">
+        <div class="fold-toggle" onclick="toggleFold('fold-config')">
+          <div class="flex items-center gap-2"><span class="chevron text-[#6D6A65]">&#x25B6;</span><span class="font-medium text-[#2D4A3E]">System config &mdash; what's live, what needs setup</span></div>
+        </div>
+        <div class="fold-body pt-3">
+          <div class="text-sm text-[#6D6A65] italic">[the existing 8 config rows: Track A live / PT discovery live / Contact enricher live / Google Places needs-setup / Twilio SMS needs-setup / Track B needs-setup / Refer-a-colleague needs-setup / Re-engagement not built]</div>
+          <div class="mt-2 text-xs text-[#6D6A65]">Note: today these badges are hardcoded. Separate ticket: wire them to live env checks.</div>
+        </div>
+      </div>
+
+      <div class="fold mb-3" id="fold-test">
+        <div class="fold-toggle" onclick="toggleFold('fold-test')">
+          <div class="flex items-center gap-2"><span class="chevron text-[#6D6A65]">&#x25B6;</span><span class="font-medium text-[#2D4A3E]">Live test &mdash; run the pipeline against a real city</span></div>
+        </div>
+        <div class="fold-body pt-3">
+          <div class="text-sm text-[#6D6A65] italic">[the existing scraper test panel + Places + Twilio diagnostics]</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================== OUTCOMES ========================== -->
+  <section class="section" data-section="outcomes">
+    <div class="card p-8 text-[#6D6A65]">[Unchanged from current Outcomes view.]</div>
+  </section>
+
+  <!-- ========================== CONTENT ========================== -->
+  <section class="section" data-section="content">
+    <div class="flex items-center gap-2 mb-6 flex-wrap">
+      <div class="sub-pill active">Blog</div>
+      <div class="sub-pill inactive">FAQs</div>
+      <div class="sub-pill inactive">Site copy</div>
+      <div class="sub-pill inactive">How it works</div>
+      <div class="sub-pill inactive">Email templates</div>
+    </div>
+    <div class="card p-8 text-[#6D6A65]">[Unchanged from current Content view.]</div>
+  </section>
+
+  <!-- ========================== OPERATIONS ========================== -->
+  <section class="section" data-section="operations">
+    <div class="flex items-center gap-2 mb-6 flex-wrap">
+      <div class="sub-pill inactive" onclick="setSubInPrimary('operations','team')">Team</div>
+      <div class="sub-pill inactive" onclick="setSubInPrimary('operations','settings')">Settings</div>
+      <div class="sub-pill active" onclick="setSubInPrimary('operations','matching')">Matching</div>
+      <div class="sub-pill inactive" onclick="setSubInPrimary('operations','referrals')">Referrals</div>
+      <div class="sub-pill inactive" onclick="setSubInPrimary('operations','referral_sources')">Referral sources</div>
+      <div class="sub-pill inactive" onclick="setSubInPrimary('operations','waitlist')">Waitlist</div>
+      <div class="sub-pill inactive" onclick="setSubInPrimary('operations','audit_log')">Audit log</div>
+      <div class="sub-pill inactive" onclick="setSubInPrimary('operations','scrape_sources')">Scrape sources</div>
+    </div>
+
+    <!-- Matching pipeline with folds -->
+    <div data-sub="operations.matching">
+      <div class="card p-6 mb-4">
+        <div class="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div class="text-xs uppercase tracking-widest text-[#6D6A65]">Operations</div>
+            <h2 class="font-serif text-2xl text-[#2D4A3E] leading-tight">Matching pipeline</h2>
+            <p class="text-sm text-[#6D6A65] mt-2">
+              <strong>Default threshold: 80%</strong> &middot; Cap: 97 &middot; Top-N sent as matches
+              <span class="badge badge-pending ml-2">changed from 70%</span>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="fold mb-3" id="fold-how-matching">
+        <div class="fold-toggle" onclick="toggleFold('fold-how-matching')">
+          <div class="flex items-center gap-2"><span class="chevron text-[#6D6A65]">&#x25B6;</span><span class="font-medium text-[#2D4A3E]">How matching works</span></div>
+          <span class="text-xs text-[#6D6A65]">click to expand</span>
+        </div>
+        <div class="fold-body text-sm text-[#6D6A65] leading-relaxed pt-3">
+          Patient request flows through hard filters first (must pass all to be considered), then each remaining therapist gets a weighted score across multiple soft axes, plus bonuses for deeper signals. The final score is mapped to a 0-97 display range; above the patient's threshold (default 80%) we send the top N as matches. Cap of 97 leaves headroom for future weight tuning without re-norming.
+        </div>
+      </div>
+
+      <div class="card p-5 mb-3">
+        <div class="font-medium text-[#2D4A3E] mb-3">Step 1 &mdash; Hard filters <span class="text-xs text-[#6D6A65] font-normal">always visible</span></div>
+        <ul class="text-sm space-y-2">
+          <li class="flex items-start gap-2"><span class="text-[#D45D5D]">&#x2715;</span><div><div>State license</div><div class="text-xs text-[#6D6A65]">Blocks when: therapist not licensed in patient's state</div></div></li>
+          <li class="flex items-start gap-2"><span class="text-[#D45D5D]">&#x2715;</span><div><div>Client type</div><div class="text-xs text-[#6D6A65]">Blocks when: therapist doesn't see this client type</div></div></li>
+          <li class="flex items-start gap-2"><span class="text-[#D45D5D]">&#x2715;</span><div><div>Age group</div><div class="text-xs text-[#6D6A65]">Blocks when: therapist doesn't see this age group</div></div></li>
+          <li class="flex items-start gap-2"><span class="text-[#D45D5D]">&#x2715;</span><div><div>Primary concern</div><div class="text-xs text-[#6D6A65]">Blocks when: therapist's primary + secondary specialties don't cover the patient's #1 presenting issue</div></div></li>
+        </ul>
+      </div>
+
+      <div class="fold mb-3" id="fold-step2">
+        <div class="fold-toggle" onclick="toggleFold('fold-step2')">
+          <div class="flex items-center gap-2"><span class="chevron text-[#6D6A65]">&#x25B6;</span><span class="font-medium text-[#2D4A3E]">Step 2 &mdash; Soft scoring axes</span></div>
+          <span class="text-xs text-[#6D6A65]">click to expand</span>
+        </div>
+        <div class="fold-body text-sm text-[#6D6A65] leading-relaxed pt-3">[the weight breakdown table currently always-visible &mdash; specialty alignment, expectation alignment, payment alignment, modality, etc.]</div>
+      </div>
+
+      <div class="fold mb-3" id="fold-step3">
+        <div class="fold-toggle" onclick="toggleFold('fold-step3')">
+          <div class="flex items-center gap-2"><span class="chevron text-[#6D6A65]">&#x25B6;</span><span class="font-medium text-[#2D4A3E]">Step 3 &mdash; Bonuses</span></div>
+          <span class="text-xs text-[#6D6A65]">click to expand</span>
+        </div>
+        <div class="fold-body text-sm text-[#6D6A65] leading-relaxed pt-3">[bonus list: faith match, language match, in-person preference, etc.]</div>
+      </div>
+
+      <div class="card p-5">
+        <div class="font-medium text-[#2D4A3E] mb-2">Live config <span class="text-xs text-[#6D6A65] font-normal">always visible</span></div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div><div class="text-xs uppercase tracking-wider text-[#6D6A65]">Threshold</div><div class="font-semibold">80%</div></div>
+          <div><div class="text-xs uppercase tracking-wider text-[#6D6A65]">Top-N</div><div class="font-semibold">5</div></div>
+          <div><div class="text-xs uppercase tracking-wider text-[#6D6A65]">Min results</div><div class="font-semibold">3</div></div>
+          <div><div class="text-xs uppercase tracking-wider text-[#6D6A65]">Auto-outreach</div><div class="font-semibold text-[#2D4A3E]">ON</div></div>
+        </div>
+        <button class="mt-4 px-3 py-1.5 text-sm border border-[#E8E5DF] rounded-md hover:bg-[#FDFBF7]">Edit config</button>
+      </div>
+    </div>
+
+    <div data-sub="operations.team" style="display:none"><div class="card p-8 text-[#6D6A65]">[Unchanged.]</div></div>
+    <div data-sub="operations.settings" style="display:none"><div class="card p-8 text-[#6D6A65]">[Unchanged.]</div></div>
+    <div data-sub="operations.referrals" style="display:none"><div class="card p-8 text-[#6D6A65]">[Unchanged.]</div></div>
+    <div data-sub="operations.referral_sources" style="display:none"><div class="card p-8 text-[#6D6A65]">[Unchanged.]</div></div>
+    <div data-sub="operations.waitlist" style="display:none"><div class="card p-8 text-[#6D6A65]">[Unchanged.]</div></div>
+    <div data-sub="operations.audit_log" style="display:none"><div class="card p-8 text-[#6D6A65]">[Unchanged.]</div></div>
+    <div data-sub="operations.scrape_sources" style="display:none"><div class="card p-8 text-[#6D6A65]">[Unchanged.]</div></div>
+  </section>
+
+  <!-- ========================== TESTING ========================== -->
+  <section class="section" data-section="testing">
+    <div class="card p-8 text-[#6D6A65]">[Unchanged from current Testing view.]</div>
+  </section>
+
+</main>
+
+<footer class="max-w-[1600px] mx-auto px-6 py-10 text-xs text-[#6D6A65] border-t border-[#E8E5DF] mt-12">
+  Mockup v2 &middot; static preview &middot; reorg lands in stages: (a) folds + 80% threshold, (b) tab restructure + Coverage gaps trim, (c) Per-request page, (d) General gap-fill page.
+</footer>
+
+<script>
+  function setTab(name) {
+    document.querySelectorAll('.primary-tab').forEach(el => el.classList.toggle('active', el.dataset.tab === name));
+    document.querySelectorAll('.section').forEach(el => el.classList.toggle('active', el.dataset.section === name));
+  }
+  function setSubInPrimary(primary, sub) {
+    const root = document.querySelector('[data-section="' + primary + '"]');
+    if (!root) return;
+    root.querySelectorAll('.sub-pill').forEach(el => el.classList.remove('active'));
+    root.querySelectorAll('.sub-pill').forEach(el => {
+      if (el.getAttribute('onclick') && el.getAttribute('onclick').includes("'" + sub + "'")) {
+        el.classList.add('active'); el.classList.remove('inactive');
+      } else {
+        el.classList.add('inactive'); el.classList.remove('active');
+      }
+    });
+    root.querySelectorAll('[data-sub]').forEach(el => {
+      el.style.display = el.dataset.sub === (primary + '.' + sub) ? '' : 'none';
+    });
+  }
+  function toggleFold(id) {
+    document.getElementById(id).classList.toggle('open');
+  }
+  function toggleExpand(id) {
+    document.getElementById(id).classList.toggle('open');
+  }
+</script>
+</body>
+</html>
