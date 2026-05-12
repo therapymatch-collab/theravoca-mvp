@@ -122,6 +122,60 @@ export default function MatchingPipelinePanel({ client }) {
           </p>
         </div>
       </Section>
+
+      {/* Step 5: patient-view ranking (post-apply) */}
+      {data.patient_view_ranking && (
+        <Section
+          icon={<TrendingUp size={18} className="text-[#C87965]" />}
+          title={`Step 5 — Patient view ranking (post-apply, max ${(data.patient_view_ranking.components || []).reduce((s, c) => s + (c.max_points || 0), 0)} raw)`}
+          subtitle={data.patient_view_ranking.description}
+          accent="#FBEFE9"
+        >
+          <WeightTable
+            rows={data.patient_view_ranking.components || []}
+            totalMax={(data.patient_view_ranking.components || []).reduce((s, c) => s + (c.max_points || 0), 0)}
+          />
+        </Section>
+      )}
+
+      {/* Deep research status */}
+      {data.deep_research && (
+        <Section
+          icon={<Sparkles size={18} className="text-[#2D4A3E]" />}
+          title="LLM deep research"
+          subtitle={data.deep_research.auto_on_signup_description}
+          accent="#EAF2E8"
+        >
+          <div className="space-y-2 text-sm">
+            <Row
+              label="Enabled"
+              value={data.deep_research.enabled ? "Yes" : "No -- toggle in Settings > LLM web-research enrichment"}
+            />
+            <Row
+              label="Auto-runs on therapist signup"
+              value={data.deep_research.auto_on_signup ? "Yes" : "No"}
+            />
+            <Row
+              label="Fresh cache (last 30 days)"
+              value={`${data.deep_research.fresh_cached_count} / ${data.deep_research.active_therapists} active therapists (${data.deep_research.coverage_pct}%)`}
+            />
+            <div className="mt-3 text-xs text-[#6D6A65] leading-relaxed">
+              <div className="font-medium text-[#2B2A29] mb-1">What deep research feeds into:</div>
+              <ul className="list-disc list-inside space-y-1">
+                {(data.deep_research.feeds_into || []).map((f, i) => (
+                  <li key={i}>{f}</li>
+                ))}
+              </ul>
+            </div>
+            <p className="text-xs text-[#6D6A65] italic mt-3 leading-relaxed">
+              The "Deep research" button on the All Providers panel re-runs
+              research on an existing therapist (useful after they update
+              their website). New signups already get it automatically in
+              the background -- no admin action required.
+            </p>
+          </div>
+        </Section>
+      )}
     </div>
   );
 }

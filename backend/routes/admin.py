@@ -4026,6 +4026,29 @@ async def admin_matching_pipeline() -> dict[str, Any]:
     ) or {}
     _threshold_pct = int(round(float(_mcfg.get("threshold") or DEFAULT_THRESHOLD)))
     _max_invites = int(_mcfg.get("max_invites") or 30)
+
+    # Deep-research stats so the panel can confirm it's actually running.
+    _re_cfg = await db.app_config.find_one(
+        {"key": "research_enrichment"}, {"_id": 0, "enabled": 1},
+    )
+    _re_enabled = bool((_re_cfg or {}).get("enabled", True))  # default on
+    _re_fresh_count = 0
+    _re_active_count = 0
+    try:
+        from datetime import datetime, timedelta, timezone as _tz
+        _re_active_count = await db.therapists.count_documents(
+            {"is_active": {"$ne": False}, "pending_approval": {"$ne": True}},
+        )
+        _fresh_cutoff = (
+            datetime.now(_tz.utc) - timedelta(days=30)
+        ).isoformat()
+        _re_fresh_count = await db.therapists.count_documents({
+            "is_active": {"$ne": False},
+            "pending_approval": {"$ne": True},
+            "research_enrichment.cached_at": {"$gte": _fresh_cutoff},
+        })
+    except Exception as e:
+        logger.warning("matching pipeline: deep-research stats failed: %s", e)
     return {
         "summary": (
             "Patient request flows through hard filters first (must pass "
@@ -4095,6 +4118,51 @@ async def admin_matching_pipeline() -> dict[str, Any]:
         "delivery": {
             "max_invites_default": _max_invites,
             "description": "Top N therapists above the patient's threshold get notified via email + SMS. Configurable per environment in app_config.matching_defaults.",
+        },
+        "patient_view_ranking": {
+            "description": (
+                "After matched therapists apply, the patient's results page "
+                "re-ranks them using a second formula -- not just the Step 1 "
+                "match score. This is what determines the ORDER patients see "
+                "their matches in. Max raw 118 -> rescaled 0-99."
+            ),
+            "components": [
+                {"name": "Step-1 baseline", "max_points": 57,
+                 "description": "The Step-1 match score scaled down to 60% so apply-time signals can meaningfully shift order. Capped at 95% to avoid 'perfect on paper' impressions."},
+                {"name": "Speed bonus", "max_points": 30,
+                 "description": "Faster reply earns more points. Linear: full 30 if the therapist applies within the first hour after match release; 0 by 24h."},
+                {"name": "Apply-message fit", "max_points": 10,
+                 "description": "Claude grades the therapist's apply message 0-5 against the patient brief (presenting issues + style + prior therapy + free-text), then doubled. THE strongest patient-facing signal of a thoughtful response. Lives in research_enrichment.score_apply_fit; stored on the application doc as apply_fit."},
+                {"name": "Message quality", "max_points": 12,
+                 "description": "Structural quality of the apply message: length (max 6), names the presenting issue (3), action keyword like 'schedule/availability/consult' (2), uses first-person 'I/my' (1). No LLM cost."},
+                {"name": "Commit bonus", "max_points": 9,
+                 "description": "Up to +3 each for explicitly confirming availability, urgency, and payment in the apply flow. Signals 'I can take you' vs 'I'm interested.'"},
+            ],
+        },
+        "deep_research": {
+            "enabled": _re_enabled,
+            "auto_on_signup": True,
+            "auto_on_signup_description": (
+                "Deep research runs automatically in the background for "
+                "every new therapist signup -- so by the time admin reviews "
+                "the application, evidence-graded specialty themes + public "
+                "footprint are already cached on the therapist doc. The "
+                "'Deep research' button in the directory is for re-running "
+                "it manually (e.g. after a therapist updates their website)."
+            ),
+            "cache_ttl_days": 30,
+            "fresh_cached_count": _re_fresh_count,
+            "active_therapists": _re_active_count,
+            "coverage_pct": (
+                round((_re_fresh_count / _re_active_count) * 100)
+                if _re_active_count else 0
+            ),
+            "feeds_into": [
+                "Research bonus axis (+25 max) on the structured match score",
+                "approach_alignment score (used in deep-match if patient opted in)",
+                "evidence_depth signal shown in the admin therapist detail view",
+            ],
+            "enabled_via_setting": "Settings > LLM web-research enrichment",
         },
     }
 
