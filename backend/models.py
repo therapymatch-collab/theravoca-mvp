@@ -135,14 +135,14 @@ class TherapistSignup(BaseModel):
 
 class RequestCreate(BaseModel):
     email: EmailStr
-    location_state: str
-    location_city: Optional[str] = ""
-    location_zip: Optional[str] = ""
-    client_type: str
-    age_group: str
+    location_state: str = Field(max_length=4)
+    location_city: Optional[str] = Field(default="", max_length=100)
+    location_zip: Optional[str] = Field(default="", max_length=10)
+    client_type: str = Field(max_length=30)
+    age_group: str = Field(max_length=30)
     client_age: Optional[int] = None
-    payment_type: str = "either"
-    insurance_name: Optional[str] = ""
+    payment_type: str = Field(default="either", max_length=20)
+    insurance_name: Optional[str] = Field(default="", max_length=100)
     # Hard-requirement toggle: when True, only therapists who explicitly
     # accept this insurance pass the filter. Default soft (insurance is
     # ranked but not filtered) so out-of-network providers can still
@@ -153,36 +153,36 @@ class RequestCreate(BaseModel):
     presenting_issues: list[str] = Field(default_factory=list, max_length=5)
     # Severity ratings per presenting issue (1-5 scale, informational only)
     issue_severity: dict[str, int] = Field(default_factory=dict)
-    other_issue: Optional[str] = ""
-    availability_windows: list[str] = Field(default_factory=list)
+    other_issue: Optional[str] = Field(default="", max_length=200)
+    availability_windows: list[str] = Field(default_factory=list, max_length=20)
     # Hard-requirement toggle for availability windows.
     availability_strict: bool = False
-    modality_preference: str = "hybrid"
-    modality_preferences: list[str] = Field(default_factory=list)
-    urgency: str = "flexible"
+    modality_preference: str = Field(default="hybrid", max_length=30)
+    modality_preferences: list[str] = Field(default_factory=list, max_length=10)
+    urgency: str = Field(default="flexible", max_length=30)
     # Hard-requirement toggle for urgency: when True, only therapists
     # whose `urgency_capacity` can meet the patient's timeframe pass.
     urgency_strict: bool = False
-    prior_therapy: str = "not_sure"
-    prior_therapy_notes: Optional[str] = ""
+    prior_therapy: str = Field(default="not_sure", max_length=30)
+    prior_therapy_notes: Optional[str] = Field(default="", max_length=2000)
     # Preferred therapy language. Defaults to English (no filter / no bonus).
     # When set to a non-English value, the matcher gives a soft bonus to
     # therapists with that language in `languages_spoken`. When the
     # patient also flips `language_strict=True`, it becomes a hard filter.
-    preferred_language: str = "English"
+    preferred_language: str = Field(default="English", max_length=50)
     language_strict: bool = False
     # Patients can pick multiple experience preferences (e.g. ["seasoned",
     # "mid_career"]); legacy clients sending a single string still work via
     # the field validator below.
     experience_preference: list[str] | str = Field(default_factory=list)
-    gender_preference: str = "no_pref"
+    gender_preference: str = Field(default="no_pref", max_length=30)
     gender_required: bool = False
-    style_preference: list[str] = Field(default_factory=list)
-    referral_source: Optional[str] = ""
+    style_preference: list[str] = Field(default_factory=list, max_length=20)
+    referral_source: Optional[str] = Field(default="", max_length=100)
     # Patient-to-patient refer-a-friend: the inviter's `patient_referral_code`,
     # captured from `?ref=` on the intake form. Plain attribution — no incentive.
-    referred_by_patient_code: Optional[str] = None
-    phone: Optional[str] = ""  # patient phone — only used for SMS receipt
+    referred_by_patient_code: Optional[str] = Field(default=None, max_length=100)
+    phone: Optional[str] = Field(default="", max_length=30)  # patient phone — only used for SMS receipt
     sms_opt_in: bool = False  # patient explicitly opted into SMS receipt
     # Patient-customizable matching: list of axes the patient cares about
     # most ("specialty", "modality", "schedule", "payment", "identity").
@@ -229,7 +229,7 @@ class RequestCreate(BaseModel):
     # Categories the patient selected despite a low-supply warning on the
     # intake form.  Empty when no warned options were chosen.  Backend
     # uses this to tag the request for recruit-priority handling.
-    low_supply_categories: list[str] = Field(default_factory=list)
+    low_supply_categories: list[str] = Field(default_factory=list, max_length=50)
     # ─── Bot defenses (rejected at the route layer; never persisted) ───
     # Honeypot input — a hidden field bots auto-fill. Real users leave it
     # blank because they never see it.
