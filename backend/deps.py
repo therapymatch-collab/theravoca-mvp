@@ -87,6 +87,10 @@ else:
     if not _public_url:
         logger.warning("PUBLIC_APP_URL not set -- email links will have no domain")
 SESSION_TTL_DAYS = int(os.environ.get("SESSION_TTL_DAYS", "30"))
+# Admin sessions get a much tighter TTL (HIPAA hygiene): an attacker who
+# steals an admin token has at most this many hours of access. Default
+# 8 hours mirrors a typical workday. Override via ADMIN_SESSION_TTL_HOURS.
+ADMIN_SESSION_TTL_HOURS = int(os.environ.get("ADMIN_SESSION_TTL_HOURS", "8"))
 MAGIC_CODE_TTL_MINUTES = int(os.environ.get("MAGIC_CODE_TTL_MINUTES", "30"))
 MAGIC_CODE_MAX_PER_HOUR = int(os.environ.get("MAGIC_CODE_MAX_PER_HOUR", "5"))
 
@@ -152,10 +156,16 @@ def require_admin(
 
 
 def _create_session_token(email: str, role: str) -> str:
+    # Admin tokens get a much shorter TTL than patient/therapist tokens
+    # so a stolen admin token has limited blast radius (HIPAA hygiene).
+    if role == "admin":
+        exp = datetime.now(timezone.utc) + timedelta(hours=ADMIN_SESSION_TTL_HOURS)
+    else:
+        exp = datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS)
     payload = {
         "email": email.lower(),
         "role": role,
-        "exp": datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS),
+        "exp": exp,
         "iat": datetime.now(timezone.utc),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
@@ -198,7 +208,8 @@ __all__ = [
     "ADMIN_PASSWORD", "DEFAULT_THRESHOLD", "AUTO_DELAY_HOURS", "PATIENT_DEMO_EMAIL",
     "ADMIN_NOTIFY_EMAIL", "LICENSE_WARN_DAYS", "AVAILABILITY_PROMPT_DAYS",
     "DAILY_TASK_HOUR_LOCAL", "DAILY_TASK_TZ_OFFSET_HOURS", "PHASE_2_LAUNCH_DATE",
-    "JWT_SECRET", "JWT_ALGO", "SESSION_TTL_DAYS", "MAGIC_CODE_TTL_MINUTES",
+    "JWT_SECRET", "JWT_ALGO", "SESSION_TTL_DAYS", "ADMIN_SESSION_TTL_HOURS",
+    "MAGIC_CODE_TTL_MINUTES",
     "MAGIC_CODE_MAX_PER_HOUR", "LOGIN_MAX_FAILURES", "LOGIN_LOCKOUT_MINUTES",
     "_login_attempts", "_client_ip", "_check_lockout", "_record_failure", "_reset_failures",
     "require_admin", "require_session", "_create_session_token",
