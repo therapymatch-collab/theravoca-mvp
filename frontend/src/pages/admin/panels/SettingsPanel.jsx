@@ -36,6 +36,10 @@ function TurnstileToggleCard({ client: clientProp }) {
   const [reason, setReason] = useState("");
   const [disabledAt, setDisabledAt] = useState(null);
   const [saving, setSaving] = useState(false);
+  // Master testing mode overrides this toggle at the backend, so we
+  // surface that here too -- otherwise the card claims Turnstile is
+  // enabled while the master switch silently bypasses it.
+  const [masterTestingOn, setMasterTestingOn] = useState(false);
 
   const load = async () => {
     try {
@@ -48,10 +52,18 @@ function TurnstileToggleCard({ client: clientProp }) {
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Failed to load Turnstile settings");
     }
+    // Poll master-testing state too so the "bypassed by master" hint
+    // appears + disappears in sync with the global toggle.
+    try {
+      const mr = await client.get("/admin/master-testing-mode");
+      setMasterTestingOn(!!mr.data?.enabled);
+    } catch (_) { /* soft-fail */ }
   };
 
   useEffect(() => {
     load();
+    const id = setInterval(load, 30000);  // refresh master-testing state
+    return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -108,6 +120,17 @@ function TurnstileToggleCard({ client: clientProp }) {
               and redeploy. Until then the widget won't render
               regardless of this toggle.
             </p>
+          )}
+          {masterTestingOn && (
+            <div
+              className="mt-3 text-xs bg-[#FBE9E5] border border-[#F4C7BE] rounded-md px-2.5 py-1.5 text-[#8B3220]"
+              data-testid="turnstile-master-override-notice"
+            >
+              Currently <strong>bypassed by master testing mode</strong>.
+              The toggle below shows Turnstile's own state, but the
+              master switch overrides it -- the widget won't appear and
+              tokens aren't verified while master testing is on.
+            </div>
           )}
         </div>
         {loaded && (
