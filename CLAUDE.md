@@ -19,13 +19,18 @@ These rules govern all code changes. No exceptions.
    while fixing the requested one, mention it and add it to a list -- don't fix
    it in the same commit.
 
-5. **Git from chat**: Josh does not use PowerShell. Run `git add`, `git
-   commit`, `git push`, `git merge`, and `git checkout` yourself via the
-   Bash tool. Confirm with Josh in chat before any action that affects the
-   live staging site (push to `staging`, merge into `staging`, anything
-   that triggers a Render deploy). Never use `--no-verify`, `--force`, or
-   `reset --hard` without an explicit ask. For feature-branch work (no
-   live impact), just do it and report what happened.
+5. **Git from chat, ship to staging directly (autonomy mode, set
+   2026-05-12)**: Josh does not use PowerShell. Run all git commands
+   (`add`, `commit`, `push`, `merge`, `checkout`) yourself via the Bash
+   tool. **Push directly to `staging` when work is ready -- no per-task
+   approval needed.** Approval happens upfront via approved mockups,
+   specs, or scoped task lists; if the spec is unclear, ASK BEFORE
+   CODING rather than ship and apologize. After each staging push, tell
+   Josh what shipped (commit hash + one-line summary) so he can `git
+   revert` quickly if needed. Before pushing: run the encoding check
+   and -- when Node is available -- `npx craco build`; don't push past
+   local failures. Never use `--no-verify`, `--force`, or `reset --hard`
+   without an explicit ask.
 
 6. **No marking "done"**: Never say "fixed" or "completed" until Josh has
    verified the change is live on the deployed staging site
