@@ -3243,12 +3243,19 @@ function AdminTabsBar({
   referralAnalytics,
   onLoadReferralAnalytics,
 }) {
-  // Hide the Testing tab on production builds. Staging currently uses a
-  // production build (REACT_APP_ADMIN_SHOW_TESTING="1" overrides if Josh
-  // wants the tab visible on staging until a real prod env exists).
-  const showTesting =
+  // Hide the Testing tab only on real production hostnames. Staging
+  // uses a production build (so NODE_ENV==='production') but is still
+  // gated by basic auth -- we want Testing visible there. Detect at
+  // runtime by hostname so this works without rebuilds when we
+  // eventually point a real production domain at the service.
+  const host = typeof window !== "undefined" ? window.location.hostname : "";
+  const isStagingOrDev =
     process.env.NODE_ENV !== "production" ||
-    process.env.REACT_APP_ADMIN_SHOW_TESTING === "1";
+    process.env.REACT_APP_ADMIN_SHOW_TESTING === "1" ||
+    host.includes("onrender.com") ||
+    host === "localhost" ||
+    host === "127.0.0.1";
+  const showTesting = isStagingOrDev;
 
   const TAB_TREE = [
     {
