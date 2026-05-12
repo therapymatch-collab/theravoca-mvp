@@ -142,7 +142,7 @@ DEFAULTS: dict[str, dict[str, str]] = {
             "we found via Google Places + license-board lookups when an "
             "active patient request scores 70%+ against their public "
             "practice info. Different from the gap recruiter (which "
-            "targets coverage holes pre-launch); this fires per-request "
+            "targets coverage holes proactively); this fires per-request "
             "to fill specific patient matches."
         ),
         "subject": "TheraVoca referral request — {score}% estimated match",
@@ -172,20 +172,24 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "available_vars": "first_name, score, rationale, signup_url, opt_out_url",
     },
     "prelaunch_invite": {
-        "title": "Pre-launch invite (gap recruiter)",
+        # NOTE: key kept as "prelaunch_invite" for backwards compatibility
+        # with existing admin overrides + tests. User-facing copy is now
+        # timeless so this template can run on an ongoing basis, not just
+        # pre-launch.
+        "title": "Gap-recruit invite",
         "description": (
             "Sent by the gap recruiter to therapists in underserved Idaho "
-            "specialties before public launch. Auto-recruit cycle generates "
-            "drafts; admin approves before they go out."
+            "specialties when our directory is thin for a given match "
+            "profile. Auto-recruit cycle generates drafts; admin approves "
+            "before they go out. Runs ongoing -- not pre-launch-only."
         ),
-        "subject": "Idaho therapist outreach — joining TheraVoca's launch network",
-        "heading": "Pre-launch invite",
+        "subject": "Idaho therapist outreach — joining TheraVoca's network",
+        "heading": "Recruiting invite",
         "greeting": "Hi {first_name},",
         "intro": (
             "I'm reaching out from TheraVoca, a small Idaho-based therapist "
-            "matching service. We're building our directory ahead of launch, "
-            "and your practice came up as a strong fit for an underserved "
-            "area we're trying to fill."
+            "matching service. We came across your practice and you look "
+            "like a strong fit for an underserved area we're trying to fill."
         ),
         "rationale": "{rationale}",
         "cta_label": "See if TheraVoca is a fit",
@@ -195,9 +199,8 @@ DEFAULTS: dict[str, dict[str, str]] = {
         ),
         "footer_note": (
             "You're receiving this because TheraVoca is recruiting for an "
-            "underserved Idaho specialty before public launch. Reference "
-            "code: {code}. You can ignore this email — we won't follow up "
-            "unless you click above."
+            "underserved Idaho specialty. Reference code: {code}. You can "
+            "ignore this email — we won't follow up unless you click above."
         ),
         "available_vars": "first_name, rationale, code, signup_url",
     },
