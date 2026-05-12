@@ -190,3 +190,47 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ── Security headers middleware ────────────────────────────────────
+# HIPAA quick win (2026-05-12): set baseline security headers on every
+# response so PHI in transit is protected and the served SPA is harder
+# to embed/sniff. Override via env vars if anything in the policy
+# breaks a third-party integration the frontend relies on.
+_DEFAULT_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
+    "https://js.stripe.com https://challenges.cloudflare.com; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "font-src 'self' https://fonts.gstatic.com; "
+    "img-src 'self' data: https:; "
+    "connect-src 'self' https://api.stripe.com https://challenges.cloudflare.com; "
+    "frame-src https://js.stripe.com https://challenges.cloudflare.com; "
+    "frame-ancestors 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'"
+)
+_CSP_VALUE = os.environ.get("CONTENT_SECURITY_POLICY", _DEFAULT_CSP)
+_HSTS_VALUE = os.environ.get(
+    "STRICT_TRANSPORT_SECURITY", "max-age=31536000; includeSubDomains",
+)
+
+
+@app.middleware("http")
+async def _security_headers(request, call_next):
+    response = await call_next(request)
+    # Don't add HSTS on non-HTTPS requests (e.g. local dev) -- the
+    # browser will silently treat it as instructions for plain-HTTP
+    # which it ignores, but Lighthouse flags it.
+    if request.url.scheme == "https":
+        response.headers.setdefault("Strict-Transport-Security", _HSTS_VALUE)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy",
+        "geolocation=(), microphone=(), camera=(), payment=(self)",
+    )
+    response.headers.setdefault("Content-Security-Policy", _CSP_VALUE)
+    return response
+
