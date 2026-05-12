@@ -133,6 +133,30 @@ def charge_monthly_fee(
         return {"error": "stripe_error", "message": str(e)}
 
 
+def retrieve_subscription(subscription_id: str) -> Optional[dict[str, Any]]:
+    """Fetch a Stripe Subscription by id. Returns a small plain-dict
+    projection (id, status, customer, trial_end, current_period_end)
+    or None if the call fails. Used by the webhook handler when
+    Stripe sends checkout.session.completed and we need to read the
+    subscription's current status + period dates."""
+    if not _configure():
+        return None
+    try:
+        s = stripe.Subscription.retrieve(subscription_id)
+        return {
+            "id": s.id,
+            "status": s.status,
+            "customer": s.customer if isinstance(s.customer, str) else (
+                getattr(s.customer, "id", None) if s.customer else None
+            ),
+            "trial_end": getattr(s, "trial_end", None),
+            "current_period_end": getattr(s, "current_period_end", None),
+        }
+    except stripe.error.StripeError as e:
+        logger.warning("Stripe subscription retrieve failed: %s", e)
+        return None
+
+
 # ─── Customer Portal (self-service subscription management) ────────────────
 
 def create_billing_portal_session(
