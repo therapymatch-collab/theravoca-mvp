@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TheraVoca Admin - Reorg Mockup v1</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --bg: #FDFBF7;
+    --surface: #FFFFFF;
+    --primary: #2D4A3E;
+    --primary-hover: #3A5E50;
+    --secondary: #C87965;
+    --text-main: #2B2A29;
+    --text-muted: #6D6A65;
+    --border: #E8E5DF;
+    --success: #4A6B5D;
+    --error: #D45D5D;
+    --warn: #D4A843;
+  }
+  body { background: var(--bg); color: var(--text-main); font-family: ui-sans-serif, system-ui, sans-serif; }
+  .font-serif { font-family: 'Georgia', 'Cormorant Garamond', serif; }
+  .primary-tab { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; font-size: 0.95rem; font-weight: 500; color: var(--text-muted); border-bottom: 2px solid transparent; cursor: pointer; transition: all 0.15s; }
+  .primary-tab:hover { color: var(--primary); }
+  .primary-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .sub-pill { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.95rem; border-radius: 9999px; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+  .sub-pill.active { background: var(--primary); color: white; }
+  .sub-pill.inactive { background: #F2EFE8; color: var(--text-muted); }
+  .sub-pill.inactive:hover { background: var(--border); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  .mq-btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.55rem 1.1rem; background: var(--primary); color: white; border-radius: 9999px; font-size: 0.85rem; font-weight: 500; cursor: pointer; }
+  .mq-btn:hover { background: var(--primary-hover); }
+  .section { display: none; }
+  .section.active { display: block; }
+  .sub-section { display: none; }
+  .sub-section.active { display: block; }
+  .design-note { background: #FBEFE9; border: 1px solid #F4DDD2; color: #8B4F3B; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 9999px; font-weight: 500; }
+  .badge-active { background: #E8F0EA; color: #2D4A3E; }
+  .badge-pending { background: #FBEFE9; color: #B8742A; }
+  .badge-warn { background: #FBE9E5; color: #C8412B; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<div class="design-note px-6 py-2.5 text-xs">
+  <span class="font-semibold">ADMIN REORG MOCKUP v1</span> &middot; click the top tabs and sub-pills to navigate &middot; this is a static preview, not the real app
+</div>
+
+<!-- TOP BAR -->
+<header class="bg-white border-b border-[#E8E5DF]">
+  <div class="max-w-[1600px] mx-auto px-6 py-4 flex items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-full bg-[#2D4A3E] text-white flex items-center justify-center font-serif text-lg">T</div>
+      <div>
+        <div class="text-xs uppercase tracking-widest text-[#6D6A65]">Admin</div>
+        <div class="font-serif text-xl text-[#2D4A3E] leading-tight">TheraVoca Console</div>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <button class="mq-btn" onclick="alert('Master Query opens a modal — natural-language Q&A over your data.')">
+        &#x2728; Master Query
+      </button>
+      <button class="text-sm text-[#6D6A65] hover:text-[#2D4A3E]">Sign out</button>
+    </div>
+  </div>
+
+  <!-- PRIMARY NAV -->
+  <nav class="max-w-[1600px] mx-auto px-6 flex items-center gap-1 overflow-x-auto">
+    <div class="primary-tab active" data-tab="inbox" onclick="setTab('inbox')">
+      &#x1F4E5; Inbox
+      <span class="badge badge-warn">5</span>
+    </div>
+    <div class="primary-tab" data-tab="directory" onclick="setTab('directory')">
+      &#x1F465; Directory
+    </div>
+    <div class="primary-tab" data-tab="outcomes" onclick="setTab('outcomes')">
+      &#x1F4CA; Outcomes
+    </div>
+    <div class="primary-tab" data-tab="content" onclick="setTab('content')">
+      &#x270F;&#xFE0F; Content
+    </div>
+    <div class="primary-tab" data-tab="operations" onclick="setTab('operations')">
+      &#x2699;&#xFE0F; Operations
+    </div>
+    <div class="ml-auto"></div>
+    <div class="primary-tab" data-tab="testing" onclick="setTab('testing')"
+         style="border-left: 1px dashed var(--border); margin-left: 1rem;">
+      &#x1F9EA; Testing
+      <span class="badge" style="background:#FBEFE9; color:#8B4F3B;">DEV</span>
+    </div>
+  </nav>
+</header>
+
+<!-- MAIN -->
+<main class="max-w-[1600px] mx-auto px-6 py-6">
+
+  <!-- ============== INBOX ============== -->
+  <section class="section active" id="section-inbox">
+    <div class="flex items-center gap-2 flex-wrap mb-5">
+      <div class="sub-pill active" data-sub="inbox-requests" onclick="setSub('inbox', 'inbox-requests')">
+        Active requests <span class="ml-1 px-1.5 py-0.5 rounded-full bg-white/20 text-xs">25</span>
+      </div>
+      <div class="sub-pill inactive" data-sub="inbox-pending" onclick="setSub('inbox', 'inbox-pending')">
+        Pending therapists <span class="ml-1 px-1.5 py-0.5 rounded-full bg-[#FBE9E5] text-[#C8412B] text-xs">3</span>
+      </div>
+      <div class="sub-pill inactive" data-sub="inbox-completion" onclick="setSub('inbox', 'inbox-completion')">
+        Profile completion <span class="ml-1 px-1.5 py-0.5 rounded-full text-[#6D6A65] text-xs">12</span>
+      </div>
+    </div>
+
+    <div class="sub-section active" id="sub-inbox-requests">
+      <div class="card overflow-hidden">
+        <div class="px-5 py-4 border-b border-[#E8E5DF] flex items-center justify-between gap-3">
+          <div>
+            <div class="font-serif text-xl text-[#2D4A3E]">Active patient requests</div>
+            <div class="text-sm text-[#6D6A65] mt-0.5">Newest first. Click any row to open the full brief.</div>
+          </div>
+          <input type="text" placeholder="Search by email or request ID..." class="border border-[#E8E5DF] rounded-lg px-3 py-1.5 text-sm w-72"/>
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-[#FDFBF7] text-[#6D6A65] text-xs uppercase tracking-wider">
+            <tr>
+              <th class="text-left p-3">Email</th>
+              <th class="text-left p-3">Age / State</th>
+              <th class="text-left p-3">Status</th>
+              <th class="text-left p-3">Source</th>
+              <th class="text-right p-3">Notified</th>
+              <th class="text-right p-3">Apps</th>
+              <th class="text-right p-3">Threshold</th>
+              <th class="text-left p-3">Created</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[#E8E5DF]">
+            <tr class="hover:bg-[#FDFBF7] cursor-pointer">
+              <td class="p-3">therapymatch+abc&hellip; <span class="text-[10px] text-[#9C9893] block">3d33de50</span></td>
+              <td class="p-3">young_adult / ID</td>
+              <td class="p-3"><span class="badge badge-active">completed</span></td>
+              <td class="p-3 text-[#6D6A65]">News article / podcast</td>
+              <td class="p-3 text-right">20</td>
+              <td class="p-3 text-right">3</td>
+              <td class="p-3 text-right">70%</td>
+              <td class="p-3 text-[#6D6A65]">5/11/2026</td>
+            </tr>
+            <tr class="hover:bg-[#FDFBF7] cursor-pointer">
+              <td class="p-3">therapymatch+v2final&hellip; <span class="text-[10px] text-[#9C9893] block">3e8afd4e</span></td>
+              <td class="p-3">adult / CA</td>
+              <td class="p-3"><span class="badge badge-active">completed</span></td>
+              <td class="p-3 text-[#6D6A65]">Friend / family</td>
+              <td class="p-3 text-right">20</td>
+              <td class="p-3 text-right">2</td>
+              <td class="p-3 text-right">70%</td>
+              <td class="p-3 text-[#6D6A65]">5/10/2026</td>
+            </tr>
+            <tr class="hover:bg-[#FDFBF7] cursor-pointer">
+              <td class="p-3">therapymatch+thresh&hellip; <span class="text-[10px] text-[#9C9893] block">4ddab1e4</span></td>
+              <td class="p-3">young_adult / NY</td>
+              <td class="p-3"><span class="badge badge-pending">matched</span></td>
+              <td class="p-3 text-[#6D6A65]">Friend / family</td>
+              <td class="p-3 text-right">22/30</td>
+              <td class="p-3 text-right">0</td>
+              <td class="p-3 text-right">70%</td>
+              <td class="p-3 text-[#6D6A65]">5/6/2026</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="sub-section" id="sub-inbox-pending">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">Pending therapists (3)</div>
+        <p class="text-sm text-[#6D6A65] mt-1">Review and approve. Currently only therapists that signed up in the last 14 days.</p>
+        <div class="mt-5 divide-y divide-[#E8E5DF]">
+          <div class="py-4 flex items-center justify-between gap-3">
+            <div>
+              <div class="font-medium text-[#2B2A29]">Dr. Alex Morgan, LMFT</div>
+              <div class="text-xs text-[#6D6A65] mt-0.5">alex@example.com &middot; CA &middot; submitted 2 days ago</div>
+            </div>
+            <div class="flex gap-2">
+              <button class="text-xs text-[#2D4A3E] hover:underline">Review</button>
+              <button class="text-xs text-[#4A6B5D] font-medium">Approve</button>
+              <button class="text-xs text-[#D45D5D]">Reject</button>
+            </div>
+          </div>
+          <div class="py-4 flex items-center justify-between gap-3">
+            <div>
+              <div class="font-medium text-[#2B2A29]">Dr. Priya Sharma, PsyD</div>
+              <div class="text-xs text-[#6D6A65] mt-0.5">priya@example.com &middot; NY &middot; submitted 5 hours ago</div>
+            </div>
+            <div class="flex gap-2">
+              <button class="text-xs text-[#2D4A3E] hover:underline">Review</button>
+              <button class="text-xs text-[#4A6B5D] font-medium">Approve</button>
+              <button class="text-xs text-[#D45D5D]">Reject</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub-section" id="sub-inbox-completion">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">Profile completion (12 incomplete)</div>
+        <p class="text-sm text-[#6D6A65] mt-1">Approved therapists whose profile isn't publishable yet.</p>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ============== DIRECTORY ============== -->
+  <section class="section" id="section-directory">
+    <div class="flex items-center gap-2 flex-wrap mb-5">
+      <div class="sub-pill active" data-sub="dir-providers" onclick="setSub('directory', 'dir-providers')">
+        All providers <span class="ml-1 px-1.5 py-0.5 rounded-full bg-white/20 text-xs">123</span>
+      </div>
+      <div class="sub-pill inactive" data-sub="dir-patients" onclick="setSub('directory', 'dir-patients')">
+        Patients (by email)
+      </div>
+      <div class="sub-pill inactive" data-sub="dir-coverage" onclick="setSub('directory', 'dir-coverage')">
+        Coverage gaps <span class="ml-1 px-1.5 py-0.5 rounded-full bg-[#FBE9E5] text-[#C8412B] text-xs">4</span>
+      </div>
+      <div class="sub-pill inactive" data-sub="dir-invites" onclick="setSub('directory', 'dir-invites')">
+        Invited therapists
+      </div>
+      <div class="sub-pill inactive" data-sub="dir-optouts" onclick="setSub('directory', 'dir-optouts')">
+        Opt-outs
+      </div>
+    </div>
+
+    <div class="sub-section active" id="sub-dir-providers">
+      <div class="card overflow-hidden">
+        <div class="px-5 py-4 border-b border-[#E8E5DF]">
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <div class="font-serif text-xl text-[#2D4A3E]">All providers (123)</div>
+              <div class="text-sm text-[#6D6A65] mt-0.5">Approved + active therapists in the directory.</div>
+            </div>
+            <div class="flex gap-2">
+              <label class="text-xs text-[#6D6A65] inline-flex items-center gap-1.5">
+                <input type="checkbox" checked class="accent-[#2D4A3E]"/> Active only
+              </label>
+              <input type="text" placeholder="Search..." class="border border-[#E8E5DF] rounded-lg px-3 py-1.5 text-sm w-48"/>
+            </div>
+          </div>
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-[#FDFBF7] text-[#6D6A65] text-xs uppercase tracking-wider">
+            <tr>
+              <th class="text-left p-3">Name</th>
+              <th class="text-left p-3">Specialties</th>
+              <th class="text-left p-3">State</th>
+              <th class="text-left p-3">Status</th>
+              <th class="text-right p-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[#E8E5DF]">
+            <tr class="hover:bg-[#FDFBF7]">
+              <td class="p-3 font-medium">Dr. Sarah Lin, LCSW</td>
+              <td class="p-3 text-[#6D6A65]">Anxiety, Depression, Trauma</td>
+              <td class="p-3">CA</td>
+              <td class="p-3"><span class="badge badge-active">active</span></td>
+              <td class="p-3 text-right text-xs">
+                <button class="text-[#2D4A3E] hover:underline">Edit</button> &middot;
+                <button class="text-[#C87965] hover:underline">Preview</button> &middot;
+                <button class="text-[#6D6A65] hover:underline">Test survey</button>
+              </td>
+            </tr>
+            <tr class="hover:bg-[#FDFBF7]">
+              <td class="p-3 font-medium">Dr. James Park, PhD</td>
+              <td class="p-3 text-[#6D6A65]">Couples, ADHD, Identity</td>
+              <td class="p-3">NY</td>
+              <td class="p-3"><span class="badge badge-active">active</span></td>
+              <td class="p-3 text-right text-xs">
+                <button class="text-[#2D4A3E] hover:underline">Edit</button> &middot;
+                <button class="text-[#C87965] hover:underline">Preview</button> &middot;
+                <button class="text-[#6D6A65] hover:underline">Test survey</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="sub-section" id="sub-dir-patients">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">Patients by email</div>
+        <p class="text-sm text-[#6D6A65] mt-1">Aggregate view of patients by their email, with request counts.</p>
+      </div>
+    </div>
+
+    <div class="sub-section" id="sub-dir-coverage">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">Coverage gaps (4 critical)</div>
+        <p class="text-sm text-[#6D6A65] mt-1">Where the directory is too thin for matching to succeed.</p>
+      </div>
+    </div>
+
+    <div class="sub-section" id="sub-dir-invites">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">Invited therapists</div>
+        <p class="text-sm text-[#6D6A65] mt-1">Outreach invites in flight.</p>
+      </div>
+    </div>
+
+    <div class="sub-section" id="sub-dir-optouts">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">Opt-outs</div>
+        <p class="text-sm text-[#6D6A65] mt-1">Therapists who have asked not to be contacted.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== OUTCOMES ============== -->
+  <section class="section" id="section-outcomes">
+    <div class="card p-8 mb-5">
+      <div class="text-xs uppercase tracking-widest text-[#6D6A65] mb-2">Already built today</div>
+      <div class="font-serif text-3xl text-[#2D4A3E]">Outcomes</div>
+      <p class="text-base text-[#6D6A65] mt-2 max-w-2xl">
+        This tab is the Outcomes dashboard we built earlier today. 4 business-question
+        sub-tabs (Marketing / Recruiting / Satisfaction / Matching Algorithm), date
+        picker, hero KPIs, NPS by source, detractor alerts.
+      </p>
+      <p class="text-sm text-[#6D6A65] mt-4 italic">
+        In the real app, click this tab and you'd see the live Outcomes panel. In this
+        mockup we'd just show a "you are here" placeholder so we can focus the design
+        review on the other 4 sections.
+      </p>
+      <div class="mt-5 flex gap-3">
+        <div class="px-4 py-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg flex-1">
+          <div class="text-[10px] uppercase tracking-widest text-[#6D6A65]">Marketing</div>
+          <div class="font-serif text-2xl text-[#2D4A3E]">+48</div>
+          <div class="text-xs text-[#6D6A65]">Patient NPS</div>
+        </div>
+        <div class="px-4 py-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg flex-1">
+          <div class="text-[10px] uppercase tracking-widest text-[#6D6A65]">Recruiting</div>
+          <div class="font-serif text-2xl text-[#2D4A3E]">+55</div>
+          <div class="text-xs text-[#6D6A65]">Therapist NPS</div>
+        </div>
+        <div class="px-4 py-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg flex-1">
+          <div class="text-[10px] uppercase tracking-widest text-[#6D6A65]">Satisfaction</div>
+          <div class="font-serif text-2xl text-[#2D4A3E]">7.4</div>
+          <div class="text-xs text-[#6D6A65]">Progress at 15w</div>
+        </div>
+        <div class="px-4 py-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg flex-1">
+          <div class="text-[10px] uppercase tracking-widest text-[#6D6A65]">Matching</div>
+          <div class="font-serif text-2xl text-[#2D4A3E]">0.62</div>
+          <div class="text-xs text-[#6D6A65]">MS &rarr; retention</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== CONTENT ============== -->
+  <section class="section" id="section-content">
+    <div class="flex items-center gap-2 flex-wrap mb-5">
+      <div class="sub-pill active" data-sub="content-blog" onclick="setSub('content', 'content-blog')">
+        Blog
+      </div>
+      <div class="sub-pill inactive" data-sub="content-faqs" onclick="setSub('content', 'content-faqs')">
+        FAQs
+      </div>
+      <div class="sub-pill inactive" data-sub="content-sitecopy" onclick="setSub('content', 'content-sitecopy')">
+        Site copy
+      </div>
+      <div class="sub-pill inactive" data-sub="content-howitworks" onclick="setSub('content', 'content-howitworks')">
+        How it works
+      </div>
+      <div class="sub-pill inactive" data-sub="content-emails" onclick="setSub('content', 'content-emails')">
+        Email templates
+      </div>
+    </div>
+
+    <div class="sub-section active" id="sub-content-blog">
+      <div class="card p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div class="font-serif text-xl text-[#2D4A3E]">Blog posts</div>
+          <button class="text-sm text-white bg-[#2D4A3E] px-3 py-1.5 rounded-lg">+ New post</button>
+        </div>
+        <div class="space-y-3">
+          <div class="p-4 border border-[#E8E5DF] rounded-lg flex items-center justify-between">
+            <div>
+              <div class="font-medium text-[#2B2A29]">How TheraVoca matches you with the right therapist</div>
+              <div class="text-xs text-[#6D6A65] mt-1">Published 5/3/2026 &middot; 1.2k views</div>
+            </div>
+            <button class="text-sm text-[#2D4A3E] hover:underline">Edit</button>
+          </div>
+          <div class="p-4 border border-[#E8E5DF] rounded-lg flex items-center justify-between">
+            <div>
+              <div class="font-medium text-[#2B2A29]">What to expect at your first session</div>
+              <div class="text-xs text-[#6D6A65] mt-1">Published 4/20/2026 &middot; 880 views</div>
+            </div>
+            <button class="text-sm text-[#2D4A3E] hover:underline">Edit</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub-section" id="sub-content-faqs">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">FAQs</div>
+        <p class="text-sm text-[#6D6A65] mt-1">Patient + therapist FAQ entries, editable here.</p>
+      </div>
+    </div>
+
+    <div class="sub-section" id="sub-content-sitecopy">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">Site copy</div>
+        <p class="text-sm text-[#6D6A65] mt-1">Buttons, hero text, footer strings -- all editable without a deploy.</p>
+      </div>
+    </div>
+
+    <div class="sub-section" id="sub-content-howitworks">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">How it works</div>
+        <p class="text-sm text-[#6D6A65] mt-1">Public-facing process explanation page.</p>
+      </div>
+    </div>
+
+    <div class="sub-section" id="sub-content-emails">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">Email templates</div>
+        <p class="text-sm text-[#6D6A65] mt-1">Subject, heading, greeting, intro, footer for every transactional + recurring email.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== OPERATIONS ============== -->
+  <section class="section" id="section-operations">
+    <div class="flex items-center gap-2 flex-wrap mb-5">
+      <div class="sub-pill active" data-sub="ops-team" onclick="setSub('operations', 'ops-team')">
+        Team
+      </div>
+      <div class="sub-pill inactive" data-sub="ops-settings" onclick="setSub('operations', 'ops-settings')">
+        Settings
+      </div>
+      <div class="sub-pill inactive" data-sub="ops-referrals" onclick="setSub('operations', 'ops-referrals')">
+        Referrals
+      </div>
+      <div class="sub-pill inactive" data-sub="ops-refsources" onclick="setSub('operations', 'ops-refsources')">
+        Referral sources
+      </div>
+      <div class="sub-pill inactive" data-sub="ops-waitlist" onclick="setSub('operations', 'ops-waitlist')">
+        Waitlist
+      </div>
+      <div class="sub-pill inactive" data-sub="ops-audit" onclick="setSub('operations', 'ops-audit')">
+        Audit log
+      </div>
+    </div>
+
+    <div class="sub-section active" id="sub-ops-team">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">Team</div>
+        <p class="text-sm text-[#6D6A65] mt-1">Admins with access to this console.</p>
+        <div class="mt-5 divide-y divide-[#E8E5DF]">
+          <div class="py-3 flex items-center justify-between">
+            <div>
+              <div class="font-medium text-[#2B2A29]">Josh Rosenthal</div>
+              <div class="text-xs text-[#6D6A65] mt-0.5">josh@theravoca.com</div>
+            </div>
+            <span class="badge badge-active">owner</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub-section" id="sub-ops-settings">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">Settings</div>
+        <p class="text-sm text-[#6D6A65] mt-1">Matching defaults (threshold, max_invites), Stripe config, etc.</p>
+      </div>
+    </div>
+
+    <div class="sub-section" id="sub-ops-referrals">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">Referral analytics</div>
+      </div>
+    </div>
+
+    <div class="sub-section" id="sub-ops-refsources">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">Referral sources</div>
+        <p class="text-sm text-[#6D6A65] mt-1">Edit the dropdown options patients see at intake.</p>
+      </div>
+    </div>
+
+    <div class="sub-section" id="sub-ops-waitlist">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">Waitlist</div>
+      </div>
+    </div>
+
+    <div class="sub-section" id="sub-ops-audit">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">Audit log</div>
+        <p class="text-sm text-[#6D6A65] mt-1">Every admin action against patient or therapist data, with hashed identifiers for HIPAA compliance.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== TESTING (dev only, hidden in production) ============== -->
+  <section class="section" id="section-testing">
+    <div class="design-note rounded-lg p-4 mb-5 flex items-start gap-3">
+      <span class="text-xl leading-none">&#x26A0;&#xFE0F;</span>
+      <div>
+        <div class="font-semibold text-[#8B4F3B]">Testing tools -- hidden in production</div>
+        <p class="text-sm mt-1 leading-relaxed">
+          Everything in this section only renders when the app is running in
+          staging or dev mode. In production, this primary tab is hidden so
+          admins can't accidentally wipe live data.
+        </p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2 flex-wrap mb-5">
+      <div class="sub-pill active" data-sub="test-actions" onclick="setSub('testing', 'test-actions')">
+        Test actions
+      </div>
+      <div class="sub-pill inactive" data-sub="test-sim" onclick="setSub('testing', 'test-sim')">
+        Matching simulator
+      </div>
+      <div class="sub-pill inactive" data-sub="test-research" onclick="setSub('testing', 'test-research')">
+        Research reviews
+      </div>
+      <div class="sub-pill inactive" data-sub="test-feedback" onclick="setSub('testing', 'test-feedback')">
+        Feedback test tools
+      </div>
+      <div class="sub-pill inactive" data-sub="test-scraper" onclick="setSub('testing', 'test-scraper')">
+        Scraper test
+      </div>
+    </div>
+
+    <div class="sub-section active" id="sub-test-actions">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+        <div class="card p-5">
+          <div class="text-[10px] uppercase tracking-widest text-[#6D6A65]">Live data refresh</div>
+          <div class="font-serif text-lg text-[#2D4A3E] mt-1">Refresh all caches</div>
+          <p class="text-xs text-[#6D6A65] mt-1.5 leading-relaxed">
+            Bust the matching-defaults cache, snapshot cache, capacity cache,
+            and Outcomes dashboard cache so the next page load reads fresh
+            from Mongo.
+          </p>
+          <button class="mt-3 text-sm text-white bg-[#2D4A3E] hover:bg-[#3A5E50] px-3 py-1.5 rounded-lg"
+                  onclick="alert('Would POST /api/admin/cache/clear')">
+            &#x1F504; Refresh now
+          </button>
+        </div>
+
+        <div class="card p-5">
+          <div class="text-[10px] uppercase tracking-widest text-[#6D6A65]">Seed data</div>
+          <div class="font-serif text-lg text-[#2D4A3E] mt-1">Backfill with test data</div>
+          <p class="text-xs text-[#6D6A65] mt-1.5 leading-relaxed">
+            Drop a known set of test patient requests + matching applications
+            + feedback so the Outcomes dashboard has something to render.
+            Safe to re-run -- idempotent.
+          </p>
+          <div class="mt-3 flex items-center gap-2">
+            <input type="number" placeholder="N=20" class="border border-[#E8E5DF] rounded-lg px-2 py-1 text-sm w-20"/>
+            <button class="text-sm text-white bg-[#2D4A3E] hover:bg-[#3A5E50] px-3 py-1.5 rounded-lg">
+              &#x2795; Backfill
+            </button>
+          </div>
+        </div>
+
+        <div class="card p-5 border-[#F4C7BE]">
+          <div class="text-[10px] uppercase tracking-widest text-[#D45D5D]">Destructive</div>
+          <div class="font-serif text-lg text-[#D45D5D] mt-1">Wipe test data</div>
+          <p class="text-xs text-[#6D6A65] mt-1.5 leading-relaxed">
+            Delete every request, application, feedback, and therapist_survey
+            whose email contains "+test" or matches the test allowlist. Real
+            patient data is untouched. Confirmation modal required.
+          </p>
+          <button class="mt-3 text-sm text-[#D45D5D] border border-[#D45D5D] hover:bg-[#FDF1EF] px-3 py-1.5 rounded-lg">
+            &#x1F5D1;&#xFE0F; Wipe test data...
+          </button>
+        </div>
+
+        <div class="card p-5">
+          <div class="text-[10px] uppercase tracking-widest text-[#6D6A65]">Cron triggers</div>
+          <div class="font-serif text-lg text-[#2D4A3E] mt-1">Run a cron now</div>
+          <p class="text-xs text-[#6D6A65] mt-1.5 leading-relaxed">
+            Manually fire any scheduled job without waiting for the next tick.
+            Useful when verifying a fix shipped to staging.
+          </p>
+          <select class="mt-3 border border-[#E8E5DF] rounded-lg px-2 py-1.5 text-sm">
+            <option>Pick a cron...</option>
+            <option>send_v2_patient_surveys</option>
+            <option>send_v2_reminders</option>
+            <option>fire_therapist_phase3_surveys</option>
+            <option>charge_monthly_subscriptions</option>
+            <option>license_expiry_alerts</option>
+          </select>
+          <button class="ml-2 text-sm text-white bg-[#2D4A3E] hover:bg-[#3A5E50] px-3 py-1.5 rounded-lg">
+            &#x25B6;&#xFE0F; Run
+          </button>
+        </div>
+
+        <div class="card p-5">
+          <div class="text-[10px] uppercase tracking-widest text-[#6D6A65]">Email preview</div>
+          <div class="font-serif text-lg text-[#2D4A3E] mt-1">Send test email to me</div>
+          <p class="text-xs text-[#6D6A65] mt-1.5 leading-relaxed">
+            Render any template against test data and send it to your inbox so
+            you can see what patients/therapists actually receive.
+          </p>
+          <select class="mt-3 border border-[#E8E5DF] rounded-lg px-2 py-1.5 text-sm">
+            <option>Pick a template...</option>
+            <option>verification</option>
+            <option>patient_results</option>
+            <option>patient_survey_v2_48h</option>
+            <option>therapist_survey</option>
+          </select>
+          <button class="ml-2 text-sm text-white bg-[#2D4A3E] hover:bg-[#3A5E50] px-3 py-1.5 rounded-lg">
+            &#x2709;&#xFE0F; Send
+          </button>
+        </div>
+
+        <div class="card p-5">
+          <div class="text-[10px] uppercase tracking-widest text-[#6D6A65]">v1 cleanup</div>
+          <div class="font-serif text-lg text-[#2D4A3E] mt-1">Strip legacy flags</div>
+          <p class="text-xs text-[#6D6A65] mt-1.5 leading-relaxed">
+            One-shot Mongo cleanup that removes legacy
+            structured_followup_*_sent_at flags from old requests.
+            Idempotent.
+          </p>
+          <button class="mt-3 text-sm text-white bg-[#2D4A3E] hover:bg-[#3A5E50] px-3 py-1.5 rounded-lg">
+            &#x1F9F9; Run cleanup
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="sub-section" id="sub-test-sim">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">Matching simulator</div>
+        <p class="text-sm text-[#6D6A65] mt-1">Run a hypothetical patient request and see who would match.</p>
+      </div>
+    </div>
+
+    <div class="sub-section" id="sub-test-research">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">Research reviews</div>
+        <p class="text-sm text-[#6D6A65] mt-1">
+          Inspect deep-research output for any therapist (DuckDuckGo + 5 web pages
+          + AI extraction). Compare cached vs. fresh. Re-run on demand.
+        </p>
+      </div>
+    </div>
+
+    <div class="sub-section" id="sub-test-feedback">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">Feedback test tools</div>
+        <p class="text-sm text-[#6D6A65] mt-1">
+          Fire individual surveys against a request, reset survey flags, manually
+          trigger Match Strength recompute, toggle global testing mode.
+        </p>
+      </div>
+    </div>
+
+    <div class="sub-section" id="sub-test-scraper">
+      <div class="card p-6">
+        <div class="font-serif text-xl text-[#2D4A3E]">Scraper test</div>
+        <p class="text-sm text-[#6D6A65] mt-1">Run the directory scraper against a single URL and inspect output before bulk import.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="border-t border-[#E8E5DF] py-6 text-center text-xs text-[#6D6A65]">
+  TheraVoca admin reorg mockup v1 &middot; 5 sections, 18+ tabs collapsed
+</footer>
+
+<script>
+  function setTab(id) {
+    document.querySelectorAll('.primary-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === id));
+    document.querySelectorAll('.section').forEach(s => s.classList.toggle('active', s.id === 'section-' + id));
+    window.scrollTo({top: 0, behavior: 'smooth'});
+  }
+  function setSub(parent, subId) {
+    document.querySelectorAll('#section-' + parent + ' .sub-pill').forEach(p => {
+      const isActive = p.dataset.sub === subId;
+      p.classList.toggle('active', isActive);
+      p.classList.toggle('inactive', !isActive);
+    });
+    document.querySelectorAll('#section-' + parent + ' .sub-section').forEach(s => {
+      s.classList.toggle('active', s.id === 'sub-' + subId);
+    });
+  }
+</script>
+</body>
+</html>
