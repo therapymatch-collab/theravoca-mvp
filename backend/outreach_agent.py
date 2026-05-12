@@ -1,19 +1,28 @@
 """Multi-source outreach agent for therapist recruiting.
 
-When a patient request has `outreach_needed_count > 0` (we couldn't fill 30
-quality matches from our directory), this module cascades through multiple
-real data sources to find therapist candidates:
+When a patient request has `outreach_needed_count > 0` (we couldn't fill our
+max-invites target from the directory), this module cascades through real,
+public data sources to find therapist candidates:
 
 1. **Psychology Today** — JSON-LD scrape of PT directory listings. See
-   `pt_scraper.py`. Includes retry + user-agent rotation for bot-detection.
+   `pt_scraper.py`. Discovery only (names, cities, specialties); contact
+   info is filled in by the enricher.
 2. **Admin-registered external directories** — configurable URLs scraped via
    `external_scraper.py` (JSON-LD first, LLM extraction fallback).
 3. **Backup directories** — TherapyDen, GoodTherapy (HTML scraping), and
-   Google Maps (Places API with GOOGLE_PLACES_API_KEY). These run in parallel
-   and return real names, phones, websites, and guessed emails. See
+   Google Maps (Places API with GOOGLE_PLACES_API_KEY). See
    `directory_scrapers.py`.
-4. **LLM fallback** — Claude generates plausible candidates from training
-   data when all scrapers yield too few. Last resort only.
+4. **Contact enrichment** — every candidate from above flows through
+   `contact_enricher.enrich_batch` which hits Google Places + scrapes the
+   therapist's actual website for `mailto:` / visible-text emails. This is
+   the only step that produces verified real emails. Candidates with no
+   real contact info are silently dropped at send-time.
+
+LLM-generated candidates were retired 2026-05-12: the founder's call was
+that low-yield, last-resort suggestions weren't worth the ambiguity
+(hallucinated names that the enricher couldn't verify). Sources 1-3 cover
+Idaho well; if directory coverage becomes thin in a future market, the
+right fix is to register more external directory URLs in admin settings.
 
 Each phase only runs when previous phases haven't filled the count.
 Candidates are deduplicated by name+city across all sources.
@@ -21,14 +30,12 @@ Candidates are deduplicated by name+city across all sources.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from llm_client import ask_claude, ANTHROPIC_API_KEY
 
 from deps import db
 from email_service import _get_app_url, _send, _wrap, BRAND
@@ -160,102 +167,11 @@ async def _find_candidates_pt(request: dict, count: int) -> list[dict]:
     return out
 
 
-async def _find_candidates_llm(
-    request: dict, count: int = 30,
-) -> list[dict]:
-    """Ask Claude to generate `count` plausible Idaho therapist candidates that
-    match this patient's brief. Used as a fallback when PT scraping yields too
-    few real candidates."""
-    if not ANTHROPIC_API_KEY:
-        logger.warning("ANTHROPIC_API_KEY missing — skipping outreach")
-        return []
-
-    summary = _safe_summary_for_therapist(request)
-    summary_text = "\n".join(f"- {k}: {v}" for k, v in summary.items())
-    state = request.get("location_state", "ID")
-    city = request.get("location_city") or "Boise"
-
-    # Inject any admin-configured external directory URLs so Claude grounds
-    # its candidate suggestions on those rosters in addition to PT/DOPL.
-    extra_sources_block = ""
-    try:
-        from routes.admin import get_enabled_scrape_sources
-        extra = await get_enabled_scrape_sources()
-    except Exception:
-        extra = []
-    if extra:
-        bullets = "\n".join(
-            f"  - {s['url']}" + (f"  ({s.get('label')})" if s.get("label") else "")
-            for s in extra
-        )
-        extra_sources_block = (
-            "\n\nADDITIONAL DIRECTORY SOURCES (consult these in addition to PT/DOPL):\n"
-            f"{bullets}\n"
-        )
-
-    prompt = f"""You are an outreach research agent for TheraVoca, a therapist matching service in Idaho.
-
-We need {count} REAL Idaho-licensed therapist candidates for a patient request that we couldn't fill from our directory. Search your training data for therapists you have HIGH CONFIDENCE about — people with real Idaho licenses (LCSW/LMFT/LPC/LCPC/PsyD/PhD) who have public profiles on Psychology Today, Idaho DOPL, group-practice websites, or established Idaho mental-health clinics.
-
-PATIENT BRIEF:
-{summary_text}
-
-CRITICAL RULES:
-1. ONLY return therapists you have HIGH CONFIDENCE actually exist (you've seen their name + license_type + Idaho city in training data). Do NOT invent.
-2. If you can't find {count} confident matches, return FEWER. Returning 5 real candidates is better than 30 fabricated ones.
-3. Cities MUST be real Idaho cities (Boise, Meridian, Nampa, Idaho Falls, Pocatello, Coeur d'Alene, Twin Falls, Lewiston, Caldwell, Eagle, Post Falls, Rexburg, Moscow, Sun Valley, Ketchum, etc.).
-4. Email must be plausible (their first.last @ their public website domain, or @gmail.com / @yahoo.com for solo practitioners). Don't invent fake domains.
-5. License_type must match what their actual license is — don't guess LMFT for someone you only remember as LCSW.
-6. Specialties must come from this exact slug list: anxiety, depression, ocd, adhd, trauma_ptsd, relationship_issues, life_transitions, parenting_family, substance_use, eating_concerns, autism_neurodivergence, school_academic_stress.
-7. estimated_score should reflect your CONFIDENCE in the match (70=barely confident, 95=very confident this real person fits this brief).{extra_sources_block}
-
-For each candidate, return strict JSON with these fields:
-- name: full name + license suffix (e.g. "Sarah Chen, LCSW")
-- email: plausible private-practice email
-- license_type: one of LCSW, LMFT, LCPC, LPC, PsyD, PhD
-- specialties: 1–3 patient-relevant specialties from the slug list above
-- modalities: 1–3 modalities (e.g. "CBT", "EMDR", "IFS", "ACT", "DBT")
-- city: a real Idaho city near {city}
-- state: "{state}"
-- match_rationale: one sentence on why this therapist is a fit
-- estimated_score: integer 70–95 reflecting your confidence
-
-Return ONLY a JSON array. No prose, no markdown fences. Empty array `[]` is acceptable if you have zero high-confidence matches."""
-
-    resp = await ask_claude(
-        prompt,
-        system_message=(
-            "You are a precise research agent. Never invent therapists. "
-            "If unsure, return fewer candidates. Always return valid JSON."
-        ),
-    )
-    if resp is None:
-        return []
-
-    text = (resp or "").strip()
-    if text.startswith("```"):
-        text = text.strip("`").lstrip("json").strip()
-    try:
-        candidates = json.loads(text)
-        if not isinstance(candidates, list):
-            return []
-    except json.JSONDecodeError:
-        # Try to recover the first [ ... ] block
-        start, end = text.find("["), text.rfind("]")
-        if start != -1 and end > start:
-            try:
-                candidates = json.loads(text[start:end + 1])
-            except json.JSONDecodeError:
-                logger.warning("LLM returned non-JSON: %s", text[:300])
-                return []
-        else:
-            return []
-    return candidates[:count]
-
-
 async def _find_candidates(request: dict, count: int = 30) -> list[dict]:
-    """Hybrid cascade: PT scrape → admin-registered external directories →
-    backup directories (TherapyDen, GoodTherapy, Google Maps) → LLM fallback. Each phase only runs if we still need more candidates.
+    """Hybrid cascade: PT scrape -> admin-registered external directories ->
+    backup directories (TherapyDen, GoodTherapy, Google Maps) -> contact
+    enrichment. Each discovery phase only runs if we still need more
+    candidates; the enrichment phase always runs on the merged set.
 
     Honours the `PT_SCRAPING_ENABLED` env flag so we can disable scraping
     quickly if PT changes their HTML or starts rate-limiting us.
@@ -311,35 +227,13 @@ async def _find_candidates(request: dict, count: int = 30) -> list[dict]:
     if len(merged) >= count:
         return merged[:count]
 
-    # Phase 4: LLM-generated candidates as last resort. We KEEP the name +
-    # city + license + specialties (LLM can plausibly recall those from
-    # training data) but DROP the email field -- LLM-fabricated emails
-    # historically routed our outreach to fake addresses. The contact
-    # enrichment phase below will fill in real emails for these (or
-    # they get dropped at send-time when no real contact is found).
-    needed_extra = count - len(merged)
-    llm_results = await _find_candidates_llm(request, count=needed_extra)
-    logger.info("LLM fallback returned %d candidates (needed %d more)",
-                len(llm_results), needed_extra)
-    for c in llm_results:
-        key = ((c.get("name") or "").lower().strip(), (c.get("city") or "").lower().strip())
-        if key in seen:
-            continue
-        seen.add(key)
-        # Strip any LLM-fabricated contact info -- we only trust the
-        # discovery fields (name, city, license, specialties).
-        c.pop("email", None)
-        c.pop("phone", None)
-        c["source"] = "llm_discovery_only"
-        merged.append(c)
-
-    # Phase 5: contact enrichment. Every candidate (PT names, external
-    # directory hits, backup-scraper records, LLM-discovered names) gets
-    # run through contact_enricher.enrich_batch -- Google Places API for
-    # phone + website, then HTML scrape of the therapist's actual website
-    # for mailto:/visible-text emails. This is the ONLY step that
-    # produces verified real emails. PT/backup/LLM all only supply the
-    # therapist's identity; contact info comes from here.
+    # Phase 4: contact enrichment. Every candidate (PT names, external
+    # directory hits, backup-scraper records) gets run through
+    # contact_enricher.enrich_batch -- Google Places API for phone +
+    # website, then HTML scrape of the therapist's actual website for
+    # mailto: / visible-text emails. This is the ONLY step that
+    # produces verified real emails. Phases 1-3 only supply identity;
+    # contact info comes from here.
     #
     # Pre-clear the fake `info@<domain>` emails that backup scrapers
     # wrote so the enricher's "skip if email already set" guard doesn't

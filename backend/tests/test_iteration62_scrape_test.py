@@ -122,16 +122,27 @@ class TestOutreachDedup:
             return [_normalize_pt_to_outreach(same_person, req),
                     _normalize_pt_to_outreach(diff_person, req)]
 
-        async def fake_llm(req, count):
+        # Stub the backup-scraper + contact-enricher phases so this unit
+        # test stays hermetic (no real HTTP). The LLM phase was retired
+        # 2026-05-12; only PT + admin-registered externals + backup
+        # scrapers run now, followed by contact enrichment.
+        async def fake_backup(**kwargs):
             return []
+        async def fake_enrich(candidates, **kwargs):
+            return candidates
 
+        import directory_scrapers
+        import contact_enricher
         orig_pt = outreach_agent._find_candidates_pt
         orig_ext = outreach_agent._find_candidates_external
-        orig_llm = outreach_agent._find_candidates_llm
+        orig_backup = directory_scrapers.scrape_all_backup_sources
+        orig_enrich = contact_enricher.enrich_batch
         orig_flag = outreach_agent.PT_SCRAPING_ENABLED
         outreach_agent._find_candidates_pt = fake_pt
         outreach_agent._find_candidates_external = fake_ext
-        outreach_agent._find_candidates_llm = fake_llm
+        directory_scrapers.scrape_all_backup_sources = fake_backup
+        contact_enricher.enrich_batch = fake_enrich
+        outreach_agent.scrape_all_backup_sources = fake_backup
         outreach_agent.PT_SCRAPING_ENABLED = True
         try:
             result = asyncio.get_event_loop().run_until_complete(
@@ -142,7 +153,9 @@ class TestOutreachDedup:
         finally:
             outreach_agent._find_candidates_pt = orig_pt
             outreach_agent._find_candidates_external = orig_ext
-            outreach_agent._find_candidates_llm = orig_llm
+            directory_scrapers.scrape_all_backup_sources = orig_backup
+            contact_enricher.enrich_batch = orig_enrich
+            outreach_agent.scrape_all_backup_sources = orig_backup
             outreach_agent.PT_SCRAPING_ENABLED = orig_flag
 
         names = [c["name"] for c in result]

@@ -39,7 +39,7 @@ export default function RecruitingPanel() {
           rows={[
             { label: "When", value: "Automatically, right after matching runs. If the engine finds fewer therapists above threshold than max-invites (currently 20), outreach fires in the background. No admin click needed." },
             { label: "Who we target", value: "Therapists who exactly fit THIS patient's specialty, location, modality, and matching threshold. The brief is sanitized first -- no PII shared." },
-            { label: "Discovery sources", value: "Psychology Today scrape -> admin-registered directories -> backup scrapers (TherapyDen, GoodTherapy, Google Maps) -> LLM-suggested names. Each phase only runs if the previous one didn't fill the gap." },
+            { label: "Discovery sources", value: "Psychology Today scrape -> admin-registered directories -> backup scrapers (TherapyDen, GoodTherapy, Google Maps). Each phase only runs if the previous one didn't fill the gap. LLM fallback was retired 2026-05-12 -- we only invite therapists from real public listings now." },
             { label: "Email finder", value: "After discovery, every candidate runs through the contact enricher (Google Places API + scrape of the therapist's actual website for mailto: links). Candidates with no real email AND no real phone are silently dropped -- we never send to guessed addresses." },
             { label: "Email template", value: "\"New referral inquiry\" -- edit in Content -> Email templates." },
             { label: "See live data", value: "Directory -> Invited therapists shows every per-request invite, channel, and send status.", link: "invited_therapists" },
@@ -57,7 +57,7 @@ export default function RecruitingPanel() {
           rows={[
             { label: "When", value: "Daily gap-recruit (max 10 drafts/day) finds underserved specialty/city/age-group combos. Weekly auto-recruit cycle runs the matching simulator to find patient profiles that get ZERO matches and queues recruits against those gaps." },
             { label: "Who we target", value: "Therapists who would close a coverage hole in the directory, even when no specific patient is waiting. E.g. \"we have zero EMDR-trained LCSWs in Coeur d'Alene -- recruit some.\"" },
-            { label: "Discovery sources", value: "Same cascade as Track A (PT -> external dirs -> backup scrapers -> LLM) but seeded by the gap profile instead of a patient request." },
+            { label: "Discovery sources", value: "Same cascade as Track A (PT -> external dirs -> backup scrapers) but seeded by the gap profile instead of a patient request." },
             { label: "Email finder", value: "Same contact enricher as Track A -- Google Places + website mailto/text scrape. Guessed emails get cleared before sending." },
             { label: "Email template", value: "\"Gap-recruit invite\" -- edit in Content -> Email templates." },
             { label: "See live data", value: "Directory -> Coverage gaps shows the gap analysis + queued drafts awaiting your approval.", link: "coverage_gap" },
