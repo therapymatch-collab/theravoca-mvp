@@ -376,18 +376,34 @@ async def scrape_pt_candidates(
     needed: int = 30,
     *,
     max_pages: int = 3,
+    fetch_profiles: bool = True,
 ) -> list[dict]:
-    """Returns up to `needed` therapist names+locations from Psychology Today.
+    """Returns up to `needed` therapists from Psychology Today with REAL
+    contact data (website + license + specialties), so the downstream
+    contact-enricher website-scrape step can find their actual emails.
 
-    PT is used ONLY for discovering therapist names and cities.
-    Contact enrichment (phone, website, email) is handled separately
-    by contact_enricher via Google Places API.
+    Phase 1: Search listing JSON-LD -> name + city + profile_url.
+    Phase 2 (when fetch_profiles=True): Hit each therapist's PT profile
+      page and extract their EXTERNAL website + license suffixes +
+      specialty keywords. This is the key step that lets us find real
+      emails -- without a website, the enricher's mailto:-scrape has
+      nothing to scrape.
 
-    Each candidate dict has: name, profile_url, city, state, zip, lat, lng, source.
+    Rate-limited to MAX_PROFILE_FETCHES profiles per run with
+    REQUEST_DELAY_SEC between fetches to stay polite to PT. Cap is ~30
+    by default, so a max_pages=3 listing + Phase 2 enrichment takes
+    ~20-25 seconds and produces grounded, website-bearing candidates.
+
+    Set fetch_profiles=False to skip Phase 2 (faster, names only --
+    only useful when an upstream caller will fill in websites itself).
+
+    Each candidate dict has: name, profile_url, city, state, zip, lat,
+    lng, source. With fetch_profiles=True, also: website, license_types,
+    primary_license, specialties.
     """
     out: list[dict] = []
     async with httpx.AsyncClient(follow_redirects=True) as client:
-        # Phase 1: collect listing-card persons across paginated search
+        # ── Phase 1: paginated listing scrape ─────────────────────────
         for page in range(1, max_pages + 1):
             if len(out) >= needed:
                 break
@@ -405,10 +421,33 @@ async def scrape_pt_candidates(
                 out.append(card)
             await asyncio.sleep(REQUEST_DELAY_SEC)
 
+        logger.info(
+            "PT listing scrape: state=%s city=%s pages<=%d -> %d names found",
+            state_code, city, max_pages, len(out),
+        )
 
+        # ── Phase 2: per-profile website + specialty enrichment ───────
+        # This is what turns PT from a names-only source into a
+        # self-sufficient real-email pipeline (no Google Places needed).
+        if fetch_profiles and out:
+            enriched = 0
+            for card in out[:MAX_PROFILE_FETCHES]:
+                if not card.get("profile_url"):
+                    continue
+                details = await _fetch_profile_details(
+                    card["profile_url"], client,
+                )
+                if details:
+                    # Merge -- don't overwrite name/city/state from listing
+                    for k in ("website", "license_types", "primary_license", "specialties"):
+                        if details.get(k):
+                            card[k] = details[k]
+                    enriched += 1
+                await asyncio.sleep(REQUEST_DELAY_SEC)
+            websites_found = sum(1 for c in out if c.get("website"))
+            logger.info(
+                "PT profile enrichment: %d profiles fetched -> %d with websites",
+                enriched, websites_found,
+            )
 
-    logger.info(
-        "PT scrape: state=%s city=%s pages<=%d -> %d names found",
-        state_code, city, max_pages, len(out),
-    )
     return out
