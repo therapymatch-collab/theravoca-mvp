@@ -200,9 +200,9 @@ we scoped together but pushed to post-MVP.
 - `void = logger` workaround at end of admin.py and helpers.py
 - Clean up after broader refactor
 
-### 20. Missing input validation on intake form
-- Some edge cases (very long text, special characters) may not be sanitized
-- Audit all `db.requests.insert_one()` callers
+### 20. Missing input validation on intake form -- DONE 2026-05-12
+- max_length added to all free-text and list fields on RequestCreate
+  as part of the HIPAA quick-wins batch.
 
 ### 21. Database indexes audit
 - `db.requests` on `id`, `email`, `results_sent_at`, `unsubscribed`
@@ -267,17 +267,64 @@ we scoped together but pushed to post-MVP.
 
 ## ✅ Done (recent)
 
-- **2026-05-11** -- Outcomes admin dashboard built (4 business-question
-  tabs; replaces planned Phase 5 design)
-- **2026-05-11** -- Date range picker (default 90d) on Outcomes
-- **2026-05-11** -- NPS by referral source chart (Marketing tab)
-- **2026-05-11** -- Detractor alert list (Satisfaction tab)
-- **2026-05-11** -- Hide obsolete Feedback admin tab
-- **2026-05-11** -- Fix mojibake in matching.py / helpers.py / auto_recruit.py
-- **2026-05-11** -- Tighten encoding-check script (stop false-flagging legit unicode)
-- **2026-05-11** -- Fix hardcoded `30` in match-gap alert; now reads `max_invites` from app_config
-- **2026-05-11** -- Add `session_expectations` field to patient results page
-- **2026-05-11** -- CLAUDE.md rule 5 updated: git from chat
+### 2026-05-12 (autonomy-mode shipping batch)
+- Admin console reorg per approved mockup -- 5 primary tabs (Inbox /
+  Directory / Outcomes / Content / Operations) + dev-only Testing.
+  Master Query moved to top-right modal. Test buttons consolidated
+  inside Testing > Test actions.
+- Removed Research Reviews feature end-to-end (LLM agent, admin
+  endpoints, matching score bonus, frontend display, profile badges,
+  PRD docs). Reason: too complex for the signal it added.
+- Removed Emergent integration end-to-end (Stripe proxy URL,
+  demo_mode plumbing, .emergent/ config folder, frontend demo
+  fast-forward branches). Stripe now routes direct via STRIPE_API_KEY.
+- CLAUDE.md rule 5 updated to autonomy mode: Claude pushes directly
+  to staging, heartbeats with commit hash. Approval upfront via
+  mockups/specs only.
+- Test Actions panel: Run-a-cron-now (allowlist of 10), Send-test-
+  email-to-me, Strip-legacy-flags wired to real backend endpoints.
+- Stripe webhook hardening: 4 missing handlers added
+  (charge.refunded, charge.dispute.created, payment_intent.succeeded,
+  payment_intent.payment_failed) plus retrieve_subscription helper
+  that the existing handler had been silently falling back to {} on.
+- HIPAA quick wins (4 commits): security headers middleware (HSTS,
+  X-Frame-Options, CSP, Permissions-Policy), 8h admin session TTL
+  (was 30d), HMAC-hashed patient emails before LLM in master_query,
+  max_length on free-text intake fields.
+- Matching algo (3 commits): MAX_EXPECTATION_ALIGNMENT 30->40 so
+  expectation actually outranks issues (was inverted vs docstring);
+  payment_alignment partial credit (50%) when patient signals
+  flexibility but no path lands; strict-priorities silent-zero
+  guard -- if strict mode wipes everyone, re-run without strict
+  and tag results with strict_priorities_relaxed=True.
+
+### 2026-05-12 (BACKLOG cleanup -- items confirmed done in code)
+- Item #6 patient match history view -- already shipped, verified.
+- Item #7 "Fire test therapist survey" admin button -- already wired
+  in ProviderRow at `fire-test-survey-${t.id}`; BACKLOG entry was
+  stale.
+- Item #8 cron_runs_export.json security audit -- already done
+  2026-05-11.
+- Item #11 verification email greeting -- already fixed in
+  send_verification_email (greeting now renders).
+- Item #12 orphan therapist weekly pulse -- all referenced files
+  already deleted from the repo.
+- Item #20 missing input validation on intake form -- closed by
+  the 2026-05-12 HIPAA max_length pass.
+
+### 2026-05-11
+- Outcomes admin dashboard built (4 business-question tabs;
+  replaces planned Phase 5 design)
+- Date range picker (default 90d) on Outcomes
+- NPS by referral source chart (Marketing tab)
+- Detractor alert list (Satisfaction tab)
+- Hide obsolete Feedback admin tab
+- Fix mojibake in matching.py / helpers.py / auto_recruit.py
+- Tighten encoding-check script (stop false-flagging legit unicode)
+- Fix hardcoded `30` in match-gap alert; now reads `max_invites`
+  from app_config
+- Add `session_expectations` field to patient results page
+- CLAUDE.md rule 5 updated: git from chat
 
 ## How to use this list
 
