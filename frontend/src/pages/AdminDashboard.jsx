@@ -69,6 +69,7 @@ import PatientsByEmailPanel from "@/pages/admin/panels/PatientsByEmailPanel";
 import FeedbackPanel from "@/pages/admin/panels/FeedbackPanel";
 import FeedbackTrackingPanel from "@/pages/admin/panels/FeedbackTrackingPanel";
 import OutcomesPanel from "@/pages/admin/panels/OutcomesPanel";
+import MatchingPipelinePanel from "@/pages/admin/panels/MatchingPipelinePanel";
 import AuditLogPanel from "@/pages/admin/panels/AuditLogPanel";
 import WaitlistPanel from "@/pages/admin/panels/WaitlistPanel";
 import ProviderPreviewCard from "@/pages/admin/panels/ProviderPreviewCard";
@@ -1733,6 +1734,8 @@ export default function AdminDashboard() {
 
               {tab === "settings" && <SettingsPanel client={client} />}
 
+              {tab === "matching" && <MatchingPipelinePanel client={client} />}
+
               {tab === "audit_log" && <AuditLogPanel client={client} />}
 
               {tab === "scrape_sources" && <ScrapeSourcesPanel client={client} />}
@@ -3196,6 +3199,7 @@ function AdminTabsBar({
       subs: [
         { id: "team", label: "Team", count: team?.total ?? null, onClick: onLoadTeam },
         { id: "settings", label: "Settings" },
+        { id: "matching", label: "Matching" },
         { id: "referrals", label: "Referrals", onClick: onLoadReferralAnalytics },
         { id: "referral_sources", label: "Referral sources", onClick: onLoadReferralSources },
         { id: "waitlist", label: "Waitlist" },

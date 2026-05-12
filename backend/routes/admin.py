@@ -3999,6 +3999,86 @@ async def admin_set_turnstile_settings(payload: dict) -> dict[str, Any]:
     return {"ok": True, "disabled": disabled}
 
 
+@router.get("/admin/matching/pipeline", dependencies=[Depends(require_admin)])
+async def admin_matching_pipeline() -> dict[str, Any]:
+    """Read-only description of the matching pipeline + current scoring
+    weights. Source of truth for the Admin > Operations > Matching
+    panel so the displayed weights always reflect what the engine is
+    actually using right now (no double-bookkeeping)."""
+    import matching as _m
+    return {
+        "summary": (
+            "Patient request flows through hard filters first (must pass "
+            "all to be considered), then each remaining therapist gets a "
+            "weighted score across multiple soft axes, plus bonuses for "
+            "deeper signals. The final score is mapped to a 0-97 display "
+            "range; above the patient's threshold (default 70%) we send "
+            "the top N as matches. Cap of 97 leaves headroom for future "
+            "weight tuning without re-norming."
+        ),
+        "hard_filters": [
+            {"name": "State license", "blocks_when": "Therapist not licensed in patient's state"},
+            {"name": "Client type", "blocks_when": "Therapist doesn't see this patient's client type (individual / couples / family / group)"},
+            {"name": "Age group", "blocks_when": "Therapist doesn't see this age group"},
+            {"name": "Primary concern", "blocks_when": "Therapist's primary + secondary specialties don't cover the patient's #1 presenting issue"},
+            {"name": "Format (in-person only)", "blocks_when": "Patient needs in-person and therapist is telehealth-only"},
+            {"name": "Format (telehealth only)", "blocks_when": "Patient needs telehealth and therapist is in-person-only"},
+            {"name": "Distance (in-person)", "blocks_when": "Patient needs in-person AND nearest therapist office is too far"},
+            {"name": "Payment", "blocks_when": "Patient marked insurance_strict and therapist doesn't take their plan (no sliding-scale fallback)"},
+            {"name": "Language (when strict)", "blocks_when": "Patient flipped language_strict and therapist doesn't speak the requested language"},
+            {"name": "Gender (when required)", "blocks_when": "Patient flipped gender_required and therapist's gender doesn't match"},
+            {"name": "Availability (when strict)", "blocks_when": "Patient flipped availability_strict and therapist offers none of the requested windows"},
+            {"name": "Urgency (when strict)", "blocks_when": "Patient flipped urgency_strict and therapist's capacity can't meet the timeframe"},
+            {"name": "Active + approved", "blocks_when": "Therapist account is inactive, pending approval, or has past_due/canceled subscription"},
+        ],
+        "scoring_axes": [
+            {"name": "Expectation alignment", "max_points": _m.MAX_EXPECTATION_ALIGNMENT, "key": "expectation_alignment",
+             "description": "Overlap between patient's session_expectations and therapist's t6 picks. THE #1 ranking signal. 'not_sure'/'depends' act as wildcards."},
+            {"name": "Presenting issues", "max_points": _m.MAX_ISSUES, "key": "issues",
+             "description": "Primary specialty match counts most; secondary specialties + general_treats add diminishing returns for #2 and #3 concerns."},
+            {"name": "Therapist reliability", "max_points": _m.MAX_RELIABILITY, "key": "reliability",
+             "description": "Weighted: response_rate 25%, expectation_accuracy 20%, retention_9w 20%, retention_15w 20%, selection_rate 15%. Defaults to 50% for therapists without enough history."},
+            {"name": "Payment alignment", "max_points": _m.MAX_PAYMENT_ALIGNMENT, "key": "payment_alignment",
+             "description": "Full points when therapist accepts patient's insurance; partial credit when there's a viable sliding-scale or cash fallback path; zero otherwise."},
+            {"name": "Availability", "max_points": _m.MAX_AVAILABILITY, "key": "availability",
+             "description": "Overlap between patient's preferred windows and therapist's offered windows. Flexible counts as a wildcard."},
+            {"name": "Modality (format)", "max_points": _m.MAX_MODALITY, "key": "modality",
+             "description": "How well the therapist's in-person / telehealth / hybrid offering matches the patient's preference (when not already enforced as hard)."},
+            {"name": "Urgency", "max_points": _m.MAX_URGENCY, "key": "urgency",
+             "description": "Therapist's urgency_capacity vs patient's urgency. Sooner-than-needed = full points; matching = full; slower = partial."},
+            {"name": "Prior therapy", "max_points": _m.MAX_PRIOR, "key": "prior_therapy",
+             "description": "Patient's prior-therapy history vs therapist's experience treating returning vs first-time patients."},
+            {"name": "Experience level", "max_points": _m.MAX_EXPERIENCE, "key": "experience",
+             "description": "Match between patient's preferred experience bucket (0-3 / 3-7 / 7-15 / 15+ years) and therapist's years_experience."},
+            {"name": "Modality preference (CBT/DBT/etc.)", "max_points": _m.MAX_MODALITY_PREF, "key": "modality_pref",
+             "description": "Bonus when patient's preferred therapy approaches overlap with therapist's modalities."},
+            {"name": "Gender preference", "max_points": _m.MAX_GENDER, "key": "gender",
+             "description": "Small bonus when therapist's gender matches the patient's preference (when not already a hard filter)."},
+            {"name": "Payment fit (sliding scale)", "max_points": _m.MAX_PAYMENT_FIT, "key": "payment_fit",
+             "description": "Bonus when patient marked sliding_scale_ok AND therapist offers sliding scale -- a small extra reward for flexibility."},
+            {"name": "Style preference", "max_points": _m.MAX_STYLE, "key": "style",
+             "description": "Bonus when patient's style preferences (e.g. 'warm-supportive', 'direct') overlap with therapist's style tags."},
+        ],
+        "bonuses": [
+            {"name": "Research evidence (deep)", "max_points": 25,
+             "description": "LLM-graded grade of therapist's public web footprint vs patient's primary concern. Adds up to +25 above the structured score. Requires deep research to be enabled."},
+            {"name": "Deep-match (P1/P2/P3)", "max_points": 30,
+             "description": "When patient opted into deep-match intake and answered P1 (relationship style), P2 (way of working), P3 (resonance), embeddings of these match against therapist T1/T3/T5. Adds up to +30."},
+            {"name": "Prior-therapy resonance", "max_points": _m.MAX_PRIOR_THERAPY_BONUS,
+             "description": "Embedding similarity between patient's prior-therapy notes and therapist's T5 lived-experience description."},
+        ],
+        "display_normalization": {
+            "max_display_score": 97,
+            "min_threshold_default_pct": 70,
+            "description": "Raw scores 0-130+ are mapped through a piecewise-linear curve to 0-97 so the top of the range stays differentiated as weights are tuned.",
+        },
+        "delivery": {
+            "max_invites_default": 30,
+            "description": "Top N therapists above the patient's threshold get notified via email + SMS. Configurable per environment in app_config.matching_defaults.",
+        },
+    }
+
+
 @router.get("/admin/master-testing-mode", dependencies=[Depends(require_admin)])
 async def admin_get_master_testing_mode() -> dict[str, Any]:
     """Current state of the master testing-mode toggle. See testing_mode.py
