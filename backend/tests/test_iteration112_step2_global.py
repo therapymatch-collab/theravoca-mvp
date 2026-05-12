@@ -114,9 +114,11 @@ def test_step2_response_quality_breakdown():
     )
     a.update(compute_patient_rank_score(a, req))
     rq = a["response_quality"]
-    assert rq["issue_match"] == 3.0  # "trauma" matched
-    assert rq["action_signal"] == 2.0  # "schedule" + "tomorrow"
-    assert rq["personal_voice"] >= 1.0  # "I work with..."
+    # Rebalanced 2026-05-12: sub-axis caps bumped 1.5x as part of
+    # promoting apply-quality signals over the (now-retired) commit bonus.
+    assert rq["issue_match"] == 4.5  # "trauma" matched
+    assert rq["action_signal"] == 3.0  # "schedule" + "tomorrow"
+    assert rq["personal_voice"] >= 1.5  # "I work with..."
     assert rq["length"] > 0
 
 

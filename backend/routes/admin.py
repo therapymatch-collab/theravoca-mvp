@@ -4213,19 +4213,23 @@ async def admin_matching_pipeline() -> dict[str, Any]:
                 "After matched therapists apply, the patient's results page "
                 "re-ranks them using a second formula -- not just the Step 1 "
                 "match score. This is what determines the ORDER patients see "
-                "their matches in. Max raw 118 -> rescaled 0-99."
+                "their matches in. Max raw 113 -> rescaled 0-99. Rebalanced "
+                "2026-05-12: commit-confirmation bonus retired (was awarded to "
+                "100% of applicants -- gating, not signal); apply-message-fit "
+                "and message-quality bumped so a thoughtful, on-brief response "
+                "moves rank meaningfully against a generic one."
             ),
             "components": [
-                {"name": "Step-1 baseline", "max_points": 57,
-                 "description": "The Step-1 match score scaled down to 60% so apply-time signals can meaningfully shift order. Capped at 95% to avoid 'perfect on paper' impressions."},
-                {"name": "Speed bonus", "max_points": 30,
-                 "description": "Faster reply earns more points. Linear: full 30 if the therapist applies within the first hour after match release; 0 by 24h."},
-                {"name": "Apply-message fit", "max_points": 10,
-                 "description": "Claude grades the therapist's apply message 0-5 against the patient brief (presenting issues + style + prior therapy + free-text), then doubled. THE strongest patient-facing signal of a thoughtful response. Lives in research_enrichment.score_apply_fit; stored on the application doc as apply_fit."},
-                {"name": "Message quality", "max_points": 12,
-                 "description": "Structural quality of the apply message: length (max 6), names the presenting issue (3), action keyword like 'schedule/availability/consult' (2), uses first-person 'I/my' (1). No LLM cost."},
-                {"name": "Commit bonus", "max_points": 9,
-                 "description": "Up to +3 each for explicitly confirming availability, urgency, and payment in the apply flow. Signals 'I can take you' vs 'I'm interested.'"},
+                {"name": "Step-1 baseline", "max_points": 45,
+                 "description": "The Step-1 match score scaled to 45% so apply-time signals can dominate ranking when an algorithmic match is close. Capped at 95% to avoid 'perfect on paper' impressions."},
+                {"name": "Speed bonus", "max_points": 25,
+                 "description": "Faster reply earns more points. Linear: full 25 if the therapist applies within the first hour after match release; 0 by 24h."},
+                {"name": "Apply-message fit", "max_points": 25,
+                 "description": "Claude grades the therapist's apply message 0-5 against the patient brief (presenting issues + style + prior therapy + free-text), then multiplied by 5. THE strongest patient-facing signal of a thoughtful response. Lives in research_enrichment.score_apply_fit; stored on the application doc as apply_fit."},
+                {"name": "Message quality", "max_points": 18,
+                 "description": "Structural quality of the apply message: length (max 9), names the presenting issue (4.5), action keyword like 'schedule/availability/consult' (3), uses first-person 'I/my' (1.5). No LLM cost."},
+                {"name": "Commit bonus", "max_points": 0,
+                 "description": "Retired as a scoring axis (was +3 each for 3 confirmations -- but the apply form gates submit on all three, so 100% of applicants earned the full 9 pts, no variance). The 3 confirmation checkboxes are still REQUIRED to apply; they just no longer affect ranking."},
             ],
         },
         "deep_research": {

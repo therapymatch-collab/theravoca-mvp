@@ -31,7 +31,12 @@ _ACTION_KEYWORDS = (
 )
 # Theoretical max raw_total used to rescale `patient_rank_score` to a
 # 0-99 display number. Keep this in sync with the component caps below.
-PATIENT_RANK_MAX = 118.0
+# Rebalanced 2026-05-12: commit bonus removed (was 9 pts, awarded to
+# 100% of applying therapists since the frontend gates submit on all
+# three confirmations -- no variance, no signal); apply-message-fit
+# and message-quality weights bumped so a thoughtful, on-brief response
+# can move the rank meaningfully relative to a generic one.
+PATIENT_RANK_MAX = 113.0
 
 
 def compute_patient_rank_score(application: dict, request: dict) -> dict:
@@ -40,21 +45,21 @@ def compute_patient_rank_score(application: dict, request: dict) -> dict:
     Returns a dict shaped like:
       {
         "patient_rank_score": 0-99 float (rescaled),
-        "response_quality": {...component scores 0-12...},
-        "rank_components": {...raw step1 / speed / quality / fit / commit...},
+        "response_quality": {...component scores 0-18...},
+        "rank_components": {...raw step1 / speed / quality / fit ...},
       }
 
     The breakdown surfaces in the patient's UI (tooltip on score chip)
     AND the admin Applications panel so both views agree on ranking.
 
     Components (raw, pre-rescale):
-      - step1_baseline (0-57)  match_score * 0.6, capped at 95% Step-1
-      - speed_bonus    (0-30)  faster reply within first 24h scores higher
-      - quality_bonus  (0-12)  length + issue match + action signal + voice
-      - apply_fit_bonus(0-10)  apply_fit (LLM grade 0-5) * 2
-      - commit_bonus   (0-9)   +3 each for confirms_availability/urgency/payment
-    Total max raw = 118. Rescaled to 0-99 (raw / 1.18) so the realistic
-    top is ~91 and ceiling is 99 — never display 100% (mirrors the 95%
+      - step1_baseline (0-45)  match_score * 0.45, capped at ~43 in practice
+      - speed_bonus    (0-25)  faster reply within first 24h scores higher
+      - quality_bonus  (0-18)  length + issue match + action signal + voice
+      - apply_fit_bonus(0-25)  apply_fit (LLM grade 0-5) * 5
+      - commit_bonus   (always 0) -- gating only, not scored
+    Total max raw = 113. Rescaled to 0-99 (raw / 1.13) so the realistic
+    top is ~94 and ceiling is 99 -- never display 100% (mirrors the 95%
     Step-1 cap philosophy: no relationship is perfect on paper).
     """
     ms = float(application.get("match_score") or 0)
@@ -65,11 +70,11 @@ def compute_patient_rank_score(application: dict, request: dict) -> dict:
         applied_dt = _parse_iso(application.get("created_at") or "")
         if applied_dt:
             hours = max(0.0, (applied_dt - matched_dt).total_seconds() / 3600.0)
-            speed_bonus = max(0.0, min(30.0, 30.0 * (24.0 - hours) / 24.0))
+            speed_bonus = max(0.0, min(25.0, 25.0 * (24.0 - hours) / 24.0))
 
     msg = (application.get("message") or "").lower()
     msg_len = len(msg)
-    len_score = min(6.0, msg_len / 300.0 * 6.0)
+    len_score = min(9.0, msg_len / 300.0 * 9.0)
     issue_score = 0.0
     patient_issues = [
         i.lower() for i in (request.get("presenting_issues") or []) if i
@@ -80,31 +85,30 @@ def compute_patient_rank_score(application: dict, request: dict) -> dict:
         # avoid false positives like "ed".
         tokens = [issue] + issue.replace("_", " ").split()
         if any(tok in msg for tok in tokens if len(tok) >= 4):
-            issue_score = 3.0
+            issue_score = 4.5
             break
-    action_score = 2.0 if any(k in msg for k in _ACTION_KEYWORDS) else 0.0
-    personal_score = 1.0 if re.search(
+    action_score = 3.0 if any(k in msg for k in _ACTION_KEYWORDS) else 0.0
+    personal_score = 1.5 if re.search(
         r"\b(i\s|i'd|i'll|i've|i'm|my\s)", msg,
     ) else 0.0
     quality_bonus = min(
-        12.0, len_score + issue_score + action_score + personal_score,
+        18.0, len_score + issue_score + action_score + personal_score,
     )
 
     apply_fit = float(application.get("apply_fit") or 0)
-    apply_fit_bonus = round(apply_fit * 2.0, 1)
+    apply_fit_bonus = round(apply_fit * 5.0, 1)
 
+    # Commit confirmations are now gating-only: the frontend disables
+    # submit until all three are checked, so this used to award a flat
+    # 9 pts to every applicant -- no variance, no useful signal. Kept
+    # as a (0.0) breakdown entry so existing tooltips/admin code that
+    # reads rank_components.commit_bonus still find the key.
     commit_bonus = 0.0
-    if application.get("confirms_availability"):
-        commit_bonus += 3.0
-    if application.get("confirms_urgency"):
-        commit_bonus += 3.0
-    if application.get("confirms_payment"):
-        commit_bonus += 3.0
 
     raw_step2 = (
-        ms * 0.6 + speed_bonus + quality_bonus + apply_fit_bonus + commit_bonus
+        ms * 0.45 + speed_bonus + quality_bonus + apply_fit_bonus + commit_bonus
     )
-    patient_rank_score = round(min(99.0, raw_step2 / 1.18), 1)
+    patient_rank_score = round(min(99.0, raw_step2 / 1.13), 1)
     return {
         "patient_rank_score": patient_rank_score,
         "response_quality": {
@@ -115,7 +119,7 @@ def compute_patient_rank_score(application: dict, request: dict) -> dict:
             "total": round(quality_bonus, 1),
         },
         "rank_components": {
-            "step1_baseline": round(ms * 0.6, 1),
+            "step1_baseline": round(ms * 0.45, 1),
             "speed_bonus": round(speed_bonus, 1),
             "quality_bonus": round(quality_bonus, 1),
             "apply_fit_bonus": apply_fit_bonus,
