@@ -12,6 +12,12 @@ import { Input } from "@/components/ui/input";
 //   1. POST /admin/scraper-test  -> returns { job_id }
 //   2. Poll GET /admin/scraper-jobs/{job_id} until phase === "complete"
 //   3. Render the candidates list with completeness sorting
+//
+// The job runs server-side in MongoDB, so it survives page navigation.
+// We persist the active job_id to localStorage so revisiting this panel
+// re-attaches to the in-progress job (or shows the most recent results).
+const ACTIVE_JOB_STORAGE_KEY = "tv_admin_scraper_active_job";
+
 export default function ScraperTestPanel({ client }) {
   const [city, setCity] = useState("");
   const [state, setState] = useState("ID");
@@ -63,6 +69,40 @@ export default function ScraperTestPanel({ client }) {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current);
   }, []);
 
+  // Re-attach to an in-progress (or most recent) job when the panel
+  // re-mounts -- e.g. after the admin navigated away and came back.
+  // Only reads localStorage on mount; subsequent state changes don't
+  // re-trigger this.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    let cancelled = false;
+    const savedId = (() => {
+      try { return localStorage.getItem(ACTIVE_JOB_STORAGE_KEY); } catch { return null; }
+    })();
+    if (!savedId) return;
+    (async () => {
+      try {
+        const r = await client.get(`/admin/scraper-jobs/${savedId}`);
+        if (cancelled) return;
+        const j = r.data;
+        if (!j) return;
+        setJob(j);
+        setPhase(j?.phase || "scraping");
+        if (j.city) setCity(j.city);
+        if (j.state) setState(j.state);
+        const inProgress =
+          ["starting", "scraping", "enriching"].includes(j?.phase) &&
+          !j?.completed_at;
+        if (inProgress) pollUntilDone(savedId);
+      } catch (e) {
+        if (e?.response?.status === 404) {
+          try { localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY); } catch {}
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const startJob = async () => {
     if (!city.trim()) return;
     setError("");
@@ -80,6 +120,7 @@ export default function ScraperTestPanel({ client }) {
       const r = await client.post("/admin/scraper-test", payload);
       const jobId = r.data?.job_id;
       if (!jobId) throw new Error("No job_id returned");
+      try { localStorage.setItem(ACTIVE_JOB_STORAGE_KEY, jobId); } catch {}
       setPhase("scraping");
       pollUntilDone(jobId);
     } catch (e) {
