@@ -4,19 +4,23 @@ When a patient request has `outreach_needed_count > 0` (we couldn't fill our
 max-invites target from the directory), this module cascades through real,
 public data sources to find therapist candidates:
 
-1. **Psychology Today** — JSON-LD scrape of PT directory listings. See
-   `pt_scraper.py`. Discovery only (names, cities, specialties); contact
-   info is filled in by the enricher.
-2. **Admin-registered external directories** — configurable URLs scraped via
-   `external_scraper.py` (JSON-LD first, LLM extraction fallback).
-3. **Backup directories** — TherapyDen, GoodTherapy (HTML scraping), and
-   Google Maps (Places API with GOOGLE_PLACES_API_KEY). See
-   `directory_scrapers.py`.
-4. **Contact enrichment** — every candidate from above flows through
-   `contact_enricher.enrich_batch` which hits Google Places + scrapes the
-   therapist's actual website for `mailto:` / visible-text emails. This is
-   the only step that produces verified real emails. Candidates with no
-   real contact info are silently dropped at send-time.
+1. **Google Places API (New)** — PRIMARY source. Returns real Business
+   Profiles with name + website + phone in one call. See
+   `directory_scrapers.scrape_google_maps` + `places_client.py`. Requires
+   `GOOGLE_PLACES_API_KEY`. Highest quality + fastest path to real emails.
+2. **Psychology Today** — secondary. Catches therapists who aren't on
+   Google Business but are on PT, and adds specialty tags Places doesn't
+   expose. Discovery only (no contact info from PT itself).
+3. **Admin-registered external directories** — configurable URLs scraped
+   via `external_scraper.py`.
+4. **Backup directories** — TherapyDen, GoodTherapy (HTML scraping; Google
+   Maps is skipped here since it already ran as Phase 1).
+5. **Contact enrichment** — every candidate flows through
+   `contact_enricher.enrich_batch` which scrapes the therapist's actual
+   website for `mailto:` / visible-text emails. Places-sourced candidates
+   already have website + phone; PT/external candidates get a Places
+   search at this step too. Candidates with no real contact info are
+   silently dropped at send-time.
 
 LLM-generated candidates were retired 2026-05-12: the founder's call was
 that low-yield, last-resort suggestions weren't worth the ambiguity
@@ -150,6 +154,40 @@ async def _find_candidates_external(request: dict) -> list[dict]:
     return out
 
 
+async def _find_candidates_places(request: dict, count: int) -> list[dict]:
+    """Google Places API (New) as PRIMARY discovery + contact source.
+
+    Places returns real Business Profiles with name + website + phone in a
+    single call -- so we skip the PT scrape entirely when Places is
+    available, and skip the per-candidate enrichment search later.
+
+    Returns candidates already normalized to the outreach shape with
+    website + phone populated. Email still needs the website-scrape
+    enrichment step downstream.
+    """
+    state = request.get("location_state") or "ID"
+    city = request.get("location_city") or ""
+    try:
+        from directory_scrapers import scrape_google_maps
+        raw = await scrape_google_maps(
+            state_code=state,
+            city=city,
+            needed=count,
+            presenting_issues=request.get("presenting_issues"),
+        )
+    except Exception as e:
+        logger.exception("Google Places (primary) discovery failed: %s", e)
+        return []
+    out = [_normalize_pt_to_outreach(c, request) for c in raw]
+    # Pre-clear the fake info@<domain> guesses the scraper writes so the
+    # downstream website-scrape enricher can fill in the real email.
+    for c in out:
+        if (c.get("email") or "").startswith("info@"):
+            c.pop("email", None)
+    out.sort(key=lambda c: c.get("estimated_score") or 0, reverse=True)
+    return out
+
+
 async def _find_candidates_pt(request: dict, count: int) -> list[dict]:
     """Real PT directory scrape, normalized into outreach candidate shape."""
     state = request.get("location_state") or "ID"
@@ -168,32 +206,58 @@ async def _find_candidates_pt(request: dict, count: int) -> list[dict]:
 
 
 async def _find_candidates(request: dict, count: int = 30) -> list[dict]:
-    """Hybrid cascade: PT scrape -> admin-registered external directories ->
-    backup directories (TherapyDen, GoodTherapy, Google Maps) -> contact
-    enrichment. Each discovery phase only runs if we still need more
-    candidates; the enrichment phase always runs on the merged set.
+    """Cascade (reordered 2026-05-12 to put Google Places FIRST):
 
-    Honours the `PT_SCRAPING_ENABLED` env flag so we can disable scraping
-    quickly if PT changes their HTML or starts rate-limiting us.
+      1. Google Places API -- primary discovery + contact. One call
+         returns real Business Profiles with name + website + phone.
+         Highest-quality source; fastest path to real emails.
+      2. Psychology Today -- catches therapists who aren't on Google but
+         are on PT, and adds specialty tags Places doesn't expose.
+      3. Admin-registered external directories.
+      4. TherapyDen + GoodTherapy (HTML scrapers; fragile).
+      5. Contact enrichment for any candidate still missing website or
+         phone. Always runs on the merged set; this is the step that
+         scrapes therapist websites for real `mailto:` / visible-text
+         emails.
+
+    Each discovery phase only runs if we still need more candidates.
+    Honours the `PT_SCRAPING_ENABLED` env flag.
     """
-    pt_results: list[dict] = []
-    if PT_SCRAPING_ENABLED:
-        pt_results = await _find_candidates_pt(request, count=count)
-        logger.info("PT scrape returned %d candidates (need %d)", len(pt_results), count)
-
-    if len(pt_results) >= count:
-        return pt_results[:count]
-
-    # Phase 2: live HTTP scrape of admin-registered external directory URLs.
-    ext_results = await _find_candidates_external(request)
-    logger.info("External scrape returned %d candidates", len(ext_results))
-
-    # Dedupe by name+city across phases so we don't double-invite.
+    # ── Phase 1: Google Places (primary) ──────────────────────────────
+    places_results = await _find_candidates_places(request, count=count)
+    logger.info(
+        "Google Places (primary) returned %d candidates (need %d)",
+        len(places_results), count,
+    )
     seen: set[tuple[str, str]] = {
         ((c.get("name") or "").lower().strip(), (c.get("city") or "").lower().strip())
-        for c in pt_results
+        for c in places_results
     }
-    merged = list(pt_results)
+    merged = list(places_results)
+    if len(merged) >= count:
+        # Still run enrichment to fill in emails from the websites Places
+        # returned. Places gives phone + website; emails require a
+        # website scrape.
+        await _enrich(merged, count)
+        return merged[:count]
+
+    # ── Phase 2: Psychology Today (secondary, catches non-Google therapists) ──
+    if PT_SCRAPING_ENABLED:
+        pt_results = await _find_candidates_pt(request, count=count)
+        logger.info("PT scrape returned %d candidates", len(pt_results))
+        for c in pt_results:
+            key = ((c.get("name") or "").lower().strip(), (c.get("city") or "").lower().strip())
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(c)
+        if len(merged) >= count:
+            await _enrich(merged, count)
+            return merged[:count]
+
+    # ── Phase 3: admin-registered external directories ────────────────
+    ext_results = await _find_candidates_external(request)
+    logger.info("External scrape returned %d candidates", len(ext_results))
     for c in ext_results:
         key = ((c.get("name") or "").lower().strip(), (c.get("city") or "").lower().strip())
         if key in seen:
@@ -201,21 +265,20 @@ async def _find_candidates(request: dict, count: int = 30) -> list[dict]:
         seen.add(key)
         merged.append(c)
     if len(merged) >= count:
+        await _enrich(merged, count)
         return merged[:count]
 
-    # Phase 3: backup directory scrapers (TherapyDen, GoodTherapy, Google Maps).
-    # These run in parallel and return real, grounded candidates with actual
-    # contact info (emails and phones). Google Maps is the most reliable since
-    # it uses an official API — the others are HTML scraping that may break
-    # if the sites change their layout.
+    # ── Phase 4: backup scrapers (TherapyDen + GoodTherapy; skip Google
+    # Maps since it already ran as Phase 1) ────────────────────────────
     needed_backup = count - len(merged)
     backup_results = await scrape_all_backup_sources(
         state_code=request.get("location_state") or "ID",
         city=request.get("location_city") or "",
         needed=needed_backup,
         presenting_issues=request.get("presenting_issues"),
+        skip_google_maps=True,
     )
-    logger.info("Backup scrapers returned %d candidates (needed %d more)",
+    logger.info("Backup scrapers (TD+GT) returned %d candidates (needed %d more)",
                 len(backup_results), needed_backup)
     for c in backup_results:
         c_norm = _normalize_pt_to_outreach(c, request)
@@ -224,30 +287,31 @@ async def _find_candidates(request: dict, count: int = 30) -> list[dict]:
             continue
         seen.add(key)
         merged.append(c_norm)
-    if len(merged) >= count:
-        return merged[:count]
 
-    # Phase 4: contact enrichment. Every candidate (PT names, external
-    # directory hits, backup-scraper records) gets run through
-    # contact_enricher.enrich_batch -- Google Places API for phone +
-    # website, then HTML scrape of the therapist's actual website for
-    # mailto: / visible-text emails. This is the ONLY step that
-    # produces verified real emails. Phases 1-3 only supply identity;
-    # contact info comes from here.
-    #
-    # Pre-clear the fake `info@<domain>` emails that backup scrapers
-    # wrote so the enricher's "skip if email already set" guard doesn't
-    # block real-email extraction.
-    for c in merged:
+    await _enrich(merged, count)
+    return merged[:count]
+
+
+async def _enrich(candidates: list[dict], count: int) -> None:
+    """Run contact_enricher.enrich_batch on the merged candidate list.
+
+    Pre-clears fake info@<domain> guesses so the enricher's 'skip if
+    email already set' guard doesn't block real-email extraction from
+    the therapist's actual website.
+
+    Places-sourced candidates already have website + phone; the
+    enricher will hit their website to extract the email. Non-Places
+    candidates (PT, external) only have name + city; the enricher
+    searches Places for them too.
+    """
+    for c in candidates:
         if (c.get("email") or "").startswith("info@"):
             c.pop("email", None)
     try:
         from contact_enricher import enrich_batch
-        await enrich_batch(merged, max_enrich=count * 2)
+        await enrich_batch(candidates, max_enrich=count * 2)
     except Exception as e:
         logger.warning("Contact enrichment failed: %s", e)
-
-    return merged[:count]
 
 
 def _send_invite_sms_body(candidate: dict, request: dict, score: int, opt_out_url: str) -> str:

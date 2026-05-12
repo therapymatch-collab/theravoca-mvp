@@ -710,31 +710,34 @@ async def scrape_all_backup_sources(
     city: str | None = None,
     needed: int = 30,
     presenting_issues: list[str] | None = None,
+    *,
+    skip_google_maps: bool = False,
 ) -> list[dict]:
     """Run all backup scrapers in parallel and return deduplicated candidates.
 
-    Runs TherapyDen, GoodTherapy, and Google Maps concurrently. Deduplicates
-    by name+city (case-insensitive), sorts by record completeness (candidates
-    with both email AND phone rank higher), and returns up to `needed`.
-    """
-    # Run all three in parallel; each handles its own errors internally
-    therapyden_task = asyncio.create_task(
-        scrape_therapyden(state_code, city, needed),
-    )
-    goodtherapy_task = asyncio.create_task(
-        scrape_goodtherapy(state_code, city, needed),
-    )
-    google_maps_task = asyncio.create_task(
-        scrape_google_maps(state_code, city, needed, presenting_issues),
-    )
+    Runs TherapyDen, GoodTherapy, and (optionally) Google Maps concurrently.
+    `skip_google_maps=True` lets callers that already ran Google Maps as
+    their primary tier avoid duplicating the API spend here.
 
-    results = await asyncio.gather(
-        therapyden_task, goodtherapy_task, google_maps_task,
-        return_exceptions=True,
-    )
+    Deduplicates by name+city (case-insensitive), sorts by record
+    completeness (candidates with both email AND phone rank higher), and
+    returns up to `needed`.
+    """
+    # Run scrapers in parallel; each handles its own errors internally
+    tasks = [
+        asyncio.create_task(scrape_therapyden(state_code, city, needed)),
+        asyncio.create_task(scrape_goodtherapy(state_code, city, needed)),
+    ]
+    source_names = ["TherapyDen", "GoodTherapy"]
+    if not skip_google_maps:
+        tasks.append(asyncio.create_task(
+            scrape_google_maps(state_code, city, needed, presenting_issues),
+        ))
+        source_names.append("Google Maps")
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
     all_candidates: list[dict] = []
-    source_names = ["TherapyDen", "GoodTherapy", "Google Maps"]
     for i, result in enumerate(results):
         if isinstance(result, Exception):
             logger.warning(
