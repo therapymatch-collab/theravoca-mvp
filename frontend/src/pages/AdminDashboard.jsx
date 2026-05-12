@@ -75,6 +75,7 @@ import ProviderPreviewCard from "@/pages/admin/panels/ProviderPreviewCard";
 import SimulatorPanel from "@/pages/admin/panels/SimulatorPanel";
 import ScraperTestPanel from "@/pages/admin/panels/ScraperTestPanel";
 import FeedbackTestPanel from "@/pages/admin/panels/FeedbackTestPanel";
+import TestActionsPanel from "@/pages/admin/panels/TestActionsPanel";
 import { StatBox } from "@/pages/admin/panels/_panelShared";
 
 // ─── Editor option lists (mirrors TherapistSignup) ───
@@ -718,6 +719,14 @@ export default function AdminDashboard() {
   };
 
 
+  // Master Query is rendered as a modal triggered from a top-right
+  // button (admin-reorg mockup v1). The deep-link tab key "master_query"
+  // also opens it for backwards compatibility with bookmarks.
+  const [masterQueryOpen, setMasterQueryOpen] = useState(false);
+  useEffect(() => {
+    if (tab === "master_query") setMasterQueryOpen(true);
+  }, [tab]);
+
   const [researchingReviews, setResearchingReviews] = useState(false);
   const runReviewResearch = async () => {
     if (!confirm(
@@ -1083,68 +1092,22 @@ export default function AdminDashboard() {
                 Operations
               </h1>
             </div>
-            <div className="flex flex-col gap-3">
-              {/* ── Actions ── */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  className="tv-btn-secondary !py-2 !px-4 text-sm"
-                  onClick={runBackfill}
-                  data-testid="backfill-btn"
-                  title="Complete every therapist profile with realistic fake data"
-                >
-                  Backfill profiles
-                </button>
-                <button
-                  className="tv-btn-secondary !py-2 !px-4 text-sm disabled:opacity-60"
-                  onClick={runReviewResearch}
-                  disabled={researchingReviews}
-                  data-testid="research-reviews-btn"
-                  title="LLM-research public reviews for therapists (folds into match score)"
-                >
-                  {researchingReviews ? (
-                    <Loader2 size={14} className="inline mr-1.5 animate-spin" />
-                  ) : (
-                    <Star size={14} className="inline mr-1.5" />
-                  )}
-                  Research reviews
-                </button>
-                <button
-                  className="tv-btn-secondary !py-2 !px-4 text-sm"
-                  onClick={sendTestSms}
-                  data-testid="test-sms-btn"
-                  title="Send a test SMS to the configured Twilio dev override number"
-                >
-                  <MessageSquare size={14} className="inline mr-1.5" /> Test SMS
-                </button>
-                <button
-                  className="tv-btn-secondary !py-2 !px-4 text-sm"
-                  onClick={refresh}
-                  data-testid="refresh-btn"
-                >
-                  <RotateCw size={14} className="inline mr-1.5" /> Refresh
-                </button>
-              </div>
-              {/* ── Destructive (pre-launch) ── */}
-              <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-gray-200">
-                <span className="text-xs text-gray-400 uppercase tracking-wide mr-1">Pre-launch</span>
-                <button
-                  className="!py-2 !px-4 text-sm rounded-md border border-[#D45D5D] text-[#D45D5D] bg-white hover:bg-[#D45D5D] hover:text-white transition"
-                  onClick={stripBackfill}
-                  data-testid="strip-backfill-btn"
-                  title="Pre-launch reversal: restore real emails + remove all fields backfill added. User-edited fields are preserved."
-                >
-                  Strip backfilled data
-                </button>
-                <button
-                  className="!py-2 !px-4 text-sm rounded-md border border-[#D45D5D] text-[#D45D5D] bg-white hover:bg-[#D45D5D] hover:text-white transition"
-                  onClick={openWipeDialog}
-                  data-testid="wipe-test-data-btn"
-                  title="Pre-launch: delete every request, application, simulator run, and non-seeded therapist. Keeps the seeded therapist directory + all admin/site config."
-                >
-                  <Trash2 size={14} className="inline mr-1.5" />
-                  Wipe test data
-                </button>
-              </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setMasterQueryOpen(true)}
+                data-testid="master-query-btn"
+                title="Natural-language Q&A over your data"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#2D4A3E] text-white text-sm font-medium hover:bg-[#3A5E50] transition"
+              >
+                <Sparkles size={14} /> Master Query
+              </button>
+              <button
+                className="tv-btn-secondary !py-2 !px-4 text-sm"
+                onClick={refresh}
+                data-testid="refresh-btn"
+              >
+                <RotateCw size={14} className="inline mr-1.5" /> Refresh
+              </button>
             </div>
           </div>
 
@@ -1769,7 +1732,18 @@ export default function AdminDashboard() {
                 />
               )}
 
-              {tab === "master_query" && <MasterQueryPanel client={client} />}
+              {/* Master Query is rendered as a modal further down -- the
+                  effect on `tab` change opens it. No inline render here. */}
+
+              {tab === "test_actions" && (
+                <TestActionsPanel
+                  refresh={refresh}
+                  runBackfill={runBackfill}
+                  stripBackfill={stripBackfill}
+                  openWipeDialog={openWipeDialog}
+                  sendTestSms={sendTestSms}
+                />
+              )}
 
               {tab === "blog" && <BlogAdminPanel client={client} />}
 
@@ -1974,6 +1948,32 @@ export default function AdminDashboard() {
               )}
             </button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Master Query modal -- triggered by the top-right header button.
+          Closing it reverts the deep-link tab key so the page underneath
+          isn't left blank when the user came in via /admin?tab=master_query. */}
+      <Dialog
+        open={masterQueryOpen}
+        onOpenChange={(open) => {
+          setMasterQueryOpen(open);
+          if (!open && tab === "master_query") setTab("requests");
+        }}
+      >
+        <DialogContent
+          className="max-w-3xl max-h-[85vh] overflow-y-auto bg-white border-[#E8E5DF]"
+          data-testid="master-query-dialog"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-serif-display text-2xl text-[#2D4A3E] flex items-center gap-2">
+              <Sparkles size={20} /> Master Query
+            </DialogTitle>
+            <DialogDescription className="text-[#6D6A65]">
+              Natural-language Q&amp;A across patients, therapists, and matches.
+            </DialogDescription>
+          </DialogHeader>
+          <MasterQueryPanel client={client} />
         </DialogContent>
       </Dialog>
 
@@ -3081,10 +3081,16 @@ function TabBtn({ active, onClick, icon, label, count, testid, highlight }) {
   );
 }
 
-// AdminTabsBar — primary tabs visible inline; everything else goes into a
-// "More" dropdown so the bar stops overflowing horizontally on smaller
-// screens. Adding/removing tabs only touches the PRIMARY/SECONDARY arrays
-// below.
+// AdminTabsBar -- 5 primary tabs (Inbox / Directory / Outcomes / Content /
+// Operations) plus a dev-only Testing tab. Each primary tab carries a row
+// of sub-pills underneath that drive the panel render switch in
+// AdminDashboard. Tab keys are unchanged from the prior flat layout so
+// the existing render branches keep working; the reorg is pure regrouping.
+//
+// Layout follows frontend/public/admin-mockup-v1.html (approved 2026-05-11).
+// Two existing tabs (sms_status, scrape_sources) aren't on the mockup but
+// are kept under Operations so their functionality stays reachable --
+// flagged in the BACKLOG to revisit.
 function AdminTabsBar({
   tab,
   setTab,
@@ -3114,273 +3120,240 @@ function AdminTabsBar({
   referralAnalytics,
   onLoadReferralAnalytics,
 }) {
-  const PRIMARY = [
-    {
-      id: "requests",
-      label: "Requests",
-      icon: <Inbox size={14} />,
-      count: requestsCount,
-    },
-    {
-      id: "therapists",
-      label: "Pending therapists",
-      icon: <UserCheck size={14} />,
-      count: pendingTherapists,
-      highlight: pendingTherapists > 0,
-    },
-    {
-      id: "all_therapists",
-      label: "All providers",
-      icon: <Users size={14} />,
-      count: allTherapists,
-    },
-    {
-      id: "master_query",
-      label: "Master Query",
-      icon: <Sparkles size={14} />,
-    },
-  ];
+  // Hide the Testing tab on production builds. Staging currently uses a
+  // production build (REACT_APP_ADMIN_SHOW_TESTING="1" overrides if Josh
+  // wants the tab visible on staging until a real prod env exists).
+  const showTesting =
+    process.env.NODE_ENV !== "production" ||
+    process.env.REACT_APP_ADMIN_SHOW_TESTING === "1";
 
-  const SECONDARY = [
+  const TAB_TREE = [
     {
-      id: "patients",
-      label: "Patients (by email)",
+      id: "inbox",
+      label: "Inbox",
+      icon: <Inbox size={14} />,
+      subs: [
+        { id: "requests", label: "Active requests", count: requestsCount },
+        {
+          id: "therapists",
+          label: "Pending therapists",
+          count: pendingTherapists,
+          highlight: pendingTherapists > 0,
+        },
+        {
+          id: "completion",
+          label: "Profile completion",
+          count: completion?.incomplete ?? null,
+          highlight: (completion?.incomplete || 0) > 0,
+          onClick: onLoadCompletion,
+        },
+      ],
+    },
+    {
+      id: "directory",
+      label: "Directory",
       icon: <Users size={14} />,
-      count: patientsByEmail?.total ?? null,
-      onClick: onLoadPatients,
+      subs: [
+        { id: "all_therapists", label: "All providers", count: allTherapists },
+        {
+          id: "patients",
+          label: "Patients (by email)",
+          count: patientsByEmail?.total ?? null,
+          onClick: onLoadPatients,
+        },
+        {
+          id: "coverage_gap",
+          label: "Coverage gaps",
+          count:
+            (coverageGap?.summary?.critical_gaps || 0) +
+              (coverageGap?.summary?.warning_gaps || 0) || null,
+          highlight: (coverageGap?.summary?.critical_gaps || 0) > 0,
+          onClick: onLoadCoverageGap,
+        },
+        {
+          id: "invited_therapists",
+          label: "Invited therapists",
+          count: outreach?.total ?? null,
+          onClick: onLoadOutreach,
+        },
+        {
+          id: "opt_outs",
+          label: "Opt-outs",
+          count: optOuts?.total ?? null,
+          onClick: onLoadOptOuts,
+        },
+      ],
     },
-    {
-      id: "completion",
-      label: "Profile completion",
-      icon: <UserCheck size={14} />,
-      count: completion?.incomplete ?? null,
-      highlight: (completion?.incomplete || 0) > 0,
-      onClick: onLoadCompletion,
-    },
-    {
-      id: "invited_therapists",
-      label: "Invited therapists",
-      icon: <UserPlus size={14} />,
-      count: outreach?.total ?? null,
-      onClick: onLoadOutreach,
-    },
-    {
-      id: "coverage_gap",
-      label: "Coverage gaps",
-      icon: <AlertTriangle size={14} />,
-      count:
-        (coverageGap?.summary?.critical_gaps || 0) +
-        (coverageGap?.summary?.warning_gaps || 0) || null,
-      highlight: (coverageGap?.summary?.critical_gaps || 0) > 0,
-      onClick: onLoadCoverageGap,
-    },
-    {
-      id: "opt_outs",
-      label: "Opt-outs",
-      icon: <Ban size={14} />,
-      count: optOuts?.total ?? null,
-      onClick: onLoadOptOuts,
-    },
-    // Legacy raw-feedback tab hidden -- superseded by the Outcomes dashboard.
-    // The FeedbackPanel render block below is left intact so the route
-    // tab === "feedback" still works if someone deep-links to it.
     {
       id: "outcomes",
       label: "Outcomes",
       icon: <Activity size={14} />,
-      onClick: onLoadOutcomes,
+      // Single-pill primary -- the panel renders straight under the
+      // primary tab without showing a sub-pill row.
+      subs: [{ id: "outcomes", label: "Overview", onClick: onLoadOutcomes }],
     },
     {
-      id: "referrals",
-      label: "Referral analytics",
-      icon: <Share2 size={14} />,
-      onClick: onLoadReferralAnalytics,
-    },
-    {
-      id: "referral_sources",
-      label: "Referral sources",
-      icon: <TrendingUp size={14} />,
-      onClick: onLoadReferralSources,
-    },
-    {
-      id: "team",
-      label: "Team",
-      icon: <Users size={14} />,
-      count: team?.total ?? null,
-      onClick: onLoadTeam,
-    },
-    {
-      id: "blog",
-      label: "Blog",
+      id: "content",
+      label: "Content",
       icon: <Pencil size={14} />,
+      subs: [
+        { id: "blog", label: "Blog" },
+        { id: "faqs", label: "FAQs" },
+        { id: "site_copy", label: "Site copy" },
+        { id: "how_it_works", label: "How it works" },
+        {
+          id: "email_templates",
+          label: "Email templates",
+          count: emailTemplatesCount,
+          onClick: onLoadEmailTemplates,
+        },
+      ],
     },
     {
-      id: "site_copy",
-      label: "Site copy",
-      icon: <Pencil size={14} />,
-    },
-    {
-      id: "faqs",
-      label: "FAQs",
-      icon: <Pencil size={14} />,
-    },
-    {
-      id: "waitlist",
-      label: "Waitlist",
-      icon: <MapPin size={14} />,
-    },
-    // 'Feedback tracking' tab hidden -- superseded by the Outcomes
-    // dashboard. The render block for tab === 'feedback_tracking' is
-    // left intact so direct links still work.
-    {
-      id: "settings",
-      label: "Settings",
+      id: "operations",
+      label: "Operations",
       icon: <Sliders size={14} />,
-    },
-    {
-      id: "audit_log",
-      label: "Audit log",
-      icon: <Eye size={14} />,
-    },
-    {
-      id: "scrape_sources",
-      label: "Scrape sources",
-      icon: <ExternalLink size={14} />,
-    },
-    {
-      id: "sms_status",
-      label: "SMS",
-      icon: <MessageSquareWarning size={14} />,
-    },
-    {
-      id: "email_templates",
-      label: "Email templates",
-      icon: <Mail size={14} />,
-      count: emailTemplatesCount,
-      onClick: onLoadEmailTemplates,
-    },
-    {
-      id: "how_it_works",
-      label: "How it works",
-      icon: <Brain size={14} />,
-    },
-    {
-      id: "simulator",
-      label: "Matching simulator",
-      icon: <Activity size={14} />,
-    },
-    {
-      id: "scraper_test",
-      label: "Scraper test",
-      icon: <Search size={14} />,
+      subs: [
+        { id: "team", label: "Team", count: team?.total ?? null, onClick: onLoadTeam },
+        { id: "settings", label: "Settings" },
+        { id: "referrals", label: "Referrals", onClick: onLoadReferralAnalytics },
+        { id: "referral_sources", label: "Referral sources", onClick: onLoadReferralSources },
+        { id: "waitlist", label: "Waitlist" },
+        { id: "audit_log", label: "Audit log" },
+        // Not in approved mockup; kept here so functionality is reachable.
+        { id: "scrape_sources", label: "Scrape sources" },
+      ],
     },
   ];
 
-  const [moreOpen, setMoreOpen] = useState(false);
-  const activeSecondary = SECONDARY.find((t) => t.id === tab);
+  if (showTesting) {
+    TAB_TREE.push({
+      id: "testing",
+      label: "Testing",
+      icon: <Sparkles size={14} />,
+      devOnly: true,
+      subs: [
+        { id: "test_actions", label: "Test actions" },
+        { id: "simulator", label: "Matching simulator" },
+        { id: "feedback_test", label: "Feedback test tools" },
+        { id: "scraper_test", label: "Scraper test" },
+        { id: "sms_status", label: "SMS status" },
+      ],
+    });
+  }
 
-  const handleClick = (entry) => {
-    if (entry.onClick) entry.onClick();
-    setTab(entry.id);
-    setMoreOpen(false);
+  // Find which primary tab the active sub-tab belongs to. Falls back to
+  // Inbox so deep-link visits to retired tab keys land somewhere sane.
+  const activePrimary =
+    TAB_TREE.find((p) => p.subs.some((s) => s.id === tab)) || TAB_TREE[0];
+
+  const handleSubClick = (sub) => {
+    if (sub.onClick) sub.onClick();
+    setTab(sub.id);
   };
 
+  const handlePrimaryClick = (primary) => {
+    if (activePrimary.id === primary.id) return; // already here
+    const first = primary.subs[0];
+    if (first) handleSubClick(first);
+  };
+
+  const visibleSubs = activePrimary.subs.filter((s) => s.id !== "outcomes" || activePrimary.subs.length > 1);
+  const hideSubRow = activePrimary.id === "outcomes";
+
   return (
-    <div
-      className="mt-10 border-b border-[#E8E5DF] flex flex-wrap items-end gap-x-1"
-      data-testid="admin-tabs-bar"
-    >
-      {PRIMARY.map((entry) => (
-        <TabBtn
-          key={entry.id}
-          active={tab === entry.id}
-          onClick={() => handleClick(entry)}
-          icon={entry.icon}
-          label={entry.label}
-          count={entry.count}
-          testid={`tab-${entry.id}`}
-          highlight={entry.highlight}
-        />
-      ))}
-
-      {/* Active secondary tab gets pinned inline so admins know where they
-          are; the rest stay tucked under "More". */}
-      {activeSecondary && (
-        <TabBtn
-          active
-          onClick={() => handleClick(activeSecondary)}
-          icon={activeSecondary.icon}
-          label={activeSecondary.label}
-          count={activeSecondary.count}
-          testid={`tab-${activeSecondary.id}`}
-          highlight={activeSecondary.highlight}
-        />
-      )}
-
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setMoreOpen((v) => !v)}
-          className="flex items-center gap-1.5 px-4 py-3 text-sm border-b-2 border-transparent text-[#6D6A65] hover:text-[#2D4A3E] -mb-px whitespace-nowrap"
-          data-testid="tab-more-btn"
-          aria-expanded={moreOpen}
-        >
-          More
-          <ChevronDown
-            size={14}
-            className={`transition ${moreOpen ? "rotate-180" : ""}`}
+    <div className="mt-10" data-testid="admin-tabs-bar">
+      {/* Primary tab row */}
+      <div className="border-b border-[#E8E5DF] flex items-end gap-1 overflow-x-auto">
+        {TAB_TREE.filter((t) => !t.devOnly).map((primary) => (
+          <PrimaryTab
+            key={primary.id}
+            primary={primary}
+            active={activePrimary.id === primary.id}
+            onClick={() => handlePrimaryClick(primary)}
           />
-        </button>
-        {moreOpen && (
-          <>
-            <button
-              type="button"
-              onClick={() => setMoreOpen(false)}
-              aria-label="Close menu"
-              className="fixed inset-0 z-10 cursor-default"
-            />
-            <div
-              // On mobile (up to sm), anchor the menu to the LEFT edge
-              // of the trigger so the 256-px panel doesn't clip off the
-              // left edge of a 375-px viewport. From sm+ we keep the
-              // historical right-aligned position. The width also
-              // clamps to the viewport so very narrow screens still
-              // show every menu item.
-              className="absolute left-0 sm:left-auto sm:right-0 z-20 mt-1 w-[min(16rem,calc(100vw-1.5rem))] sm:w-64 bg-white border border-[#E8E5DF] rounded-xl shadow-lg py-1"
-              data-testid="tab-more-menu"
-            >
-              {SECONDARY.map((entry) => (
-                <button
-                  key={entry.id}
-                  type="button"
-                  onClick={() => handleClick(entry)}
-                  className={`flex items-center gap-2 w-full text-left px-3 py-2 text-sm hover:bg-[#FDFBF7] ${
-                    tab === entry.id
-                      ? "text-[#2D4A3E] font-semibold bg-[#FDFBF7]"
-                      : "text-[#3F3D3B]"
-                  }`}
-                  data-testid={`more-tab-${entry.id}`}
-                >
-                  <span className="text-[#6D6A65]">{entry.icon}</span>
-                  <span className="flex-1">{entry.label}</span>
-                  {entry.count != null && (
-                    <span
-                      className={`text-[11px] rounded-full px-2 py-0.5 ${
-                        entry.highlight
-                          ? "bg-[#C87965] text-white"
-                          : "bg-[#E8E5DF] text-[#6D6A65]"
-                      }`}
-                    >
-                      {entry.count}
-                    </span>
-                  )}
-                </button>
-              ))}
+        ))}
+        {showTesting &&
+          TAB_TREE.filter((t) => t.devOnly).map((primary) => (
+            <div key={primary.id} className="ml-auto">
+              <PrimaryTab
+                primary={primary}
+                active={activePrimary.id === primary.id}
+                onClick={() => handlePrimaryClick(primary)}
+                devOnly
+              />
             </div>
-          </>
-        )}
+          ))}
       </div>
+
+      {/* Sub-pill row -- omitted for single-sub primaries (Outcomes). */}
+      {!hideSubRow && (
+        <div className="mt-4 flex items-center gap-2 flex-wrap">
+          {visibleSubs.map((sub) => (
+            <SubPill
+              key={sub.id}
+              sub={sub}
+              active={tab === sub.id}
+              onClick={() => handleSubClick(sub)}
+            />
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+function PrimaryTab({ primary, active, onClick, devOnly }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={`tab-primary-${primary.id}`}
+      className={`inline-flex items-center gap-2 px-6 py-3 text-sm font-medium transition whitespace-nowrap border-b-2 -mb-px ${
+        active
+          ? "text-[#2D4A3E] border-[#2D4A3E]"
+          : "text-[#6D6A65] border-transparent hover:text-[#2D4A3E]"
+      } ${devOnly ? "ml-4 pl-6 border-l border-l-[#E8E5DF]" : ""}`}
+      style={devOnly ? { borderLeftStyle: "dashed" } : undefined}
+    >
+      {primary.icon}
+      {primary.label}
+      {devOnly && (
+        <span className="text-[10px] uppercase px-1.5 py-0.5 rounded-full bg-[#FBEFE9] text-[#8B4F3B]">
+          DEV
+        </span>
+      )}
+    </button>
+  );
+}
+
+function SubPill({ sub, active, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={`tab-sub-${sub.id}`}
+      className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition ${
+        active
+          ? "bg-[#2D4A3E] text-white"
+          : "bg-[#F2EFE8] text-[#6D6A65] hover:bg-[#E8E5DF]"
+      }`}
+    >
+      {sub.label}
+      {sub.count != null && (
+        <span
+          className={`text-[11px] rounded-full px-1.5 ${
+            sub.highlight
+              ? "bg-[#C87965] text-white"
+              : active
+              ? "bg-white/20 text-white"
+              : "bg-white text-[#6D6A65]"
+          }`}
+        >
+          {sub.count}
+        </span>
+      )}
+    </button>
   );
 }
 
