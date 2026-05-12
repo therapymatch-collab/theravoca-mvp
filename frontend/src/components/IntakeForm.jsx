@@ -80,14 +80,17 @@ export default function IntakeForm() {
   const [turnstileToken, setTurnstileToken] = useState("");
   const turnstileRef = useRef(null);
   // Runtime config: the admin can disable Turnstile at runtime via
-  // Settings → "Disable Turnstile during AI testing". We fetch the
-  // effective enabled flag from the backend and fall back to the
-  // compile-time env var when the fetch hasn't resolved yet.
+  // Settings → "Disable Turnstile during AI testing". The backend
+  // returns BOTH the enabled flag AND the site key, so we don't need
+  // the env var baked into the CRA bundle at build time -- updates
+  // to the Render env var take effect on the NEXT page load.
   const [turnstileEnabled, setTurnstileEnabled] = useState(
     !!process.env.REACT_APP_TURNSTILE_SITE_KEY,
   );
-  const turnstileSiteKey =
-    turnstileEnabled ? (process.env.REACT_APP_TURNSTILE_SITE_KEY || "") : "";
+  const [turnstileSiteKeyFromApi, setTurnstileSiteKeyFromApi] = useState(null);
+  const turnstileSiteKey = turnstileEnabled
+    ? (turnstileSiteKeyFromApi || process.env.REACT_APP_TURNSTILE_SITE_KEY || "")
+    : "";
   const turnstileWidgetIdRef = useRef(null);
 
   useEffect(() => {
@@ -95,7 +98,10 @@ export default function IntakeForm() {
     (async () => {
       try {
         const r = await api.get("/config/turnstile");
-        if (alive) setTurnstileEnabled(!!r.data?.enabled);
+        if (alive) {
+          setTurnstileEnabled(!!r.data?.enabled);
+          if (r.data?.site_key) setTurnstileSiteKeyFromApi(r.data.site_key);
+        }
       } catch (_) {
         // Keep the env-var fallback on network error.
       }

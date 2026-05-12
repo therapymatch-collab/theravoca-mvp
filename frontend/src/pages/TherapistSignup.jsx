@@ -146,14 +146,19 @@ export default function TherapistSignup() {
   const [turnstileEnabled, setTurnstileEnabled] = useState(
     !!process.env.REACT_APP_TURNSTILE_SITE_KEY,
   );
-  const turnstileSiteKey =
-    turnstileEnabled ? (process.env.REACT_APP_TURNSTILE_SITE_KEY || "") : "";
+  const [turnstileSiteKeyFromApi, setTurnstileSiteKeyFromApi] = useState(null);
+  const turnstileSiteKey = turnstileEnabled
+    ? (turnstileSiteKeyFromApi || process.env.REACT_APP_TURNSTILE_SITE_KEY || "")
+    : "";
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         const r = await api.get("/config/turnstile");
-        if (alive) setTurnstileEnabled(!!r.data?.enabled);
+        if (alive) {
+          setTurnstileEnabled(!!r.data?.enabled);
+          if (r.data?.site_key) setTurnstileSiteKeyFromApi(r.data.site_key);
+        }
       } catch (_) {
         /* keep env-var fallback */
       }

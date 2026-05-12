@@ -3906,16 +3906,29 @@ async def public_referral_source_options() -> dict[str, Any]:
 @public_router.get("/config/turnstile")
 async def public_turnstile_config() -> dict[str, Any]:
     """Public endpoint the React app calls on mount to decide whether
-    to render the Turnstile widget. Returns `{enabled: bool}`  --
+    to render the Turnstile widget. Returns:
+        { enabled: bool, site_key: str | None }
+
+    The site_key is returned so the frontend can render the widget
+    without baking the env var into the bundle at CRA build time.
+    Lifting the key from build-time to runtime means env-var changes
+    in Render take effect on the NEXT page load -- not after a full
+    rebuild.
+
     `enabled=False` when either (a) the admin has flipped the
     runtime-disable toggle (used during AI-driven E2E testing) or
     (b) neither `TURNSTILE_SITE_KEY` nor `REACT_APP_TURNSTILE_SITE_KEY`
     env vars are configured.
-    The widget only renders when `enabled=True`."""
+
+    Site keys are PUBLIC by design (Cloudflare embeds them in the
+    widget URL); the secret key never leaves the server."""
     import turnstile_service
     disabled = await turnstile_service._is_disabled_by_admin()
-    configured = bool(turnstile_service._site_key())
-    return {"enabled": (not disabled) and configured}
+    site_key = turnstile_service._site_key()
+    return {
+        "enabled": (not disabled) and bool(site_key),
+        "site_key": site_key or None,
+    }
 
 
 @public_router.get("/config/hard-capacity")
