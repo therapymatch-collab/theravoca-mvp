@@ -420,9 +420,12 @@ export default function ScraperTestPanel({ client }) {
                   <thead>
                     <tr className="bg-[#FDFBF7] text-left text-xs text-[#6D6A65] uppercase tracking-wider">
                       <th className="px-3 py-2">#</th>
-                      <th className="px-3 py-2">Name</th>
-                      <th className="px-3 py-2">License</th>
+                      <th className="px-3 py-2">Company</th>
+                      <th className="px-3 py-2">First name</th>
+                      <th className="px-3 py-2">Last name</th>
                       <th className="px-3 py-2">City</th>
+                      <th className="px-3 py-2">State</th>
+                      <th className="px-3 py-2">Matching issue</th>
                       <th className="px-3 py-2">Phone</th>
                       <th className="px-3 py-2">Email</th>
                       <th className="px-3 py-2">Website</th>
@@ -430,43 +433,52 @@ export default function ScraperTestPanel({ client }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {candidates.map((c, i) => (
-                      <tr key={i} className={`border-t border-[#E8E5DF] ${i % 2 === 0 ? "bg-white" : "bg-[#FAFAF8]"}`}>
-                        <td className="px-3 py-2 text-[#9C9893]">{i + 1}</td>
-                        <td className="px-3 py-2 font-medium text-[#2B2A29]">{c.name}</td>
-                        <td className="px-3 py-2 text-[#6D6A65]">
-                          {(c.license_types || []).join(", ") || c.primary_license || "—"}
-                        </td>
-                        <td className="px-3 py-2 text-[#2B2A29]">
-                          {c.city}{c.state ? `, ${c.state}` : ""}
-                        </td>
-                        <td className="px-3 py-2">
-                          {c.phone ? (
-                            <span className="inline-flex items-center gap-1 text-[#2D4A3E]" title={c.phone_source || ""}>
-                              <Phone size={12} /> {c.phone}
-                            </span>
-                          ) : <span className="text-[#C4C0B8]">—</span>}
-                        </td>
-                        <td className="px-3 py-2">
-                          {c.email ? (
-                            <span className="inline-flex items-center gap-1 text-[#2D4A3E]" title={c.email_source || ""}>
-                              <Mail size={12} /> {c.email}
-                            </span>
-                          ) : <span className="text-[#C4C0B8]">—</span>}
-                        </td>
-                        <td className="px-3 py-2">
-                          {c.website ? (
-                            <a href={c.website} target="_blank" rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-[#2D4A3E] hover:underline">
-                              <Globe size={12} /> open
-                            </a>
-                          ) : <span className="text-[#C4C0B8]">—</span>}
-                        </td>
-                        <td className="px-3 py-2">
-                          <SourceChip src={c.source} />
-                        </td>
-                      </tr>
-                    ))}
+                    {candidates.map((c, i) => {
+                      const { company, firstName, lastName } = splitNameField(c.name);
+                      const matched = matchedIssue(c.specialties, issues);
+                      return (
+                        <tr key={i} className={`border-t border-[#E8E5DF] ${i % 2 === 0 ? "bg-white" : "bg-[#FAFAF8]"}`}>
+                          <td className="px-3 py-2 text-[#9C9893]">{i + 1}</td>
+                          <td className="px-3 py-2 font-medium text-[#2B2A29]">{company || <span className="text-[#C4C0B8]">—</span>}</td>
+                          <td className="px-3 py-2 text-[#2B2A29]">{firstName || <span className="text-[#C4C0B8]">—</span>}</td>
+                          <td className="px-3 py-2 text-[#2B2A29]">{lastName || <span className="text-[#C4C0B8]">—</span>}</td>
+                          <td className="px-3 py-2 text-[#2B2A29]">{c.city || "—"}</td>
+                          <td className="px-3 py-2 text-[#2B2A29]">{c.state || "—"}</td>
+                          <td className="px-3 py-2 text-[#2B2A29]">
+                            {matched
+                              ? <span className="bg-[#EAF2E8] text-[#2D4A3E] px-2 py-0.5 rounded-full text-xs">{matched.replace(/_/g, " ")}</span>
+                              : (c.specialties || []).length > 0
+                                ? <span className="text-xs text-[#6D6A65]">{(c.specialties || []).slice(0, 2).map(s => s.replace(/_/g, " ")).join(", ")}</span>
+                                : <span className="text-[#C4C0B8]">—</span>}
+                          </td>
+                          <td className="px-3 py-2">
+                            {c.phone ? (
+                              <span className="inline-flex items-center gap-1 text-[#2D4A3E]" title={c.phone_source || ""}>
+                                <Phone size={12} /> {c.phone}
+                              </span>
+                            ) : <span className="text-[#C4C0B8]">—</span>}
+                          </td>
+                          <td className="px-3 py-2">
+                            {c.email ? (
+                              <span className="inline-flex items-center gap-1 text-[#2D4A3E]" title={c.email_source || ""}>
+                                <Mail size={12} /> {c.email}
+                              </span>
+                            ) : <span className="text-[#C4C0B8]">—</span>}
+                          </td>
+                          <td className="px-3 py-2">
+                            {c.website ? (
+                              <a href={c.website} target="_blank" rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[#2D4A3E] hover:underline">
+                                <Globe size={12} /> open
+                              </a>
+                            ) : <span className="text-[#C4C0B8]">—</span>}
+                          </td>
+                          <td className="px-3 py-2">
+                            <SourceChip src={c.source} />
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -506,6 +518,59 @@ function SummaryTile({ label, value, subtitle, accent, highlight }) {
       {subtitle && <div className="text-[10px] text-[#9C9893] mt-0.5">{subtitle}</div>}
     </div>
   );
+}
+
+// Heuristic split of the `name` field into company vs first/last name.
+// Google Maps / TherapyDen / GoodTherapy often return practice names
+// ("Mind Space Mental Wellness Counseling LLC"); PT returns mostly
+// individual names ("Jane Smith, LCSW"). We use a keyword list to
+// detect company-ish strings; everything else gets parsed as a person.
+const COMPANY_KEYWORDS = [
+  "llc", "inc", "pllc", "pc", "llp", "ltd",
+  "counseling", "wellness", "center", "centre", "clinic", "office",
+  "therapy", "psychology", "psychiatry", "psychiatric",
+  "associates", "partners", "group", "services", "practice",
+  "institute", "collective", "behavioral", "health",
+];
+function splitNameField(name) {
+  const raw = (name || "").trim();
+  if (!raw) return { company: "", firstName: "", lastName: "" };
+  // Strip a trailing credential suffix like ", LCSW" / ", PhD" so we
+  // don't accidentally treat it as a last name.
+  const stripped = raw.replace(
+    /,\s*(LCSW|LCPC|LPC|LMFT|LCMHC|LMHC|PsyD|PhD|MD|LMSW|MA|MEd|MSW|EdSP)\s*$/i,
+    "",
+  ).trim();
+  const lower = stripped.toLowerCase();
+  const looksLikeCompany = COMPANY_KEYWORDS.some((kw) =>
+    new RegExp(`\\b${kw}\\b`, "i").test(lower),
+  );
+  if (looksLikeCompany) {
+    return { company: raw, firstName: "", lastName: "" };
+  }
+  const tokens = stripped.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return { company: "", firstName: "", lastName: "" };
+  if (tokens.length === 1) {
+    return { company: "", firstName: tokens[0], lastName: "" };
+  }
+  return {
+    company: "",
+    firstName: tokens[0],
+    lastName: tokens.slice(1).join(" "),
+  };
+}
+
+// Return the candidate specialty that best matches the user's search
+// input (comma-separated string of issue slugs). Returns null when no
+// overlap; caller falls back to showing the first few specialties.
+function matchedIssue(specialties, issuesInput) {
+  if (!Array.isArray(specialties) || specialties.length === 0) return null;
+  const want = (issuesInput || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (want.length === 0) return null;
+  return specialties.find((s) => want.includes((s || "").toLowerCase())) || null;
 }
 
 function SourceChip({ src }) {
