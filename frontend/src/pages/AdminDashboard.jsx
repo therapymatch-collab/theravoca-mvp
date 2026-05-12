@@ -2922,7 +2922,8 @@ export default function AdminDashboard() {
                 {(detail.invited || []).length === 0 ? (
                   <p className="text-sm text-[#6D6A65]">
                     No LLM outreach invites for this request yet. If the directory
-                    returned fewer than 30 matches, click <strong>Run LLM outreach now</strong> above.
+                    returned fewer than {detail.request.effective_top_n || 30} matches,
+                    click <strong>Run LLM outreach now</strong> above.
                   </p>
                 ) : (
                   <div className="space-y-2 max-h-[360px] overflow-y-auto">
