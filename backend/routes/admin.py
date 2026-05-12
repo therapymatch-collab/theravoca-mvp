@@ -1308,6 +1308,64 @@ async def admin_list_crons(_: bool = Depends(require_admin)):
     }
 
 
+@router.get("/admin/cron/health")
+async def admin_cron_health(_: bool = Depends(require_admin)):
+    """Cron observability snapshot (BACKLOG #25).
+
+    Returns:
+      - stuck: cron_runs docs where completed_at is null AND started_at
+        is more than 24h ago. These are the canaries for "cron crashed
+        and I didn't notice for days."
+      - last_completion: per-job most-recent successful completion.
+        Stale entries (oldest first) surface jobs that should have
+        fired by now but haven't.
+      - recent_failures: cron_runs docs with status="failed" in the
+        last 7 days.
+
+    Read-only -- no side effects. Cheap enough to call from a
+    dashboard refresh.
+    """
+    cutoff_24h = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    cutoff_7d = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+
+    stuck_cur = db.cron_runs.find(
+        {"completed_at": None, "started_at": {"$lt": cutoff_24h}},
+        {"_id": 0, "name": 1, "started_at": 1, "actor": 1},
+    ).sort("started_at", 1).limit(50)
+    stuck = await stuck_cur.to_list(50)
+
+    failures_cur = db.cron_runs.find(
+        {"status": "failed", "started_at": {"$gte": cutoff_7d}},
+        {"_id": 0, "name": 1, "started_at": 1, "completed_at": 1, "error": 1},
+    ).sort("started_at", -1).limit(20)
+    recent_failures = await failures_cur.to_list(20)
+
+    # Per-job most-recent successful completion.
+    last_completion_cur = db.cron_runs.aggregate([
+        {"$match": {"completed_at": {"$ne": None}}},
+        {"$sort": {"completed_at": -1}},
+        {"$group": {
+            "_id": "$name",
+            "last_completed_at": {"$first": "$completed_at"},
+        }},
+        {"$sort": {"last_completed_at": 1}},  # stalest first
+    ])
+    last_completion = []
+    async for row in last_completion_cur:
+        last_completion.append({
+            "name": row["_id"],
+            "last_completed_at": row["last_completed_at"],
+        })
+
+    return {
+        "stuck": stuck,
+        "stuck_count": len(stuck),
+        "recent_failures": recent_failures,
+        "last_completion": last_completion,
+        "checked_at": _now_iso(),
+    }
+
+
 @router.post("/admin/cron/run")
 async def admin_run_cron(payload: dict, _: bool = Depends(require_admin)):
     """Manually fire one of the allowlisted cron functions. Useful when
