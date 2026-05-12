@@ -2,13 +2,15 @@
 # Survey timeline: 48h soft touch -> 3w selection -> 9w retention -> 15w outcome
 """TheraVoca matching engine v5  --  Expectation alignment first, reliability=25pts, Match Strength tracking.
 
-Ranking priority:
-  1. Expectation alignment  25  (patient + therapist session expectations overlap)
-  2. Availability           20
+Ranking priority (max points per axis -- highest signal first):
+  1. Expectation alignment  40  (patient + therapist session expectations overlap)
+  2. Presenting issues      35  (clinical fit)
   3. Therapist reliability  25  (passive behavior: response rate, selection, retention)
-  4. Presenting issues      35  (clinical fit)
-  5. Modality               15
-  6. Everything else: urgency 10, prior therapy 10, experience 5, gender 3, style 2
+  4. Availability           20
+  5. Payment alignment      20  (soft-penalty axis)
+  6. Modality               15
+  7. Everything else: urgency 10, prior therapy 10, experience 5, modality_pref 4,
+     prior-therapy free-text 4, gender 3, payment_fit 3, style 2
 
 Plus deep-match bonus (up to 30 when patient opts in).
 
