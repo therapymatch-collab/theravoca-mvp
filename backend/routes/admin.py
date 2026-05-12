@@ -4017,6 +4017,15 @@ async def admin_matching_pipeline() -> dict[str, Any]:
     panel so the displayed weights always reflect what the engine is
     actually using right now (no double-bookkeeping)."""
     import matching as _m
+    # Pull the LIVE admin-configurable defaults so the Step 4 numbers
+    # match what's set in /admin/matching-defaults (Settings panel).
+    # Falls back to the historical defaults when the admin hasn't
+    # changed them.
+    _mcfg = await db.app_config.find_one(
+        {"key": "matching_defaults"}, {"_id": 0},
+    ) or {}
+    _threshold_pct = int(round(float(_mcfg.get("threshold") or DEFAULT_THRESHOLD)))
+    _max_invites = int(_mcfg.get("max_invites") or 30)
     return {
         "summary": (
             "Patient request flows through hard filters first (must pass "
@@ -4080,11 +4089,11 @@ async def admin_matching_pipeline() -> dict[str, Any]:
         ],
         "display_normalization": {
             "max_display_score": 97,
-            "min_threshold_default_pct": 70,
+            "min_threshold_default_pct": _threshold_pct,
             "description": "Raw scores 0-130+ are mapped through a piecewise-linear curve to 0-97 so the top of the range stays differentiated as weights are tuned.",
         },
         "delivery": {
-            "max_invites_default": 30,
+            "max_invites_default": _max_invites,
             "description": "Top N therapists above the patient's threshold get notified via email + SMS. Configurable per environment in app_config.matching_defaults.",
         },
     }

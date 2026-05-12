@@ -111,12 +111,14 @@ export default function MatchingPipelinePanel({ client }) {
       >
         <div className="space-y-2 text-sm">
           <Row label="Max display score" value={`${data.display_normalization?.max_display_score || 97}`} />
-          <Row label="Default minimum threshold" value={`${data.display_normalization?.min_threshold_default_pct || 70}%`} />
-          <Row label="Default max invites per request" value={`${data.delivery?.max_invites_default || 30}`} />
+          <Row label="Current minimum threshold" value={`${data.display_normalization?.min_threshold_default_pct || 70}%`} />
+          <Row label="Current max invites per request" value={`${data.delivery?.max_invites_default || 30}`} />
           <p className="text-xs text-[#6D6A65] italic mt-3 leading-relaxed">
-            {data.display_normalization?.description}
-            {" "}
-            {data.delivery?.description}
+            Threshold + max invites are live values from
+            {" "}<strong>Settings &rarr; Matching defaults</strong> -- change them
+            there and refresh this page to see the new numbers.
+            {" "}{data.display_normalization?.description}
+            {" "}{data.delivery?.description}
           </p>
         </div>
       </Section>
