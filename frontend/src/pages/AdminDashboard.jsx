@@ -169,6 +169,8 @@ export default function AdminDashboard() {
   const [allTherapists, setAllTherapists] = useState([]);
   const [patientsByEmail, setPatientsByEmail] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshAt, setLastRefreshAt] = useState(null);
   const [tab, setTab] = useState("requests");
   const [openId, setOpenId] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -332,7 +334,11 @@ export default function AdminDashboard() {
     };
   }, [outreach, search, matches]);
 
+  // Returns true on success, false on failure (so the button wrapper
+  // can decide whether to toast success or error without changing the
+  // throw/return contract for ~10 internal callers).
   const refresh = useCallback(async () => {
+    setRefreshing(true);
     try {
       const [s, r, pt, allT] = await Promise.all([
         client.get("/admin/stats"),
@@ -344,6 +350,8 @@ export default function AdminDashboard() {
       setRequests(r.data);
       setPendingTherapists(pt.data);
       setAllTherapists(allT.data);
+      setLastRefreshAt(new Date());
+      return true;
     } catch (e) {
       if (e?.response?.status === STATUS_UNAUTHORIZED) {
         sessionStorage.removeItem("tv_admin_pwd");
@@ -352,10 +360,21 @@ export default function AdminDashboard() {
         sessionStorage.removeItem("tv_admin_name");
         navigate("/admin");
       }
+      return false;
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [client, navigate]);
+
+  // User-initiated refresh from the toolbar button -- adds visible
+  // feedback (toast) on top of the silent `refresh()` used internally
+  // after admin actions.
+  const refreshFromButton = useCallback(async () => {
+    const ok = await refresh();
+    if (ok) toast.success("Refreshed");
+    else toast.error("Refresh failed");
+  }, [refresh]);
 
   useEffect(() => {
     // Either auth mode is acceptable: master env password OR a per-user JWT.
@@ -1081,11 +1100,18 @@ export default function AdminDashboard() {
                 <Sparkles size={14} /> Master Query
               </button>
               <button
-                className="tv-btn-secondary !py-2 !px-4 text-sm"
-                onClick={refresh}
+                className="tv-btn-secondary !py-2 !px-4 text-sm disabled:opacity-50"
+                onClick={refreshFromButton}
+                disabled={refreshing}
                 data-testid="refresh-btn"
+                title={lastRefreshAt
+                  ? `Last refreshed at ${lastRefreshAt.toLocaleTimeString()}`
+                  : "Refresh dashboard data"}
               >
-                <RotateCw size={14} className="inline mr-1.5" /> Refresh
+                {refreshing
+                  ? <Loader2 size={14} className="inline mr-1.5 animate-spin" />
+                  : <RotateCw size={14} className="inline mr-1.5" />}
+                {refreshing ? "Refreshing..." : "Refresh"}
               </button>
             </div>
           </div>
@@ -3247,8 +3273,10 @@ function AdminTabsBar({
 
   return (
     <div className="mt-10" data-testid="admin-tabs-bar">
-      {/* Primary tab row */}
-      <div className="border-b border-[#E8E5DF] flex items-end gap-1 overflow-x-auto">
+      {/* Primary tab row. flex-wrap (not overflow-x-auto) so on narrow
+          viewports the tabs reflow rather than triggering Chrome's
+          horizontal scrollbar arrows on the right edge. */}
+      <div className="border-b border-[#E8E5DF] flex items-end gap-1 flex-wrap">
         {TAB_TREE.filter((t) => !t.devOnly).map((primary) => (
           <PrimaryTab
             key={primary.id}
