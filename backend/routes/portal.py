@@ -167,8 +167,19 @@ async def auth_request_code(payload: MagicCodeRequest):
 
 
 @router.post("/auth/verify-code")
-async def auth_verify_code(payload: MagicCodeVerify):
+async def auth_verify_code(payload: MagicCodeVerify, request: Request):
     email = payload.email.lower()
+    # Per-(ip, email) failed-attempt lockout. Keyed with a "code:" prefix
+    # so it never collides with password login failures (which use the
+    # bare ip:email key). Without this, an attacker who can reach our
+    # API could brute-force a 6-digit code (1M possibilities) inside the
+    # 30-min TTL window.
+    ip = _client_ip(request)
+    attempt_key = f"code:{ip}:{email}"
+    locked = await _password_lockout_remaining(attempt_key)
+    if locked is not None:
+        raise HTTPException(429, f"Too many failed attempts. Try again in {locked // 60 + 1} min.")
+
     now_iso = _now_iso()
     rec = await db.magic_codes.find_one({
         "email": email,
@@ -178,7 +189,9 @@ async def auth_verify_code(payload: MagicCodeVerify):
         "expires_at": {"$gte": now_iso},
     }, {"_id": 0})
     if not rec:
+        await _password_record_failure(attempt_key)
         raise HTTPException(401, "Invalid or expired code")
+    await _password_reset_failures(attempt_key)
     await db.magic_codes.update_one(
         {"id": rec["id"]}, {"$set": {"used": True, "used_at": now_iso}}
     )

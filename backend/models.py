@@ -131,6 +131,13 @@ class TherapistSignup(BaseModel):
     # Cloudflare Turnstile token (optional). Backend fail-softs when not
     # configured; verified at the route layer.
     turnstile_token: Optional[str] = Field(default=None, max_length=2200)
+    # ─── Bot defenses (rejected at the route layer; never persisted) ───
+    # Honeypot input -- a hidden field bots auto-fill. Real users leave
+    # it blank because they never see it.
+    fax_number: Optional[str] = Field(default="", max_length=200)
+    # Client timestamp (ms since epoch) when the form was first rendered.
+    # If the gap from this to submit is < ~2s, it's almost certainly a bot.
+    form_started_at_ms: Optional[int] = None
 
 
 class RequestCreate(BaseModel):

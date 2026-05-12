@@ -131,11 +131,48 @@ async def _embed_therapist_signals(
 
 @router.post("/therapists/signup", response_model=dict)
 async def therapist_signup(payload: TherapistSignup, request: Request):
-    # Cloudflare Turnstile gate (fail-soft when secret not configured).
+    # ─── Bot defenses (run before anything expensive) ──────────────────
+    # 1. Honeypot: a hidden form field bots auto-fill. Real users never
+    #    see it, so any non-empty value is a clear bot signal. Mirrors
+    #    the patient intake defense.
+    if (getattr(payload, "fax_number", "") or "").strip():
+        raise HTTPException(400, "Submission rejected.")
+    # 2. Timing heuristic: humans take >2s to fill the form, bots fire
+    #    instantly. If form_started_at_ms is missing we just skip the
+    #    check (older clients).
+    started_ms = getattr(payload, "form_started_at_ms", None)
+    if started_ms is not None:
+        try:
+            now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+            delta_s = (now_ms - int(started_ms)) / 1000.0
+            if delta_s < 2.0 or delta_s > 24 * 3600.0:
+                raise HTTPException(400, "Submission rejected.")
+        except (TypeError, ValueError):
+            pass
     fwd = request.headers.get("x-forwarded-for") or ""
     client_ip = (fwd.split(",")[0].strip() if fwd else None) or (
         getattr(request.client, "host", None) or ""
     )
+    # 3. Per-IP rate limit: cap therapist signups per IP per hour.
+    #    Reuses the intake_ip_log collection so the same admin-tunable
+    #    cap protects both flows. Therapist signups are rare so we use
+    #    a tighter cap.
+    if client_ip:
+        ip_cutoff_iso = (
+            datetime.now(timezone.utc) - timedelta(hours=1)
+        ).isoformat()
+        ip_recent = await db.intake_ip_log.count_documents(
+            {"ip": client_ip, "kind": "therapist_signup", "ts": {"$gte": ip_cutoff_iso}},
+        )
+        # Hardcoded cap of 3 -- legit therapists signing up the same hour
+        # from one IP is extremely rare; bots can hit this many times.
+        if ip_recent >= 3:
+            raise HTTPException(
+                429,
+                "Too many signup attempts from this network in the last hour. "
+                "Please try again later.",
+            )
+    # 4. Cloudflare Turnstile gate (fail-soft when secret not configured).
     ok, ts_err = await verify_turnstile(
         getattr(payload, "turnstile_token", None), remote_ip=client_ip,
     )
@@ -147,7 +184,10 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
     tid = str(uuid.uuid4())
     office_geos = await geocode_offices(db, payload.office_locations or [], "ID")
     data = payload.model_dump()
-    data.pop("turnstile_token", None)  # not persisted
+    # Bot-defense fields are interrogated above -- never persist them.
+    data.pop("turnstile_token", None)
+    data.pop("fax_number", None)
+    data.pop("form_started_at_ms", None)
     data["telehealth"] = data["modality_offering"] in ("telehealth", "both")
     data["offers_in_person"] = data["modality_offering"] in ("in_person", "both")
     # Issue a stable refer-a-colleague code (8 chars, base32-ish)
@@ -191,6 +231,18 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
         "created_at": _now_iso(),
     }
     await db.therapists.insert_one(doc.copy())
+    # Log the IP for the per-IP rate-limit window. Same collection +
+    # TTL the patient intake uses, distinguished by `kind`.
+    if client_ip:
+        try:
+            await db.intake_ip_log.insert_one({
+                "ip": client_ip,
+                "kind": "therapist_signup",
+                "therapist_id": tid,
+                "ts": _now_iso(),
+            })
+        except Exception as e:
+            logger.warning("intake_ip_log insert failed for therapist signup: %s", e)
     _spawn_bg(
         send_therapist_signup_received(payload.email, payload.name),
         name=f"signup_email_{tid[:8]}",
