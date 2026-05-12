@@ -70,6 +70,7 @@ import FeedbackPanel from "@/pages/admin/panels/FeedbackPanel";
 import FeedbackTrackingPanel from "@/pages/admin/panels/FeedbackTrackingPanel";
 import OutcomesPanel from "@/pages/admin/panels/OutcomesPanel";
 import MatchingPipelinePanel from "@/pages/admin/panels/MatchingPipelinePanel";
+import BulkProfileAuditPanel from "@/pages/admin/panels/BulkProfileAuditPanel";
 import AuditLogPanel from "@/pages/admin/panels/AuditLogPanel";
 import WaitlistPanel from "@/pages/admin/panels/WaitlistPanel";
 import ProviderPreviewCard from "@/pages/admin/panels/ProviderPreviewCard";
@@ -1741,6 +1742,13 @@ export default function AdminDashboard() {
               {/* Master Query is rendered as a modal further down -- the
                   effect on `tab` change opens it. No inline render here. */}
 
+              {tab === "profile_audit" && (
+                <BulkProfileAuditPanel
+                  client={client}
+                  onPreview={(t) => setPreviewTherapist(t)}
+                />
+              )}
+
               {tab === "test_actions" && (
                 <TestActionsPanel
                   client={client}
@@ -3346,6 +3354,7 @@ function AdminTabsBar({
       devOnly: true,
       subs: [
         { id: "test_actions", label: "Test actions" },
+        { id: "profile_audit", label: "Profile audit" },
         { id: "simulator", label: "Matching simulator" },
         { id: "feedback_test", label: "Feedback test tools" },
         { id: "scraper_test", label: "Scraper test" },
