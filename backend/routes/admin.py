@@ -1509,6 +1509,95 @@ async def admin_strip_backfill(_: bool = Depends(require_admin)):
     }
 
 
+@router.get("/admin/email-restoration/preview", dependencies=[Depends(require_admin)])
+async def admin_email_restoration_preview() -> dict[str, Any]:
+    """Pre-launch audit: how many imported_xlsx therapists still have
+    a 'therapymatch+t...@gmail.com' placeholder in `email`, and how
+    many of those have a real `real_email` we can swap in.
+
+    The xlsx importer always wrote the original real email to
+    `real_email` while putting a fake one in `email` for testing. To
+    actually go live we need to promote `real_email` -> `email` for
+    every imported therapist. This endpoint reports what would change
+    so the admin can preview before running the destructive step.
+    """
+    total_imported = await db.therapists.count_documents(
+        {"source": "imported_xlsx"},
+    )
+    placeholder_q = {
+        "source": "imported_xlsx",
+        "email": {"$regex": "therapymatch\\+", "$options": "i"},
+    }
+    placeholder_total = await db.therapists.count_documents(placeholder_q)
+    restorable = await db.therapists.count_documents({
+        **placeholder_q,
+        "real_email": {"$regex": "@", "$exists": True},
+        # Also require the real_email isn't itself a therapymatch+ value.
+    })
+    # Surface a few real_email samples (truncated) so admin can sanity-check
+    # they look like real addresses before pulling the trigger.
+    sample_cursor = db.therapists.find(
+        {**placeholder_q, "real_email": {"$regex": "@"}},
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "real_email": 1},
+    ).limit(5)
+    samples = await sample_cursor.to_list(5)
+    return {
+        "total_imported": total_imported,
+        "placeholder_emails": placeholder_total,
+        "restorable": restorable,
+        "missing_real_email": placeholder_total - restorable,
+        "samples": samples,
+    }
+
+
+@router.post("/admin/email-restoration/run", dependencies=[Depends(require_admin)])
+async def admin_email_restoration_run(payload: dict | None = None) -> dict[str, Any]:
+    """Promote `real_email` -> `email` for every imported_xlsx therapist
+    whose `email` is still a placeholder. Idempotent: re-running on an
+    already-restored therapist is a no-op.
+
+    The placeholder email is preserved in `_email_was_placeholder` (audit
+    trail) so a future debug pass can see which docs were swapped.
+
+    Set `payload.dry_run=true` to count without writing -- safety check
+    before pulling the trigger on a few hundred docs.
+    """
+    payload = payload or {}
+    dry_run = bool(payload.get("dry_run", False))
+    base_q = {
+        "source": "imported_xlsx",
+        "email": {"$regex": "therapymatch\\+", "$options": "i"},
+        "real_email": {"$regex": "@"},
+    }
+    candidates = await db.therapists.find(
+        base_q, {"_id": 0, "id": 1, "email": 1, "real_email": 1},
+    ).to_list(2000)
+    if dry_run:
+        return {
+            "ok": True,
+            "dry_run": True,
+            "would_restore": len(candidates),
+        }
+    restored = 0
+    for t in candidates:
+        real = (t.get("real_email") or "").strip()
+        if not real or "@" not in real:
+            continue
+        placeholder = t.get("email") or ""
+        await db.therapists.update_one(
+            {"id": t["id"]},
+            {"$set": {
+                "email": real,
+                "_email_was_placeholder": placeholder,
+                "_email_restored_at": _now_iso(),
+                "updated_at": _now_iso(),
+            }},
+        )
+        restored += 1
+    logger.warning("EMAIL RESTORATION: restored=%d", restored)
+    return {"ok": True, "dry_run": False, "restored": restored}
+
+
 @router.get("/admin/backfill-status")
 async def admin_backfill_status(_: bool = Depends(require_admin)):
     """Snapshot of backfill state  --  used by the admin UI to confirm
