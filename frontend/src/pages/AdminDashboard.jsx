@@ -1144,6 +1144,19 @@ export default function AdminDashboard() {
                 tab={tab}
                 setTab={setTab}
                 requestsCount={requests.length}
+                activeRequestsCount={
+                  // "Active" = anything not yet in a terminal status. Drives
+                  // the red dot on the Requests primary tab + the Active
+                  // subtab so the dot only fires when there's actually
+                  // something pending review, not just "any request exists."
+                  requests.filter((r) => {
+                    const s = String(r.status || "").toLowerCase();
+                    return ![
+                      "completed", "results_sent", "delivered",
+                      "failed", "cancelled", "expired",
+                    ].includes(s);
+                  }).length
+                }
                 pendingTherapists={pendingTherapists.length}
                 allTherapists={allTherapists.length}
                 emailTemplatesCount={emailTemplates.length || null}
@@ -3463,6 +3476,7 @@ function AdminTabsBar({
   tab,
   setTab,
   requestsCount,
+  activeRequestsCount,
   pendingTherapists,
   allTherapists,
   emailTemplatesCount,
@@ -3507,12 +3521,18 @@ function AdminTabsBar({
       id: "requests_primary",
       label: "Requests",
       icon: <FileText size={14} />,
-      // Surface a red dot on the primary tab when there are active
-      // requests waiting for review. Lets the admin see at a glance
-      // there's something new without drilling into the subtab.
-      highlight: (requestsCount || 0) > 0,
+      // Surface a red dot on the primary tab when there are still-active
+      // requests waiting for review (not in a terminal status like
+      // completed/failed/cancelled). Lets the admin see at a glance
+      // there's something to do, not just "requests exist."
+      highlight: (activeRequestsCount || 0) > 0,
       subs: [
-        { id: "requests", label: "Active", count: requestsCount, highlight: (requestsCount || 0) > 0 },
+        {
+          id: "requests",
+          label: "Active",
+          count: activeRequestsCount ?? requestsCount,
+          highlight: (activeRequestsCount || 0) > 0,
+        },
         { id: "requests_analytics", label: "Analytics" },
       ],
     },
