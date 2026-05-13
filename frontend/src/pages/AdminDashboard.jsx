@@ -3705,7 +3705,11 @@ function AdminTabsBar({
   };
 
   const visibleSubs = activePrimary.subs.filter((s) => s.id !== "outcomes" || activePrimary.subs.length > 1);
-  const hideSubRow = activePrimary.id === "outcomes";
+  // Hide the sub-pill row for any single-sub primary -- the row is just
+  // visual noise when there's nothing to choose between. Was previously
+  // hard-coded for Outcomes; now applies to Outbound and any future
+  // single-sub primary too.
+  const hideSubRow = activePrimary.subs.length <= 1;
 
   return (
     <div className="mt-10" data-testid="admin-tabs-bar">
