@@ -1,6 +1,8 @@
 /**
  * Privacy Notice -- locally hosted legal content.
  * Content sourced from theravoca.com/privacy-notice/ (effective April 23, 2025).
+ * Scope-out additions 2026-05-13: HIPAA non-CE/non-BA statement, service-area
+ * limit, no-tracking-pixels disclosure, additional-state-rights pointer.
  */
 import { Header, Footer } from "@/components/SiteShell";
 
@@ -15,7 +17,7 @@ export default function PrivacyNotice() {
             TheraVoca Privacy Notice
           </h1>
           <p className="text-sm text-[#6D6A65] mt-3">
-            Effective Date: April 23, 2025
+            Effective Date: May 13, 2026
           </p>
 
           <div className="mt-8 prose prose-sm max-w-none text-[#2B2A29] leading-relaxed space-y-6">
@@ -80,6 +82,40 @@ export default function PrivacyNotice() {
               </p>
             </section>
 
+            {/* ── SERVICE AREA ── */}
+            <section>
+              <h2 className="font-serif-display text-xl text-[#2D4A3E] mt-8 mb-3">
+                SERVICE AREA
+              </h2>
+              <p>
+                TheraVoca is currently available only to Idaho residents. Search Requests submitted from outside Idaho are rejected at the form level and at our servers. If we expand to additional states, we will update this notice before doing so.
+              </p>
+            </section>
+
+            {/* ── HIPAA, COVERED ENTITIES, AND BUSINESS ASSOCIATES ── */}
+            <section>
+              <h2 className="font-serif-display text-xl text-[#2D4A3E] mt-8 mb-3">
+                HIPAA, COVERED ENTITIES, AND BUSINESS ASSOCIATES
+              </h2>
+              <p>
+                We want to be clear about TheraVoca's role under U.S. health privacy law:
+              </p>
+              <ul className="list-disc pl-5 mt-2 space-y-2">
+                <li>
+                  TheraVoca is a consumer-directed matching and marketing service. We are not a healthcare provider, health plan, or healthcare clearinghouse. We do not render clinical care, bill insurance, diagnose, prescribe, or transmit any HIPAA-covered transaction. As a result, <strong>TheraVoca is not a "Covered Entity" under the Health Insurance Portability and Accountability Act (HIPAA).</strong>
+                </li>
+                <li>
+                  We do not act on behalf of any Therapist in collecting your information. Patients submit Search Requests directly to TheraVoca; we then share relevant Search Requests with prospective Therapists for marketing purposes. As a result, <strong>TheraVoca is not a "Business Associate" of any Therapist under HIPAA.</strong>
+                </li>
+                <li>
+                  The Therapist-Patient relationship begins outside the Service, when a Patient independently contacts a Therapist after seeing the matches we deliver. The information exchanged in that relationship -- including any clinical notes -- is governed by the Therapist's own privacy practices, and by HIPAA where it applies to the Therapist.
+                </li>
+              </ul>
+              <p className="mt-3">
+                HIPAA therefore does not apply to the information we collect through the Service. State consumer-health-privacy laws (such as Washington's My Health My Data Act) and federal consumer-protection rules (such as the FTC's Health Breach Notification Rule and FTC Act Section 5) can still apply, and we design the Service to comply with them.
+              </p>
+            </section>
+
             {/* ── TABLE OF CONTENTS ── */}
             <section>
               <h2 className="font-serif-display text-xl text-[#2D4A3E] mt-8 mb-3">
@@ -125,9 +161,23 @@ export default function PrivacyNotice() {
                 Our website and service providers use cookies and similar technology, which collect additional information from any visitors or users of our Service, as described below.
               </p>
 
+              <p className="font-medium mt-4">What we do <em>not</em> collect:</p>
+              <ul className="list-disc pl-5 mt-2 space-y-1">
+                <li>Medical records, clinical notes, lab results, imaging, or diagnoses;</li>
+                <li>Insurance claim or eligibility data;</li>
+                <li>Government identification numbers (such as Social Security numbers or driver's license numbers);</li>
+                <li>Full payment card numbers (handled directly by our payment processor).</li>
+              </ul>
+              <p className="mt-3">
+                Free-text fields in our Search Request are optional, capped at 250 characters, and gated behind an explicit consent toggle. We ask Patients not to include names, contact details, or other identifying information in these fields.
+              </p>
+
               <p className="font-medium mt-4">b. Cookies and Other Technology</p>
               <p>
                 Through our online properties and emails, we and third parties may collect information from your computer or other device by automated means such as cookies, web beacons, local storage, JavaScript, mobile-device functionality and other computer code. This information may include unique browser identifiers, IP address, browser and operating system information, device identifiers, other device information, Internet connection information, as well as details about your interactions with the relevant website, email or other online property (for example, the URL of the third-party website from which you came, the pages on our website that you visit, and the links you click on in a website). In some cases (such as cookies), the tools described here involve storing unique identifiers or other information on your device for later use.
+              </p>
+              <p className="mt-3">
+                <strong>We do not use third-party advertising pixels, conversion trackers, or session-replay tools that identify you on Patient-facing pages of the Service. We do not sell or share your personal information with advertisers, data brokers, social-media platforms, or analytics resellers.</strong>
               </p>
 
               <p className="font-medium mt-4">c. Information From Third Parties</p>
@@ -192,6 +242,12 @@ export default function PrivacyNotice() {
                 You can request deletion of your data by emailing us at{" "}
                 <a href="mailto:privacy@theravoca.com" className="text-[#2D4A3E] underline">privacy@theravoca.com</a>.
                 {" "}Unless we have an important legal or business need to keep it, we will delete it.
+              </p>
+              <p className="font-medium mt-4">c. Additional State Rights</p>
+              <p>
+                Depending on your state of residence and other factors, you may have additional rights under state consumer-protection or health-data laws -- for example, the right to confirm what consumer health data we hold about you, to withdraw consent, to request deletion, or to appeal a denial of a request. To exercise any such right, contact us at{" "}
+                <a href="mailto:privacy@theravoca.com" className="text-[#2D4A3E] underline">privacy@theravoca.com</a>
+                {" "}and identify which right you want to exercise and your state of residence. We will respond within the timeframe required by applicable law.
               </p>
             </section>
 
