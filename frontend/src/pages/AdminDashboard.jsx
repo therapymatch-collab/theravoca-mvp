@@ -3329,33 +3329,39 @@ function ScoreDetailButton({ client, requestId }) {
 
             {data && !error && (
               <>
-                <div className="px-6 py-3 bg-[#FDFBF7] border-b border-[#E8E5DF] grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                <div className="px-6 py-3 bg-[#FDFBF7] border-b border-[#E8E5DF] grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
                   <div>
                     <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Scored</div>
                     <div className="font-semibold text-[#2D4A3E] text-base">{data.scored_total}</div>
                   </div>
                   <div>
-                    <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Top-30 spread</div>
-                    <div className={`font-semibold text-base ${data.spread_top30_precise < 2 ? "text-[#C8412B]" : "text-[#2D4A3E]"}`}>
-                      {data.spread_top30_precise} pts
+                    <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Threshold</div>
+                    <div className="font-semibold text-[#2D4A3E] text-base">{data.threshold_used}%</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Matched</div>
+                    <div className="font-semibold text-[#2D4A3E] text-base">{data.matched_count}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Matched spread</div>
+                    <div className={`font-semibold text-base ${data.matched_spread_precise < 2 ? "text-[#C8412B]" : "text-[#2D4A3E]"}`}>
+                      {data.matched_spread_precise} pts
                     </div>
                   </div>
                   <div>
-                    <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Min (top 30)</div>
-                    <div className="font-semibold text-[#2D4A3E] text-base">{data.min_top30}%</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Max (top 30)</div>
-                    <div className="font-semibold text-[#2D4A3E] text-base">{data.max_top30}%</div>
+                    <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Matched min / max</div>
+                    <div className="font-semibold text-[#2D4A3E] text-base">
+                      {data.matched_min}% – {data.matched_max}%
+                    </div>
                   </div>
                 </div>
-                {data.spread_top30_precise < 2 && (
+                {data.matched_count > 0 && data.matched_spread_precise < 2 && (
                   <div className="mx-6 mt-3 mb-1 px-3 py-2 bg-[#FBEFE9] border border-[#F4DDD2] rounded text-xs text-[#8B5A1F]">
-                    <strong>Top-30 spread is &lt; 2 points.</strong> Integer rounding
-                    crushes this into one or two visible scores. Either steepen
-                    the display curve in matching.py or accept that the model
-                    sees these therapists as genuinely interchangeable for this
-                    patient.
+                    <strong>The {data.matched_count} matched therapists span only {data.matched_spread_precise} precise points.</strong>{" "}
+                    Integer rounding crushes this into one or two visible
+                    scores. Either steepen the display curve in matching.py
+                    or accept that the model sees these therapists as
+                    genuinely interchangeable for this patient.
                   </div>
                 )}
                 <div className="overflow-y-auto flex-1">

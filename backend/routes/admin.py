@@ -737,6 +737,16 @@ async def admin_request_score_detail(request_id: str) -> dict[str, Any]:
         all_scored_out=all_scored,
     )
 
+    # Threshold the request actually used for live matching. We use this
+    # to flag which scored therapists are "above threshold" -- the
+    # subset that would have been notified -- so the spread stats can
+    # report on the matched cohort, not the full 122.
+    actual_threshold = float(
+        req.get("effective_threshold")
+        or req.get("threshold")
+        or 80
+    )
+
     # Emit a compact view: id, name, integer + precise scores, raw total,
     # and the top-3 contributing breakdown axes so admin can see WHERE the
     # differentiation comes from (or doesn't).
@@ -752,32 +762,46 @@ async def admin_request_score_detail(request_id: str) -> dict[str, Any]:
             {"axis": k, "points": round(float(v), 2)}
             for k, v in sorted_axes[:3]
         ]
+        # Re-evaluate above_threshold against the request's ACTUAL
+        # threshold (rank_therapists was called with threshold=0 to get
+        # the full distribution, so its above_threshold flag is unusable
+        # here).
+        precise = s.get("match_score_precise") or 0
         rows.append({
             "therapist_id": s.get("id"),
             "name": s.get("name"),
             "score_int": s.get("match_score"),
-            "score_precise": s.get("match_score_precise"),
+            "score_precise": precise,
             "raw_total": raw_total,
             "top_axes": top_axes,
-            "above_threshold": s.get("above_threshold"),
+            "above_threshold": precise >= actual_threshold,
         })
     rows.sort(key=lambda r: (r.get("score_precise") or 0), reverse=True)
 
-    # Spread stats: how much does the precise score actually differ across
-    # the top N? Quick "is the model differentiating?" answer.
+    matched = [r for r in rows if r["above_threshold"]]
+    matched_precise = [r["score_precise"] or 0 for r in matched]
+    matched_spread = (
+        max(matched_precise) - min(matched_precise) if matched_precise else 0.0
+    )
+
     top30 = rows[:30]
-    precise_top30 = [r["score_precise"] or 0 for r in top30]
-    spread = (
-        max(precise_top30) - min(precise_top30) if precise_top30 else 0.0
+    top30_precise = [r["score_precise"] or 0 for r in top30]
+    top30_spread = (
+        max(top30_precise) - min(top30_precise) if top30_precise else 0.0
     )
 
     return {
         "request_id": request_id,
         "request_email": req.get("email"),
         "scored_total": len(rows),
-        "spread_top30_precise": round(spread, 2),
-        "min_top30": round(min(precise_top30), 2) if precise_top30 else 0,
-        "max_top30": round(max(precise_top30), 2) if precise_top30 else 0,
+        "threshold_used": actual_threshold,
+        "matched_count": len(matched),
+        "matched_spread_precise": round(matched_spread, 2),
+        "matched_min": round(min(matched_precise), 2) if matched_precise else 0,
+        "matched_max": round(max(matched_precise), 2) if matched_precise else 0,
+        "spread_top30_precise": round(top30_spread, 2),
+        "min_top30": round(min(top30_precise), 2) if top30_precise else 0,
+        "max_top30": round(max(top30_precise), 2) if top30_precise else 0,
         "rows": rows,
     }
 
