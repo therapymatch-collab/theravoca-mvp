@@ -1,6 +1,7 @@
 """Shared dependencies, db connection, env constants, auth deps."""
 from __future__ import annotations
 
+import hmac as _hmac
 import logging
 import os
 import secrets
@@ -86,6 +87,15 @@ if not _jwt_secret_raw:
         "JWT_SECRET not set — using random ephemeral secret. "
         "All sessions will be lost on next restart. Set JWT_SECRET env var to fix."
     )
+# A short JWT secret is brute-forceable. 32 chars of entropy is the
+# floor; 48+ is recommended. Enforce in production only -- dev can
+# use short throwaway values.
+if _ENV == "production" and len(_jwt_secret_raw) < 32:
+    raise RuntimeError(
+        "FATAL: JWT_SECRET is too short. Production requires at least "
+        "32 characters of entropy. Generate one with `python -c "
+        "'import secrets; print(secrets.token_urlsafe(48))'`."
+    )
 JWT_SECRET = _jwt_secret_raw
 JWT_ALGO = "HS256"
 
@@ -166,7 +176,9 @@ def require_admin(
       • a Bearer JWT with role=admin (issued by /admin/login-with-email when
         a team member signs in with email + password).
     """
-    if x_admin_password and x_admin_password == ADMIN_PASSWORD:
+    if x_admin_password and _hmac.compare_digest(
+        x_admin_password.encode("utf-8"), ADMIN_PASSWORD.encode("utf-8")
+    ):
         return True
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()

@@ -1,6 +1,7 @@
 """Admin routes: login, requests, therapists, templates, declines, backfill, stats, cron triggers."""
 from __future__ import annotations
 
+import hmac as _hmac
 import json
 import os
 from datetime import datetime, timedelta, timezone
@@ -37,7 +38,8 @@ async def admin_login(payload: dict, request: Request):
             status_code=429,
             detail=f"Too many failed attempts. Try again in {remaining // 60 + 1} minutes.",
         )
-    if payload.get("password") != ADMIN_PASSWORD:
+    submitted = payload.get("password") or ""
+    if not _hmac.compare_digest(submitted.encode("utf-8"), ADMIN_PASSWORD.encode("utf-8")):
         _record_failure(ip)
         rec = _login_attempts.get(ip, {})
         attempts_left = max(0, LOGIN_MAX_FAILURES - rec.get("failures", 0))

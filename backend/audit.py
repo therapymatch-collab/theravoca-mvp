@@ -43,6 +43,23 @@ def _hash_patient_email(email: str) -> str:
     return digest[:32]
 
 
+def _hash_ip(ip: str) -> str:
+    """HMAC-hash an IP address before writing it to the audit log.
+
+    Same pattern as `_hash_patient_email`: same IP -> same hash, so
+    admin can still group/filter by source, but the value is not
+    reversible without JWT_SECRET. Keeps the audit log clean of
+    direct identifiers (HIPAA-adjacent + MHMDA-relevant). Forensic
+    logging keeps raw IPs separately via uvicorn/Render access logs.
+    Empty string in -> empty string out (skip the hash).
+    """
+    raw = ip.strip()
+    if not raw:
+        return ""
+    digest = hmac.new(JWT_SECRET.encode("utf-8"), raw.encode("utf-8"), hashlib.sha256).hexdigest()
+    return digest[:32]
+
+
 async def ensure_indexes() -> None:
     """Create the TTL + query indexes for audit_log. Idempotent."""
     try:
@@ -92,7 +109,7 @@ async def log_access(
     if resource_id:
         entry["resource_id"] = resource_id
     if ip:
-        entry["ip"] = ip
+        entry["ip"] = _hash_ip(ip)
     if user_agent:
         entry["user_agent"] = user_agent
     if detail:
