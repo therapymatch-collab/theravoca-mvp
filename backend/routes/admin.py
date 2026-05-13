@@ -245,7 +245,12 @@ async def admin_send_claim_campaign(
     dry_run = bool(payload.get("dry_run", False))
     allow_resend = bool(payload.get("resend", False))
 
-    query: dict[str, Any] = {"is_active": {"$ne": False}, "pending_approval": {"$ne": True}}
+    query: dict[str, Any] = {
+        "is_active": {"$ne": False},
+        "pending_approval": {"$ne": True},
+        "unsubscribed": {"$ne": True},
+        "hard_bounced": {"$ne": True},
+    }
     if mode == "selected":
         if not therapist_ids:
             raise HTTPException(400, "therapist_ids is required when mode='selected'")
@@ -284,6 +289,7 @@ async def admin_send_claim_campaign(
                 therapist_name=r["name"],
                 score=r["score"],
                 missing_fields=r["missing"],
+                therapist_id=r["id"],
             ))
             await db.therapists.update_one(
                 {"id": r["id"]},

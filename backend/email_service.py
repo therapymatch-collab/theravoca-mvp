@@ -713,6 +713,7 @@ async def send_therapist_followup_2w(to: str, name: str, therapist_id: str) -> N
     url = f"{_get_app_url()}/feedback/therapist/{therapist_id}?milestone=2w&token={token}"
     await _send_simple_cta_template(
         "therapist_followup_2w", to, url, {"first_name": _first_name(name)},
+        unsubscribe_url=_therapist_unsub_url(therapist_id),
     )
 
 
@@ -743,11 +744,14 @@ async def send_therapist_survey(
     )
 
 
-async def send_therapist_stale_profile_nag(to: str, name: str, days_stale: int) -> None:
+async def send_therapist_stale_profile_nag(
+    to: str, name: str, days_stale: int, therapist_id: str,
+) -> None:
     url = f"{_get_app_url()}/portal/therapist/edit"
     await _send_simple_cta_template(
         "therapist_stale_profile_nag", to, url,
         {"first_name": _first_name(name), "days_stale": days_stale},
+        unsubscribe_url=_therapist_unsub_url(therapist_id),
     )
 
 
@@ -823,7 +827,7 @@ async def send_license_expiring_to_admin(
     await _send(to, subject, _wrap("License renewal alert", inner), template_key="license_renewal_alert_admin")
 
 
-async def send_availability_prompt(to: str, therapist_name: str) -> None:
+async def send_availability_prompt(to: str, therapist_name: str, therapist_id: str) -> None:
     """Monday morning reminder asking the therapist to refresh their availability."""
     first_name = _first_name(therapist_name)
     portal_url = f"{_get_app_url()}/portal/therapist"
@@ -841,7 +845,12 @@ async def send_availability_prompt(to: str, therapist_name: str) -> None:
       If your availability hasn't changed, just hit "Yes, still current" in the portal.
     </p>
     """
-    await _send(to, subject, _wrap("Availability check-in", inner), template_key="availability_prompt")
+    await _send(
+        to,
+        subject,
+        _wrap("Availability check-in", inner, unsubscribe_url=_therapist_unsub_url(therapist_id)),
+        template_key="availability_prompt",
+    )
 
 
 
@@ -850,6 +859,7 @@ async def send_claim_profile_email(
     therapist_name: str,
     score: int,
     missing_fields: list[str],
+    therapist_id: str,
 ) -> None:
     """One-time go-live outreach email asking each existing therapist to
     claim their profile and fill in any missing information.
@@ -911,4 +921,13 @@ async def send_claim_profile_email(
       any time. Reply to this email if anything looks off -- we'd love to hear from you.
     </p>
     """
-    await _send(to, subject, _wrap(tpl.get("heading", "Claim your TheraVoca profile"), inner), template_key="claim_profile")
+    await _send(
+        to,
+        subject,
+        _wrap(
+            tpl.get("heading", "Claim your TheraVoca profile"),
+            inner,
+            unsubscribe_url=_therapist_unsub_url(therapist_id),
+        ),
+        template_key="claim_profile",
+    )

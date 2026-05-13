@@ -203,6 +203,8 @@ async def _run_availability_prompts() -> dict[str, int]:
             "is_active": {"$ne": False},
             "pending_approval": {"$ne": True},
             "subscription_status": {"$nin": ["canceled", "rejected"]},
+            "unsubscribed": {"$ne": True},
+            "hard_bounced": {"$ne": True},
             "$or": [
                 {"availability_prompt_sent_date": {"$ne": today_iso}},
                 {"availability_prompt_sent_date": {"$exists": False}},
@@ -218,7 +220,7 @@ async def _run_availability_prompts() -> dict[str, int]:
     async for t in cur:
         if t.get("notify_email", True):
             try:
-                await send_availability_prompt(t["email"], t["name"])
+                await send_availability_prompt(t["email"], t["name"], t["id"])
                 sent_email += 1
             except Exception as e:
                 logger.warning("Availability email failed for therapist=%s: %s", t.get("id"), e)
@@ -499,6 +501,8 @@ async def _run_therapist_2w_followups() -> dict[str, int]:
             "first_referral_sent_at": {"$ne": None, "$lte": cutoff},
             "therapist_2w_followup_sent_at": {"$exists": False},
             "email": {"$ne": None},
+            "unsubscribed": {"$ne": True},
+            "hard_bounced": {"$ne": True},
         },
         {"_id": 0, "id": 1, "email": 1, "name": 1},
     )
@@ -534,6 +538,8 @@ async def _run_stale_profile_nag() -> dict[str, int]:
             ],
             "stale_profile_nag_sent_at": {"$exists": False},
             "email": {"$ne": None},
+            "unsubscribed": {"$ne": True},
+            "hard_bounced": {"$ne": True},
         },
         {"_id": 0, "id": 1, "email": 1, "name": 1, "updated_at": 1, "created_at": 1},
     )
@@ -546,7 +552,7 @@ async def _run_stale_profile_nag() -> dict[str, int]:
             except ValueError:
                 last_dt = now
             days_stale = max(STALE_DAYS, (now - last_dt).days)
-            await send_therapist_stale_profile_nag(t["email"], t["name"], days_stale)
+            await send_therapist_stale_profile_nag(t["email"], t["name"], days_stale, t["id"])
             await db.therapists.update_one(
                 {"id": t["id"]},
                 {"$set": {"stale_profile_nag_sent_at": _now_iso()}},
