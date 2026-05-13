@@ -464,17 +464,39 @@ async def _send_outreach_invite(
         </p>
         {opt_out_footer}
         """
+        # _send returns None on three silent-fail paths: missing
+        # RESEND_API_KEY, pre-launch safety-guard block, OR an internal
+        # Resend exception that _send caught + logged. Previously this
+        # function reported ok=True regardless, which lied to the
+        # caller -- sent_email got bumped + the invite row was marked
+        # email_sent=True even when the network call never happened.
+        # Now we explicitly check the return value and only mark ok
+        # when _send returned a result dict.
+        email_error: Optional[str] = None
+        email_result = None
         try:
-            await _send(
+            email_result = await _send(
                 email,
                 subject,
                 _wrap(heading, inner),
             )
-            return {"ok": True, "channel": "email", "error": None}
+            if email_result is None:
+                email_error = "send_returned_none"
+                logger.warning(
+                    "Outreach email returned None for invite=%s recipient=%s "
+                    "(missing RESEND_API_KEY, blocked by pre-launch safety guard, "
+                    "or Resend exception -- check server logs)",
+                    invite_id, email,
+                )
         except Exception as e:
-            logger.warning("Outreach email failed for invite=%s: %s", invite_id, e)
-            if not phone:
-                return {"ok": False, "channel": "email", "error": str(e)}
+            email_error = str(e)
+            logger.warning("Outreach email exception for invite=%s: %s", invite_id, e)
+        if email_result is not None:
+            return {"ok": True, "channel": "email", "error": None}
+        # Email failed. Fall through to SMS if a phone number is on file;
+        # otherwise return the failure so the invite row + counts reflect reality.
+        if not phone:
+            return {"ok": False, "channel": "email", "error": email_error or "unknown"}
 
     # SMS path (no email or email send failed but we have a phone)
     body = _send_invite_sms_body(candidate, request, score, opt_out_url)
