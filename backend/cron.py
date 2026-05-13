@@ -581,6 +581,98 @@ async def _run_auto_recruit_weekly() -> dict[str, Any]:
         return {"error": str(e)}
 
 
+async def _run_cron_health_alert() -> dict[str, Any]:
+    """Look for stuck / failed / stale cron jobs and email admin.
+
+    Mirrors the read path at /admin/cron/health but actively alerts
+    rather than waiting for someone to look. Idempotent + deduped:
+    won't re-fire more than once per 24h regardless of how often it's
+    invoked (state lives in app_config.cron_alert_state).
+
+    Skips entirely if ADMIN_NOTIFY_EMAIL isn't set.
+    """
+    from email_service import send_cron_health_alert_to_admin
+    if not ADMIN_NOTIFY_EMAIL:
+        return {"skipped": "no admin email"}
+
+    now = datetime.now(timezone.utc)
+    cutoff_24h = (now - timedelta(hours=24)).isoformat()
+    cutoff_36h = (now - timedelta(hours=36)).isoformat()
+    cutoff_7d = (now - timedelta(days=7)).isoformat()
+
+    stuck = await db.cron_runs.find(
+        {"completed_at": None, "started_at": {"$lt": cutoff_24h}},
+        {"_id": 0, "name": 1, "started_at": 1},
+    ).sort("started_at", 1).limit(50).to_list(50)
+    recent_failures = await db.cron_runs.find(
+        {"status": "failed", "started_at": {"$gte": cutoff_7d}},
+        {"_id": 0, "name": 1, "started_at": 1, "completed_at": 1, "error": 1},
+    ).sort("started_at", -1).limit(20).to_list(20)
+    # Stalest jobs: ever-completed jobs whose latest completion is >36h ago.
+    # If a job has never completed, that's caught by the `stuck` query
+    # (or it's a brand-new install -- not our problem).
+    last_completion = []
+    async for row in db.cron_runs.aggregate([
+        {"$match": {"completed_at": {"$ne": None}}},
+        {"$sort": {"completed_at": -1}},
+        {"$group": {
+            "_id": "$name",
+            "last_completed_at": {"$first": "$completed_at"},
+        }},
+    ]):
+        last_completion.append({
+            "name": row["_id"],
+            "last_completed_at": row["last_completed_at"],
+        })
+    stalest = [
+        j for j in last_completion
+        if j["last_completed_at"] and j["last_completed_at"] < cutoff_36h
+    ]
+    stalest.sort(key=lambda j: j["last_completed_at"])
+
+    if not stuck and not recent_failures and not stalest:
+        return {"alert_sent": False, "reason": "all clear"}
+
+    # Dedupe: at most one alert per 24h regardless of how many issues.
+    state = await db.app_config.find_one(
+        {"key": "cron_alert_state"}, {"_id": 0, "last_sent_at": 1}
+    ) or {}
+    last_sent = state.get("last_sent_at")
+    if last_sent and last_sent > cutoff_24h:
+        return {
+            "alert_sent": False,
+            "reason": "deduped",
+            "last_sent_at": last_sent,
+            "would_have_reported": {
+                "stuck": len(stuck),
+                "recent_failures": len(recent_failures),
+                "stalest": len(stalest),
+            },
+        }
+
+    try:
+        await send_cron_health_alert_to_admin(
+            to=ADMIN_NOTIFY_EMAIL,
+            stuck=stuck,
+            recent_failures=recent_failures,
+            stalest_jobs=stalest,
+        )
+        await db.app_config.update_one(
+            {"key": "cron_alert_state"},
+            {"$set": {"key": "cron_alert_state", "last_sent_at": _now_iso()}},
+            upsert=True,
+        )
+        return {
+            "alert_sent": True,
+            "stuck": len(stuck),
+            "recent_failures": len(recent_failures),
+            "stalest": len(stalest),
+        }
+    except Exception as e:
+        logger.warning("Cron health alert send failed: %s", e)
+        return {"alert_sent": False, "error": str(e)}
+
+
 async def _daily_loop() -> None:
     while True:
         try:
@@ -612,6 +704,10 @@ async def _daily_loop() -> None:
                     auto_rec = None
                     if local.weekday() == 0:  # Monday
                         auto_rec = await _run_auto_recruit_weekly()
+                    # Health alert sweep (BACKLOG #25). Runs AFTER everything
+                    # else so today's stuck-job pattern is included. Deduped
+                    # to one email per 24h.
+                    health = await _run_cron_health_alert()
                     await db.cron_runs.update_one(
                         {"name": "daily_tasks", "date": today_iso},
                         {"$set": {
@@ -624,6 +720,7 @@ async def _daily_loop() -> None:
                             "v2_surveys": v2_surveys,
                             "v2_reminders": v2_reminders,
                             "auto_recruit_weekly": auto_rec,
+                            "cron_health_alert": health,
                         }},
                     )
         except Exception as e:

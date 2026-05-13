@@ -827,6 +827,89 @@ async def send_license_expiring_to_admin(
     await _send(to, subject, _wrap("License renewal alert", inner), template_key="license_renewal_alert_admin")
 
 
+async def send_cron_health_alert_to_admin(
+    to: str,
+    stuck: list[dict],
+    recent_failures: list[dict],
+    stalest_jobs: list[dict],
+) -> None:
+    """Email admin when the cron health sweep finds stuck jobs, recent
+    failures, or jobs that haven't completed in a long time.
+
+    Sent at most once per 24h (dedupe lives in cron._run_cron_health_alert).
+    """
+    portal_url = f"{_get_app_url()}/admin/dashboard"
+    stuck_count = len(stuck)
+    fail_count = len(recent_failures)
+    stale_count = len(stalest_jobs)
+
+    parts = []
+    headline_bits = []
+    if stuck_count:
+        headline_bits.append(f"{stuck_count} stuck")
+    if fail_count:
+        headline_bits.append(f"{fail_count} failed (7d)")
+    if stale_count:
+        headline_bits.append(f"{stale_count} stale (>36h)")
+    headline = " · ".join(headline_bits) or "all clear"
+    subject = f"[TheraVoca] Cron health alert: {headline}"
+
+    if stuck:
+        rows = "".join(
+            f'<li style="margin:6px 0;"><strong>{s.get("name", "?")}</strong> '
+            f'-- started {s.get("started_at", "?")} (no completion since)</li>'
+            for s in stuck[:20]
+        )
+        parts.append(
+            f'<p style="font-size:15px;color:{BRAND["text"]};margin-top:18px;">'
+            f'<strong>Stuck jobs</strong> (started >24h ago, never completed):'
+            f'</p><ul style="font-size:14px;color:{BRAND["text"]};line-height:1.7;">{rows}</ul>'
+        )
+    if recent_failures:
+        rows = "".join(
+            f'<li style="margin:6px 0;"><strong>{f.get("name", "?")}</strong> '
+            f'-- {f.get("started_at", "?")} -- '
+            f'<code>{(f.get("error") or "")[:120]}</code></li>'
+            for f in recent_failures[:20]
+        )
+        parts.append(
+            f'<p style="font-size:15px;color:{BRAND["text"]};margin-top:18px;">'
+            f'<strong>Recent failures</strong> (last 7 days):'
+            f'</p><ul style="font-size:14px;color:{BRAND["text"]};line-height:1.7;">{rows}</ul>'
+        )
+    if stalest_jobs:
+        rows = "".join(
+            f'<li style="margin:6px 0;"><strong>{j.get("name", "?")}</strong> '
+            f'-- last completed {j.get("last_completed_at", "?")}</li>'
+            for j in stalest_jobs[:10]
+        )
+        parts.append(
+            f'<p style="font-size:15px;color:{BRAND["text"]};margin-top:18px;">'
+            f'<strong>Jobs that have not run in >36h</strong> '
+            f'(may have silently stopped scheduling):'
+            f'</p><ul style="font-size:14px;color:{BRAND["text"]};line-height:1.7;">{rows}</ul>'
+        )
+
+    body_html = "".join(parts) or (
+        f'<p style="font-size:15px;color:{BRAND["text"]};">'
+        f'No problems detected. (This message should not have fired.)</p>'
+    )
+
+    inner = f"""
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      The cron health sweep flagged at least one issue. Details below.
+      Full health view:
+      <a href="{portal_url}" style="color:{BRAND['primary']};">admin dashboard</a>.
+    </p>
+    {body_html}
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.7;margin-top:24px;">
+      This alert is sent at most once per 24 hours. If you've already
+      fixed the issue, you can ignore -- the next sweep will go quiet.
+    </p>
+    """
+    await _send(to, subject, _wrap("Cron health alert", inner), template_key="cron_health_alert")
+
+
 async def send_availability_prompt(to: str, therapist_name: str, therapist_id: str) -> None:
     """Monday morning reminder asking the therapist to refresh their availability."""
     first_name = _first_name(therapist_name)
