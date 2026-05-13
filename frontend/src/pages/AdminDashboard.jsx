@@ -1147,14 +1147,29 @@ export default function AdminDashboard() {
                 setTab={setTab}
                 requestsCount={requests.length}
                 activeRequestsCount={
-                  // "Active" = anything not yet in a terminal status. Drives
-                  // the red dot on the Requests primary tab + the Active
-                  // subtab so the dot only fires when there's actually
-                  // something pending review, not just "any request exists."
+                  // "Active" = the request is still flowing AND there's
+                  // (at least notionally) something for the admin to
+                  // look at. Drives the red dot on the Requests primary
+                  // tab + the Active subtab.
+                  //
+                  // Terminal/no-action statuses excluded:
+                  // - completed       -- helpers.py sets this when results
+                  //                      send (matched + results_sent_at
+                  //                      land in the same write).
+                  // - matched         -- legacy alias for completed in older
+                  //                      code paths; system did its job.
+                  // - results_sent /
+                  //   delivered       -- terminal.
+                  // - failed /
+                  //   cancelled /
+                  //   expired         -- terminal.
+                  //
+                  // What stays "active": pending_verification (waiting on
+                  // patient), open (verified, awaiting matcher).
                   requests.filter((r) => {
                     const s = String(r.status || "").toLowerCase();
                     return ![
-                      "completed", "results_sent", "delivered",
+                      "completed", "matched", "results_sent", "delivered",
                       "failed", "cancelled", "expired",
                     ].includes(s);
                   }).length
