@@ -195,6 +195,31 @@ async def resend_webhook(request: Request) -> dict[str, Any]:
             {"id": invite["id"]}, {"$set": update_set},
         )
 
+    # Always log the event into a generic email_events stream so the
+    # Outbound admin tab can render delivery state for ALL outbound
+    # email -- not just outreach invites. Verification emails, match
+    # results, surveys, and the claim campaign all flow through the
+    # same Resend pipeline; without this every non-outreach event
+    # would be silently dropped from the admin feed.
+    try:
+        await db.email_events.insert_one({
+            "event_type": etype,
+            "received_at": _now_iso(),
+            "resend_email_id": email_id,
+            "to": recipients[0] if recipients else None,
+            "subject": data.get("subject"),
+            "from": data.get("from"),
+            "invite_id": invite["id"] if invite else None,
+            "is_hard_bounce": is_hard_bounce,
+            "bounce_type": (data.get("bounce_type") or "").lower() or None,
+            "bounce_reason": data.get("reason") or data.get("message") or None,
+            "raw_created_at": created_at,
+        })
+    except Exception as e:
+        # Don't fail the webhook on event-log write failures -- the
+        # invite update above is the critical path.
+        logger.warning("email_events insert failed for %s: %s", etype, e)
+
     # ── Permanent bounce registry so cooldown filter can skip forever ──
     if is_hard_bounce:
         for r in recipients:

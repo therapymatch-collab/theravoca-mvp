@@ -36,6 +36,7 @@ import {
   MapPin,
   Radio,
   FileText,
+  Inbox as InboxIcon,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
@@ -71,6 +72,7 @@ import RecruitingPerRequestPanel from "@/pages/admin/panels/RecruitingPerRequest
 import RecruitingGapFillPanel from "@/pages/admin/panels/RecruitingGapFillPanel";
 import RequestsAnalyticsPanel from "@/pages/admin/panels/RequestsAnalyticsPanel";
 import EmailSafetyBanner from "@/pages/admin/panels/EmailSafetyBanner";
+import OutboundPanel from "@/pages/admin/panels/OutboundPanel";
 import PatientsByEmailPanel from "@/pages/admin/panels/PatientsByEmailPanel";
 import FeedbackPanel from "@/pages/admin/panels/FeedbackPanel";
 import FeedbackTrackingPanel from "@/pages/admin/panels/FeedbackTrackingPanel";
@@ -1253,6 +1255,10 @@ export default function AdminDashboard() {
 
               {tab === "requests_analytics" && (
                 <RequestsAnalyticsPanel requests={requests} />
+              )}
+
+              {tab === "outbound" && (
+                <OutboundPanel client={client} />
               )}
 
               {tab === "therapists" && (
@@ -3597,6 +3603,14 @@ function AdminTabsBar({
           onClick: onLoadOutreach,
         },
         { id: "recruiting", label: "How recruiting works" },
+      ],
+    },
+    {
+      id: "outbound_primary",
+      label: "Outbound",
+      icon: <InboxIcon size={14} />,
+      subs: [
+        { id: "outbound", label: "Recent" },
       ],
     },
     {

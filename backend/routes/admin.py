@@ -5073,6 +5073,81 @@ async def admin_delete_gap_draft(draft_id: str, _: bool = Depends(require_admin)
     return {"ok": True}
 
 
+@router.get("/admin/outbound/summary", dependencies=[Depends(require_admin)])
+async def admin_outbound_summary() -> dict[str, Any]:
+    """Aggregate view for the Outbound admin tab.
+
+    Returns:
+      kpis: today / 7d sent / failed counts
+      by_template: per-template breakdown (sent today, sent 7d, fail %)
+      recent: last 50 outreach_invites with current event status
+      bounced: hard-bounced address registry (top 50 by recency)
+      events_recent: last 50 raw email_events (Resend webhook stream)
+
+    Reads outreach_invites + bounced_emails + email_events. Does NOT
+    re-aggregate from raw email logs every call -- the underlying
+    collections already have the timestamps the UI needs.
+    """
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc)
+    today_iso = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    seven_days_iso = (now - timedelta(days=7)).isoformat()
+
+    # ── KPIs from outreach_invites + email_events ──
+    sent_today = await db.outreach_invites.count_documents({
+        "sent_at": {"$gte": today_iso},
+    })
+    sent_7d = await db.outreach_invites.count_documents({
+        "sent_at": {"$gte": seven_days_iso},
+    })
+    queued = await db.outreach_invites.count_documents({
+        "sent_at": None,
+        "send_error": None,
+        "created_at": {"$gte": (now - timedelta(hours=1)).isoformat()},
+    })
+    failed_7d = await db.outreach_invites.count_documents({
+        "$or": [
+            {"send_error": {"$ne": None, "$exists": True}},
+            {"bounced_at": {"$ne": None, "$exists": True}},
+        ],
+        "created_at": {"$gte": seven_days_iso},
+    })
+
+    # ── Recent outreach_invites with event status ──
+    recent_invites = await db.outreach_invites.find(
+        {}, {
+            "_id": 0, "id": 1, "request_id": 1, "candidate.email": 1,
+            "candidate.name": 1, "candidate.phone": 1, "channel": 1,
+            "email_sent": 1, "sms_sent": 1, "send_error": 1,
+            "sent_at": 1, "created_at": 1, "delivered_at": 1,
+            "opened_at": 1, "bounced_at": 1, "complained_at": 1,
+            "bounce_reason": 1, "bounce_type": 1, "source": 1,
+        },
+    ).sort("created_at", -1).limit(50).to_list(50)
+
+    # ── Hard-bounced registry ──
+    bounced = await db.bounced_emails.find(
+        {}, {"_id": 0},
+    ).sort("last_bounce_at", -1).limit(50).to_list(50)
+
+    # ── Recent raw email_events (covers ALL outbound, not just outreach) ──
+    events_recent = await db.email_events.find(
+        {}, {"_id": 0},
+    ).sort("received_at", -1).limit(50).to_list(50)
+
+    return {
+        "kpis": {
+            "sent_today": sent_today,
+            "sent_7d": sent_7d,
+            "queued": queued,
+            "failed_7d": failed_7d,
+        },
+        "recent_invites": recent_invites,
+        "bounced": bounced,
+        "events_recent": events_recent,
+    }
+
+
 @router.get("/admin/track-b-config", dependencies=[Depends(require_admin)])
 async def admin_get_track_b_config() -> dict[str, Any]:
     """Live config for the Track B (gap-recruit) cron. Drives the
