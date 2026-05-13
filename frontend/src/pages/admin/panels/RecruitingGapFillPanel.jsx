@@ -1,16 +1,21 @@
-import { useEffect } from "react";
-import { Loader2, AlertTriangle, ExternalLink } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2, AlertTriangle, ExternalLink, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 // Recruiting -> General gap-fill (Track B).
 // Currently dry-run: nightly cron generates draft invites for each
-// coverage gap but doesn't send. This panel surfaces those drafts +
-// the path to flip Track B live.
+// coverage gap but doesn't send. This panel surfaces those drafts,
+// the path to flip Track B live, and a wipe action for stale drafts
+// generated against an older Coverage gaps snapshot.
 export default function RecruitingGapFillPanel({
+  client,
   recruitDrafts,
   loadRecruitDrafts,
   generateRecruitDrafts,
   setTab,
 }) {
+  const [wiping, setWiping] = useState(false);
+
   useEffect(() => {
     if (recruitDrafts === null && loadRecruitDrafts) {
       loadRecruitDrafts();
@@ -18,22 +23,64 @@ export default function RecruitingGapFillPanel({
     // eslint-disable-next-line
   }, []);
 
-  // Group drafts by gap label so admin can see which gaps the agent
-  // targeted. The drafts collection itself is flat -- each row is a
-  // single therapist draft with a gap_label / gap_dimension stamp.
+  // Group drafts by gap so the admin can see which gaps the agent
+  // targeted. Schema: each draft has draft.gap = { dimension, key, severity }.
   const drafts = (recruitDrafts?.drafts) || [];
   const totalDrafts = drafts.length;
   const draftsByGap = (() => {
     const map = new Map();
     for (const d of drafts) {
-      const key = d.gap_label || d.gap_dimension_value || d.gap_dimension || "(uncategorized)";
-      if (!map.has(key)) {
-        map.set(key, { label: key, severity: d.severity || "", draft_count: 0 });
+      const dim = d.gap?.dimension || "(uncategorized)";
+      const key = d.gap?.key || "";
+      const label = key ? `${dim} -> ${key}` : dim;
+      if (!map.has(label)) {
+        map.set(label, {
+          label,
+          dimension: dim,
+          key,
+          severity: d.gap?.severity || "",
+          draft_count: 0,
+          dry_run_count: 0,
+          google_verified_count: 0,
+        });
       }
-      map.get(key).draft_count += 1;
+      const row = map.get(label);
+      row.draft_count += 1;
+      if (d.dry_run) row.dry_run_count += 1;
+      if (d.google_verified) row.google_verified_count += 1;
     }
     return Array.from(map.values()).sort((a, b) => b.draft_count - a.draft_count);
   })();
+
+  const onWipeAll = async () => {
+    if (!client) {
+      toast.error("Admin client not available");
+      return;
+    }
+    if (totalDrafts === 0) {
+      toast.success("Nothing to wipe -- drafts queue is already empty.");
+      return;
+    }
+    if (!confirm(
+      `Delete all ${totalDrafts} recruit draft(s)?\n\n` +
+      `These are stale -- they were generated against a previous Coverage gaps ` +
+      `snapshot and don't necessarily map to your current gaps. ` +
+      `Click "Generate drafts now" after wiping to rebuild against the current gaps.\n\n` +
+      `Safe -- nothing has been emailed (dry_run drafts).`
+    )) return;
+    setWiping(true);
+    try {
+      const res = await client.delete("/admin/gap-recruit/drafts", {
+        data: { confirm: "WIPE" },
+      });
+      toast.success(`Deleted ${res.data?.deleted ?? 0} draft(s).`, { duration: 6000 });
+      if (loadRecruitDrafts) await loadRecruitDrafts();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Wipe failed");
+    } finally {
+      setWiping(false);
+    }
+  };
 
   return (
     <div className="mt-6 space-y-4" data-testid="recruiting-gap-fill-panel">
@@ -54,7 +101,7 @@ export default function RecruitingGapFillPanel({
               {" "}line ~250 (<code className="text-xs">dry_run=False</code>).
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {generateRecruitDrafts && (
               <button
                 type="button"
@@ -64,6 +111,15 @@ export default function RecruitingGapFillPanel({
                 Generate drafts now
               </button>
             )}
+            <button
+              type="button"
+              onClick={onWipeAll}
+              disabled={wiping || totalDrafts === 0}
+              className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-[#D45D5D] text-[#D45D5D] hover:bg-[#FDF1EF] disabled:opacity-50"
+            >
+              {wiping ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+              Wipe all drafts ({totalDrafts})
+            </button>
             {setTab && (
               <button
                 type="button"
@@ -77,13 +133,18 @@ export default function RecruitingGapFillPanel({
         </div>
       </div>
 
-      <div className="bg-[#FBEFE9] border border-[#F4DDD2] text-[#8B4F3B] rounded-2xl px-5 py-3 text-sm flex items-center gap-2">
-        <AlertTriangle size={16} className="shrink-0" />
+      <div className="bg-[#FBEFE9] border border-[#F4DDD2] text-[#8B4F3B] rounded-2xl px-5 py-3 text-sm flex items-start gap-2">
+        <AlertTriangle size={16} className="shrink-0 mt-0.5" />
         <div>
           <strong>Dry-run mode.</strong> Nothing sends until you flip{" "}
           <code className="text-xs">dry_run=False</code> in cron.py and the
           pre-launch email safety guard is satisfied (set EMAIL_LIVE_MODE=true
           on Render or remove EMAIL_OVERRIDE_TO).
+          <br />
+          <strong>Stale drafts?</strong> Drafts in the table below were generated
+          against a prior Coverage gaps snapshot. If they don't match your
+          current gaps, click <strong>Wipe all drafts</strong> then{" "}
+          <strong>Generate drafts now</strong> to rebuild fresh.
         </div>
       </div>
 
@@ -104,7 +165,7 @@ export default function RecruitingGapFillPanel({
       {recruitDrafts && draftsByGap.length > 0 && (
         <div className="bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
           <div className="px-5 py-3 border-b border-[#E8E5DF] flex items-center justify-between">
-            <div className="font-medium text-[#2D4A3E]">Drafts by gap</div>
+            <div className="font-medium text-[#2D4A3E]">Drafts grouped by gap</div>
             <div className="text-xs text-[#6D6A65]">
               <strong className="text-[#2B2A29]">{totalDrafts}</strong> total drafts
             </div>
@@ -112,17 +173,21 @@ export default function RecruitingGapFillPanel({
           <table className="w-full text-sm">
             <thead className="bg-[#FDFBF7] text-[#6D6A65]">
               <tr className="text-left">
-                <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold">Gap</th>
+                <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold">Gap (dimension &rarr; value)</th>
                 <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold">Severity</th>
                 <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold text-right">Drafts</th>
+                <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold text-right">Google verified</th>
               </tr>
             </thead>
             <tbody>
               {draftsByGap.map((g, i) => (
                 <tr key={i} className="border-t border-[#E8E5DF]">
-                  <td className="p-4 text-[#2B2A29]">{g.label || g.dimension_value || g.dimension}</td>
+                  <td className="p-4 text-[#2B2A29]">{g.label}</td>
                   <td className="p-4 text-[#2B2A29] capitalize">{g.severity || "—"}</td>
-                  <td className="p-4 text-right font-semibold text-[#2D4A3E]">{g.draft_count || 0}</td>
+                  <td className="p-4 text-right font-semibold text-[#2D4A3E]">{g.draft_count}</td>
+                  <td className="p-4 text-right text-[#6D6A65]">
+                    {g.google_verified_count} / {g.draft_count}
+                  </td>
                 </tr>
               ))}
             </tbody>

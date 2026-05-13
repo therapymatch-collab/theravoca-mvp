@@ -1713,6 +1713,7 @@ export default function AdminDashboard() {
               {tab === "recruiting_gap_fill" && (
                 <>
                   <RecruitingGapFillPanel
+                    client={client}
                     recruitDrafts={recruitDrafts}
                     loadRecruitDrafts={loadRecruitDrafts}
                     generateRecruitDrafts={generateRecruitDrafts}

@@ -4963,6 +4963,28 @@ async def admin_delete_gap_draft(draft_id: str, _: bool = Depends(require_admin)
     return {"ok": True}
 
 
+@router.delete("/admin/gap-recruit/drafts", dependencies=[Depends(require_admin)])
+async def admin_wipe_all_gap_drafts(payload: dict | None = None) -> dict[str, Any]:
+    """Wipe all recruit drafts (or only the unsent / dry-run subset).
+
+    Body (all optional):
+      - only_dry_run: bool   -- if true, only delete drafts where dry_run=True
+      - only_unsent: bool    -- if true, only delete drafts where sent != True
+      - confirm: str         -- must equal "WIPE" to proceed (safety)
+    """
+    payload = payload or {}
+    if payload.get("confirm") != "WIPE":
+        raise HTTPException(400, "Pass confirm='WIPE' to proceed.")
+    q: dict[str, Any] = {}
+    if payload.get("only_dry_run"):
+        q["dry_run"] = True
+    if payload.get("only_unsent"):
+        q["sent"] = {"$ne": True}
+    res = await db.recruit_drafts.delete_many(q)
+    logger.warning("WIPE recruit_drafts: deleted=%d query=%s", res.deleted_count, q)
+    return {"ok": True, "deleted": res.deleted_count, "query": q}
+
+
 @router.post("/admin/gap-recruit/send-all")
 async def admin_send_gap_drafts(_: bool = Depends(require_admin)):
     """Fire off all pending non-dry-run drafts via Resend. Pre-launch this
