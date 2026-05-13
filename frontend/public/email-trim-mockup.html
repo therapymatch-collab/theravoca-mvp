@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TheraVoca Email Trim Mockup -- HIPAA Phase 2</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --bg: #FDFBF7;
+    --surface: #FFFFFF;
+    --primary: #2D4A3E;
+    --primary-hover: #3A5E50;
+    --secondary: #C87965;
+    --text-main: #2B2A29;
+    --text-muted: #6D6A65;
+    --border: #E8E5DF;
+  }
+  body { background: var(--bg); color: var(--text-main); font-family: ui-sans-serif, system-ui, sans-serif; }
+  .font-serif { font-family: 'Georgia', 'Cormorant Garamond', serif; }
+  .design-note { background: #FBEFE9; border: 1px solid #F4DDD2; color: #8B4F3B; }
+  .email-shell { background: #FDFBF7; padding: 24px; border-radius: 12px; }
+  .email-card { background: #FFFFFF; border: 1px solid #E8E5DF; border-radius: 12px; max-width: 600px; margin: 0 auto; overflow: hidden; }
+  .email-header { padding: 20px 24px; border-bottom: 1px solid #E8E5DF; }
+  .email-header .brand { font-family: Georgia, serif; font-size: 20px; color: #2D4A3E; }
+  .email-body { padding: 24px; }
+  .email-footer { padding: 16px 24px; background: #FDFBF7; color: #6D6A65; font-size: 12px; border-top: 1px solid #E8E5DF; }
+  .phi-highlight { background: #FBE9E5; border: 1px dashed #D45D5D; padding: 2px 4px; border-radius: 4px; }
+  .phi-removed { background: #E8F0EA; border: 1px dashed #4A6B5D; padding: 2px 4px; border-radius: 4px; color: #2D4A3E; font-style: italic; }
+  .meta-strip { padding: 8px 16px; background: #2D4A3E; color: white; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  .meta-strip.before { background: #C8412B; }
+  .meta-strip.after { background: #2D4A3E; }
+  .annotation { font-size: 12px; color: #6D6A65; line-height: 1.5; padding: 12px 16px; background: #FDFBF7; border-radius: 8px; border: 1px solid #E8E5DF; }
+  .cta-btn { display: inline-block; background: #2D4A3E; color: white; padding: 12px 28px; border-radius: 999px; font-weight: 600; text-decoration: none; font-size: 14px; }
+  .summary-table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  .summary-table td { padding: 6px 0; font-size: 13px; }
+  .summary-table td:first-child { color: #6D6A65; width: 130px; font-size: 12px; }
+  .summary-table td:last-child { color: #2B2A29; }
+  .reason-pill { display: inline-block; background: #EAF2E8; color: #2D4A3E; padding: 4px 10px; border-radius: 999px; font-size: 11px; margin: 2px 3px; }
+</style>
+</head>
+<body>
+
+<div class="design-note px-6 py-3 text-xs">
+  <span class="font-semibold">EMAIL TRIM MOCKUP -- HIPAA Phase 2</span> &middot; Three transactional emails currently carry PHI in-band. Each row shows the
+  <strong style="color:#C8412B">RED = current</strong> version vs <strong style="color:#2D4A3E">GREEN = proposed trimmed</strong> version. Highlights show
+  <span class="phi-highlight">PHI removed</span> &middot; <span class="phi-removed">replacement / where it lives now</span>.
+</div>
+
+<main class="max-w-[1600px] mx-auto px-6 py-8 space-y-12">
+
+  <!-- ===================== EMAIL 1: Therapist notification ===================== -->
+  <section>
+    <div class="flex items-baseline justify-between mb-2 flex-wrap gap-3">
+      <div>
+        <div class="text-[10px] uppercase tracking-widest text-[#6D6A65] font-semibold">Email 1 / 3</div>
+        <h2 class="font-serif text-2xl text-[#2D4A3E]">Therapist notification</h2>
+        <p class="text-sm text-[#6D6A65] mt-1">Sent to each notified therapist when a new patient request matches their profile (template: <code>therapist_notification</code> a.k.a. <code>new_referral_inquiry</code>).</p>
+      </div>
+      <span class="text-xs px-3 py-1 rounded-full bg-[#FBE9E5] text-[#C8412B] font-semibold">HIGHEST volume PHI surface</span>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <!-- BEFORE -->
+      <div>
+        <div class="meta-strip before">CURRENT (live)</div>
+        <div class="email-shell">
+          <div class="email-card">
+            <div class="email-header">
+              <div class="brand">TheraVoca</div>
+            </div>
+            <div class="email-body">
+              <div class="text-xs text-[#6D6A65] mb-3">
+                <strong>To:</strong> sarah@example-therapy.com<br/>
+                <strong>Subject:</strong> New referral match <span class="phi-highlight">(88%)</span> &mdash; TheraVoca
+              </div>
+              <p class="text-sm">Hi Sarah,</p>
+              <p class="text-sm mt-3">We have an anonymous referral that looks like a strong fit for your practice. <span class="phi-highlight">Your specialties align with this patient's needs &mdash; particularly around anxiety, trauma_ptsd, and life_transitions.</span></p>
+
+              <div class="bg-[#FDFBF7] border border-[#E8E5DF] rounded p-4 mt-4">
+                <div class="text-[10px] uppercase tracking-wider text-[#6D6A65] font-semibold mb-2">Anonymous referral summary</div>
+                <table class="summary-table">
+                  <tr><td>Client age</td><td><span class="phi-highlight">34</span></td></tr>
+                  <tr><td>Location</td><td><span class="phi-highlight">Boise, ID 83702</span></td></tr>
+                  <tr><td>Presenting</td><td><span class="phi-highlight">anxiety, trauma_ptsd, life_transitions</span></td></tr>
+                  <tr><td>Urgency</td><td><span class="phi-highlight">Within 2 weeks</span></td></tr>
+                  <tr><td>Format</td><td><span class="phi-highlight">Telehealth preferred</span></td></tr>
+                  <tr><td>Payment</td><td><span class="phi-highlight">Sliding scale, $80 max/session</span></td></tr>
+                </table>
+              </div>
+
+              <p class="text-sm mt-4">Speak to your overall fit and approach in your reply if you want to apply.</p>
+              <p style="text-align:center; margin: 24px 0;"><a href="#" class="cta-btn">I'm interested</a></p>
+              <p class="text-xs text-[#6D6A65]">Reference: <span class="phi-highlight">R-9KIJ</span></p>
+            </div>
+            <div class="email-footer">Reply to this email if anything looks off &mdash; we'd love to hear from you.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AFTER -->
+      <div>
+        <div class="meta-strip after">PROPOSED (trimmed)</div>
+        <div class="email-shell">
+          <div class="email-card">
+            <div class="email-header">
+              <div class="brand">TheraVoca</div>
+            </div>
+            <div class="email-body">
+              <div class="text-xs text-[#6D6A65] mb-3">
+                <strong>To:</strong> sarah@example-therapy.com<br/>
+                <strong>Subject:</strong> New TheraVoca referral &mdash; ready for review
+              </div>
+              <p class="text-sm">Hi Sarah,</p>
+              <p class="text-sm mt-3">You have a new TheraVoca referral that the matcher flagged as a strong fit for your practice. The full anonymized brief &mdash; including the patient's concerns, preferred format, urgency, and payment fit &mdash; is in your secure portal.</p>
+
+              <p class="text-sm mt-3"><span class="phi-removed">[brief details no longer in email -- click to view in portal]</span></p>
+
+              <p style="text-align:center; margin: 24px 0;"><a href="#" class="cta-btn">View referral &amp; decide</a></p>
+
+              <p class="text-xs text-[#6D6A65] text-center">Sign-in is one-click from this email -- no password needed.</p>
+            </div>
+            <div class="email-footer">Reply to this email any time. To stop receiving referrals, click Unsubscribe in the portal.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="annotation mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <strong class="text-[#C8412B]">PHI in current email:</strong> match score, presenting issues, age, location + ZIP, urgency, format preference, payment range, request ID.
+      </div>
+      <div>
+        <strong class="text-[#2D4A3E]">After trim:</strong> only the therapist's name + a CTA link with HMAC-signed token. All PHI moves to the secure portal page (already exists -- the apply-fit form already lives behind the same token).
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== EMAIL 2: Patient results ===================== -->
+  <section>
+    <div class="flex items-baseline justify-between mb-2 flex-wrap gap-3">
+      <div>
+        <div class="text-[10px] uppercase tracking-widest text-[#6D6A65] font-semibold">Email 2 / 3</div>
+        <h2 class="font-serif text-2xl text-[#2D4A3E]">Patient results</h2>
+        <p class="text-sm text-[#6D6A65] mt-1">Sent to the patient when their matches are ready (template: <code>patient_results</code>).</p>
+      </div>
+      <span class="text-xs px-3 py-1 rounded-full bg-[#FBE9E5] text-[#C8412B] font-semibold">Joins therapist identity to patient identity</span>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <!-- BEFORE -->
+      <div>
+        <div class="meta-strip before">CURRENT (live)</div>
+        <div class="email-shell">
+          <div class="email-card">
+            <div class="email-header">
+              <div class="brand">TheraVoca</div>
+            </div>
+            <div class="email-body">
+              <div class="text-xs text-[#6D6A65] mb-3">
+                <strong>To:</strong> jane@example.com<br/>
+                <strong>Subject:</strong> Your <span class="phi-highlight">5</span> therapist matches are ready
+              </div>
+              <p class="text-sm">Your personalized therapist matches are ready. These therapists read your anonymous referral and want to work with you.</p>
+
+              <div class="bg-[#FDFBF7] border border-[#E8E5DF] rounded p-4 mt-4">
+                <div class="text-sm font-semibold text-[#2D4A3E]">1. <span class="phi-highlight">Sarah Liu, LCSW</span> &mdash; <span class="phi-highlight">94%</span></div>
+                <div class="mt-2">
+                  <span class="reason-pill">Specializes in: <span class="phi-highlight">anxiety, trauma_ptsd</span></span>
+                  <span class="reason-pill">Schedule: <span class="phi-highlight">opens within 2 weeks</span></span>
+                  <span class="reason-pill">Format: <span class="phi-highlight">Telehealth + in-person</span></span>
+                </div>
+              </div>
+
+              <div class="bg-[#FDFBF7] border border-[#E8E5DF] rounded p-4 mt-3">
+                <div class="text-sm font-semibold text-[#2D4A3E]">2. <span class="phi-highlight">Mark Davis, PsyD</span> &mdash; <span class="phi-highlight">91%</span></div>
+                <div class="mt-2">
+                  <span class="reason-pill">Specializes in: <span class="phi-highlight">life_transitions</span></span>
+                  <span class="reason-pill">Format: <span class="phi-highlight">Telehealth</span></span>
+                </div>
+              </div>
+
+              <p class="text-sm text-center text-[#6D6A65] mt-4">+ 3 more matches</p>
+
+              <p style="text-align:center; margin: 24px 0;"><a href="#" class="cta-btn">View full matches</a></p>
+            </div>
+            <div class="email-footer">To stop receiving these emails, reply STOP or email support@theravoca.com.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AFTER -->
+      <div>
+        <div class="meta-strip after">PROPOSED (trimmed)</div>
+        <div class="email-shell">
+          <div class="email-card">
+            <div class="email-header">
+              <div class="brand">TheraVoca</div>
+            </div>
+            <div class="email-body">
+              <div class="text-xs text-[#6D6A65] mb-3">
+                <strong>To:</strong> jane@example.com<br/>
+                <strong>Subject:</strong> Your TheraVoca matches are ready
+              </div>
+              <p class="text-sm">Your therapist matches are ready to view. Tap the button below to open your secure dashboard &mdash; you'll see each match's profile, specialties, fees, and a way to reach out directly.</p>
+
+              <p class="text-sm mt-3"><span class="phi-removed">[match list, scores, and clinical reasons no longer in email -- click to view in dashboard]</span></p>
+
+              <p style="text-align:center; margin: 24px 0;"><a href="#" class="cta-btn">View my matches</a></p>
+
+              <p class="text-xs text-[#6D6A65] text-center">Many of your matches offer a free 15-minute consult. Sign-in is one-click from this email.</p>
+            </div>
+            <div class="email-footer">To stop receiving these emails, manage preferences in your dashboard.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="annotation mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <strong class="text-[#C8923A]">PHI in current email:</strong> recipient (the patient's identity is implicit in the to-address), therapist names + scores joined to patient identity, the patient's clinical concerns inferred from the match-reason pills.
+      </div>
+      <div>
+        <strong class="text-[#2D4A3E]">After trim:</strong> only "your matches are ready, click here." All match content lives behind the existing one-click sign-in token. Defense-in-depth: even if the email is forwarded or the recipient's inbox is breached, the matches themselves are not exposed.
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== EMAIL 3: Intake receipt ===================== -->
+  <section>
+    <div class="flex items-baseline justify-between mb-2 flex-wrap gap-3">
+      <div>
+        <div class="text-[10px] uppercase tracking-widest text-[#6D6A65] font-semibold">Email 3 / 3</div>
+        <h2 class="font-serif text-2xl text-[#2D4A3E]">Intake receipt</h2>
+        <p class="text-sm text-[#6D6A65] mt-1">Sent immediately after the patient submits intake (template: <code>patient_intake_receipt</code>).</p>
+      </div>
+      <span class="text-xs px-3 py-1 rounded-full bg-[#FBE9E5] text-[#C8412B] font-semibold">Most PHI per email -- complete intake answers</span>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <!-- BEFORE -->
+      <div>
+        <div class="meta-strip before">CURRENT (live)</div>
+        <div class="email-shell">
+          <div class="email-card">
+            <div class="email-header">
+              <div class="brand">TheraVoca</div>
+            </div>
+            <div class="email-body">
+              <div class="text-xs text-[#6D6A65] mb-3">
+                <strong>To:</strong> jane@example.com<br/>
+                <strong>Subject:</strong> Your TheraVoca referral &mdash; a copy for your records
+              </div>
+              <p class="text-sm">Thanks for your TheraVoca request &mdash; here's a copy of what you submitted, in case you ever want to refer back.</p>
+
+              <div class="bg-[#FDFBF7] border border-[#E8E5DF] rounded p-4 mt-4">
+                <div class="text-[10px] uppercase tracking-wider text-[#6D6A65] font-semibold mb-2">Your answers</div>
+                <table class="summary-table">
+                  <tr><td>Age</td><td><span class="phi-highlight">34</span></td></tr>
+                  <tr><td>Location</td><td><span class="phi-highlight">Boise, ID 83702</span></td></tr>
+                  <tr><td>Primary concern</td><td><span class="phi-highlight">anxiety</span></td></tr>
+                  <tr><td>Other concerns</td><td><span class="phi-highlight">trauma_ptsd, life_transitions</span></td></tr>
+                  <tr><td>Urgency</td><td><span class="phi-highlight">Within 2 weeks</span></td></tr>
+                  <tr><td>Format</td><td><span class="phi-highlight">Telehealth preferred</span></td></tr>
+                  <tr><td>Payment</td><td><span class="phi-highlight">Sliding scale, $80 max</span></td></tr>
+                  <tr><td>Prior therapy</td><td><span class="phi-highlight">"Tried a therapist last year, didn't click; she didn't seem to specialize in trauma"</span></td></tr>
+                  <tr><td>Anything else</td><td><span class="phi-highlight">"Recently moved for work, struggling with isolation and a recent breakup"</span></td></tr>
+                </table>
+              </div>
+
+              <p class="text-sm mt-4">We'll email you when matches are ready &mdash; usually within a few hours.</p>
+              <p class="text-xs text-[#6D6A65] mt-2">Reference: <span class="phi-highlight">R-9KIJ</span></p>
+            </div>
+            <div class="email-footer">Need to correct something? Reply to this email &mdash; once we match, edits aren't possible.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AFTER -->
+      <div>
+        <div class="meta-strip after">PROPOSED (trimmed)</div>
+        <div class="email-shell">
+          <div class="email-card">
+            <div class="email-header">
+              <div class="brand">TheraVoca</div>
+            </div>
+            <div class="email-body">
+              <div class="text-xs text-[#6D6A65] mb-3">
+                <strong>To:</strong> jane@example.com<br/>
+                <strong>Subject:</strong> We received your TheraVoca request
+              </div>
+              <p class="text-sm">Thanks for submitting your request. Reference number: <strong>9KIJ</strong>.</p>
+
+              <p class="text-sm mt-3">We'll email you when your therapist matches are ready &mdash; usually within a few hours. In the meantime you can view a full copy of your answers any time:</p>
+
+              <p style="text-align:center; margin: 24px 0;"><a href="#" class="cta-btn">View my submitted answers</a></p>
+
+              <p class="text-sm mt-3"><span class="phi-removed">[full intake answers no longer in email body -- viewable on your private dashboard]</span></p>
+
+              <p class="text-xs text-[#6D6A65]">If anything in your answers looks wrong, reply to this email &mdash; we can correct it before matching.</p>
+            </div>
+            <div class="email-footer">A reference number on its own isn't sensitive; it can't be matched back to you without a one-click portal sign-in.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="annotation mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <strong class="text-[#C8412B]">PHI in current email:</strong> the entire intake form. Free-text fields (prior therapy notes, "anything else") are particularly sensitive -- patients sometimes share trauma history, relationship details, mental health history.
+      </div>
+      <div>
+        <strong class="text-[#2D4A3E]">After trim:</strong> reference number + sign-in CTA. The reference number alone is not PHI (it's a UUID prefix that can't be re-identified). Full receipt remains accessible at <code>/portal/patient/request/{id}</code> behind the same auto-login token.
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== Implementation notes ===================== -->
+  <section class="bg-white border border-[#E8E5DF] rounded-2xl p-6 mt-12">
+    <h2 class="font-serif text-2xl text-[#2D4A3E]">Implementation notes</h2>
+    <div class="text-sm text-[#6D6A65] mt-3 space-y-3 leading-relaxed">
+      <div>
+        <strong class="text-[#2D4A3E]">Pages required (some may exist):</strong>
+        <ul class="list-disc pl-5 mt-1 space-y-1">
+          <li><code>/portal/therapist/referral/{request_id}</code> &mdash; therapist landing for a specific referral. Already exists for the apply flow; add the brief details that came out of the email.</li>
+          <li><code>/portal/patient/matches</code> &mdash; patient sees their matches. Already exists.</li>
+          <li><code>/portal/patient/request/{id}</code> &mdash; patient view of their submitted intake answers. <strong>Likely needs to be built</strong>; today the data is only viewable in the email.</li>
+        </ul>
+      </div>
+      <div>
+        <strong class="text-[#2D4A3E]">Auto-login tokens:</strong> Every email already uses HMAC-signed magic links per <code>routes/portal.py</code>. The same token can sign in the patient or therapist on click. No new auth machinery required.
+      </div>
+      <div>
+        <strong class="text-[#2D4A3E]">Defense in depth:</strong> Even with a Resend BAA in place, trimming reduces exposure if a recipient's inbox is breached, the email is forwarded by mistake, or a bug ever leaks email previews. Principle of least disclosure.
+      </div>
+      <div>
+        <strong class="text-[#2D4A3E]">Editable copy stays editable:</strong> Each template's <code>subject / heading / greeting / intro / cta_label / footer_note</code> remain admin-editable via Content &rarr; Email templates. The trim is structural &mdash; the dynamic content sections (intake-answer table, match list) are removed from <code>email_service.py</code> entirely; admin-editable copy lives untouched.
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="max-w-[1600px] mx-auto px-6 py-10 text-xs text-[#6D6A65] border-t border-[#E8E5DF] mt-12">
+  Mockup &middot; static preview &middot; corresponds to HIPAA Audit Phase 2 (commit 0b313a8). Open <a href="/admin/dashboard" class="underline">/admin/dashboard</a> to compare to live email-template editor.
+</footer>
+
+</body>
+</html>
