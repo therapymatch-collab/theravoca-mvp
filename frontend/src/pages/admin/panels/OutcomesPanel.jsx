@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Loader2, RotateCw } from "lucide-react";
+import { Loader2, RotateCw, Download } from "lucide-react";
 import { toast } from "sonner";
 import useAdminClient from "@/lib/useAdminClient";
 import {
@@ -49,6 +49,187 @@ function formatDate(iso) {
   } catch { return iso.slice(0, 10); }
 }
 
+// ───────────────── CSV export utilities ─────────────────
+function csvCell(v) {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  if (s.includes(",") || s.includes("\"") || s.includes("\n")) {
+    return `"${s.replace(/"/g, "\"\"")}"`;
+  }
+  return s;
+}
+function csvRow(arr) {
+  return arr.map(csvCell).join(",");
+}
+function csvSection(title, headers, rows) {
+  const out = [`# ${title}`];
+  if (headers && headers.length) out.push(csvRow(headers));
+  for (const r of rows || []) out.push(csvRow(r));
+  out.push("");
+  return out.join("\n");
+}
+function downloadCsv(filename, content) {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function rangeSuffix(range, data) {
+  const start = data?.range?.start_date ? data.range.start_date.slice(0, 10) : null;
+  const end = data?.range?.end_date ? data.range.end_date.slice(0, 10) : null;
+  if (start && end) return `${start}_to_${end}`;
+  return range || "all";
+}
+
+// Per-tab serializers. Each returns the multi-section CSV body string.
+function marketingCsv(d) {
+  let out = "";
+  out += csvSection(
+    "Patient NPS by month",
+    ["month", "nps", "n_responses"],
+    (d.patient_nps_trend || []).map((p) => [p.month, p.nps, p.n]),
+  );
+  out += csvSection(
+    "Conversion funnel",
+    ["stage", "count"],
+    [
+      ["matches_sent",      d.funnel?.matches_sent ?? 0],
+      ["responded_48h",     d.funnel?.responded_48h ?? 0],
+      ["picked_3w",         d.funnel?.picked_3w ?? 0],
+      ["still_seeing_9w",   d.funnel?.still_seeing_9w ?? 0],
+      ["still_seeing_15w",  d.funnel?.still_seeing_15w ?? 0],
+    ],
+  );
+  out += csvSection(
+    "Match volume per month",
+    ["month", "count"],
+    (d.match_volume_monthly || []).map((p) => [p.month, p.count]),
+  );
+  out += csvSection(
+    "NPS by referral source",
+    ["source", "nps", "n_responses"],
+    (d.nps_by_source || []).map((r) => [r.source, r.nps, r.n]),
+  );
+  return out;
+}
+
+function recruitingCsv(d) {
+  let out = "";
+  out += csvSection(
+    "Therapist NPS by month",
+    ["month", "nps", "n_responses"],
+    (d.therapist_nps_trend || []).map((p) => [p.month, p.nps, p.n]),
+  );
+  out += csvSection(
+    "New patients per month (therapist-reported)",
+    ["month", "count"],
+    (d.new_patients_monthly || []).map((p) => [p.month, p.count]),
+  );
+  out += csvSection(
+    "Match fit distribution",
+    ["rating", "count"],
+    [
+      ["poor",      d.match_fit_distribution?.poor ?? 0],
+      ["fair",      d.match_fit_distribution?.fair ?? 0],
+      ["good",      d.match_fit_distribution?.good ?? 0],
+      ["excellent", d.match_fit_distribution?.excellent ?? 0],
+    ],
+  );
+  return out;
+}
+
+function satisfactionCsv(d) {
+  let out = "";
+  out += csvSection(
+    "Patient satisfaction summary",
+    ["metric", "value"],
+    [
+      ["nps",                  d.patient?.nps ?? ""],
+      ["confidence_3w_avg",    d.patient?.confidence_3w_avg ?? ""],
+      ["progress_15w_avg",     d.patient?.progress_15w_avg ?? ""],
+      ["n_nps_responses",      d.patient?.n_nps ?? 0],
+    ],
+  );
+  out += csvSection(
+    "Patient NPS distribution",
+    ["score", "count"],
+    (d.patient?.nps_distribution || []).map((c, i) => [i, c]),
+  );
+  out += csvSection(
+    "Therapist satisfaction summary",
+    ["metric", "value"],
+    [
+      ["nps",              d.therapist?.nps ?? ""],
+      ["match_fit_avg",    d.therapist?.match_fit_avg ?? ""],
+      ["surveyed_count",   d.therapist?.surveyed_count ?? 0],
+      ["total_count",      d.therapist?.total_count ?? 0],
+      ["n_nps_responses",  d.therapist?.n_nps ?? 0],
+    ],
+  );
+  out += csvSection(
+    "Therapist NPS distribution",
+    ["score", "count"],
+    (d.therapist?.nps_distribution || []).map((c, i) => [i, c]),
+  );
+  out += csvSection(
+    "Selection confidence (3w) by month",
+    ["month", "avg", "n_responses"],
+    (d.confidence_3w_trend || []).map((p) => [p.month, p.avg, p.n]),
+  );
+  out += csvSection(
+    "Detractor alerts",
+    ["nps", "milestone", "patient_email", "referral_source", "submitted_at", "comment"],
+    (d.detractors || []).map((r) => [
+      r.nps, r.milestone, r.patient_email, r.referral_source, r.submitted_at, r.comment,
+    ]),
+  );
+  return out;
+}
+
+function matchingCsv(d) {
+  let out = "";
+  out += csvSection(
+    "Match Strength distribution (10-pt buckets)",
+    ["bucket_low", "bucket_high", "count"],
+    (d.distribution || []).map((c, i) => [
+      i * 10, i === 9 ? "100+" : (i + 1) * 10, c,
+    ]),
+  );
+  out += csvSection(
+    "Match Strength stats",
+    ["metric", "value"],
+    [
+      ["mean",        d.stats?.mean ?? ""],
+      ["median",      d.stats?.median ?? ""],
+      ["n",           d.stats?.n ?? 0],
+      ["correlation", d.correlation ?? ""],
+    ],
+  );
+  out += csvSection(
+    "Avg Match Strength by month",
+    ["month", "avg", "n_scored"],
+    (d.trend || []).map((p) => [p.month, p.avg, p.n]),
+  );
+  out += csvSection(
+    "Per-patient scatter (Match Strength vs 15w retention)",
+    ["match_strength", "retained_at_15w"],
+    (d.scatter || []).map((p) => [p.match_strength, p.retained ? 1 : 0]),
+  );
+  return out;
+}
+
+const TAB_CSV_SERIALIZERS = {
+  marketing:    marketingCsv,
+  recruiting:   recruitingCsv,
+  satisfaction: satisfactionCsv,
+  matching:     matchingCsv,
+};
+
 export default function OutcomesPanel({ data, loading, onReload }) {
   const [tab, setTab] = useState("marketing");
   const [range, setRange] = useState("90d");
@@ -94,6 +275,18 @@ export default function OutcomesPanel({ data, loading, onReload }) {
 
   const handleRefresh = () => {
     onReload(computeRangeParams(range));
+  };
+
+  const handleExportCsv = () => {
+    const serializer = TAB_CSV_SERIALIZERS[tab];
+    if (!serializer || !data?.[tab]) {
+      toast.error("No data to export for this tab.");
+      return;
+    }
+    const csv = serializer(data[tab]);
+    const filename = `outcomes-${tab}-${rangeSuffix(range, data)}.csv`;
+    downloadCsv(filename, csv);
+    toast.success(`Exported ${filename}`);
   };
 
   if (loading && !data) {
@@ -160,6 +353,14 @@ export default function OutcomesPanel({ data, loading, onReload }) {
                   }`} />
                 </button>
               </div>
+              <button onClick={handleExportCsv}
+                      disabled={loading || !data}
+                      className="inline-flex items-center gap-2 text-sm text-[#2D4A3E] hover:underline disabled:opacity-50"
+                      data-testid={`outcomes-export-${tab}`}
+                      title={`Download the current ${tab} tab as CSV. Multi-section, opens in Excel.`}>
+                <Download size={14} />
+                Export CSV
+              </button>
               <button onClick={handleRefresh}
                       disabled={loading}
                       className="inline-flex items-center gap-2 text-sm text-[#2D4A3E] hover:underline disabled:opacity-50"
