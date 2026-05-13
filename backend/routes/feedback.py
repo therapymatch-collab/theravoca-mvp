@@ -76,17 +76,27 @@ def _snapshot_fields(req: dict) -> dict:
 async def _snapshot_match_scores(request_id: str) -> dict:
     """Grab the top application's match_score and match_breakdown at
     the time the patient submits feedback, so we can correlate survey
-    answers with the match quality they experienced."""
+    answers with the match quality they experienced.
+
+    `match_score_at_response` reflects the FINAL score (initial
+    match_score + apply_fit bonus, capped at 100) so it matches what the
+    survey UI displayed to the patient. `initial_match_score_at_response`
+    is preserved separately for trend analysis.
+    """
     app = await db.applications.find_one(
         {"request_id": request_id},
-        {"_id": 0, "match_score": 1, "match_breakdown": 1},
+        {"_id": 0, "match_score": 1, "match_breakdown": 1, "apply_fit": 1},
         sort=[("match_score", -1)],
     )
     if not app:
         return {}
-    out = {}
-    if app.get("match_score") is not None:
-        out["match_score_at_response"] = app["match_score"]
+    out: dict[str, Any] = {}
+    initial = app.get("match_score")
+    fit = app.get("apply_fit") or 0
+    if initial is not None:
+        out["initial_match_score_at_response"] = initial
+        out["apply_fit_bonus_at_response"] = fit
+        out["match_score_at_response"] = min(100, round(initial + fit))
     if app.get("match_breakdown"):
         out["match_breakdown_at_response"] = app["match_breakdown"]
     return out
@@ -808,12 +818,22 @@ async def get_patient_matches(
         a deterministic avatar color. Empty input -> empty output."""
         if not therapist_ids:
             return []
-        apps: dict[str, float | None] = {}
+        # Pull both the initial match_score (computed at intake, displayed
+        # to patient + therapist on the original notification) AND the
+        # apply_fit bonus (0-5 LLM-graded based on the therapist's actual
+        # apply text). The combined `final_score` is what we surface in
+        # surveys -- it reflects how the match performed AFTER the
+        # therapist actually responded, which is more honest than the
+        # pre-response score.
+        apps: dict[str, dict] = {}
         async for a in db.applications.find(
             {"request_id": request_id, "therapist_id": {"$in": therapist_ids}},
-            {"_id": 0, "therapist_id": 1, "match_score": 1},
+            {"_id": 0, "therapist_id": 1, "match_score": 1, "apply_fit": 1},
         ):
-            apps[a["therapist_id"]] = a.get("match_score")
+            apps[a["therapist_id"]] = {
+                "match_score": a.get("match_score"),
+                "apply_fit": a.get("apply_fit") or 0,
+            }
         out: list[dict] = []
         _colors = [
             "#4F46E5", "#7C3AED", "#2563EB", "#0891B2",
@@ -827,10 +847,21 @@ async def get_patient_matches(
         ):
             tid = t["id"]
             _hash = sum(ord(c) for c in tid) % len(_colors)
+            app_data = apps.get(tid) or {}
+            initial = app_data.get("match_score")
+            fit = app_data.get("apply_fit") or 0
+            # Final score caps at 100 -- a therapist with the max apply_fit
+            # bonus on top of an already-high score shouldn't display 102.
+            final = (
+                min(100, round((initial or 0) + fit))
+                if initial is not None else None
+            )
             out.append({
                 "therapist_id": tid,
                 "therapist_name": t.get("name", "Therapist"),
-                "match_score": apps.get(tid),
+                "match_score": final,        # what the survey UI displays
+                "initial_match_score": initial,  # pre-apply for transparency
+                "apply_fit_bonus": fit,
                 "credential_type": t.get("credential_type"),
                 "years_experience": t.get("years_experience"),
                 "modality_offering": t.get("modality_offering"),
