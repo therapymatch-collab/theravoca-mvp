@@ -132,18 +132,29 @@ export default function TherapistApply() {
     }
     setSubmitting(true);
     try {
-      await http.post(`/therapist/apply/${requestId}/${therapistId}${sigQs}`, {
+      const res = await http.post(`/therapist/apply/${requestId}/${therapistId}${sigQs}`, {
         message,
         confirms_availability: confirmAvail,
         confirms_urgency: confirmUrgency,
         confirms_payment: confirmPayment,
       });
+      // Auto-login: drop the session token from the apply response into
+      // sessionStorage so the portal recognises the therapist immediately
+      // (no email + magic-code round-trip needed).
+      if (res?.data?.session_token) {
+        try {
+          sessionStorage.setItem("tv_session_token", res.data.session_token);
+          sessionStorage.setItem("tv_session_role", "therapist");
+        } catch (e) {
+          console.warn("sessionStorage write failed:", e?.message);
+        }
+      }
       setSubmitted(true);
       toast.success("Interest submitted — taking you to your dashboard.");
       // Send the therapist to their portal so they can see all their referrals
       // in context. We delay slightly so they see the success state first.
       setTimeout(() => {
-        window.location.href = "/portal/therapist";
+        window.location.href = res?.data?.portal_url || "/portal/therapist";
       }, 1200);
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Submission failed.");

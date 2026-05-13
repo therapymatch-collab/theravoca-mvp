@@ -602,6 +602,18 @@ async def therapist_apply(
         {"request_id": request_id, "therapist_id": therapist_id}, {"_id": 0}
     )
     now = _now_iso()
+    # Auto-login token so the therapist lands in their portal after
+    # applying instead of having to re-authenticate via magic-code.
+    # Mirrors the patient pattern at routes/patients.py:508. Skipped
+    # silently when the therapist record has no email (impossible in
+    # practice but defensively guarded).
+    therapist_email = (therapist.get("email") or "").strip()
+    auto_token: Optional[str] = (
+        _create_session_token(therapist_email, "therapist")
+        if therapist_email else None
+    )
+    portal_url: Optional[str] = "/portal/therapist" if auto_token else None
+
     if existing:
         await db.applications.update_one(
             {"id": existing["id"]},
@@ -626,6 +638,8 @@ async def therapist_apply(
             match_score=score,
             message=payload.message,
             created_at=existing["created_at"],
+            session_token=auto_token,
+            portal_url=portal_url,
         )
 
     app_doc = {
@@ -656,7 +670,16 @@ async def therapist_apply(
     except Exception:
         pass
     await db.applications.insert_one(app_doc.copy())
-    return ApplicationOut(**app_doc)
+    # Strip fields that aren't on ApplicationOut before unpacking.
+    out_kwargs = {k: v for k, v in app_doc.items() if k in {
+        "id", "request_id", "therapist_id", "therapist_name",
+        "match_score", "message", "created_at",
+    }}
+    return ApplicationOut(
+        **out_kwargs,
+        session_token=auto_token,
+        portal_url=portal_url,
+    )
 
 
 @router.post("/therapist/decline/{request_id}/{therapist_id}", response_model=dict)

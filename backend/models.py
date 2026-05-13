@@ -304,6 +304,11 @@ class ApplicationOut(BaseModel):
     match_score: float
     message: str
     created_at: str
+    # Auto-login token: lets the therapist land in their portal without
+    # having to re-enter their email + magic-code after applying. Populated
+    # by /therapist/apply when the therapist has an email on file.
+    session_token: Optional[str] = None
+    portal_url: Optional[str] = None
 
 
 class FollowupResponse(BaseModel):
