@@ -702,6 +702,86 @@ async def admin_resend_notifications(request_id: str, request: Request, _: bool 
     return await _trigger_matching(request_id, threshold=threshold, top_n=top_n)
 
 
+@router.get(
+    "/admin/requests/{request_id}/score-detail",
+    dependencies=[Depends(require_admin)],
+)
+async def admin_request_score_detail(request_id: str) -> dict[str, Any]:
+    """Re-run rank_therapists for a request and return per-therapist
+    PRECISE scores + breakdown axes, sorted descending. Lets the admin
+    see the underlying differentiation that the integer match_score
+    rounds away (e.g. 30 therapists all displaying 89% may actually
+    span 88.7 - 89.4 in raw precision).
+
+    Read-only -- doesn't update the request. Useful for debugging
+    "why are all my matches scoring the same?" without disturbing
+    notified_therapist_ids or the live result set.
+    """
+    from matching import rank_therapists
+
+    req = await db.requests.find_one({"id": request_id}, {"_id": 0})
+    if not req:
+        raise HTTPException(404, "request not found")
+
+    therapists = await db.therapists.find(
+        {"is_active": {"$ne": False}, "pending_approval": {"$ne": True}},
+        {"_id": 0},
+    ).to_list(length=2000)
+
+    all_scored: list[dict] = []
+    rank_therapists(
+        therapists, req,
+        threshold=0.0,        # don't filter -- we want the full distribution
+        top_n=len(therapists),
+        min_results=1,
+        all_scored_out=all_scored,
+    )
+
+    # Emit a compact view: id, name, integer + precise scores, raw total,
+    # and the top-3 contributing breakdown axes so admin can see WHERE the
+    # differentiation comes from (or doesn't).
+    rows = []
+    for s in all_scored:
+        breakdown = s.get("match_breakdown") or {}
+        raw_total = round(sum(float(v) for v in breakdown.values()), 2)
+        # Top 3 contributing axes for at-a-glance "what dominates."
+        sorted_axes = sorted(
+            breakdown.items(), key=lambda kv: float(kv[1] or 0), reverse=True,
+        )
+        top_axes = [
+            {"axis": k, "points": round(float(v), 2)}
+            for k, v in sorted_axes[:3]
+        ]
+        rows.append({
+            "therapist_id": s.get("id"),
+            "name": s.get("name"),
+            "score_int": s.get("match_score"),
+            "score_precise": s.get("match_score_precise"),
+            "raw_total": raw_total,
+            "top_axes": top_axes,
+            "above_threshold": s.get("above_threshold"),
+        })
+    rows.sort(key=lambda r: (r.get("score_precise") or 0), reverse=True)
+
+    # Spread stats: how much does the precise score actually differ across
+    # the top N? Quick "is the model differentiating?" answer.
+    top30 = rows[:30]
+    precise_top30 = [r["score_precise"] or 0 for r in top30]
+    spread = (
+        max(precise_top30) - min(precise_top30) if precise_top30 else 0.0
+    )
+
+    return {
+        "request_id": request_id,
+        "request_email": req.get("email"),
+        "scored_total": len(rows),
+        "spread_top30_precise": round(spread, 2),
+        "min_top30": round(min(precise_top30), 2) if precise_top30 else 0,
+        "max_top30": round(max(precise_top30), 2) if precise_top30 else 0,
+        "rows": rows,
+    }
+
+
 @router.put("/admin/requests/{request_id}/threshold")
 async def admin_update_threshold(
     request_id: str, payload: dict, _: bool = Depends(require_admin),

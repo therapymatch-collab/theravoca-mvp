@@ -2803,6 +2803,10 @@ export default function AdminDashboard() {
                     </>
                   )}
                 </button>
+                <ScoreDetailButton
+                  client={client}
+                  requestId={detail.request.id}
+                />
                 <RerunWithCutoffs
                   requestId={detail.request.id}
                   currentThreshold={detail.request.effective_threshold || detail.request.threshold || 70}
@@ -3240,6 +3244,161 @@ function TabBtn({ active, onClick, icon, label, count, testid, highlight }) {
         </span>
       )}
     </button>
+  );
+}
+
+// ScoreDetailButton: opens a modal showing each scored therapist's
+// PRECISE score (88.7 / 89.1 / 89.4) alongside the integer match_score
+// the patient actually sees. Lets the admin debug "why are all my
+// matches scoring the same?" by surfacing the underlying float spread
+// + the top-3 contributing axes per therapist.
+function ScoreDetailButton({ client, requestId }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+
+  const fetchDetail = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const r = await client.get(`/admin/requests/${requestId}/score-detail`);
+      setData(r.data);
+      setOpen(true);
+    } catch (e) {
+      setError(e?.response?.data?.detail || "Could not load score detail");
+      setOpen(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={fetchDetail}
+        disabled={loading}
+        className="tv-btn-secondary !py-2 !px-4 text-sm disabled:opacity-60"
+        title="Re-runs scoring for every active therapist and shows precise (un-rounded) match scores so you can see the differentiation that integer rounding hides."
+      >
+        {loading ? (
+          <>
+            <Loader2 size={14} className="inline mr-1.5 animate-spin" /> Computing...
+          </>
+        ) : (
+          <>
+            <TrendingUp size={14} className="inline mr-1.5" /> Score detail
+          </>
+        )}
+      </button>
+
+      {open && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start justify-center pt-12 px-4"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-[#E8E5DF] flex items-center justify-between">
+              <div>
+                <h3 className="font-serif-display text-xl text-[#2D4A3E]">
+                  Score detail
+                </h3>
+                <p className="text-xs text-[#6D6A65] mt-0.5">
+                  Re-ran rank_therapists for this request &middot; full distribution
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="p-1.5 rounded hover:bg-[#F2EFE8] text-[#6D6A65]"
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {error && (
+              <div className="m-6 p-3 bg-[#FDF1EF] border border-[#F2C9C0] rounded text-sm text-[#8B3220]">
+                {error}
+              </div>
+            )}
+
+            {data && !error && (
+              <>
+                <div className="px-6 py-3 bg-[#FDFBF7] border-b border-[#E8E5DF] grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Scored</div>
+                    <div className="font-semibold text-[#2D4A3E] text-base">{data.scored_total}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Top-30 spread</div>
+                    <div className={`font-semibold text-base ${data.spread_top30_precise < 2 ? "text-[#C8412B]" : "text-[#2D4A3E]"}`}>
+                      {data.spread_top30_precise} pts
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Min (top 30)</div>
+                    <div className="font-semibold text-[#2D4A3E] text-base">{data.min_top30}%</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">Max (top 30)</div>
+                    <div className="font-semibold text-[#2D4A3E] text-base">{data.max_top30}%</div>
+                  </div>
+                </div>
+                {data.spread_top30_precise < 2 && (
+                  <div className="mx-6 mt-3 mb-1 px-3 py-2 bg-[#FBEFE9] border border-[#F4DDD2] rounded text-xs text-[#8B5A1F]">
+                    <strong>Top-30 spread is &lt; 2 points.</strong> Integer rounding
+                    crushes this into one or two visible scores. Either steepen
+                    the display curve in matching.py or accept that the model
+                    sees these therapists as genuinely interchangeable for this
+                    patient.
+                  </div>
+                )}
+                <div className="overflow-y-auto flex-1">
+                  <table className="w-full text-sm">
+                    <thead className="bg-[#FDFBF7] text-[#6D6A65] sticky top-0">
+                      <tr className="text-left">
+                        <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-semibold">Rank</th>
+                        <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-semibold">Therapist</th>
+                        <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-semibold text-right">Display</th>
+                        <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-semibold text-right">Precise</th>
+                        <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-semibold text-right">Raw</th>
+                        <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-semibold">Top axes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(data.rows || []).slice(0, 60).map((r, i) => (
+                        <tr key={r.therapist_id || i} className="border-t border-[#E8E5DF]">
+                          <td className="px-4 py-2 text-[#6D6A65] tabular-nums">{i + 1}</td>
+                          <td className="px-4 py-2 text-[#2B2A29]">{r.name || r.therapist_id?.slice(0, 8)}</td>
+                          <td className="px-4 py-2 text-right font-semibold text-[#2D4A3E] tabular-nums">{r.score_int}%</td>
+                          <td className="px-4 py-2 text-right text-[#2D4A3E] tabular-nums">{r.score_precise}</td>
+                          <td className="px-4 py-2 text-right text-[#6D6A65] tabular-nums">{r.raw_total}</td>
+                          <td className="px-4 py-2 text-xs text-[#6D6A65]">
+                            {(r.top_axes || []).map((a) => `${a.axis}: ${a.points}`).join(" / ")}
+                          </td>
+                        </tr>
+                      ))}
+                      {(data.rows || []).length > 60 && (
+                        <tr className="border-t border-[#E8E5DF]">
+                          <td colSpan={6} className="px-4 py-3 text-center text-xs text-[#6D6A65] italic">
+                            Showing top 60 of {data.rows.length}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
