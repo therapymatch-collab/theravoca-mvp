@@ -61,10 +61,21 @@ export default function RecruitingPerRequestPanel({ requests, openDetail, client
         <table className="w-full text-sm">
           <thead className="bg-[#FDFBF7] text-[#6D6A65]">
             <tr className="text-left">
-              <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold">When</th>
+              <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold">Last run</th>
               <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold">Patient</th>
               <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold">State</th>
-              <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold text-right">Sent</th>
+              <th
+                className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold text-right"
+                title="Total invite rows on this request, across all runs (matches the count shown on the request detail's Invited therapists list)"
+              >
+                Invited (all-time)
+              </th>
+              <th
+                className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold text-right"
+                title="Number of sends in the most recent outreach run only -- email + SMS combined"
+              >
+                Last-run sent
+              </th>
               <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold text-right">Email</th>
               <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold text-right">SMS</th>
               <th className="px-4 py-3"></th>
@@ -73,7 +84,7 @@ export default function RecruitingPerRequestPanel({ requests, openDetail, client
           <tbody>
             {recruitingRuns.length === 0 && (
               <tr>
-                <td colSpan={7} className="p-10 text-center text-[#6D6A65]">
+                <td colSpan={8} className="p-10 text-center text-[#6D6A65]">
                   No per-request recruiting runs yet. A run fires automatically
                   when a request's matches fall below the target.
                 </td>
@@ -90,6 +101,9 @@ export default function RecruitingPerRequestPanel({ requests, openDetail, client
                 </td>
                 <td className="p-4 text-[#2B2A29]">{r.email}</td>
                 <td className="p-4 text-[#2B2A29]">{r.location_state || ""}</td>
+                <td className="p-4 text-right font-semibold text-[#2D4A3E]">
+                  {r.invited_count || 0}
+                </td>
                 <td className="p-4 text-right font-semibold text-[#2D4A3E]">
                   {r.outreach_sent_count || 0}
                 </td>
@@ -110,6 +124,15 @@ export default function RecruitingPerRequestPanel({ requests, openDetail, client
             ))}
           </tbody>
         </table>
+        <div className="px-4 py-3 text-xs text-[#6D6A65] border-t border-[#E8E5DF] bg-[#FDFBF7]">
+          <strong className="text-[#2B2A29]">Invited (all-time)</strong> = total
+          invite rows for this request across all outreach runs (matches the
+          count on the request detail's Invited therapists list).{" "}
+          <strong className="text-[#2B2A29]">Last-run sent</strong> = how many of
+          those actually got delivered in the most recent run only (email +
+          SMS). Differences point to dedupe + send failures -- click the row
+          for the per-therapist breakdown.
+        </div>
       </div>
     </div>
   );
