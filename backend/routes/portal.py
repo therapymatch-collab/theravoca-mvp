@@ -209,6 +209,15 @@ async def auth_verify_code(payload: MagicCodeVerify, request: Request):
         {"id": rec["id"]}, {"$set": {"used": True, "used_at": now_iso}}
     )
     token = _create_session_token(email, payload.role)
+    # New-IP login alert (fire-and-forget). Records the event regardless
+    # of whether an alert fires; alerts only on second+ login from a
+    # never-before-seen IP for this account.
+    from login_alerts import check_and_record_login
+    await check_and_record_login(
+        email=email, role=payload.role,
+        ip=_client_ip(request),
+        user_agent=request.headers.get("user-agent", ""),
+    )
     # Tell the client whether this account already has a password — used by
     # the portal to nudge first-time users to set one for password login.
     user = await _find_user_doc(email, payload.role)
@@ -263,6 +272,12 @@ async def auth_login_password(payload: dict[str, Any], request: Request):
 
     await _password_reset_failures(key)
     token = _create_session_token(email, role)
+    from login_alerts import check_and_record_login
+    await check_and_record_login(
+        email=email, role=role,
+        ip=ip,
+        user_agent=request.headers.get("user-agent", ""),
+    )
     return {"token": token, "role": role, "email": email, "has_password": True}
 
 

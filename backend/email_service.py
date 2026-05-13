@@ -827,6 +827,91 @@ async def send_license_expiring_to_admin(
     await _send(to, subject, _wrap("License renewal alert", inner), template_key="license_renewal_alert_admin")
 
 
+async def send_new_login_alert(
+    to: str,
+    role: str,
+    user_agent: str = "",
+    when_iso: str = "",
+) -> None:
+    """Email a user when a new sign-in happens from an IP that hasn't
+    been seen for their account before.
+
+    Doesn't include IP itself (we hash IPs server-side and the raw value
+    isn't stored). Includes user agent so the user can tell "Chrome on
+    my MacBook" from "Firefox on Windows."
+    """
+    role_label = (role or "").strip().lower()
+    if role_label == "patient":
+        portal_path = "/portal/patient"
+        portal_label = "your TheraVoca portal"
+    elif role_label == "therapist":
+        portal_path = "/portal/therapist"
+        portal_label = "your therapist portal"
+    elif role_label == "admin":
+        portal_path = "/admin/dashboard"
+        portal_label = "the admin dashboard"
+    else:
+        portal_path = "/sign-in"
+        portal_label = "your account"
+    portal_url = f"{_get_app_url()}{portal_path}"
+    history_url = f"{_get_app_url()}/portal/{role_label}/login-history"
+
+    when_human = when_iso
+    try:
+        if when_iso:
+            when_dt = datetime.fromisoformat(when_iso.replace("Z", "+00:00"))
+            when_human = when_dt.strftime("%Y-%m-%d %H:%M UTC")
+    except ValueError:
+        pass
+
+    ua_short = (user_agent or "").strip()
+    if len(ua_short) > 200:
+        ua_short = ua_short[:200] + "..."
+    ua_block = (
+        f'<p style="font-size:13px;color:{BRAND["muted"]};margin:4px 0;">'
+        f'<strong>Device / browser:</strong> {ua_short or "(not reported)"}</p>'
+    )
+
+    subject = f"New sign-in to {portal_label}"
+    inner = f"""
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      We noticed a sign-in to {portal_label} from a device or location
+      we haven't seen on your account before.
+    </p>
+    <div style="background:{BRAND['bg']};border:1px solid {BRAND['border']};border-radius:10px;padding:14px 18px;margin:18px 0;">
+      <p style="font-size:13px;color:{BRAND['muted']};margin:4px 0;">
+        <strong>When:</strong> {when_human or "just now"}
+      </p>
+      {ua_block}
+    </div>
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      <strong>If this was you</strong>, no action needed. You can ignore
+      this message.
+    </p>
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      <strong>If this wasn't you</strong>, somebody may have access to
+      your email. Sign in and:
+    </p>
+    <ol style="font-size:14px;color:{BRAND['text']};line-height:1.8;">
+      <li>Set or rotate your password from the portal.</li>
+      <li>Review your recent sign-ins:
+        <a href="{history_url}" style="color:{BRAND['primary']};">login history</a>.
+      </li>
+      <li>If you can't get in, reply to this email and we'll help you
+        recover the account.</li>
+    </ol>
+    <p style="margin:24px 0;">
+      <a href="{portal_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:999px;font-weight:600;">Open {portal_label}</a>
+    </p>
+    <p style="color:{BRAND['muted']};font-size:12px;line-height:1.6;margin-top:24px;">
+      You're getting this because a sign-in just happened on a device
+      or network we haven't seen on your account in the last 90 days.
+      We send this once per new device, not on every login.
+    </p>
+    """
+    await _send(to, subject, _wrap("New sign-in alert", inner), template_key="new_login_alert")
+
+
 async def send_cron_health_alert_to_admin(
     to: str,
     stuck: list[dict],

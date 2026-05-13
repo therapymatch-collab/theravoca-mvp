@@ -100,6 +100,12 @@ async def admin_login_with_email(payload: dict, request: Request):
         {"id": user["id"]}, {"$set": {"last_login_at": _now_iso()}}
     )
     token = _create_session_token(email, "admin")
+    from login_alerts import check_and_record_login
+    await check_and_record_login(
+        email=email, role="admin",
+        ip=ip,
+        user_agent=request.headers.get("user-agent", ""),
+    )
     return {
         "token": token,
         "role": "admin",

@@ -110,6 +110,9 @@ async def lifespan(_app: FastAPI):
         # HIPAA audit trail -- TTL + query indexes for PHI access log.
         from audit import ensure_indexes as _ensure_audit_indexes
         await _ensure_audit_indexes()
+        # Login-event TTL + lookup indexes for the new-IP alert path.
+        from login_alerts import ensure_indexes as _ensure_login_indexes
+        await _ensure_login_indexes()
 
         # Additional indexes (BACKLOG #21, audited 2026-05-12). Each
         # wrapped individually so a single failure (e.g. a unique
