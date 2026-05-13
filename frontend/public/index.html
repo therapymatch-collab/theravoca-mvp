@@ -99,13 +99,21 @@
                     }),
                     (e.__SV = 1));
             })(document, window.posthog || []);
+            // Session recording is DISABLED globally. Per the 2026-05-13
+            // HIPAA scope-out + Privacy Notice, we don't capture form
+            // fields or DOM state on any patient-facing page. Anonymous
+            // event tracking (page views, button clicks) is retained;
+            // person_profiles stays "identified_only" so no anonymous
+            // profile is ever created. To re-enable session replay,
+            // both `disable_session_recording` flags must be removed
+            // AND the Privacy Notice + scope-out posture must be
+            // re-evaluated -- this is not just a config flip.
             posthog.init("phc_xAvL2Iq4tFmANRE7kzbKwaSqp1HJjN7x48s3vr0CMjs", {
                 api_host: "https://us.i.posthog.com",
-                person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well,
-                session_recording: {
-                    recordCrossOriginIframes: true,
-                    capturePerformance: false,
-                },
+                person_profiles: "identified_only",
+                disable_session_recording: true,
+                capture_pageview: true,
+                autocapture: false,
             });
         </script>
     </body>
