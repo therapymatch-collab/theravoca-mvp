@@ -7,10 +7,21 @@ import { useMemo, useState } from "react";
 // Date picker defaults to last 30 days. KPI tiles + a per-day volume
 // bar chart + a source breakdown table.
 function toDateInput(d) {
+  // YYYY-MM-DD for <input type="date"> -- the HTML spec requires it.
+  // Don't expose this string to humans; use displayDate() for that.
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+// Reformat a YYYY-MM-DD string (the canonical key we use for grouping)
+// into the MM-DD-YYYY display format requested by Josh.
+function displayDate(ymd) {
+  if (!ymd || typeof ymd !== "string") return ymd || "";
+  const m = ymd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return ymd;
+  return `${m[2]}-${m[3]}-${m[1]}`;
 }
 
 const TARGET_NOTIFIED = 30;
@@ -167,7 +178,7 @@ export default function RequestsAnalyticsPanel({ requests }) {
             {dailyVolume.map(([day, n]) => {
               const pct = maxDay > 0 ? (n / maxDay) * 100 : 0;
               return (
-                <div key={day} className="flex-1 flex flex-col items-center gap-1 min-w-0" title={`${day}: ${n}`}>
+                <div key={day} className="flex-1 flex flex-col items-center gap-1 min-w-0" title={`${displayDate(day)}: ${n}`}>
                   <div
                     className="w-full bg-[#2D4A3E] rounded-t"
                     style={{ height: `${Math.max(pct, 2)}%`, minHeight: 2 }}
@@ -179,8 +190,8 @@ export default function RequestsAnalyticsPanel({ requests }) {
         )}
         {dailyVolume.length > 0 && (
           <div className="flex justify-between text-[10px] text-[#6D6A65] mt-2">
-            <span>{dailyVolume[0][0]}</span>
-            <span>{dailyVolume[dailyVolume.length - 1][0]}</span>
+            <span>{displayDate(dailyVolume[0][0])}</span>
+            <span>{displayDate(dailyVolume[dailyVolume.length - 1][0])}</span>
           </div>
         )}
       </div>
