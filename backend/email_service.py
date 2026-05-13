@@ -250,6 +250,13 @@ async def send_therapist_notification(
     summary: dict[str, Any],
     gaps: Optional[list[dict[str, Any]]] = None,
 ) -> None:
+    # PHI-trimmed (HIPAA Phase 2, mockup at /email-trim-mockup.html).
+    # The match score, anonymous summary table, and gaps explanation
+    # all moved out of the email body and into the secure portal landing
+    # page (TherapistApply). The email now carries only: therapist's
+    # first name, "you have a referral" copy, and the signed apply/decline
+    # CTAs. `summary` and `gaps` are still accepted for backward-compat
+    # with callers, but are no longer rendered in the email itself.
     tpl = await get_template(_db(), "therapist_notification")
     first_name = _first_name(therapist_name)
     from routes.therapists import generate_signed_url
@@ -257,50 +264,6 @@ async def send_therapist_notification(
     apply_url = generate_signed_url(app_url, request_id, therapist_id, "apply")
     decline_url = generate_signed_url(app_url, request_id, therapist_id, "decline")
     portal_url = f"{_get_app_url()}/portal/therapist"
-    summary_rows = "".join(
-        f'<tr><td style="padding:6px 0;color:{BRAND["muted"]};font-size:13px;width:140px;">{k}</td>'
-        f'<td style="padding:6px 0;color:{BRAND["text"]};font-size:14px;">{v}</td></tr>'
-        for k, v in summary.items()
-    )
-    gaps_html = ""
-    # Bug B: Hide the gaps section entirely at 95-97% (the cap) since those
-    # are functionally perfect. Show fallback copy when gaps=[] but score < 95.
-    if round(match_score) < 95:
-        if gaps:
-            rows = "".join(
-                f'<li style="margin:10px 0;color:{BRAND["text"]};font-size:14px;line-height:1.55;">'
-                f'<div style="font-weight:600;color:{BRAND["primary"]};margin-bottom:2px;">'
-                f'{g["label"]}</div>'
-                f'<div style="margin-bottom:3px;">{g["explanation"]}</div>'
-                f'<div style="color:{BRAND["muted"]};font-size:13px;font-style:italic;">'
-                f'-> {g["suggestion"]}</div>'
-                f'</li>'
-                for g in gaps
-            )
-            gaps_html = (
-                f'<div style="background:#FDF7EC;border:1px solid #E8DCC1;border-radius:12px;'
-                f'padding:16px 20px;margin:0 0 20px;">'
-                f'<div style="font-size:13px;color:{BRAND["muted"]};text-transform:uppercase;'
-                f'letter-spacing:0.08em;margin-bottom:8px;">Why this isn\'t 100% — and what to address</div>'
-                f'<ul style="margin:6px 0 0;padding-left:18px;list-style:disc;">{rows}</ul>'
-                f'<div style="font-size:12px;color:{BRAND["muted"]};margin-top:10px;line-height:1.5;">'
-                f'These don\'t disqualify you -- they\'re just the points the patient cares about. '
-                f'Speak to them in your reply if you want to apply.'
-                f'</div>'
-                f'</div>'
-            )
-        else:
-            gaps_html = (
-                f'<div style="background:#FDF7EC;border:1px solid #E8DCC1;border-radius:12px;'
-                f'padding:16px 20px;margin:0 0 20px;">'
-                f'<div style="font-size:13px;color:{BRAND["muted"]};text-transform:uppercase;'
-                f'letter-spacing:0.08em;margin-bottom:8px;">Why this isn\'t 100% — and what to address</div>'
-                f'<p style="font-size:14px;color:{BRAND["text"]};line-height:1.6;margin:0;">'
-                f'This is a strong match across the dimensions we evaluate. '
-                f'Speak to your overall fit and approach in your reply.'
-                f'</p>'
-                f'</div>'
-            )
     bulk_cta = (
         f'<p style="color:{BRAND["muted"]};font-size:13px;line-height:1.6;text-align:center;'
         f'margin:18px 0 0;">'
@@ -309,22 +272,17 @@ async def send_therapist_notification(
         f'Open your dashboard</a> to review them all in one place.'
         f'</p>'
     )
+    # match_score is no longer rendered in the email body, but we keep
+    # it in vars_ so an admin who customizes the template copy can still
+    # reference {match_score} if they ever want to put it back.
     vars_ = {"first_name": first_name, "match_score": int(match_score), "apply_url": apply_url, "decline_url": decline_url}
     greeting = render(tpl["greeting"], **vars_)
     intro = render(tpl["intro"], **vars_)
-    cta_label = render(tpl["cta_label"], **vars_) or "I'm interested"
+    cta_label = render(tpl["cta_label"], **vars_) or "View referral & decide"
     footer_note = render(tpl["footer_note"], **vars_)
     inner = f"""
     {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
     <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">{intro}</p>
-    <div style="background:{BRAND['bg']};border:1px solid {BRAND['border']};border-radius:12px;padding:18px 22px;margin:20px 0;">
-      <div style="font-size:13px;color:{BRAND['muted']};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Match Score</div>
-      <div style="font-family:Georgia,serif;font-size:34px;color:{BRAND['primary']};">{match_score}%</div>
-    </div>
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:8px 0 24px;">
-      {summary_rows}
-    </table>
-    {gaps_html}
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:28px 0;">
       <tr>
         <td style="padding-right:10px;">
@@ -335,7 +293,10 @@ async def send_therapist_notification(
         </td>
       </tr>
     </table>
-    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">{footer_note}</p>
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;text-align:center;margin:6px 0 0;">
+      Sign-in is one-click from this email — no password needed.
+    </p>
+    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:18px;">{footer_note}</p>
     {bulk_cta}
     """
     subject = render(tpl["subject"], **vars_)
@@ -343,8 +304,16 @@ async def send_therapist_notification(
 
 
 async def send_patient_results(to: str, request_id: str, applications: list[dict[str, Any]]) -> None:
-    # Fetch the request once so we can carry its `view_token` into every link
-    # — patients land on /results/:id?t=<token> which auto-grants access; if
+    # PHI-trimmed (HIPAA Phase 2, mockup at /email-trim-mockup.html).
+    # Therapist names, scores, specialties, fees, and "why we matched"
+    # reasons all moved out of the email body and into the secure
+    # results page (PatientResults at /results/:id?t=<view_token>).
+    # The email now carries only: "your matches are ready" copy + a
+    # one-click CTA. `applications` is still accepted (and used to
+    # decide between the empty-state and ready-state templates) but
+    # the per-therapist cards are no longer rendered in the email.
+    #
+    # patients land on /results/:id?t=<token> which auto-grants access; if
     # they hit the URL later without the token, they'll be prompted to sign
     # in via magic code. See routes/patients.py:public_request_results.
     req = await _db().requests.find_one(
@@ -361,109 +330,19 @@ async def send_patient_results(to: str, request_id: str, applications: list[dict
         return
 
     tpl = await get_template(_db(), "patient_results")
-    cards = ""
-    axis_meta = {
-        "issues": (35, "Specializes in your concerns"),
-        "availability": (20, "Matches your schedule"),
-        "modality": (15, "Offers your preferred format"),
-        "urgency": (10, "Can take you on quickly"),
-        "prior_therapy": (10, "Right fit for your therapy history"),
-        "experience": (5, "Matches your experience preference"),
-        "gender": (3, "Matches your gender preference"),
-        "style": (2, "Aligns with your style preference"),
-        "payment_fit": (3, "Open to your budget on a sliding scale"),
-        "modality_pref": (4, "Practices your preferred therapy approach"),
-    }
-    for i, app in enumerate(applications[:5], 1):
-        t = app["therapist"]
-        bd = app.get("match_breakdown") or {}
-        reasons = sorted(
-            (
-                (k, v, axis_meta[k][1])
-                for k, v in bd.items()
-                if k in axis_meta and axis_meta[k][0] > 0 and v > 0
-            ),
-            # Always show the top 3 highest-raw-score axes (no % threshold)
-            key=lambda x: x[1],
-            reverse=True,
-        )[:3]
-        reasons_html = ""
-        if reasons:
-            chips = "".join(
-                f'<span style="display:inline-block;background:#ffffff;border:1px solid {BRAND["border"]};color:{BRAND["text"]};font-size:12px;padding:5px 10px;border-radius:999px;margin:2px 4px 2px 0;">{label}</span>'
-                for _, _, label in reasons
-            )
-            reasons_html = (
-                f'<div style="background:{BRAND["bg"]};border:1px solid {BRAND["border"]};border-radius:10px;padding:10px 12px;margin-top:10px;">'
-                f'<div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:{BRAND["muted"]};margin-bottom:6px;">Why we matched</div>'
-                f'<div>{chips}</div>'
-                f'</div>'
-            )
-
-        specialties_list = (t.get("specialties_display") or [])[:5]
-        modalities_list = (t.get("modalities") or [])[:4]
-        offices_list = (t.get("office_locations") or [])[:3]
-        insurance_list = (t.get("insurance_accepted") or [])[:4]
-        reviews_line = ""
-
-        fee_parts = []
-        if t.get("cash_rate"):
-            fee_parts.append(f"${t['cash_rate']}/session")
-        if t.get("sliding_scale"):
-            fee_parts.append("sliding scale")
-        if t.get("free_consult"):
-            fee_parts.append("free consult")
-        fee_line = " · ".join(fee_parts) if fee_parts else "—"
-
-        bio_preview = (t.get("bio") or "").strip()
-        if len(bio_preview) > 240:
-            bio_preview = bio_preview[:237].rstrip() + "…"
-
-        format_label = "Telehealth"
-        if t.get("offers_in_person") or offices_list:
-            format_label = (
-                "In-person & telehealth" if t.get("telehealth") else "In-person"
-            ) if offices_list else "Telehealth"
-        if t.get("modality_offering") == "both":
-            format_label = "In-person & telehealth"
-
-        profile_url = f"{_get_app_url()}/results/{request_id}{token_query}#therapist-{t.get('id', '')}"
-        cta_cell = (
-            f'<a href="{profile_url}" '
-            f'style="display:inline-block;background:{BRAND["primary"]};color:#ffffff;'
-            f'text-decoration:none;padding:10px 20px;border-radius:999px;'
-            f'font-weight:600;font-size:13px;">View full profile &amp; contact</a>'
-        )
-
-        cards += f"""
-        <div style="background:#ffffff;border:1px solid {BRAND['border']};border-radius:14px;padding:22px;margin-bottom:14px;">
-          <div style="display:inline-block;background:{BRAND['primary']};color:#ffffff;font-size:12px;padding:4px 10px;border-radius:999px;letter-spacing:0.05em;margin-bottom:10px;">{int(round(app.get('patient_rank_score') or app.get('match_score') or 0))}% MATCH</div>
-          <h3 style="margin:6px 0 4px;font-family:Georgia,serif;font-size:22px;color:{BRAND['primary']};">{i}. {t['name']}</h3>
-          <div style="color:{BRAND['muted']};font-size:13px;margin-bottom:10px;">{', '.join(specialties_list[:3]) or '—'} • {t.get('years_experience', '?')} yrs experience</div>
-          {f'<p style="margin:10px 0;color:{BRAND["text"]};font-size:14px;line-height:1.6;font-style:italic;border-left:3px solid {BRAND["secondary"]};padding-left:12px;">"{app.get("message", "")}"</p>' if app.get('message') else ''}
-          {reasons_html}
-          <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:12px;font-size:13px;color:{BRAND['text']};width:100%;">
-            <tr><td style="padding:3px 14px 3px 0;color:{BRAND['muted']};width:110px;">Fee</td><td style="padding:3px 0;">{fee_line}</td></tr>
-            <tr><td style="padding:3px 14px 3px 0;color:{BRAND['muted']};">Format</td><td style="padding:3px 0;">{format_label}</td></tr>
-            {f'<tr><td style="padding:3px 14px 3px 0;color:{BRAND["muted"]};">Offices</td><td style="padding:3px 0;">{", ".join(offices_list)}</td></tr>' if offices_list else ''}
-            {f'<tr><td style="padding:3px 14px 3px 0;color:{BRAND["muted"]};">Approaches</td><td style="padding:3px 0;">{", ".join(modalities_list)}</td></tr>' if modalities_list else ''}
-            {f'<tr><td style="padding:3px 14px 3px 0;color:{BRAND["muted"]};">Insurance</td><td style="padding:3px 0;">{", ".join(insurance_list)}</td></tr>' if insurance_list else ''}
-            {reviews_line}
-          </table>
-          {f'<p style="margin:14px 0 0;font-size:14px;line-height:1.6;color:{BRAND["text"]};">{bio_preview}</p>' if bio_preview else ''}
-          <div style="margin-top:16px;">{cta_cell}</div>
-        </div>
-        """
     results_url = f"{_get_app_url()}/results/{request_id}{token_query}"
     count = len(applications[:5])
     vars_ = {"count": count, "results_url": results_url}
     intro = render(tpl["intro"], **vars_)
-    cta_label = render(tpl["cta_label"], **vars_)
+    cta_label = render(tpl["cta_label"], **vars_) or "View my matches"
     cta_html = (
-        f'<p style="margin:28px 0;">'
+        f'<p style="margin:28px 0;text-align:center;">'
         f'<a href="{results_url}" style="display:inline-block;background:{BRAND["primary"]};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">{cta_label}</a>'
         f'</p>'
-    ) if cta_label else ""
+        f'<p style="color:{BRAND["muted"]};font-size:13px;line-height:1.6;text-align:center;margin:6px 0 0;">'
+        f'Many of your matches offer a free 15-minute consult. Sign-in is one-click from this email.'
+        f'</p>'
+    )
     followup_note = (
         f'<div style="background:{BRAND["bg"]};border:1px solid {BRAND["border"]};border-radius:12px;padding:16px 18px;margin:20px 0;">'
         f'<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:{BRAND["primary"]};">What happens next</p>'
@@ -475,9 +354,8 @@ async def send_patient_results(to: str, request_id: str, applications: list[dict
     )
     inner = f"""
     <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">{intro}</p>
-    <div style="margin:24px 0;">{cards}</div>
-    {followup_note}
     {cta_html}
+    {followup_note}
     """
     subject = render(tpl["subject"], **vars_)
     await _send(to, subject, _wrap(tpl["heading"], inner), template_key="patient_results")
@@ -499,46 +377,61 @@ async def send_therapist_signup_received(to: str, name: str) -> None:
 
 
 async def send_intake_receipt(to: str, request_id: str, summary_rows: list[tuple[str, str]]) -> None:
-    """Send the patient a read-only receipt of the answers they just
-    submitted. Patients can't self-edit a request through the UI, so this
-    receipt doubles as their paper trail — they can forward it back to
-    support with corrections and we ship a follow-up corrected match.
+    """Send the patient a confirmation that we received their request.
 
-    `summary_rows` is a list of (label, value) tuples already rendered
-    to human-friendly strings by the caller (so the email service stays
-    decoupled from intake-form constants). The route layer is
-    responsible for ordering + filtering empty rows.
+    PHI-trimmed (HIPAA Phase 2, mockup at /email-trim-mockup.html). The
+    full intake answers (age, location, presenting issues, free-text
+    "anything else", etc.) used to be rendered into a table inside the
+    email body. They now live behind the auto-login token at
+    /receipt/:id?t=<view_token>. The email body carries only: a
+    "request received" line, the 4-char reference, and a CTA to the
+    private receipt page.
+
+    `summary_rows` is still accepted (caller still builds it for the
+    page) but is no longer rendered into the email itself. Keeping the
+    parameter avoids a breaking signature change for existing callers.
     """
-    rows_html = "".join(
-        f"""
-        <tr>
-          <td style="padding:8px 14px 8px 0;color:{BRAND['muted']};font-size:11px;text-transform:uppercase;letter-spacing:0.05em;vertical-align:top;width:36%;">{label}</td>
-          <td style="padding:8px 0;color:{BRAND['text']};font-size:14px;line-height:1.55;vertical-align:top;">{value or '—'}</td>
-        </tr>
-        """
-        for label, value in summary_rows
+    # Pull the view_token so the receipt link auto-grants access. If the
+    # token isn't present (older request), the page itself will redirect
+    # the patient to magic-code sign-in.
+    req = await _db().requests.find_one(
+        {"id": request_id}, {"_id": 0, "view_token": 1},
+    ) or {}
+    view_token = req.get("view_token", "")
+    token_query = f"?t={view_token}" if view_token else ""
+    receipt_url = f"{_get_app_url()}/receipt/{request_id}{token_query}"
+    short_ref = (request_id[:4] or "----").upper()
+
+    cta_html = (
+        f'<p style="margin:24px 0;text-align:center;">'
+        f'<a href="{receipt_url}" style="display:inline-block;background:{BRAND["primary"]};'
+        f'color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">'
+        f'View my submitted answers</a>'
+        f'</p>'
+        f'<p style="color:{BRAND["muted"]};font-size:13px;line-height:1.6;text-align:center;margin:6px 0 0;">'
+        f'Sign-in is one-click from this email — no password needed.'
+        f'</p>'
     )
     inner = f"""
     <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-      Here's a copy of the referral request you just submitted. We'll start
-      matching you with therapists right away — you should hear from us
-      within 24 hours.
+      Thanks for submitting your TheraVoca request. Reference number:
+      <strong>{short_ref}</strong>.
     </p>
-    <p style="font-size:14px;line-height:1.6;color:{BRAND['muted']};">
-      Need to correct something? Just reply to this email — once we match,
-      we can resend with the right info.
+    <p style="font-size:14px;line-height:1.6;color:{BRAND['text']};">
+      We'll email you when your therapist matches are ready — usually
+      within a few hours. In the meantime you can view a full copy of
+      your answers any time:
     </p>
-    <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:24px;border-top:1px solid #E8E5DF;width:100%;">
-      {rows_html}
-    </table>
-    <p style="color:{BRAND['muted']};font-size:12px;line-height:1.6;margin-top:28px;">
-      Reference: {request_id[:8]} · We'll never share these answers with anyone but the therapists you choose to contact.
+    {cta_html}
+    <p style="font-size:13px;line-height:1.6;color:{BRAND['muted']};margin-top:18px;">
+      If anything looks wrong, just reply to this email — we can correct
+      it before matching.
     </p>
     """
     await _send(
         to,
-        "Your TheraVoca referral — a copy for your records",
-        _wrap("Your referral on file", inner),
+        "We received your TheraVoca request",
+        _wrap("Request received", inner),
         template_key="patient_intake_receipt",
     )
 

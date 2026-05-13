@@ -767,6 +767,86 @@ async def public_request_results(
     }
 
 
+@router.get("/requests/{request_id}/receipt", response_model=dict)
+async def patient_request_receipt(
+    request_id: str,
+    request: Request,
+    t: Optional[str] = None,
+    authorization: Optional[str] = Header(None),
+):
+    """Patient view of their submitted intake answers.
+
+    Created so we can trim the intake-receipt EMAIL down to just a CTA
+    link (HIPAA Phase 2). The full answers live here behind the same
+    auth model the results page uses:
+
+      - `?t=<view_token>` from the receipt email link grants access
+        (the link itself was sent only to the verified patient inbox).
+      - Otherwise: magic-link patient session whose email matches.
+
+    Returns a whitelist of intake fields -- email is omitted (the
+    requester is presumed to know it; including it just creates extra
+    PHI surface in the JSON response).
+    """
+    req = await db.requests.find_one(
+        {"id": request_id}, {"_id": 0, "verification_token": 0},
+    )
+    if not req:
+        raise HTTPException(404)
+
+    granted = False
+    expected_token = req.get("view_token")
+    if t and expected_token and t == expected_token:
+        granted = True
+    if not granted:
+        sess = _decode_session_from_authorization(authorization)
+        if (
+            sess
+            and (sess.get("role") == "patient")
+            and (sess.get("email", "").lower() == (req.get("email") or "").lower())
+        ):
+            granted = True
+    if not granted:
+        raise HTTPException(
+            status_code=401,
+            detail="signin_required",
+            headers={"X-Auth-Hint": "magic_code"},
+        )
+
+    _actor_id = (
+        audit._hash_patient_email(req.get("email", ""))
+        if req.get("email") else "anonymous"
+    )
+    audit.emit(
+        actor_type="patient", actor_id=_actor_id, action="view_receipt",
+        resource="request", resource_id=request_id,
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+
+    # Whitelist of fields the patient submitted on intake. Editable
+    # in the future via a separate write endpoint (not built here --
+    # the email's "reply if anything looks wrong" line covers it for
+    # now since requests are short-lived: matched within a few hours).
+    fields = (
+        "id", "created_at", "status",
+        "client_age", "age_group",
+        "location_state", "location_zip", "location_city",
+        "presenting_issues", "primary_concern",
+        "urgency",
+        "modality_preference", "modality_preferences", "format_preference",
+        "payment_type", "payment_method", "max_session_fee",
+        "insurance_carrier", "insurance_type",
+        "gender_preference", "gender_preference_strength",
+        "preferred_language",
+        "session_expectations", "priority_factors", "strict_priorities",
+        "prior_therapy", "prior_therapy_notes", "other_issue",
+        "referral_source",
+    )
+    out = {k: req.get(k) for k in fields if req.get(k) is not None}
+    return out
+
+
 # ─── Waitlist for out-of-state users ────────────────────────────────────
 
 COVERED_STATES = {"ID"}  # expand this set as we launch in new states
