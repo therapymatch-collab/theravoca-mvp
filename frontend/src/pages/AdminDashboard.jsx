@@ -70,6 +70,7 @@ import RecruitingPanel from "@/pages/admin/panels/RecruitingPanel";
 import RecruitingPerRequestPanel from "@/pages/admin/panels/RecruitingPerRequestPanel";
 import RecruitingGapFillPanel from "@/pages/admin/panels/RecruitingGapFillPanel";
 import RequestsAnalyticsPanel from "@/pages/admin/panels/RequestsAnalyticsPanel";
+import EmailSafetyBanner from "@/pages/admin/panels/EmailSafetyBanner";
 import PatientsByEmailPanel from "@/pages/admin/panels/PatientsByEmailPanel";
 import FeedbackPanel from "@/pages/admin/panels/FeedbackPanel";
 import FeedbackTrackingPanel from "@/pages/admin/panels/FeedbackTrackingPanel";
@@ -1464,6 +1465,7 @@ export default function AdminDashboard() {
 
               {tab === "invited_therapists" && (
                 <div className="mt-6 space-y-4" data-testid="invited-therapists-panel">
+                  <EmailSafetyBanner client={client} />
                   <div className="bg-[#F2F4F0] border border-[#D9DDD2] rounded-2xl p-5 leading-relaxed">
                     <h3 className="font-medium text-[#2D4A3E] flex items-center gap-2">
                       <Send size={14} /> How invited-therapist outreach works
@@ -1707,6 +1709,7 @@ export default function AdminDashboard() {
                 <RecruitingPerRequestPanel
                   requests={requests}
                   openDetail={openDetail}
+                  client={client}
                 />
               )}
 
@@ -2922,6 +2925,7 @@ export default function AdminDashboard() {
               </div>
 
               <div data-testid="detail-invited-therapists">
+                <EmailSafetyBanner client={client} />
                 <div className="flex items-baseline justify-between gap-3 mb-2">
                   <h4 className="font-semibold text-[#2B2A29]">
                     Invited therapists ({(detail.invited || []).length})

@@ -306,11 +306,17 @@ async def admin_list_requests(request: Request, _: bool = Depends(require_admin)
     )
     # Slim projection -- the list table only needs summary fields.
     # Full doc is loaded on-demand via GET /admin/requests/{id}.
+    # outreach_* fields are needed by the Recruiting -> Per-request panel
+    # so it can list runs + their per-channel send counts without an
+    # extra round-trip per row.
     _LIST_PROJECTION = {
         "_id": 0, "id": 1, "email": 1, "status": 1, "location_state": 1,
         "client_age": 1, "referral_source": 1, "created_at": 1,
         "verified": 1, "threshold": 1, "notified_therapist_ids": 1,
         "matched_at": 1,
+        "outreach_run_at": 1, "outreach_sent_count": 1,
+        "outreach_sent_email_count": 1, "outreach_sent_sms_count": 1,
+        "outreach_needed_count": 1,
     }
     docs = await db.requests.find(
         {}, _LIST_PROJECTION
@@ -4961,6 +4967,36 @@ async def admin_delete_gap_draft(draft_id: str, _: bool = Depends(require_admin)
     if res.deleted_count == 0:
         raise HTTPException(404)
     return {"ok": True}
+
+
+@router.get("/admin/email-safety-status", dependencies=[Depends(require_admin)])
+async def admin_email_safety_status() -> dict[str, Any]:
+    """Live read of the pre-launch email safety state. Used by admin UI
+    to show a 'TEST MODE -- redirected to <inbox>' banner so Josh can see
+    at a glance that no real therapist email actually received the send.
+
+    Three states (mirror the guard in email_service._send):
+      - mode='test_override' : EMAIL_OVERRIDE_TO is set, every send goes
+                               there regardless of recipient.
+      - mode='live'          : EMAIL_LIVE_MODE=true, sends go to the
+                               real recipient.
+      - mode='blocked'       : neither set; non-placeholder addresses
+                               will be silently dropped by the guard.
+    """
+    import os as _os
+    override = (_os.environ.get("EMAIL_OVERRIDE_TO") or "").strip()
+    live = (_os.environ.get("EMAIL_LIVE_MODE") or "").strip().lower() == "true"
+    if override:
+        mode = "test_override"
+    elif live:
+        mode = "live"
+    else:
+        mode = "blocked"
+    return {
+        "mode": mode,
+        "override_to": override,
+        "live_mode": live,
+    }
 
 
 @router.get("/admin/recruiting-status", dependencies=[Depends(require_admin)])

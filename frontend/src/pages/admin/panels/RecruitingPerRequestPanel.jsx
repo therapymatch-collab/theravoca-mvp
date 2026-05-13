@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronRight, Mail, MessageSquare, Search } from "lucide-react";
+import EmailSafetyBanner from "./EmailSafetyBanner";
 
 // Recruiting -> Per request (Track A).
 // Lists patient requests that triggered an outreach run, with the
@@ -9,7 +10,7 @@ import { ChevronRight, Mail, MessageSquare, Search } from "lucide-react";
 // Data source: the existing `requests` collection -- we look at
 // `outreach_run_at`, `outreach_sent_count`, `outreach_sent_email_count`,
 // `outreach_sent_sms_count` which are stamped by the agent when it runs.
-export default function RecruitingPerRequestPanel({ requests, openDetail }) {
+export default function RecruitingPerRequestPanel({ requests, openDetail, client }) {
   const [search, setSearch] = useState("");
 
   const recruitingRuns = useMemo(() => {
@@ -24,6 +25,7 @@ export default function RecruitingPerRequestPanel({ requests, openDetail }) {
 
   return (
     <div className="mt-6 space-y-4" data-testid="recruiting-per-request-panel">
+      <EmailSafetyBanner client={client} />
       <div className="bg-white border border-[#E8E5DF] rounded-2xl p-6">
         <div className="text-xs uppercase tracking-widest text-[#6D6A65] mb-1">
           Recruiting &middot; Track A
