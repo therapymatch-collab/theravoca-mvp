@@ -10,7 +10,6 @@ import {
   X,
   CheckCircle2,
   XCircle,
-  Inbox,
   Users,
   UserCheck,
   Pencil,
@@ -3212,7 +3211,7 @@ function TabBtn({ active, onClick, icon, label, count, testid, highlight }) {
   );
 }
 
-// AdminTabsBar -- 5 primary tabs (Inbox / Directory / Outcomes / Content /
+// AdminTabsBar -- primary tabs (Requests / Directory / Recruiting / Outcomes / Content /
 // Operations) plus a dev-only Testing tab. Each primary tab carries a row
 // of sub-pills underneath that drive the panel render switch in
 // AdminDashboard. Tab keys are unchanged from the prior flat layout so
@@ -3267,31 +3266,15 @@ function AdminTabsBar({
 
   const TAB_TREE = [
     {
-      id: "inbox",
-      label: "Inbox",
-      icon: <Inbox size={14} />,
-      subs: [
-        {
-          id: "therapists",
-          label: "Pending therapists",
-          count: pendingTherapists,
-          highlight: pendingTherapists > 0,
-        },
-        {
-          id: "completion",
-          label: "Profile completion",
-          count: completion?.incomplete ?? null,
-          highlight: (completion?.incomplete || 0) > 0,
-          onClick: onLoadCompletion,
-        },
-      ],
-    },
-    {
       id: "requests_primary",
       label: "Requests",
       icon: <FileText size={14} />,
+      // Surface a red dot on the primary tab when there are active
+      // requests waiting for review. Lets the admin see at a glance
+      // there's something new without drilling into the subtab.
+      highlight: (requestsCount || 0) > 0,
       subs: [
-        { id: "requests", label: "Active", count: requestsCount },
+        { id: "requests", label: "Active", count: requestsCount, highlight: (requestsCount || 0) > 0 },
         { id: "requests_analytics", label: "Analytics" },
       ],
     },
@@ -3299,8 +3282,26 @@ function AdminTabsBar({
       id: "directory",
       label: "Directory",
       icon: <Users size={14} />,
+      // Red on Directory whenever there's a pending therapist OR an
+      // incomplete profile that needs attention.
+      highlight:
+        (pendingTherapists || 0) > 0 ||
+        ((completion?.incomplete || 0) > 0),
       subs: [
+        {
+          id: "therapists",
+          label: "Pending therapists",
+          count: pendingTherapists,
+          highlight: pendingTherapists > 0,
+        },
         { id: "all_therapists", label: "All providers", count: allTherapists },
+        {
+          id: "completion",
+          label: "Profile completion",
+          count: completion?.incomplete ?? null,
+          highlight: (completion?.incomplete || 0) > 0,
+          onClick: onLoadCompletion,
+        },
         {
           id: "patients",
           label: "Patients (by email)",
@@ -3401,7 +3402,7 @@ function AdminTabsBar({
   }
 
   // Find which primary tab the active sub-tab belongs to. Falls back to
-  // Inbox so deep-link visits to retired tab keys land somewhere sane.
+  // the first primary tab so deep-link visits to retired tab keys land somewhere sane.
   const activePrimary =
     TAB_TREE.find((p) => p.subs.some((s) => s.id === tab)) || TAB_TREE[0];
 
@@ -3478,6 +3479,13 @@ function PrimaryTab({ primary, active, onClick, devOnly }) {
     >
       {primary.icon}
       {primary.label}
+      {primary.highlight && !active && (
+        <span
+          className="inline-block w-2 h-2 rounded-full bg-[#D45D5D]"
+          aria-label="New items to review"
+          data-testid={`tab-primary-${primary.id}-dot`}
+        />
+      )}
       {devOnly && (
         <span className="text-[10px] uppercase px-1.5 py-0.5 rounded-full bg-[#FBEFE9] text-[#8B4F3B]">
           DEV
