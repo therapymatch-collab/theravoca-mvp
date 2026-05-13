@@ -7,6 +7,7 @@ import {
   LineChart, Line,
   BarChart, Bar,
   ScatterChart, Scatter, ZAxis,
+  PieChart, Pie,
   XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, Cell, LabelList,
 } from "recharts";
 
@@ -187,6 +188,28 @@ function satisfactionCsv(d) {
     (d.detractors || []).map((r) => [
       r.nps, r.milestone, r.patient_email, r.referral_source, r.submitted_at, r.comment,
     ]),
+  );
+  const mb = d.milestone_breakdown || {};
+  out += csvSection(
+    "Milestone breakdown (retention + response rate)",
+    [
+      "milestone", "due", "responded",
+      "picked", "not_picked",
+      "still_seeing", "not_still_seeing",
+      "response_rate_pct",
+    ],
+    ["48h", "3w", "9w", "15w"].map((k) => {
+      const b = mb[k] || {};
+      const due = b.due || 0;
+      const responded = b.responded || 0;
+      const rate = due > 0 ? Math.round((responded / due) * 100) : "";
+      return [
+        k, due, responded,
+        b.picked ?? "", b.not_picked ?? "",
+        b.still_seeing ?? "", b.not_still_seeing ?? "",
+        rate,
+      ];
+    }),
   );
   return out;
 }
@@ -749,8 +772,192 @@ function SatisfactionTab({ d }) {
         )}
       </Card>
 
+      <MilestoneFunnelCards breakdown={d.milestone_breakdown} />
+
       <DetractorAlertCard detractors={d.detractors || []} />
     </div>
+  );
+}
+
+// ─── Retention donuts + response-rate chart per milestone ────────────
+function MilestoneFunnelCards({ breakdown }) {
+  if (!breakdown) return null;
+  const MILESTONES = [
+    {
+      key: "48h",
+      label: "48 hours",
+      sub: "Did the patient open the first survey?",
+      headline: "responded",
+    },
+    {
+      key: "3w",
+      label: "3 weeks",
+      sub: "Did the patient pick a therapist?",
+      headline: "picked",
+    },
+    {
+      key: "9w",
+      label: "9 weeks",
+      sub: "Still in therapy at 2 months in?",
+      headline: "still_seeing",
+    },
+    {
+      key: "15w",
+      label: "15 weeks",
+      sub: "Still in therapy at the durability mark?",
+      headline: "still_seeing",
+    },
+  ];
+  return (
+    <>
+      <Card title="Retention by milestone"
+            subtitle="Donut shows what happened at each touchpoint. Center number is the headline outcome rate among patients who were due for that survey. 'Not responded' means we never heard back -- a coverage problem, not a treatment problem.">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-2">
+          {MILESTONES.map((m) => (
+            <MilestoneDonut key={m.key} milestone={m} stats={breakdown[m.key] || {}} />
+          ))}
+        </div>
+      </Card>
+      <Card title="Survey response rate per milestone"
+            subtitle="Of patients who were due for each survey, what % actually answered? Drop-offs here mean we're losing signal -- consider reminder cadence or trimmed surveys.">
+        <ResponseRateBars breakdown={breakdown} />
+      </Card>
+    </>
+  );
+}
+
+function MilestoneDonut({ milestone, stats }) {
+  const due = stats.due || 0;
+  const responded = stats.responded || 0;
+  const notResponded = Math.max(0, due - responded);
+
+  // Build pie data + headline based on the milestone's outcome of interest.
+  let segments;
+  let headlinePct;
+  let headlineLabel;
+  if (milestone.key === "48h") {
+    // No "outcome" beyond response itself.
+    segments = [
+      { name: "Responded",     value: responded,    color: C.success },
+      { name: "Not responded", value: notResponded, color: "#E5E1D7" },
+    ];
+    headlinePct = due > 0 ? Math.round((responded / due) * 100) : null;
+    headlineLabel = "responded";
+  } else if (milestone.key === "3w") {
+    const picked = stats.picked || 0;
+    const notPicked = Math.max(0, responded - picked);
+    segments = [
+      { name: "Picked therapist", value: picked,       color: C.success },
+      { name: "Responded, no pick", value: notPicked,  color: C.warn },
+      { name: "Not responded",    value: notResponded, color: "#E5E1D7" },
+    ];
+    headlinePct = due > 0 ? Math.round((picked / due) * 100) : null;
+    headlineLabel = "picked";
+  } else {
+    // 9w + 15w
+    const stillSeeing = stats.still_seeing || 0;
+    const dropped = Math.max(0, responded - stillSeeing);
+    segments = [
+      { name: "Still in therapy", value: stillSeeing,  color: C.success },
+      { name: "Stopped",          value: dropped,      color: C.error },
+      { name: "Not responded",    value: notResponded, color: "#E5E1D7" },
+    ];
+    headlinePct = due > 0 ? Math.round((stillSeeing / due) * 100) : null;
+    headlineLabel = "retained";
+  }
+
+  const hasAny = segments.some((s) => s.value > 0);
+
+  return (
+    <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl p-4 text-center"
+         data-testid={`milestone-donut-${milestone.key}`}>
+      <div className="text-[10px] uppercase tracking-widest text-[#6D6A65]">
+        {milestone.label}
+      </div>
+      <div className="text-xs italic text-[#6D6A65] mt-0.5 mb-2 min-h-[2rem]">
+        {milestone.sub}
+      </div>
+      <div className="relative">
+        {hasAny ? (
+          <ResponsiveContainer width="100%" height={140}>
+            <PieChart>
+              <Pie
+                data={segments}
+                dataKey="value"
+                innerRadius={42}
+                outerRadius={62}
+                paddingAngle={2}
+                stroke="none"
+                isAnimationActive={false}
+              >
+                {segments.map((s, i) => (
+                  <Cell key={i} fill={s.color} />
+                ))}
+              </Pie>
+              <Tooltip
+                formatter={(v, name) => [`${v} patient${v === 1 ? "" : "s"}`, name]}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="py-10 text-xs text-[#6D6A65] italic">No data yet</div>
+        )}
+        {hasAny && (
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+            <div className="font-serif text-2xl text-[#2D4A3E] leading-none">
+              {headlinePct !== null ? `${headlinePct}%` : "—"}
+            </div>
+            <div className="text-[9px] uppercase tracking-wider text-[#6D6A65] mt-1">
+              {headlineLabel}
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="text-[10px] text-[#6D6A65] mt-2">
+        {due} due · {responded} responded
+      </div>
+    </div>
+  );
+}
+
+function ResponseRateBars({ breakdown }) {
+  const rows = ["48h", "3w", "9w", "15w"].map((k) => {
+    const b = breakdown[k] || {};
+    const due = b.due || 0;
+    const responded = b.responded || 0;
+    const rate = due > 0 ? Math.round((responded / due) * 100) : null;
+    return { milestone: k, due, responded, rate };
+  });
+  const hasAny = rows.some((r) => r.due > 0);
+  if (!hasAny) return <EmptyChart message="No patients have reached the first survey window yet." />;
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <BarChart data={rows} margin={{ top: 20, right: 30, left: 0, bottom: 10 }}>
+        <CartesianGrid stroke={C.border} strokeDasharray="3 3" vertical={false} />
+        <XAxis dataKey="milestone" tick={{ fill: C.muted, fontSize: 12 }} />
+        <YAxis domain={[0, 100]} tick={{ fill: C.muted, fontSize: 12 }}
+               tickFormatter={(v) => `${v}%`} />
+        <Tooltip
+          formatter={(v, _name, p) => {
+            const row = p?.payload || {};
+            return [`${v ?? "—"}% (${row.responded}/${row.due})`, "Response rate"];
+          }}
+        />
+        <Bar dataKey="rate" radius={[4, 4, 0, 0]}>
+          {rows.map((r, i) => (
+            <Cell key={i}
+                  fill={r.rate === null ? "#E5E1D7"
+                       : r.rate >= 50 ? C.primary
+                       : r.rate >= 25 ? C.warn
+                       : C.error} />
+          ))}
+          <LabelList dataKey="rate"
+                     position="top"
+                     formatter={(v) => v === null ? "" : `${v}%`}
+                     style={{ fill: C.text, fontSize: 12, fontWeight: 600 }} />
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
   );
 }
 

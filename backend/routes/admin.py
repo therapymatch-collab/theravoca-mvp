@@ -2457,7 +2457,8 @@ async def admin_feedback_dashboard(
     # filtered subset for funnel + monthly-volume calculations.
     # -------------------------------------------------------
     request_docs = await db.requests.find(
-        {}, {"_id": 0, "id": 1, "created_at": 1, "referral_source": 1, "notified_therapist_ids": 1}
+        {}, {"_id": 0, "id": 1, "created_at": 1, "referral_source": 1,
+             "notified_therapist_ids": 1, "results_sent_at": 1}
     ).to_list(20000)
     req_by_id: dict[str, dict] = {r.get("id"): r for r in request_docs if r.get("id")}
     requests_in_range = [
@@ -2487,6 +2488,45 @@ async def admin_feedback_dashboard(
     )
     fb_15w = [f for f in feedback if f.get("milestone") == "15w"]
     still_seeing_15w = sum(1 for f in fb_15w if f.get("still_seeing") == "yes")
+
+    # -------------------------------------------------------
+    # Per-milestone retention + response-rate breakdown.
+    #
+    # For each milestone (48h / 3w / 9w / 15w):
+    #   - `due` = patients whose results_sent_at + offset_days <= now
+    #     (i.e. they should have been surveyed by now)
+    #   - `responded` = patients who actually filled out the survey
+    #     (count of feedback rows at that milestone, scoped to range)
+    #   - `picked` (3w only) = chose a therapist
+    #   - `still_seeing` (9w + 15w) = still in therapy with the matched
+    #     therapist
+    #
+    # Milestone offsets must match the cron's schedule in cron.py.
+    # -------------------------------------------------------
+    _MILESTONE_OFFSET_DAYS = {"48h": 2, "3w": 21, "9w": 63, "15w": 105}
+    now_dt = datetime.now(timezone.utc)
+    milestone_breakdown: dict[str, dict[str, int]] = {}
+    for milestone, offset_days in _MILESTONE_OFFSET_DAYS.items():
+        cutoff = now_dt - timedelta(days=offset_days)
+        cutoff_iso = cutoff.isoformat()
+        due = sum(
+            1 for r in requests_in_range
+            if r.get("results_sent_at") and r["results_sent_at"] <= cutoff_iso
+        )
+        fb_at_milestone = [f for f in feedback if f.get("milestone") == milestone]
+        responded = len(fb_at_milestone)
+        bucket: dict[str, int] = {"due": due, "responded": responded}
+        if milestone == "3w":
+            bucket["picked"] = sum(
+                1 for f in fb_at_milestone if f.get("chosen_status") == "picked"
+            )
+            bucket["not_picked"] = max(0, responded - bucket["picked"])
+        elif milestone in ("9w", "15w"):
+            bucket["still_seeing"] = sum(
+                1 for f in fb_at_milestone if f.get("still_seeing") == "yes"
+            )
+            bucket["not_still_seeing"] = max(0, responded - bucket["still_seeing"])
+        milestone_breakdown[milestone] = bucket
 
     # -------------------------------------------------------
     # NPS by referral source -- which channels bring the best patients?
@@ -2739,6 +2779,7 @@ async def admin_feedback_dashboard(
             },
             "confidence_3w_trend": conf_3w_trend,
             "detractors": detractors,
+            "milestone_breakdown": milestone_breakdown,
         },
         "matching": {
             "scatter": scatter,
