@@ -664,10 +664,31 @@ async def run_outreach_for_request(request_id: str) -> dict[str, Any]:
     if needed <= 0:
         return {"skipped": "no_outreach_needed"}
 
-    # Over-fetch so dedupe doesn't shrink us below `needed`. Cap at 2x.
-    raw_candidates = await _find_candidates(req, count=min(needed * 2, 60))
+    # Subtract invites already issued for this request so manual re-runs
+    # don't keep firing fresh batches of `needed` on top of each other.
+    # Previously: gap=11, manual run #1 -> 11 invites, run #2 -> 11 more,
+    # run #5 -> 55 total invites for an 11-therapist gap.
+    # Now: each run respects what's already in flight. Once we've invited
+    # `outreach_needed_count` total, subsequent runs no-op.
+    existing_invites = await db.outreach_invites.count_documents(
+        {"request_id": request_id},
+    )
+    remaining = max(0, needed - existing_invites)
+    if remaining <= 0:
+        logger.info(
+            "Outreach skipped for %s: already invited %d (target gap was %d)",
+            request_id, existing_invites, needed,
+        )
+        return {
+            "skipped": "already_invited_enough",
+            "existing_invites": existing_invites,
+            "needed": needed,
+        }
+
+    # Over-fetch so dedupe doesn't shrink us below `remaining`. Cap at 2x.
+    raw_candidates = await _find_candidates(req, count=min(remaining * 2, 60))
     candidates, dedupe_stats = await _filter_existing_contacts(raw_candidates)
-    candidates = candidates[:needed]
+    candidates = candidates[:remaining]
 
     sent_email = 0
     sent_sms = 0
