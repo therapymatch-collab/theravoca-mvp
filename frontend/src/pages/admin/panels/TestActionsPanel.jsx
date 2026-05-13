@@ -34,6 +34,19 @@ export default function TestActionsPanel({
   const [restoreLoading, setRestoreLoading] = useState(true);
   const [restoreRunning, setRestoreRunning] = useState(false);
 
+  // Pre-launch strip-real-emails (inverse of restoration).
+  const [stripRealRunning, setStripRealRunning] = useState(false);
+  const [stripRealPreview, setStripRealPreview] = useState(null);
+
+  // Test-email recipient. Defaults to admin's logged-in email; falls back
+  // to therapymatch@gmail.com (the canonical test inbox) when no admin
+  // email is on file. With EMAIL_OVERRIDE_TO set on Render, ALL outbound
+  // mail lands in therapymatch@gmail.com regardless, so the field mostly
+  // documents intent.
+  const [testEmailTo, setTestEmailTo] = useState(
+    adminEmail || "therapymatch@gmail.com",
+  );
+
   const loadRestorePreview = async () => {
     if (!client) return;
     setRestoreLoading(true);
@@ -83,23 +96,68 @@ export default function TestActionsPanel({
       toast.error("Pick a template from the dropdown first");
       return;
     }
-    if (!adminEmail) {
-      toast.error("No admin email on file -- can't send to 'me'");
+    const recipient = (testEmailTo || "").trim();
+    if (!recipient || !recipient.includes("@")) {
+      toast.error("Enter a valid recipient email first");
       return;
     }
     setTplSending(true);
     try {
       const res = await client.post(
         `/admin/email-templates/${tplSelected}/send-test`,
-        { to: adminEmail },
+        { to: recipient },
       );
-      toast.success(`Sent "${res.data?.subject}" to ${adminEmail}`, {
+      toast.success(`Sent "${res.data?.subject}" to ${recipient}`, {
         duration: 8000,
       });
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Send failed");
     } finally {
       setTplSending(false);
+    }
+  };
+
+  const onPreviewStripReal = async () => {
+    setStripRealRunning(true);
+    try {
+      const res = await client.post("/admin/strip-real-emails", { dry_run: true });
+      setStripRealPreview(res.data || null);
+      toast.success(
+        `Dry run: ${res.data?.would_strip ?? 0} therapist(s) have a real email in the email field.`,
+        { duration: 8000 },
+      );
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Preview failed");
+    } finally {
+      setStripRealRunning(false);
+    }
+  };
+
+  const onRunStripReal = async () => {
+    const n = stripRealPreview?.would_strip ?? null;
+    if (n === null) {
+      toast.error("Run the dry-run preview first so you can see what would change.");
+      return;
+    }
+    if (n === 0) {
+      toast.success("Nothing to strip -- every therapist's email is already a placeholder.");
+      return;
+    }
+    if (!confirm(
+      `Move the real email out of \`email\` -> \`real_email\` for ${n} therapist(s), ` +
+      `replacing \`email\` with a therapymatch+t<id>@gmail.com placeholder?\n\n` +
+      `Pre-launch safety. Reversible via /admin/email-restoration/run at go-live. ` +
+      `Idempotent -- safe to re-run.`
+    )) return;
+    setStripRealRunning(true);
+    try {
+      const res = await client.post("/admin/strip-real-emails", { dry_run: false });
+      toast.success(`Stripped ${res.data?.stripped ?? 0} therapist email(s).`, { duration: 8000 });
+      setStripRealPreview(null);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Strip failed");
+    } finally {
+      setStripRealRunning(false);
     }
   };
 
@@ -203,25 +261,97 @@ export default function TestActionsPanel({
         testid="card-run-cron"
       />
 
-      {/* Email template send-test card -- locally wired */}
-      <ComboCard
-        kicker="Email preview"
-        title={`Send test email${adminEmail ? ` to ${adminEmail}` : ""}`}
-        description="Render any template against test data and send it to your inbox so you can see what patients/therapists actually receive."
-        select={{
-          value: tplSelected,
-          onChange: setTplSelected,
-          placeholder: "Pick a template...",
-          options: tplList.map((t) => ({ value: t.key, label: t.title || t.key })),
-        }}
-        button={{
-          label: tplSending ? "Sending..." : "Send",
-          icon: tplSending ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />,
-          onClick: onSendTestEmail,
-          disabled: tplSending || !tplSelected,
-        }}
-        testid="card-send-test-email"
-      />
+      {/* Email template send-test card -- locally wired. Recipient is
+          editable since admin master-password login doesn't capture an
+          email. With EMAIL_OVERRIDE_TO set on staging, every send lands
+          in therapymatch@gmail.com regardless of the value here. */}
+      <div className="bg-white rounded-xl p-5 border border-[#E8E5DF]" data-testid="card-send-test-email">
+        <div className="text-[10px] uppercase tracking-widest text-[#6D6A65]">Email preview</div>
+        <div className="font-serif-display text-lg mt-1 text-[#2D4A3E]">Send test email</div>
+        <p className="text-xs text-[#6D6A65] mt-1.5 leading-relaxed">
+          Render any template against test data and send it to the recipient below.
+          With <code>EMAIL_OVERRIDE_TO</code> set on Render, the actual delivery still
+          lands in <strong>therapymatch@gmail.com</strong> regardless.
+        </p>
+        <div className="mt-3 space-y-2">
+          <input
+            type="email"
+            value={testEmailTo}
+            onChange={(e) => setTestEmailTo(e.target.value)}
+            placeholder="recipient@example.com"
+            className="w-full border border-[#E8E5DF] rounded-md px-2 py-1.5 text-sm focus:outline-none focus:border-[#2D4A3E]"
+            data-testid="test-email-to-input"
+          />
+          <select
+            value={tplSelected}
+            onChange={(e) => setTplSelected(e.target.value)}
+            className="w-full border border-[#E8E5DF] rounded-md px-2 py-1.5 text-sm focus:outline-none focus:border-[#2D4A3E]"
+            data-testid="test-email-template-select"
+          >
+            <option value="">Pick a template...</option>
+            {tplList.map((t) => (
+              <option key={t.key} value={t.key}>{t.title || t.key}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={onSendTestEmail}
+            disabled={tplSending || !tplSelected}
+            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-[#2D4A3E] text-white hover:bg-[#3A5E50] disabled:opacity-60"
+          >
+            {tplSending ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
+            {tplSending ? "Sending..." : "Send"}
+          </button>
+        </div>
+      </div>
+
+      {/* Pre-launch safety: strip real emails out of `email` field. */}
+      <div className="bg-white rounded-xl p-5 border border-[#E8E5DF]" data-testid="card-strip-real-emails">
+        <div className="text-[10px] uppercase tracking-widest text-[#6D6A65]">Pre-launch safety</div>
+        <div className="font-serif-display text-lg mt-1 text-[#2D4A3E]">Strip real emails from directory</div>
+        <p className="text-xs text-[#6D6A65] mt-1.5 leading-relaxed">
+          Walk every therapist whose <code>email</code> is a real address. Tuck the real
+          value into <code>real_email</code> and replace <code>email</code> with a
+          <code>therapymatch+t&lt;id&gt;@gmail.com</code> placeholder. Idempotent.
+          Reversible at go-live via the Restore-emails card below.
+        </p>
+        {stripRealPreview && (
+          <div className="mt-2 text-xs bg-[#FDFBF7] border border-[#E8E5DF] rounded p-2 leading-relaxed">
+            <strong className="text-[#2D4A3E]">{stripRealPreview.would_strip}</strong> therapist(s)
+            have a real email in the <code>email</code> field.
+            {(stripRealPreview.samples || []).length > 0 && (
+              <ul className="mt-1 text-[#6D6A65]">
+                {(stripRealPreview.samples || []).slice(0, 3).map((s) => (
+                  <li key={s.id}>&middot; {s.name || s.id}: {s.current_email}</li>
+                ))}
+                {(stripRealPreview.samples || []).length > 3 && (
+                  <li className="italic">... and {stripRealPreview.would_strip - 3} more</li>
+                )}
+              </ul>
+            )}
+          </div>
+        )}
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={onPreviewStripReal}
+            disabled={stripRealRunning}
+            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-[#2D4A3E] text-[#2D4A3E] hover:bg-[#FDFBF7] disabled:opacity-60"
+          >
+            {stripRealRunning ? <Loader2 size={14} className="animate-spin" /> : <Eraser size={14} />}
+            Dry run (preview)
+          </button>
+          <button
+            type="button"
+            onClick={onRunStripReal}
+            disabled={stripRealRunning || stripRealPreview?.would_strip === 0 || stripRealPreview === null}
+            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-[#2D4A3E] text-white hover:bg-[#3A5E50] disabled:opacity-60"
+          >
+            {stripRealRunning ? <Loader2 size={14} className="animate-spin" /> : <Eraser size={14} />}
+            Strip now
+          </button>
+        </div>
+      </div>
 
       <ActionCard
         kicker="v1 cleanup"
