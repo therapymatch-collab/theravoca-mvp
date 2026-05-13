@@ -253,6 +253,30 @@ async def create_request(payload: RequestCreate, request: Request):
     if not payload.confirm_not_emergency:
         raise HTTPException(400, "You must confirm this is not an emergency")
 
+    # ─── Geographic eligibility gate (scope-out posture) ───────────────
+    # The frontend gates this via `COVERED_STATES` in intakeOptions.js,
+    # but a direct API POST or a stale browser tab could bypass it. We
+    # enforce server-side too -- accepting consumer health data from
+    # residents of states outside our service area would expand our
+    # regulatory surface (e.g. WA My Health My Data Act, CA SB-1223,
+    # CT CDPA). We audit-log every rejection so we can prove non-ID
+    # data was never accepted if a regulator ever asks.
+    submitted_state = (payload.location_state or "").strip().upper()
+    if submitted_state not in COVERED_STATES:
+        audit.emit(
+            actor_type="anonymous", actor_id="anonymous",
+            action="intake_rejected_out_of_area",
+            resource="request",
+            detail=f"submitted_state={submitted_state or '(empty)'}",
+            ip=request.headers.get("x-forwarded-for", ""),
+            user_agent=request.headers.get("user-agent", ""),
+        )
+        raise HTTPException(
+            400,
+            "We're not in that state yet. Join the waitlist at "
+            "/waitlist and we'll let you know when we launch in your area.",
+        )
+
     # ─── Spam / sanity gates (run before any DB writes) ────────────────
     if not email_is_plausible(payload.email):
         raise HTTPException(400, "That email address doesn't look right. Please double-check it.")

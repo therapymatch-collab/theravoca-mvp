@@ -72,6 +72,27 @@ def test_valid_payload_accepted():
     assert res.json()["status"] == "pending_verification"
 
 
+def test_out_of_area_state_rejected():
+    """Scope-out posture: backend must hard-reject any non-Idaho submission.
+    Frontend gates this in the UI, but a direct API POST or stale tab
+    could bypass it. Accepting consumer health data from non-served
+    states would expand our regulatory surface (e.g. WA MHMDA, CA
+    SB-1223, CT CDPA)."""
+    # Real WA ZIP (98101 = downtown Seattle) so the ZIP/state validator
+    # passes -- the only thing rejecting this should be the geographic
+    # eligibility guard itself.
+    p = _payload(
+        email=f"out_of_area_{int(time.time() * 1000)}@example.com",
+        location_state="WA",
+        location_zip="98101",
+        location_city="Seattle",
+    )
+    res = requests.post(f"{API}/requests", json=p, timeout=10)
+    assert res.status_code == 400, res.text
+    body_lower = res.text.lower()
+    assert "waitlist" in body_lower or "not in that state" in body_lower
+
+
 def test_sms_opt_in_field_persisted():
     """Even without Twilio enabled, the opt-in flag persists for audit."""
     p = _payload(
