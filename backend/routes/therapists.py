@@ -183,6 +183,15 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
     )
     if not ok:
         raise HTTPException(400, ts_err or "Security check failed.")
+    # 5. Therapist Terms of Use consent gate. Frontend should already
+    #    block submit, but enforce server-side so direct API callers
+    #    can't bypass. Stamp the timestamp here so we control the clock
+    #    (frontend value is informational only).
+    if not getattr(payload, "agreed_to_therapist_terms", False):
+        raise HTTPException(
+            400,
+            "You must agree to the Therapist Terms of Use to sign up.",
+        )
     existing = await db.therapists.find_one({"email": payload.email}, {"_id": 0, "id": 1})
     if existing:
         raise HTTPException(409, "A therapist with this email already exists.")
@@ -193,6 +202,8 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
     data.pop("turnstile_token", None)
     data.pop("fax_number", None)
     data.pop("form_started_at_ms", None)
+    # Server-stamp the ToS consent timestamp so we control the clock.
+    data["agreed_to_therapist_terms_at"] = _now_iso()
     data["telehealth"] = data["modality_offering"] in ("telehealth", "both")
     data["offers_in_person"] = data["modality_offering"] in ("in_person", "both")
     # Issue a stable refer-a-colleague code (8 chars, base32-ish)

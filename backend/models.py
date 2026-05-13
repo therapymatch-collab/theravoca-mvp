@@ -41,6 +41,13 @@ class TherapistOut(BaseModel):
 
 
 class TherapistSignup(BaseModel):
+    # Explicit consent to the Therapist Terms of Use. Added 2026-05-13
+    # alongside the new /terms/therapist page. Required to submit;
+    # backend rejects if False. We persist the ISO timestamp at signup
+    # time so we can later prove which version of the ToS the therapist
+    # agreed to without relying on creation_at proximity.
+    agreed_to_therapist_terms: bool = False
+    agreed_to_therapist_terms_at: Optional[str] = None
     name: str = Field(min_length=2, max_length=120)
     email: EmailStr
     phone: Optional[str] = ""  # legacy alias for phone_alert

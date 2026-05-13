@@ -126,6 +126,8 @@ export default function TherapistSignup() {
     t5_lived_experience: "",
     t6_session_expectations: [],
     t6_early_sessions_description: "",
+    // Explicit consent to the Therapist Terms of Use. Required to submit.
+    agreed_to_therapist_terms: false,
   });
   const [office, setOffice] = useState("");
   const [officeAddress, setOfficeAddress] = useState("");
@@ -384,7 +386,10 @@ export default function TherapistSignup() {
         (data.t6_early_sessions_description || "").trim().length >= 30
       );
     }
-    if (s === 9) return true; // notifications optional
+    if (s === 9) {
+      // Notifications are optional, but Therapist Terms agreement is required.
+      return !!data.agreed_to_therapist_terms;
+    }
     return true;
   };
 
@@ -461,6 +466,8 @@ export default function TherapistSignup() {
         return "Describe your early sessions (at least 30 characters).";
       return "";
     }
+    if (s === 9 && !data.agreed_to_therapist_terms)
+      return "You must agree to the Therapist Terms of Use to submit.";
     return "";
   };
 
@@ -1179,6 +1186,38 @@ export default function TherapistSignup() {
                       className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
                     />
                     <span className="text-sm text-[#2B2A29]">Text me each new referral</span>
+                  </label>
+                </Group>
+                <Group title="Agreement">
+                  <label className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer">
+                    <Checkbox
+                      checked={data.agreed_to_therapist_terms}
+                      onCheckedChange={(v) => set("agreed_to_therapist_terms", !!v)}
+                      data-testid="signup-agree-terms"
+                      className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E] mt-0.5"
+                    />
+                    <span className="text-sm text-[#2B2A29] leading-relaxed">
+                      I agree to the{" "}
+                      <a
+                        href="/terms/therapist"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#2D4A3E] underline"
+                      >
+                        Therapist Terms of Use
+                      </a>{" "}
+                      and the{" "}
+                      <a
+                        href="/privacy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#2D4A3E] underline"
+                      >
+                        Privacy Notice
+                      </a>
+                      . I understand TheraVoca is a marketing/matching platform and
+                      not my Business Associate under HIPAA.
+                    </span>
                   </label>
                 </Group>
                 </>)}
