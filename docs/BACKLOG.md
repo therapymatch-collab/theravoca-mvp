@@ -63,12 +63,12 @@ match-released, password reset) are exempt under CAN-SPAM.
 
 ### 3. Outcomes dashboard -- remaining sub-features (was Phase 5)
 *The core dashboard ships 2026-05-11. These are follow-on additions.*
-- CSV export per tab
-- Per-milestone retention donuts (48hr / 3wk / 9wk / 15wk)
-- Response-rate charts per milestone
+- ✅ CSV export per tab (2026-05-13)
+- ✅ Per-milestone retention donuts (48hr / 3wk / 9wk / 15wk) (2026-05-13)
+- ✅ Response-rate charts per milestone (2026-05-13)
 - Therapist Phase 3 survey dedicated sub-view (currently rolled into
-  Recruiting tab)
-- Free-text excerpts richer view (currently shows 4 recent quotes)
+  Recruiting tab) -- still open
+- Free-text excerpts richer view (currently shows 4 recent quotes) -- still open
 
 ### 4. Stripe real-world payment test
 - Currently in test mode
@@ -78,11 +78,23 @@ match-released, password reset) are exempt under CAN-SPAM.
 - Verify webhook signature validation under load
 - Confirm refund/dispute paths
 
-### 5. Crisis escalation protocol
-- What happens if patient submits survey with self-harm indicators
-- Crisis resource page (988 Suicide & Crisis Lifeline)
-- Whether NPS textareas trigger any alert
-- Therapist-to-TheraVoca handoff protocol
+### 5. Crisis escalation protocol -- MOSTLY DONE (2026-05-13)
+- ✅ Survey self-harm keyword detection (`_handle_crisis_flag`):
+  18 phrases matched; on hit, flags the feedback doc, logs reasons,
+  emails admin within minutes.
+- ✅ Crisis resource page at `/crisis` -- 988 + Crisis Text Line +
+  Veterans Crisis Line + Trevor Project + Trans Lifeline +
+  Idaho-specific Behavioral Health Community Crisis Centers.
+  Linked from every page footer.
+- ✅ Inline safety gate in intake when patient selects
+  "Self-harm / safety concerns" -- blocks submit, shows 988/911/text.
+- ✅ Inline crisis resources on feedback-survey thank-you when the
+  backend flagged the response.
+- Still open: NPS=0 + negative-sentiment-textarea heuristic isn't
+  wired (only keyword matching). Lower priority than the keyword
+  path.
+- Still open: documented therapist-to-TheraVoca handoff protocol
+  (ops doc, not code). Worth writing before launch.
 
 ---
 
@@ -111,15 +123,16 @@ admin GET emits, so we catch new endpoints that forget the call.
 
 ### NEW. Admin console UI re-org / declutter (raised 2026-05-11)
 Josh flagged the admin console has too many buttons, dropdowns, pages,
-tabs. Needs a deliberate cleanup pass when reorganizing:
-- Inventory every tab in the secondary nav and judge each (keep / merge /
-  hide). The Outcomes tab replaced Feedback + Feedback tracking already.
-- Inventory all action buttons on rows (Edit, Preview, Archive,
-  Delete, Deep research, Test survey, etc.) -- group into a single
-  "..." menu where possible.
-- Inventory dropdowns and modals; collapse redundant ones.
-- Likely scope: 4-6 hours. Best done as one focused session after MVP
-  launch, not piecemeal.
+tabs. Status as of 2026-05-13:
+- ✅ Single-sub primary tabs hide their sub-pill row generally
+  (was hardcoded for Outcomes; now also applies to Outbound and
+  any future single-sub primary). Visual noise reduction.
+- ✅ Scoped declutter proposal written:
+  `docs/ADMIN-DECLUTTER-PROPOSAL.md`. Tiers the remaining work into
+  T1 (low-risk, ~2 hr, ships without UX decisions), T2 (needs UX
+  input on row-action overflow + Operations split), T3 (full audit,
+  save for post-launch focused session).
+- Pending: T1 + T2 items per the proposal doc when Josh greenlights.
 
 ### 6. Patient match history view -- ALREADY DONE (verified 2026-05-11)
 - Lives at `/portal/patient` (`frontend/src/pages/PatientPortal.jsx`).
@@ -130,10 +143,11 @@ tabs. Needs a deliberate cleanup pass when reorganizing:
 - No additional work needed for MVP. Could add deeper drilldowns
   later but the core history list is functional.
 
-### 7. Wire admin button for "Fire test therapist survey"
-- Backend endpoint exists (`POST /admin/therapists/{tid}/fire-test-survey`)
-- No UI button yet
-- Add to admin therapists panel as row action
+### 7. Wire admin button for "Fire test therapist survey" -- DONE (verified 2026-05-13)
+- Already wired in ProviderRow at `fire-test-survey-${t.id}`
+  (`AdminDashboard.jsx:4551`). Calls
+  `POST /admin/therapists/{tid}/fire-test-survey`. Originally
+  reported as stale in 2026-05-12 cleanup; re-verified today.
 
 ---
 
@@ -147,10 +161,12 @@ tabs. Needs a deliberate cleanup pass when reorganizing:
   future accidental commits.
 - No filter-branch/BFG scrub needed -- contents were empty.
 
-### 9. Stale v1 flag cleanup
-- Old test requests have `structured_followup_*_sent_at` fields from v1 era
-- Harmless dead data, no v1 code reads these flags
-- One-shot Mongo cleanup script to remove fields from all docs
+### 9. Stale v1 flag cleanup -- DONE (verified 2026-05-13)
+- Backend endpoint `POST /admin/cleanup-v1-followup-flags`
+  (`admin.py:2757`) strips legacy `structured_followup_*_sent_at`
+  and `v1_*_sent_at` fields. Idempotent.
+- UI: "Strip legacy flags" card in Test Actions panel
+  (`TestActionsPanel.jsx:358`). One-click trigger from admin.
 
 ### 10. Testing toggle UI bug
 - Admin's `feedback_testing` toggle won't switch back to OFF once turned ON
@@ -161,14 +177,12 @@ tabs. Needs a deliberate cleanup pass when reorganizing:
 - "Almost there" header carries personality, so works visually
 - Cosmetic -- not blocking
 
-### 12. Delete orphan therapist weekly pulse code
-- `send_therapist_weekly_pulse` defined in `email_service.py` but never called
-- `submit_therapist_pulse` endpoint exists but no corresponding cron trigger
-- `weekly_pulse` template exists in `email_templates.py`
-- **Scope is larger than first estimated (2026-05-11 review):**
-  also touches `frontend/src/pages/TherapistPulse.jsx` (305 lines),
-  `/therapist/pulse` route in `App.js`, and the `gen_pulse` helper in
-  `scripts/simulate_feedback.py`. Plan ~45-60 min for a clean delete.
+### 12. Delete orphan therapist weekly pulse code -- DONE (verified 2026-05-13)
+- All referenced files (`TherapistPulse.jsx`, `/therapist/pulse`
+  route, `send_therapist_weekly_pulse`, `submit_therapist_pulse`
+  endpoint, `weekly_pulse` template, `gen_pulse` in
+  `scripts/simulate_feedback.py`) are gone. Confirmed via grep
+  on 2026-05-13.
 
 ---
 
@@ -305,6 +319,50 @@ we scoped together but pushed to post-MVP.
 ---
 
 ## ✅ Done (recent)
+
+### 2026-05-13 (HIPAA scope-out, /crisis, security hardening, Outcomes follow-ons, declutter pass 1)
+- HIPAA scope-out audit doc (`HIPAA-SCOPE-OUT-2026-05-13.md`).
+- Idaho-only server-side guard + free-text field caps + explicit
+  consent gates on `prior_therapy_notes` + `p3_resonance`.
+- Privacy Notice rewrite for non-CE/non-BA posture; effective
+  2026-05-13.
+- Therapist Terms of Use (new page) with explicit non-BA disclaimer.
+- Therapist signup now requires consent to the Terms via checkbox
+  on step 9; backend rejects without it; timestamp server-stamped.
+- Resend webhook + bounce skip + Outbound primary tab (delivered
+  earlier in the day).
+- Track B dry_run as a DB toggle (admin can flip live/dry from
+  the Go-Live runbook).
+- PostHog session recording + autocapture disabled globally.
+- Recurring therapist email senders (`followup_2w`,
+  `stale_profile_nag`, `availability_prompt`, `claim_profile`)
+  now honor `unsubscribed` + `hard_bounced` end-to-end (footer URL
+  + cron filter).
+- Standalone `/crisis` resource page + footer link (988, 911,
+  Crisis Text Line, Veterans Crisis, Trevor, Trans Lifeline,
+  Idaho-specific crisis centers).
+- Audit log IP hashing (HMAC-SHA256 keyed by JWT_SECRET; same
+  pattern as patient email hashing). Constant-time admin password
+  compare in both login paths. Minimum JWT_SECRET length (32 chars)
+  enforced in production.
+- Breach notification runbook (Idaho + FTC HBNR + multi-state
+  forward-looking table) at `docs/RUNBOOK-BREACH-NOTIFICATION.md`.
+- Attorney engagement brief (markdown + PDF) at
+  `docs/ATTORNEY-BRIEF-2026-05-13.{md,pdf}`.
+- Marketing plan drafted (`docs/MARKETING-PLAN-2026-05-13.md`)
+  for the pre-launch + month-1 paid acquisition strategy.
+- Paid-ad drop zone scaffolded at `docs/ad-data/{google,meta,tiktok}/`
+  with export instructions; Josh said no usable past-campaign data
+  exists, so analysis deferred.
+- Outcomes dashboard CSV export per tab + per-milestone retention
+  donuts (48h/3w/9w/15w) + response-rate bar chart. Backend exposes
+  `satisfaction.milestone_breakdown` with due/responded/picked/
+  still_seeing counts per milestone.
+- Admin console declutter phase 1: generalized single-sub primary
+  hide rule; full scoped proposal at
+  `docs/ADMIN-DECLUTTER-PROPOSAL.md`.
+- BACKLOG cleanup: items #7 (fire test survey), #9 (stale v1 flag
+  cleanup), #12 (orphan weekly pulse) re-verified as already done.
 
 ### 2026-05-12 (HIPAA audit pass 2 + autonomy-mode shipping batch)
 - HIPAA hardening:
