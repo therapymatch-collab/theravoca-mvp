@@ -125,6 +125,11 @@ SESSION_TTL_DAYS = int(os.environ.get("SESSION_TTL_DAYS", "30"))
 # steals an admin token has at most this many hours of access. Default
 # 8 hours mirrors a typical workday. Override via ADMIN_SESSION_TTL_HOURS.
 ADMIN_SESSION_TTL_HOURS = int(os.environ.get("ADMIN_SESSION_TTL_HOURS", "8"))
+# Therapist sessions sit between admin (8h) and patient (30d). Therapists
+# see patient clinical preferences -- a stolen therapist token has more
+# blast radius than a stolen patient token, so a tighter TTL is worth
+# the slight friction of re-login on a new week.
+THERAPIST_SESSION_TTL_DAYS = int(os.environ.get("THERAPIST_SESSION_TTL_DAYS", "7"))
 MAGIC_CODE_TTL_MINUTES = int(os.environ.get("MAGIC_CODE_TTL_MINUTES", "30"))
 MAGIC_CODE_MAX_PER_HOUR = int(os.environ.get("MAGIC_CODE_MAX_PER_HOUR", "5"))
 
@@ -192,10 +197,15 @@ def require_admin(
 
 
 def _create_session_token(email: str, role: str) -> str:
-    # Admin tokens get a much shorter TTL than patient/therapist tokens
-    # so a stolen admin token has limited blast radius (HIPAA hygiene).
+    # TTL by role -- tighter for higher blast radius:
+    #   admin     8h   (sees everything; HIPAA hygiene)
+    #   therapist 7d   (sees patient clinical preferences; tighter than
+    #                   patient because PHI exposure is one-to-many)
+    #   patient   30d  (sees only their own data; lowest blast radius)
     if role == "admin":
         exp = datetime.now(timezone.utc) + timedelta(hours=ADMIN_SESSION_TTL_HOURS)
+    elif role == "therapist":
+        exp = datetime.now(timezone.utc) + timedelta(days=THERAPIST_SESSION_TTL_DAYS)
     else:
         exp = datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS)
     payload = {
@@ -245,6 +255,7 @@ __all__ = [
     "ADMIN_NOTIFY_EMAIL", "LICENSE_WARN_DAYS", "AVAILABILITY_PROMPT_DAYS",
     "DAILY_TASK_HOUR_LOCAL", "DAILY_TASK_TZ_OFFSET_HOURS", "PHASE_2_LAUNCH_DATE",
     "JWT_SECRET", "JWT_ALGO", "SESSION_TTL_DAYS", "ADMIN_SESSION_TTL_HOURS",
+    "THERAPIST_SESSION_TTL_DAYS",
     "MAGIC_CODE_TTL_MINUTES",
     "MAGIC_CODE_MAX_PER_HOUR", "LOGIN_MAX_FAILURES", "LOGIN_LOCKOUT_MINUTES",
     "_login_attempts", "_client_ip", "_check_lockout", "_record_failure", "_reset_failures",
