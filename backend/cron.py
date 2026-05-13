@@ -243,11 +243,20 @@ async def _run_availability_prompts() -> dict[str, int]:
 
 async def _run_gap_recruitment() -> dict[str, int]:
     """Daily gap-fill: keep the directory healthy by recruiting therapists for
-    the most-in-demand specialties/cities/age groups we're thin on. Pre-launch
-    this runs in `dry_run=True` mode (fake emails, drafts only)."""
+    the most-in-demand specialties/cities/age groups we're thin on.
+
+    `dry_run` is read from app_config (key=track_b_config) so admin can flip
+    live without a deploy. Default = True (drafts only, fake emails) so a
+    missing/never-set config is conservative.
+    """
     try:
+        from deps import db
         from gap_recruiter import run_gap_recruitment
-        return await run_gap_recruitment(dry_run=True, max_drafts=10)
+        cfg = await db.app_config.find_one(
+            {"key": "track_b_config"}, {"_id": 0, "dry_run": 1},
+        ) or {}
+        dry_run = bool(cfg.get("dry_run", True))
+        return await run_gap_recruitment(dry_run=dry_run, max_drafts=10)
     except Exception as e:
         logger.warning("Daily gap recruit failed: %s", e)
         return {"error": str(e)}

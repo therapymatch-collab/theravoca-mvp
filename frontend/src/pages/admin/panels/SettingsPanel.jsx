@@ -204,6 +204,7 @@ function GoLiveCard({ client: clientProp }) {
   const [backfillStatus, setBackfillStatus] = useState(null);
   const [emailPreview, setEmailPreview] = useState(null);
   const [wipePreview, setWipePreview] = useState(null);
+  const [trackBConfig, setTrackBConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState("");           // step id currently running
   const [showRenderHelp, setShowRenderHelp] = useState(false);
@@ -213,16 +214,18 @@ function GoLiveCard({ client: clientProp }) {
   const refreshAll = async () => {
     setLoading(true);
     try {
-      const [es, bs, ep, wp] = await Promise.all([
+      const [es, bs, ep, wp, tb] = await Promise.all([
         client.get("/admin/email-safety-status").catch(() => ({ data: null })),
         client.get("/admin/backfill-status").catch(() => ({ data: null })),
         client.get("/admin/email-restoration/preview").catch(() => ({ data: null })),
         client.get("/admin/wipe-test-data/preview").catch(() => ({ data: null })),
+        client.get("/admin/track-b-config").catch(() => ({ data: null })),
       ]);
       setEmailStatus(es.data);
       setBackfillStatus(bs.data);
       setEmailPreview(ep.data);
       setWipePreview(wp.data);
+      setTrackBConfig(tb.data);
     } finally {
       setLoading(false);
     }
@@ -243,8 +246,9 @@ function GoLiveCard({ client: clientProp }) {
     (wipePreview.applications || 0) === 0 &&
     (wipePreview.outreach_invites || 0) === 0
   );
+  const trackBLive = trackBConfig && trackBConfig.dry_run === false;
 
-  const allReady = emailReady && realEmailsReady && backfillCleared && testDataCleared;
+  const allReady = emailReady && realEmailsReady && backfillCleared && testDataCleared && trackBLive;
 
   // ---- individual action handlers ----
   const restoreRealEmails = async () => {
@@ -289,6 +293,32 @@ function GoLiveCard({ client: clientProp }) {
       await refreshAll();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Strip failed");
+    } finally {
+      setRunning("");
+    }
+  };
+
+  const flipTrackB = async (newDryRun) => {
+    if (!newDryRun) {
+      if (!confirm(
+        "Flip Track B (gap-recruit) to LIVE?\n\n" +
+        "After this, the nightly cron will send real outreach emails to " +
+        "candidates it finds for each Coverage gap (subject to the email " +
+        "safety guard -- only EMAIL_LIVE_MODE=true gets real sends through; " +
+        "EMAIL_OVERRIDE_TO redirects everything to your test inbox).\n\n" +
+        "Reversible -- you can flip back to dry-run at any time."
+      )) return;
+    }
+    setRunning("track_b");
+    try {
+      const r = await client.put("/admin/track-b-config", { dry_run: newDryRun });
+      toast.success(
+        `Track B is now ${r.data?.dry_run ? "DRY-RUN" : "LIVE"}`,
+        { duration: 6000 },
+      );
+      await refreshAll();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Track B config update failed");
     } finally {
       setRunning("");
     }
@@ -483,15 +513,36 @@ function GoLiveCard({ client: clientProp }) {
           }
         />
 
-        {/* Step 5: Track B (informational -- still cron.py edit) */}
+        {/* Step 5: Track B (gap-recruit) live toggle */}
         <GoLiveRow
-          ready={false}
-          warningOnly
+          ready={trackBLive}
           title="Track B (gap-recruit) live"
           detail={
-            "Currently hardcoded as dry_run=True in cron.py:250. Manual code edit + " +
-            "deploy required to flip live -- separate ticket would move this to a " +
-            "DB-stored toggle so it can be flipped from here."
+            trackBConfig === null
+              ? "Loading..."
+              : trackBLive
+                ? `Nightly gap-recruit cron sends real emails (subject to email safety guard). Flipped to live${trackBConfig.updated_at ? ` ${new Date(trackBConfig.updated_at).toLocaleString()}` : ""}${trackBConfig.updated_by ? ` by ${trackBConfig.updated_by}` : ""}.`
+                : "Track B runs in DRY-RUN: drafts created, no emails sent. Flip to live when you're ready for proactive outreach beyond per-request matches."
+          }
+          action={
+            <button
+              type="button"
+              onClick={() => flipTrackB(!trackBLive)}
+              disabled={running !== "" || trackBConfig === null}
+              className={`text-xs px-3 py-1.5 rounded-md border disabled:opacity-50 ${
+                trackBLive
+                  ? "border-[#6D6A65] text-[#6D6A65] hover:bg-[#FDFBF7]"
+                  : "border-[#2D4A3E] text-[#2D4A3E] hover:bg-[#FDFBF7]"
+              }`}
+            >
+              {running === "track_b" ? (
+                <><Loader2 size={12} className="inline mr-1 animate-spin" /> Updating...</>
+              ) : trackBLive ? (
+                "Flip back to dry-run"
+              ) : (
+                "Flip to live"
+              )}
+            </button>
           }
         />
       </div>

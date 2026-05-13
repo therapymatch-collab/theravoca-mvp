@@ -5073,6 +5073,55 @@ async def admin_delete_gap_draft(draft_id: str, _: bool = Depends(require_admin)
     return {"ok": True}
 
 
+@router.get("/admin/track-b-config", dependencies=[Depends(require_admin)])
+async def admin_get_track_b_config() -> dict[str, Any]:
+    """Live config for the Track B (gap-recruit) cron. Drives the
+    Go-Live runbook's "Track B live" status row.
+    """
+    cfg = await db.app_config.find_one(
+        {"key": "track_b_config"}, {"_id": 0},
+    ) or {}
+    return {
+        "dry_run": bool(cfg.get("dry_run", True)),
+        "updated_at": cfg.get("updated_at"),
+        "updated_by": cfg.get("updated_by"),
+    }
+
+
+@router.put("/admin/track-b-config", dependencies=[Depends(require_admin)])
+async def admin_put_track_b_config(payload: dict, request: Request) -> dict[str, Any]:
+    """Flip Track B between dry-run and live without redeploying cron.py.
+
+    Body: {"dry_run": bool}
+
+    When flipping to live (dry_run=False), the email_service safety
+    guard still applies -- sends only succeed when EMAIL_OVERRIDE_TO is
+    set (test redirect) OR EMAIL_LIVE_MODE=true (real send). So setting
+    dry_run=False on its own does NOT email real therapists; both
+    layers must be configured for go-live.
+    """
+    dry_run = bool(payload.get("dry_run", True))
+    actor_email = request.headers.get("x-admin-email", "") or "admin"
+    audit.emit(
+        actor_type="admin", actor_id=actor_email, action="set_track_b_config",
+        resource="app_config", detail=f"dry_run={dry_run}",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    await db.app_config.update_one(
+        {"key": "track_b_config"},
+        {"$set": {
+            "key": "track_b_config",
+            "dry_run": dry_run,
+            "updated_at": _now_iso(),
+            "updated_by": actor_email,
+        }},
+        upsert=True,
+    )
+    logger.warning("Track B dry_run set to %s by %s", dry_run, actor_email)
+    return {"ok": True, "dry_run": dry_run}
+
+
 @router.get("/admin/email-safety-status", dependencies=[Depends(require_admin)])
 async def admin_email_safety_status() -> dict[str, Any]:
     """Live read of the pre-launch email safety state. Used by admin UI
