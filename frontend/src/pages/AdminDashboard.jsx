@@ -439,13 +439,22 @@ export default function AdminDashboard() {
     }
   };
 
+  // Tracks which request id (if any) currently has an outreach run
+  // in-flight. Powers the inline progress indicator on the "Run
+  // outreach now" button + the stage-hint text below it.
+  const [outreachRunningId, setOutreachRunningId] = useState(null);
+
   const runOutreachNow = async (id) => {
     if (!confirm(
       "Run outreach for this patient now?\n\n" +
-      "Searches our external directory pool + Claude for additional Idaho therapists who match this patient's brief, " +
-      "then queues invite emails (or SMS for therapists with no public email) to fill the gap. " +
+      "Searches our external directory pool (Google Places + Psychology Today + " +
+      "admin-registered directories + backup HTML scrapers) for additional Idaho " +
+      "therapists who match this patient's brief, then queues invite emails (or " +
+      "SMS for therapists with no public email) to fill the gap.\n\n" +
+      "This typically takes 30-60 seconds.\n\n" +
       "Use this if the auto-trigger didn't run or the directory had < 30 matches."
     )) return;
+    setOutreachRunningId(id);
     try {
       const res = await client.post(`/admin/requests/${id}/run-outreach`);
       const emails = res.data?.emails_sent ?? 0;
@@ -455,11 +464,15 @@ export default function AdminDashboard() {
       if (emails > 0) parts.push(`${emails} email${emails === 1 ? "" : "s"}`);
       if (smsCt > 0) parts.push(`${smsCt} SMS`);
       const sentDesc = parts.join(" + ") || "0 sent";
-      toast.success(`Outreach: ${found} candidate(s) found, ${sentDesc}`);
+      toast.success(`Outreach complete: ${found} candidate(s) found, ${sentDesc}.`, {
+        duration: 8000,
+      });
       refresh();
       if (openId === id) openDetail(id);
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Outreach failed");
+    } finally {
+      setOutreachRunningId(null);
     }
   };
 
@@ -2773,12 +2786,22 @@ export default function AdminDashboard() {
                   <RotateCw size={14} className="inline mr-1.5" /> Re-run matching
                 </button>
                 <button
-                  className="tv-btn-secondary !py-2 !px-4 text-sm border-[#C87965] text-[#C87965]"
+                  className="tv-btn-secondary !py-2 !px-4 text-sm border-[#C87965] text-[#C87965] disabled:opacity-60"
                   onClick={() => runOutreachNow(detail.request.id)}
+                  disabled={outreachRunningId === detail.request.id}
                   data-testid="run-outreach-btn"
                   title="Manually fire outreach for this request — useful if the auto-trigger didn't run or fewer than 30 directory matches were found. Cascades through Google Places, Psychology Today, registered directories, and backup scrapers."
                 >
-                  <Send size={14} className="inline mr-1.5" /> Run outreach now
+                  {outreachRunningId === detail.request.id ? (
+                    <>
+                      <Loader2 size={14} className="inline mr-1.5 animate-spin" />
+                      Running outreach...
+                    </>
+                  ) : (
+                    <>
+                      <Send size={14} className="inline mr-1.5" /> Run outreach now
+                    </>
+                  )}
                 </button>
                 <RerunWithCutoffs
                   requestId={detail.request.id}
@@ -2787,6 +2810,10 @@ export default function AdminDashboard() {
                   onDone={() => { refresh(); openDetail(detail.request.id); }}
                 />
               </div>
+
+              {outreachRunningId === detail.request.id && (
+                <OutreachProgressNote />
+              )}
 
               {/* v2 test survey checkbox */}
               <div className="flex items-center gap-2 mt-1">
@@ -3213,6 +3240,47 @@ function TabBtn({ active, onClick, icon, label, count, testid, highlight }) {
         </span>
       )}
     </button>
+  );
+}
+
+// OutreachProgressNote: animated stage-hint shown below the "Run
+// outreach now" button while an outreach run is in flight. Doesn't
+// poll the backend (the run isn't streamed yet) -- just rotates through
+// plain-English descriptions of what the agent does so the admin
+// trusts the system is still working through a 30-60s wait.
+function OutreachProgressNote() {
+  const stages = [
+    "Searching Google Places for therapists in this city + state...",
+    "Cross-referencing Psychology Today listings...",
+    "Pulling admin-registered directory candidates...",
+    "Falling back to TherapyDen + GoodTherapy scrapers if needed...",
+    "Enriching each candidate with real email + phone from their website...",
+    "De-duplicating against existing therapists + prior outreach...",
+    "Composing personalised invite emails (Resend) + SMS fallbacks (Twilio)...",
+    "Almost done -- awaiting final send confirmations...",
+  ];
+  const [stageIdx, setStageIdx] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStageIdx((i) => Math.min(i + 1, stages.length - 1));
+    }, 4500);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <div className="mt-3 mb-1 rounded-xl border border-[#E8DCC1] bg-[#FDF7EC] px-4 py-3 text-sm text-[#8B5A1F] flex items-start gap-3">
+      <Loader2 size={16} className="animate-spin shrink-0 mt-0.5 text-[#C87965]" />
+      <div className="leading-relaxed">
+        <div className="font-medium text-[#8B4F1F]">Outreach in progress</div>
+        <div className="text-xs text-[#8B5A1F]/85 mt-1">
+          {stages[stageIdx]}
+        </div>
+        <div className="text-[10px] text-[#8B5A1F]/60 mt-2">
+          Typically 30-60 seconds. Safe to leave the page open -- the run continues
+          in the background even if you navigate away.
+        </div>
+      </div>
+    </div>
   );
 }
 
