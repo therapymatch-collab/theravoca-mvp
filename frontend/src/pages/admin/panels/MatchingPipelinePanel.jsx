@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, RotateCw, Filter, Sparkles, TrendingUp, Award } from "lucide-react";
+import { Loader2, RotateCw, Filter, Sparkles, TrendingUp, Award, ChevronRight } from "lucide-react";
 
 // Admin > Operations > Matching
 // Read-only view of the matching pipeline + current scoring weights.
@@ -82,22 +82,26 @@ export default function MatchingPipelinePanel({ client }) {
         </ul>
       </Section>
 
-      {/* Step 2: weighted scoring */}
+      {/* Step 2: weighted scoring -- collapsible */}
       <Section
         icon={<TrendingUp size={18} className="text-[#2D4A3E]" />}
         title={`Step 2 — Weighted scoring (up to ${totalScoringMax.toFixed(0)} pts)`}
-        subtitle="Each remaining therapist gets a score on every axis below. The axis weights sum to the raw maximum; later normalization maps the raw total to a 0-97 display range."
+        subtitle="Each remaining therapist gets a score on every axis below. Click to expand."
         accent="#EAF2E8"
+        collapsible
+        defaultOpen={false}
       >
         <WeightTable rows={data.scoring_axes || []} totalMax={totalScoringMax} />
       </Section>
 
-      {/* Step 3: bonuses */}
+      {/* Step 3: bonuses -- collapsible */}
       <Section
         icon={<Sparkles size={18} className="text-[#C87965]" />}
         title={`Step 3 — Bonuses (up to +${totalBonusMax.toFixed(0)} pts)`}
-        subtitle="Extra points on top of the structured score when deeper data is available."
+        subtitle="Extra points on top of the structured score when deeper data is available. Click to expand."
         accent="#FBEFE9"
+        collapsible
+        defaultOpen={false}
       >
         <WeightTable rows={data.bonuses || []} totalMax={totalBonusMax} />
       </Section>
@@ -123,13 +127,15 @@ export default function MatchingPipelinePanel({ client }) {
         </div>
       </Section>
 
-      {/* Step 5: patient-view ranking (post-apply) */}
+      {/* Step 5: patient-view ranking (post-apply) -- collapsible */}
       {data.patient_view_ranking && (
         <Section
           icon={<TrendingUp size={18} className="text-[#C87965]" />}
           title={`Step 5 — Patient view ranking (post-apply, max ${(data.patient_view_ranking.components || []).reduce((s, c) => s + (c.max_points || 0), 0)} raw)`}
           subtitle={data.patient_view_ranking.description}
           accent="#FBEFE9"
+          collapsible
+          defaultOpen={false}
         >
           <WeightTable
             rows={data.patient_view_ranking.components || []}
@@ -138,13 +144,15 @@ export default function MatchingPipelinePanel({ client }) {
         </Section>
       )}
 
-      {/* Deep research status */}
+      {/* Deep research status -- collapsible */}
       {data.deep_research && (
         <Section
           icon={<Sparkles size={18} className="text-[#2D4A3E]" />}
           title="LLM deep research"
           subtitle={data.deep_research.auto_on_signup_description}
           accent="#EAF2E8"
+          collapsible
+          defaultOpen={false}
         >
           <div className="space-y-2 text-sm">
             <Row
@@ -180,18 +188,33 @@ export default function MatchingPipelinePanel({ client }) {
   );
 }
 
-function Section({ icon, title, subtitle, accent, children }) {
+function Section({ icon, title, subtitle, accent, children, collapsible = false, defaultOpen = true }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const showBody = !collapsible || open;
   return (
     <div className="bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
-      <div className="px-6 py-4 flex items-start gap-3 border-b border-[#E8E5DF]"
-           style={{ backgroundColor: accent }}>
+      <button
+        type="button"
+        onClick={collapsible ? () => setOpen(!open) : undefined}
+        className={`w-full text-left px-6 py-4 flex items-start gap-3 ${
+          collapsible ? "cursor-pointer hover:brightness-95" : "cursor-default"
+        } ${showBody ? "border-b border-[#E8E5DF]" : ""}`}
+        style={{ backgroundColor: accent }}
+        aria-expanded={open}
+      >
+        {collapsible && (
+          <ChevronRight
+            size={16}
+            className={`mt-1 text-[#6D6A65] shrink-0 transition-transform ${open ? "rotate-90" : ""}`}
+          />
+        )}
         <div className="mt-0.5">{icon}</div>
-        <div>
+        <div className="flex-1 min-w-0">
           <h3 className="font-serif-display text-xl text-[#2D4A3E]">{title}</h3>
-          <p className="text-xs text-[#6D6A65] mt-1 leading-relaxed max-w-3xl">{subtitle}</p>
+          {subtitle && <p className="text-xs text-[#6D6A65] mt-1 leading-relaxed max-w-3xl">{subtitle}</p>}
         </div>
-      </div>
-      <div className="p-6">{children}</div>
+      </button>
+      {showBody && <div className="p-6">{children}</div>}
     </div>
   );
 }

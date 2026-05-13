@@ -3330,7 +3330,7 @@ function AdminTabsBar({
         { id: "team", label: "Team", count: team?.total ?? null, onClick: onLoadTeam },
         { id: "settings", label: "Settings" },
         { id: "matching", label: "Matching" },
-        { id: "referrals", label: "Referrals", onClick: onLoadReferralAnalytics },
+        { id: "referrals", label: "Invites", onClick: onLoadReferralAnalytics },
         { id: "referral_sources", label: "Referral sources", onClick: onLoadReferralSources },
         { id: "waitlist", label: "Waitlist" },
         { id: "audit_log", label: "Audit log" },
