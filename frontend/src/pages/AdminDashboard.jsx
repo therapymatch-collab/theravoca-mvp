@@ -36,6 +36,7 @@ import {
   Activity,
   MapPin,
   Radio,
+  FileText,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
@@ -69,6 +70,7 @@ import RecruitDraftsPanel from "@/pages/admin/panels/RecruitDraftsPanel";
 import RecruitingPanel from "@/pages/admin/panels/RecruitingPanel";
 import RecruitingPerRequestPanel from "@/pages/admin/panels/RecruitingPerRequestPanel";
 import RecruitingGapFillPanel from "@/pages/admin/panels/RecruitingGapFillPanel";
+import RequestsAnalyticsPanel from "@/pages/admin/panels/RequestsAnalyticsPanel";
 import PatientsByEmailPanel from "@/pages/admin/panels/PatientsByEmailPanel";
 import FeedbackPanel from "@/pages/admin/panels/FeedbackPanel";
 import FeedbackTrackingPanel from "@/pages/admin/panels/FeedbackTrackingPanel";
@@ -1220,6 +1222,10 @@ export default function AdminDashboard() {
                   openDetail={openDetail}
                   StatusBadge={StatusBadge}
                 />
+              )}
+
+              {tab === "requests_analytics" && (
+                <RequestsAnalyticsPanel requests={requests} />
               )}
 
               {tab === "therapists" && (
@@ -3264,7 +3270,6 @@ function AdminTabsBar({
       label: "Inbox",
       icon: <Inbox size={14} />,
       subs: [
-        { id: "requests", label: "Active requests", count: requestsCount },
         {
           id: "therapists",
           label: "Pending therapists",
@@ -3278,6 +3283,15 @@ function AdminTabsBar({
           highlight: (completion?.incomplete || 0) > 0,
           onClick: onLoadCompletion,
         },
+      ],
+    },
+    {
+      id: "requests_primary",
+      label: "Requests",
+      icon: <FileText size={14} />,
+      subs: [
+        { id: "requests", label: "Active", count: requestsCount },
+        { id: "requests_analytics", label: "Analytics" },
       ],
     },
     {
