@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TheraVoca Admin - Reorg Mockup v4 (Outbound tab)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --bg: #FDFBF7;
+    --surface: #FFFFFF;
+    --primary: #2D4A3E;
+    --primary-hover: #3A5E50;
+    --secondary: #C87965;
+    --text-main: #2B2A29;
+    --text-muted: #6D6A65;
+    --border: #E8E5DF;
+    --success: #4A6B5D;
+    --error: #D45D5D;
+    --warn: #D4A843;
+  }
+  body { background: var(--bg); color: var(--text-main); font-family: ui-sans-serif, system-ui, sans-serif; }
+  .font-serif { font-family: 'Georgia', 'Cormorant Garamond', serif; }
+  .primary-tab { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; font-size: 0.95rem; font-weight: 500; color: var(--text-muted); border-bottom: 2px solid transparent; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .primary-tab:hover { color: var(--primary); }
+  .primary-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .primary-tab.new-pill { background: #FBEFE9; border-radius: 8px 8px 0 0; }
+  .sub-pill { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.95rem; border-radius: 9999px; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+  .sub-pill.active { background: var(--primary); color: white; }
+  .sub-pill.inactive { background: #F2EFE8; color: var(--text-muted); }
+  .sub-pill.inactive:hover { background: var(--border); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  .mq-btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.55rem 1.1rem; background: var(--primary); color: white; border-radius: 9999px; font-size: 0.85rem; font-weight: 500; cursor: pointer; }
+  .design-note { background: #FBEFE9; border: 1px solid #F4DDD2; color: #8B4F3B; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 9999px; font-weight: 500; display: inline-block; }
+  .badge-active { background: #E8F0EA; color: #2D4A3E; }
+  .badge-pending { background: #FBEFE9; color: #B8742A; }
+  .badge-warn { background: #FBE9E5; color: #C8412B; }
+  .badge-new { background: #FBEFE9; color: #B8742A; font-size: 9px; padding: 1px 6px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .kpi .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 600; }
+  .kpi .value { font-size: 26px; font-weight: 600; color: var(--primary); margin-top: 4px; line-height: 1.1; }
+  .kpi .delta { font-size: 11px; margin-top: 4px; color: var(--text-muted); }
+  .kpi.warn .value { color: #C8412B; }
+  table.data { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.data th { text-align: left; font-weight: 600; padding: 10px 14px; background: #F2EFE8; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+  table.data td { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  table.data tr:hover { background: #FDFBF7; cursor: pointer; }
+  /* status pills */
+  .pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 500; }
+  .pill-delivered { background: #E8F0EA; color: #2D4A3E; }
+  .pill-opened { background: #E8EEF6; color: #2A4F73; }
+  .pill-replied { background: #FBEFE9; color: #B8742A; }
+  .pill-signed { background: #E8F0EA; color: #2D4A3E; font-weight: 600; }
+  .pill-scheduled { background: #F2EFE8; color: #6D6A65; }
+  .pill-sending { background: #FFF4D9; color: #8B5A1F; }
+  .pill-bounced { background: #FBE9E5; color: #C8412B; }
+  .pill-failed { background: #FBE9E5; color: #C8412B; }
+  .pill-throttled { background: #FBEFE9; color: #B8742A; }
+  /* channel icons */
+  .ch { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; padding: 1px 6px; border-radius: 4px; }
+  .ch-email { background: #EAF2E8; color: #2D4A3E; }
+  .ch-sms { background: #FBEFE9; color: #C87965; }
+  .feed-row { display: grid; grid-template-columns: 80px 100px 200px 1fr 90px; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--border); align-items: center; font-size: 13px; }
+  .feed-row:hover { background: #FDFBF7; cursor: pointer; }
+  .feed-time { color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .feed-template { font-weight: 500; color: var(--text-main); }
+  .feed-recipient { color: var(--text-muted); font-size: 12px; }
+  .filter-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 12px 16px; background: #FDFBF7; border-bottom: 1px solid var(--border); }
+  .filter-input { border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font-size: 13px; background: white; }
+  .section { display: none; }
+  .section.active { display: block; }
+  .bar-chart { display: flex; align-items: flex-end; gap: 4px; height: 60px; }
+  .bar-chart .bar { flex: 1; background: linear-gradient(180deg, #2D4A3E 0%, #4A6B5D 100%); border-radius: 3px 3px 0 0; min-height: 3px; }
+  .bar-chart .bar.warn { background: #C87965; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<div class="design-note px-6 py-2.5 text-xs">
+  <span class="font-semibold">ADMIN REORG MOCKUP v4 (Outbound tab)</span> &middot; click the sub-pills inside Outbound to switch views &middot; click a feed row to preview the email drawer
+</div>
+
+<!-- TOP BAR -->
+<header class="bg-white border-b border-[#E8E5DF]">
+  <div class="max-w-[1600px] mx-auto px-6 py-4 flex items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-full bg-[#2D4A3E] text-white flex items-center justify-center font-serif text-lg">T</div>
+      <div>
+        <div class="text-xs uppercase tracking-widest text-[#6D6A65]">Admin</div>
+        <div class="font-serif text-xl text-[#2D4A3E] leading-tight">TheraVoca Console</div>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <button class="mq-btn">&#x2728; Master Query</button>
+    </div>
+  </div>
+
+  <!-- PRIMARY NAV -->
+  <nav class="max-w-[1600px] mx-auto px-6 flex items-center gap-1 overflow-x-auto">
+    <div class="primary-tab" data-tab="requests" onclick="setTab('requests')">&#x1F4C4; Requests <span class="badge badge-warn">5</span></div>
+    <div class="primary-tab" data-tab="directory" onclick="setTab('directory')">&#x1F465; Directory</div>
+    <div class="primary-tab" data-tab="recruiting" onclick="setTab('recruiting')">&#x1F4E1; Recruiting</div>
+    <div class="primary-tab active new-pill" data-tab="outbound" onclick="setTab('outbound')">
+      &#x1F4E4; Outbound <span class="badge badge-new">NEW</span>
+    </div>
+    <div class="primary-tab" data-tab="outcomes" onclick="setTab('outcomes')">&#x1F4CA; Outcomes</div>
+    <div class="primary-tab" data-tab="content" onclick="setTab('content')">&#x270F;&#xFE0F; Content</div>
+    <div class="primary-tab" data-tab="operations" onclick="setTab('operations')">&#x2699;&#xFE0F; Operations</div>
+    <div class="primary-tab ml-auto text-[#9C7A2C]" data-tab="testing" onclick="setTab('testing')">&#x2728; Testing <span class="badge badge-pending">DEV</span></div>
+  </nav>
+</header>
+
+<main class="max-w-[1600px] mx-auto px-6 py-8 space-y-6">
+
+  <!-- ========================== OUTBOUND ========================== -->
+  <section class="section active" data-section="outbound">
+
+    <!-- Sub-pills -->
+    <div class="flex items-center gap-2 mb-5 flex-wrap">
+      <div class="sub-pill active" onclick="setSub('today')">Today</div>
+      <div class="sub-pill inactive" onclick="setSub('scheduled')">Scheduled</div>
+      <div class="sub-pill inactive" onclick="setSub('by_type')">By type</div>
+      <div class="sub-pill inactive" onclick="setSub('failed')">Failed <span class="badge badge-warn">8</span></div>
+      <div class="sub-pill inactive" onclick="setSub('templates')">Templates</div>
+    </div>
+
+    <!-- KPI strip (always visible across sub-pills) -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+      <div class="kpi">
+        <div class="label">Sent today</div>
+        <div class="value">42</div>
+        <div class="delta">&uarr; 14 vs yesterday</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Sent 7d</div>
+        <div class="value">314</div>
+        <div class="delta">avg 4.2/hr</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Queued / in-flight</div>
+        <div class="value">3</div>
+        <div class="delta">2 sending, 1 scheduled</div>
+      </div>
+      <div class="kpi warn">
+        <div class="label">Failed (7d)</div>
+        <div class="value">8</div>
+        <div class="delta">5 bounce &middot; 3 throttle</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Top template</div>
+        <div class="value text-xl">therapist_notif</div>
+        <div class="delta">140 of 314 (45%)</div>
+      </div>
+    </div>
+
+    <!-- ===== TODAY SUB ===== -->
+    <div data-sub="today">
+      <div class="card overflow-hidden">
+        <div class="filter-bar">
+          <span class="text-xs uppercase tracking-wider text-[#6D6A65] font-semibold">Filter</span>
+          <select class="filter-input">
+            <option>All channels</option><option>Email only</option><option>SMS only</option>
+          </select>
+          <select class="filter-input">
+            <option>All templates</option>
+            <option>Match results</option>
+            <option>Therapist notification</option>
+            <option>Outreach invite</option>
+            <option>Patient survey</option>
+            <option>Verification</option>
+          </select>
+          <select class="filter-input">
+            <option>All statuses</option><option>Delivered</option><option>Sending</option><option>Failed</option><option>Bounced</option>
+          </select>
+          <input class="filter-input flex-1 min-w-[200px]" placeholder="Search by recipient or request id &hellip;" />
+        </div>
+
+        <div class="bg-white">
+          <div class="feed-row" onclick="openDrawer('match-r42')">
+            <div class="feed-time">9:43 AM</div>
+            <div><span class="pill pill-delivered">&#10003; delivered</span></div>
+            <div>
+              <div class="feed-template">Match results</div>
+              <div class="text-[10px] text-[#6D6A65] mt-0.5">to patient &middot; <a class="underline">R-42</a></div>
+            </div>
+            <div class="feed-recipient">jane@example.com</div>
+            <div class="text-right"><span class="ch ch-email">&#9993; email</span></div>
+          </div>
+          <div class="feed-row">
+            <div class="feed-time">9:42 AM</div>
+            <div><span class="pill pill-delivered">&#10003; delivered (5)</span></div>
+            <div>
+              <div class="feed-template">Therapist notification</div>
+              <div class="text-[10px] text-[#6D6A65] mt-0.5">5 therapists notified &middot; <a class="underline">R-42</a></div>
+            </div>
+            <div class="feed-recipient">5 therapists</div>
+            <div class="text-right"><span class="ch ch-email">&#9993; email</span></div>
+          </div>
+          <div class="feed-row">
+            <div class="feed-time">9:14 AM</div>
+            <div><span class="pill pill-sending">&#9203; sending&hellip;</span></div>
+            <div>
+              <div class="feed-template">Outreach invite (Track A)</div>
+              <div class="text-[10px] text-[#6D6A65] mt-0.5">to scraped candidate &middot; <a class="underline">R-42</a></div>
+            </div>
+            <div class="feed-recipient">sarah@&hellip;</div>
+            <div class="text-right"><span class="ch ch-email">&#9993; email</span></div>
+          </div>
+          <div class="feed-row">
+            <div class="feed-time">8:30 AM</div>
+            <div><span class="pill pill-opened">&#128065; opened</span></div>
+            <div>
+              <div class="feed-template">Patient survey 48h</div>
+              <div class="text-[10px] text-[#6D6A65] mt-0.5">48h check-in &middot; <a class="underline">R-41</a></div>
+            </div>
+            <div class="feed-recipient">john@example.com</div>
+            <div class="text-right"><span class="ch ch-email">&#9993; email</span></div>
+          </div>
+          <div class="feed-row">
+            <div class="feed-time">8:00 AM</div>
+            <div><span class="pill pill-scheduled">&#9200; scheduled</span></div>
+            <div>
+              <div class="feed-template">Weekly availability prompt</div>
+              <div class="text-[10px] text-[#6D6A65] mt-0.5">cron &middot; therapist_availability_weekly</div>
+            </div>
+            <div class="feed-recipient">122 therapists</div>
+            <div class="text-right"><span class="ch ch-email">&#9993; email</span></div>
+          </div>
+          <div class="feed-row">
+            <div class="feed-time">7:52 AM</div>
+            <div><span class="pill pill-bounced">&#10005; bounced</span></div>
+            <div>
+              <div class="feed-template">Outreach invite (Track A)</div>
+              <div class="text-[10px] text-[#6D6A65] mt-0.5">hard bounce &middot; <a class="underline">R-42</a></div>
+            </div>
+            <div class="feed-recipient">defunct@&hellip;</div>
+            <div class="text-right"><span class="ch ch-email">&#9993; email</span></div>
+          </div>
+          <div class="feed-row">
+            <div class="feed-time">7:14 AM</div>
+            <div><span class="pill pill-delivered">&#10003; delivered</span></div>
+            <div>
+              <div class="feed-template">Outreach invite (SMS fallback)</div>
+              <div class="text-[10px] text-[#6D6A65] mt-0.5">no email on file &middot; <a class="underline">R-42</a></div>
+            </div>
+            <div class="feed-recipient">+1 208 555 0142</div>
+            <div class="text-right"><span class="ch ch-sms">&#9993; sms</span></div>
+          </div>
+          <div class="feed-row">
+            <div class="feed-time">7:02 AM</div>
+            <div><span class="pill pill-delivered">&#10003; delivered</span></div>
+            <div>
+              <div class="feed-template">Patient verification</div>
+              <div class="text-[10px] text-[#6D6A65] mt-0.5">new intake &middot; <a class="underline">R-43</a></div>
+            </div>
+            <div class="feed-recipient">alex@&hellip;</div>
+            <div class="text-right"><span class="ch ch-email">&#9993; email</span></div>
+          </div>
+          <div class="feed-row">
+            <div class="feed-time">6:43 AM</div>
+            <div><span class="pill pill-signed">&#10003;&#10003; signed up</span></div>
+            <div>
+              <div class="feed-template">Therapist notification &rarr; conversion</div>
+              <div class="text-[10px] text-[#6D6A65] mt-0.5">applied + accepted &middot; <a class="underline">R-40</a></div>
+            </div>
+            <div class="feed-recipient">Mark Davis, PsyD</div>
+            <div class="text-right"><span class="ch ch-email">&#9993; email</span></div>
+          </div>
+          <div class="feed-row text-center italic text-[#6D6A65] text-xs" style="grid-template-columns: 1fr">
+            &hellip; load older
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SCHEDULED SUB ===== -->
+    <div data-sub="scheduled" style="display:none">
+      <div class="card overflow-hidden">
+        <div class="px-5 py-3 border-b border-[#E8E5DF] flex items-center justify-between">
+          <div class="font-serif text-lg text-[#2D4A3E]">Scheduled (next 7 days)</div>
+          <div class="text-xs text-[#6D6A65]">cron jobs + delayed sends</div>
+        </div>
+        <table class="data">
+          <thead>
+            <tr>
+              <th>When</th><th>Job</th><th>Template(s)</th><th class="text-right">Targets</th><th>Last run</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Tonight 2:00 AM</td>
+              <td>Track B gap-recruit <span class="pill pill-scheduled">dry-run</span></td>
+              <td>Outreach invite (Track B)</td>
+              <td class="text-right">~30</td>
+              <td class="text-xs text-[#6D6A65]">last night, 28 drafts created</td>
+            </tr>
+            <tr>
+              <td>Mon 8:00 AM</td>
+              <td>Weekly availability check-in</td>
+              <td>Availability prompt</td>
+              <td class="text-right">122</td>
+              <td class="text-xs text-[#6D6A65]">5/6/2026, 119 delivered</td>
+            </tr>
+            <tr>
+              <td>5/15 8:00 AM</td>
+              <td>Patient survey 48h cron</td>
+              <td>Patient survey 48h</td>
+              <td class="text-right">~8</td>
+              <td class="text-xs text-[#6D6A65]">5/12, 6 delivered</td>
+            </tr>
+            <tr>
+              <td>5/16 8:00 AM</td>
+              <td>Therapist follow-up 2w</td>
+              <td>Therapist follow-up 2w</td>
+              <td class="text-right">~3</td>
+              <td class="text-xs text-[#6D6A65]">5/9, 1 delivered + 1 replied</td>
+            </tr>
+            <tr>
+              <td>5/19 8:00 AM</td>
+              <td>Patient survey 3w</td>
+              <td>Patient survey 3w</td>
+              <td class="text-right">~12</td>
+              <td class="text-xs text-[#6D6A65]">5/12, 9 delivered</td>
+            </tr>
+            <tr>
+              <td>5/26 8:00 AM</td>
+              <td>Patient survey 9w</td>
+              <td>Patient survey 9w</td>
+              <td class="text-right">~5</td>
+              <td class="text-xs text-[#6D6A65]">5/12, 3 delivered</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== BY TYPE SUB ===== -->
+    <div data-sub="by_type" style="display:none">
+      <!-- 7-day sparkline + breakdown -->
+      <div class="card p-5 mb-4">
+        <div class="flex items-center justify-between mb-3">
+          <div class="font-serif text-lg text-[#2D4A3E]">Sends per day (last 30 days)</div>
+          <div class="text-xs text-[#6D6A65]">coral = failed-rate spike</div>
+        </div>
+        <div class="bar-chart">
+          <div class="bar" style="height:35%"></div>
+          <div class="bar" style="height:50%"></div>
+          <div class="bar warn" style="height:18%"></div>
+          <div class="bar" style="height:65%"></div>
+          <div class="bar" style="height:42%"></div>
+          <div class="bar" style="height:55%"></div>
+          <div class="bar" style="height:48%"></div>
+          <div class="bar" style="height:60%"></div>
+          <div class="bar" style="height:38%"></div>
+          <div class="bar" style="height:72%"></div>
+          <div class="bar warn" style="height:25%"></div>
+          <div class="bar" style="height:50%"></div>
+          <div class="bar" style="height:65%"></div>
+          <div class="bar" style="height:78%"></div>
+          <div class="bar" style="height:55%"></div>
+          <div class="bar" style="height:45%"></div>
+          <div class="bar" style="height:62%"></div>
+          <div class="bar" style="height:70%"></div>
+          <div class="bar" style="height:40%"></div>
+          <div class="bar" style="height:58%"></div>
+          <div class="bar" style="height:82%"></div>
+          <div class="bar" style="height:65%"></div>
+          <div class="bar" style="height:48%"></div>
+          <div class="bar" style="height:75%"></div>
+          <div class="bar" style="height:55%"></div>
+          <div class="bar" style="height:62%"></div>
+          <div class="bar" style="height:88%"></div>
+          <div class="bar" style="height:72%"></div>
+          <div class="bar" style="height:60%"></div>
+          <div class="bar" style="height:92%"></div>
+        </div>
+      </div>
+
+      <div class="card overflow-hidden">
+        <table class="data">
+          <thead>
+            <tr>
+              <th>Template</th>
+              <th class="text-right">Today</th>
+              <th class="text-right">7d</th>
+              <th class="text-right">Open rate</th>
+              <th class="text-right">Fail %</th>
+              <th>Last sent</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Match results</strong><div class="text-[10px] text-[#6D6A65]">patient_results</div></td><td class="text-right">12</td><td class="text-right">48</td><td class="text-right">82%</td><td class="text-right">0%</td><td class="text-xs text-[#6D6A65]">9:43 AM</td></tr>
+            <tr><td><strong>Therapist notification</strong><div class="text-[10px] text-[#6D6A65]">new_referral_inquiry</div></td><td class="text-right">18</td><td class="text-right">140</td><td class="text-right">61%</td><td class="text-right">2%</td><td class="text-xs text-[#6D6A65]">9:42 AM</td></tr>
+            <tr><td><strong>Patient survey 48h</strong><div class="text-[10px] text-[#6D6A65]">patient_survey_v2_48h</div></td><td class="text-right">3</td><td class="text-right">22</td><td class="text-right">45%</td><td class="text-right">0%</td><td class="text-xs text-[#6D6A65]">8:30 AM</td></tr>
+            <tr><td><strong>Outreach invite (Track A)</strong><div class="text-[10px] text-[#6D6A65]">new_referral_inquiry (outreach variant)</div></td><td class="text-right">5</td><td class="text-right">31</td><td class="text-right">24%</td><td class="text-right text-[#C8412B]">18%</td><td class="text-xs text-[#6D6A65]">9:14 AM</td></tr>
+            <tr><td><strong>Outreach invite (Track B)</strong><div class="text-[10px] text-[#6D6A65]">claim_profile (gap-recruit variant)</div></td><td class="text-right">0</td><td class="text-right">0</td><td class="text-right">&mdash;</td><td class="text-right">&mdash;</td><td class="text-xs text-[#6D6A65] italic">dry-run</td></tr>
+            <tr><td><strong>Claim &amp; complete profile</strong><div class="text-[10px] text-[#6D6A65]">claim_profile</div></td><td class="text-right">0</td><td class="text-right">72</td><td class="text-right">38%</td><td class="text-right">0%</td><td class="text-xs text-[#6D6A65]">5/12</td></tr>
+            <tr><td><strong>Patient verification</strong><div class="text-[10px] text-[#6D6A65]">verification</div></td><td class="text-right">4</td><td class="text-right">18</td><td class="text-right">94%</td><td class="text-right">0%</td><td class="text-xs text-[#6D6A65]">7:02 AM</td></tr>
+            <tr><td><strong>Therapist approved</strong><div class="text-[10px] text-[#6D6A65]">therapist_approved</div></td><td class="text-right">0</td><td class="text-right">2</td><td class="text-right">100%</td><td class="text-right">0%</td><td class="text-xs text-[#6D6A65]">5/11</td></tr>
+            <tr><td><strong>Therapist follow-up 2w</strong><div class="text-[10px] text-[#6D6A65]">therapist_followup_2w</div></td><td class="text-right">0</td><td class="text-right">3</td><td class="text-right">67%</td><td class="text-right">0%</td><td class="text-xs text-[#6D6A65]">5/9</td></tr>
+            <tr><td><strong>Weekly availability prompt</strong><div class="text-[10px] text-[#6D6A65]">availability_prompt</div></td><td class="text-right">0</td><td class="text-right">122</td><td class="text-right">29%</td><td class="text-right">2%</td><td class="text-xs text-[#6D6A65]">Mon 8:00 AM</td></tr>
+            <tr><td><strong>SMS outreach (no email)</strong><div class="text-[10px] text-[#6D6A65]">twilio SMS</div></td><td class="text-right">2</td><td class="text-right">11</td><td class="text-right">&mdash;</td><td class="text-right">0%</td><td class="text-xs text-[#6D6A65]">7:14 AM</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== FAILED SUB ===== -->
+    <div data-sub="failed" style="display:none">
+      <div class="card overflow-hidden">
+        <div class="px-5 py-3 border-b border-[#E8E5DF] flex items-center justify-between">
+          <div class="font-serif text-lg text-[#2D4A3E]">Failed sends (last 7 days)</div>
+          <div class="text-xs text-[#6D6A65]">click row for retry / details</div>
+        </div>
+        <table class="data">
+          <thead><tr><th>When</th><th>Template</th><th>Recipient</th><th>Channel</th><th>Reason</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="text-xs text-[#6D6A65]">5/13 7:52 AM</td>
+              <td>Outreach invite (Track A)</td>
+              <td>defunct@example.org</td>
+              <td><span class="ch ch-email">email</span></td>
+              <td><span class="pill pill-bounced">hard bounce</span> Mailbox does not exist</td>
+              <td><button class="text-xs text-[#2D4A3E] underline">mark address dead</button></td>
+            </tr>
+            <tr>
+              <td class="text-xs text-[#6D6A65]">5/13 6:30 AM</td>
+              <td>Outreach invite (Track A)</td>
+              <td>+1 555 000 0000</td>
+              <td><span class="ch ch-sms">sms</span></td>
+              <td><span class="pill pill-throttled">throttled</span> Twilio rate limit</td>
+              <td><button class="text-xs text-[#2D4A3E] underline">retry</button></td>
+            </tr>
+            <tr>
+              <td class="text-xs text-[#6D6A65]">5/12 11:14 PM</td>
+              <td>Outreach invite (Track A)</td>
+              <td>tim@&hellip;</td>
+              <td><span class="ch ch-email">email</span></td>
+              <td><span class="pill pill-bounced">soft bounce</span> Mailbox full</td>
+              <td><button class="text-xs text-[#2D4A3E] underline">retry</button></td>
+            </tr>
+            <tr>
+              <td class="text-xs text-[#6D6A65]">5/12 4:02 PM</td>
+              <td>Weekly availability prompt</td>
+              <td>old@therapymatch+&hellip;</td>
+              <td><span class="ch ch-email">email</span></td>
+              <td><span class="pill pill-failed">blocked</span> EMAIL_OVERRIDE_TO unset before send</td>
+              <td><button class="text-xs text-[#6D6A65] italic">resolved post-fix</button></td>
+            </tr>
+            <tr>
+              <td class="text-xs text-[#6D6A65]">5/11 9:15 AM</td>
+              <td>Therapist notification</td>
+              <td>therapymatch+11034@&hellip;</td>
+              <td><span class="ch ch-email">email</span></td>
+              <td><span class="pill pill-bounced">hard bounce</span> Address rejected</td>
+              <td><button class="text-xs text-[#2D4A3E] underline">mark address dead</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== TEMPLATES SUB (link to Content -> Email templates) ===== -->
+    <div data-sub="templates" style="display:none">
+      <div class="card p-6">
+        <div class="font-serif text-lg text-[#2D4A3E] mb-2">Templates</div>
+        <p class="text-sm text-[#6D6A65] leading-relaxed">
+          Same panel as today's <strong>Content &rarr; Email templates</strong>.
+          Mirrored here so you can edit copy without leaving the Outbound view
+          when you spot a pattern in the feed (e.g. low open rate on a survey).
+          Edits sync both places.
+        </p>
+        <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <a class="card p-3 hover:bg-[#FDFBF7] cursor-pointer">
+            <div class="font-medium text-[#2D4A3E] text-sm">Match results</div>
+            <div class="text-xs text-[#6D6A65] mt-1">patient_results &middot; edited 5/9</div>
+          </a>
+          <a class="card p-3 hover:bg-[#FDFBF7] cursor-pointer">
+            <div class="font-medium text-[#2D4A3E] text-sm">Therapist notification</div>
+            <div class="text-xs text-[#6D6A65] mt-1">new_referral_inquiry &middot; edited 5/12</div>
+          </a>
+          <a class="card p-3 hover:bg-[#FDFBF7] cursor-pointer">
+            <div class="font-medium text-[#2D4A3E] text-sm">Claim &amp; complete profile</div>
+            <div class="text-xs text-[#6D6A65] mt-1">claim_profile &middot; edited 5/13</div>
+          </a>
+          <a class="card p-3 hover:bg-[#FDFBF7] cursor-pointer">
+            <div class="font-medium text-[#2D4A3E] text-sm">Patient survey 48h</div>
+            <div class="text-xs text-[#6D6A65] mt-1">patient_survey_v2_48h &middot; default copy</div>
+          </a>
+          <a class="card p-3 hover:bg-[#FDFBF7] cursor-pointer text-[#6D6A65] italic">
+            &hellip; 11 more templates
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ========================== OTHER TABS (stubs) ========================== -->
+  <section class="section" data-section="requests">
+    <div class="card p-8 text-[#6D6A65]">[Unchanged from current Requests view.]</div>
+  </section>
+  <section class="section" data-section="directory">
+    <div class="card p-8 text-[#6D6A65]">[Unchanged from current Directory view.]</div>
+  </section>
+  <section class="section" data-section="recruiting">
+    <div class="card p-8 text-[#6D6A65]">
+      [Mocked separately in <a class="underline text-[#2D4A3E]" href="/admin-mockup-v2.html">v2</a>.]
+    </div>
+  </section>
+  <section class="section" data-section="outcomes">
+    <div class="card p-8 text-[#6D6A65]">[Unchanged from current Outcomes view.]</div>
+  </section>
+  <section class="section" data-section="content">
+    <div class="card p-8 text-[#6D6A65]">[Unchanged from current Content view -- Email templates lives here, mirrored on Outbound &rarr; Templates.]</div>
+  </section>
+  <section class="section" data-section="operations">
+    <div class="card p-8 text-[#6D6A65]">[Unchanged. Go-Live runbook lives at top of Settings.]</div>
+  </section>
+  <section class="section" data-section="testing">
+    <div class="card p-8 text-[#6D6A65]">[Unchanged.]</div>
+  </section>
+
+</main>
+
+<!-- Email preview drawer (overlay) -->
+<div id="drawer" class="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm hidden" onclick="closeDrawer(event)">
+  <div class="absolute right-0 top-0 bottom-0 w-full max-w-2xl bg-white shadow-2xl overflow-y-auto" onclick="event.stopPropagation()">
+    <div class="px-6 py-4 border-b border-[#E8E5DF] flex items-center justify-between sticky top-0 bg-white">
+      <div>
+        <div class="text-[10px] uppercase tracking-widest text-[#6D6A65]">Email preview</div>
+        <div class="font-serif text-xl text-[#2D4A3E] leading-tight">Match results &middot; R-42</div>
+      </div>
+      <button onclick="closeDrawer()" class="p-1.5 rounded hover:bg-[#F2EFE8]">&#10005;</button>
+    </div>
+    <div class="p-6 space-y-4 text-sm">
+      <div class="grid grid-cols-2 gap-3 text-xs">
+        <div>
+          <div class="text-[10px] uppercase tracking-wider text-[#6D6A65]">To</div>
+          <div class="font-medium">jane@example.com</div>
+        </div>
+        <div>
+          <div class="text-[10px] uppercase tracking-wider text-[#6D6A65]">Status</div>
+          <div><span class="pill pill-delivered">delivered &middot; opened 9:51 AM</span></div>
+        </div>
+        <div>
+          <div class="text-[10px] uppercase tracking-wider text-[#6D6A65]">Sent</div>
+          <div class="font-medium">5/13/2026 9:43 AM</div>
+        </div>
+        <div>
+          <div class="text-[10px] uppercase tracking-wider text-[#6D6A65]">Linked to</div>
+          <div class="font-medium"><a class="underline">Request R-42</a></div>
+        </div>
+      </div>
+
+      <div class="border border-[#E8E5DF] rounded-lg overflow-hidden">
+        <div class="bg-[#FDFBF7] px-4 py-3 border-b border-[#E8E5DF] text-xs">
+          <div><strong>From:</strong> TheraVoca Support &lt;onboarding@resend.dev&gt;</div>
+          <div><strong>Subject:</strong> Your 5 therapist matches are ready</div>
+        </div>
+        <div class="p-5 bg-white text-sm leading-relaxed text-[#2B2A29]">
+          <p>Your personalized therapist matches are ready. These therapists read your anonymous referral and want to work with you. Tap <strong>View full profile &amp; contact</strong> on any match below to see their bio and reach out -- many offer a free 15-minute consult.</p>
+          <p style="margin-top:18px"><a class="inline-block bg-[#2D4A3E] text-white px-5 py-2 rounded-full text-xs font-medium">View full matches</a></p>
+          <p class="text-xs text-[#6D6A65] mt-5">&hellip; [rendered email body would continue here]</p>
+        </div>
+      </div>
+
+      <div class="border border-[#E8E5DF] rounded-lg p-4 bg-[#FDFBF7]">
+        <div class="text-xs uppercase tracking-wider text-[#6D6A65] font-semibold mb-2">Delivery log</div>
+        <ul class="text-xs space-y-1 text-[#2B2A29]">
+          <li>9:43:01 AM &mdash; <strong>queued</strong> via Resend (id: rs_abc&hellip;)</li>
+          <li>9:43:03 AM &mdash; <strong>delivered</strong> (smtp 250 ok)</li>
+          <li>9:51:14 AM &mdash; <strong>opened</strong> (Gmail/macOS)</li>
+        </ul>
+      </div>
+
+      <div class="text-xs text-[#6D6A65] italic">
+        Real implementation: events come from Resend webhook (queued, delivered,
+        bounced, opened, clicked). SMS events come from Twilio status callbacks.
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="max-w-[1600px] mx-auto px-6 py-10 text-xs text-[#6D6A65] border-t border-[#E8E5DF] mt-12">
+  Mockup v4 &middot; static preview &middot; new this version: Outbound primary tab with Today / Scheduled / By type / Failed / Templates subtabs. Earlier versions: <a href="/admin-mockup-v2.html" class="underline">v2 Recruiting split</a> &middot; <a href="/admin-mockup-v3.html" class="underline">v3 Requests primary</a>.
+</footer>
+
+<script>
+  function setTab(name) {
+    document.querySelectorAll('.primary-tab').forEach(el => el.classList.toggle('active', el.dataset.tab === name));
+    document.querySelectorAll('.section').forEach(el => el.classList.toggle('active', el.dataset.section === name));
+  }
+  function setSub(name) {
+    const root = document.querySelector('[data-section="outbound"]');
+    if (!root) return;
+    root.querySelectorAll('.sub-pill').forEach(el => {
+      const matchesClick = el.getAttribute('onclick') && el.getAttribute('onclick').includes("'" + name + "'");
+      if (matchesClick) { el.classList.add('active'); el.classList.remove('inactive'); }
+      else { el.classList.remove('active'); el.classList.add('inactive'); }
+    });
+    root.querySelectorAll('[data-sub]').forEach(el => {
+      el.style.display = el.dataset.sub === name ? '' : 'none';
+    });
+  }
+  function openDrawer() {
+    document.getElementById('drawer').classList.remove('hidden');
+  }
+  function closeDrawer(e) {
+    if (e && e.currentTarget !== e.target) return;   // ignore inner clicks
+    document.getElementById('drawer').classList.add('hidden');
+  }
+</script>
+</body>
+</html>
