@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TheraVoca HIPAA Scope-Out — Visual Diff (2026-05-13)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --cream: #FDFBF7;
+    --paper: #ffffff;
+    --ink: #2B2A29;
+    --green: #2D4A3E;
+    --coral: #C87965;
+    --coral-deep: #C8412B;
+    --coral-bg: #FBE9E5;
+    --coral-border: #F4C7BE;
+    --border: #E8E5DF;
+    --muted: #6D6A65;
+    --amber-bg: #FEF3C7;
+    --amber-border: #FDE68A;
+    --amber-text: #92400E;
+    --red-strike: #B91C1C;
+    --green-add: #047857;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0 0 96px 0;
+    background: var(--cream);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.55;
+  }
+  .page-head {
+    background: var(--green);
+    color: var(--cream);
+    padding: 32px 28px;
+  }
+  .page-head h1 {
+    margin: 0 0 8px 0;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 30px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+  .page-head .meta {
+    font-size: 13px;
+    opacity: 0.85;
+    letter-spacing: 0.01em;
+  }
+  .container { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  .section {
+    background: var(--paper);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    margin-top: 28px;
+    padding: 24px 28px 28px;
+  }
+  .section h2 {
+    margin: 0 0 4px 0;
+    color: var(--green);
+    font-family: Georgia, serif;
+    font-size: 22px;
+    font-weight: 500;
+  }
+  .section .commit {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    color: var(--coral-deep);
+    background: var(--coral-bg);
+    border: 1px solid var(--coral-border);
+    padding: 2px 8px;
+    border-radius: 999px;
+    display: inline-block;
+    margin-bottom: 12px;
+  }
+  .section .subtitle {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0 0 18px 0;
+  }
+  .ba-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-top: 14px;
+  }
+  @media (max-width: 760px) {
+    .ba-row { grid-template-columns: 1fr; }
+  }
+  .ba-col {
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 18px 20px;
+    position: relative;
+  }
+  .ba-col h3 {
+    margin: 0 0 14px 0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .ba-col.before h3 { color: var(--red-strike); }
+  .ba-col.after  h3 { color: var(--green-add); }
+  .ba-col.after::after {
+    content: "shipped";
+    position: absolute;
+    top: 14px; right: 14px;
+    background: var(--green-add);
+    color: white;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-weight: 700;
+  }
+
+  /* Faux intake-form styling -- mimics the real React UI */
+  .form-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--green);
+    margin: 14px 0 8px 0;
+  }
+  .pill-col { display: flex; flex-direction: column; gap: 6px; }
+  .pill {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-size: 13px;
+    color: var(--ink);
+    cursor: default;
+  }
+  .pill.selected {
+    background: var(--green);
+    color: white;
+    border-color: var(--green);
+  }
+  .textarea {
+    width: 100%;
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 13px;
+    color: var(--ink);
+    font-family: inherit;
+    min-height: 84px;
+    resize: none;
+  }
+  .helper {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 6px;
+    line-height: 1.4;
+  }
+  .consent-row {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-top: 12px;
+  }
+  .consent-row.checked { border-color: var(--green); background: #F4EFE6; }
+  .checkbox {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    border: 1.5px solid var(--green);
+    border-radius: 4px;
+    background: white;
+    position: relative;
+    margin-top: 2px;
+  }
+  .checkbox.checked {
+    background: var(--green);
+  }
+  .checkbox.checked::after {
+    content: "";
+    position: absolute;
+    left: 4px; top: 1px;
+    width: 5px; height: 9px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  .consent-text {
+    font-size: 13px;
+    color: var(--green);
+    line-height: 1.4;
+  }
+  .consent-text .sub {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 400;
+  }
+  .deep-banner {
+    background: var(--coral-bg);
+    border: 1px solid var(--coral-border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+  }
+  .deep-banner .eyebrow {
+    color: var(--coral-deep);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .pii-warn {
+    background: #FFFBEB;
+    border: 1px solid var(--amber-border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--amber-text);
+    line-height: 1.4;
+  }
+  .strike { text-decoration: line-through; text-decoration-color: var(--red-strike); text-decoration-thickness: 2px; opacity: 0.6; }
+
+  /* Privacy notice mock */
+  .privacy-section {
+    margin-top: 14px;
+    padding: 16px 18px;
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .privacy-section.new {
+    border-left: 4px solid var(--green-add);
+    background: #F0FAF5;
+  }
+  .privacy-section h4 {
+    margin: 0 0 10px 0;
+    font-family: Georgia, serif;
+    font-size: 17px;
+    color: var(--green);
+    font-weight: 500;
+  }
+  .privacy-section.new h4::before {
+    content: "+ NEW · ";
+    font-family: -apple-system, sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    color: var(--green-add);
+    vertical-align: middle;
+  }
+  .privacy-section p, .privacy-section li { font-size: 13px; line-height: 1.55; }
+  .privacy-section ul { margin: 8px 0 8px 18px; padding: 0; }
+  .privacy-section li { margin: 6px 0; }
+
+  /* Server-side guard panel (text only) */
+  .server-block {
+    background: #0F172A;
+    border-radius: 12px;
+    padding: 18px;
+    color: #E2E8F0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12.5px;
+    line-height: 1.6;
+    margin-top: 14px;
+    overflow-x: auto;
+  }
+  .server-block .comment { color: #94A3B8; }
+  .server-block .keyword { color: #93C5FD; }
+  .server-block .string  { color: #FCA5A5; }
+  .server-block .new-line {
+    background: rgba(16, 185, 129, 0.15);
+    display: block;
+    border-left: 3px solid #10B981;
+    padding-left: 8px;
+    margin-left: -11px;
+  }
+
+  .summary-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 18px 0 8px 0;
+  }
+  .summary-pill {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 12px;
+    color: var(--ink);
+  }
+  .summary-pill .hash {
+    font-family: ui-monospace, monospace;
+    color: var(--coral-deep);
+    font-weight: 600;
+  }
+  .legend {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 8px;
+    letter-spacing: 0.02em;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <div class="container">
+    <h1>TheraVoca HIPAA Scope-Out — Visual Diff</h1>
+    <div class="meta">Session: 2026-05-13 · Idaho-only · Consumer-directed matching platform · Not a Covered Entity, not a Business Associate</div>
+    <div class="summary-row">
+      <span class="summary-pill"><span class="hash">3270134</span> &nbsp;scope-out audit doc</span>
+      <span class="summary-pill"><span class="hash">567f316</span> &nbsp;Idaho-only server guard</span>
+      <span class="summary-pill"><span class="hash">f3beb23</span> &nbsp;250-char caps + consent gates</span>
+      <span class="summary-pill"><span class="hash">3b35a48</span> &nbsp;Privacy Notice update</span>
+    </div>
+    <div class="legend">Live on staging at theravoca-production.onrender.com · smoke test passed</div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- ============================================================= -->
+  <!-- 1. LogisticsStep -- prior_therapy_notes consent gate           -->
+  <!-- ============================================================= -->
+  <div class="section">
+    <span class="commit">commit f3beb23</span>
+    <h2>1. LogisticsStep — prior-therapy free-text gate</h2>
+    <p class="subtitle">When a patient picks "Yes — it helped" or "Yes — but didn't fully click," the free-text textarea is no longer shown automatically. It now requires an explicit consent toggle.</p>
+
+    <div class="ba-row">
+      <!-- BEFORE -->
+      <div class="ba-col before">
+        <h3>Before</h3>
+        <div class="form-label">Has the client been in therapy before?</div>
+        <div class="pill-col">
+          <div class="pill">Yes — it helped</div>
+          <div class="pill selected">Yes — but didn't fully click</div>
+          <div class="pill">Tried it briefly</div>
+          <div class="pill">No</div>
+          <div class="pill">Not sure</div>
+        </div>
+        <div class="form-label" style="margin-top: 18px;">What didn't work last time? <span style="font-weight:400;color:var(--muted);font-size:12px;">(optional)</span></div>
+        <textarea class="textarea" placeholder="e.g. felt rushed, talked over me, only generic advice..."></textarea>
+        <div class="helper">We feed this into matching so therapists who fit what you valued (or avoid what didn't work) rank higher.</div>
+        <div class="helper" style="margin-top: 10px; color: var(--red-strike);">⚠ <span class="strike">maxLength: 2000 chars (backend) / 600 chars (frontend)</span></div>
+        <div class="helper" style="color: var(--red-strike);">⚠ Textarea appears automatically — no per-field consent</div>
+      </div>
+
+      <!-- AFTER -->
+      <div class="ba-col after">
+        <h3>After</h3>
+        <div class="form-label">Has the client been in therapy before?</div>
+        <div class="pill-col">
+          <div class="pill">Yes — it helped</div>
+          <div class="pill selected">Yes — but didn't fully click</div>
+          <div class="pill">Tried it briefly</div>
+          <div class="pill">No</div>
+          <div class="pill">Not sure</div>
+        </div>
+        <div class="consent-row checked" style="margin-top: 14px;">
+          <div class="checkbox checked"></div>
+          <div class="consent-text">
+            I'd like to share a short note about my past therapy experience (optional)
+            <span class="sub">250 character max. Helps with matching. Please do not include names, addresses, or other identifying info.</span>
+          </div>
+        </div>
+        <div class="form-label" style="margin-top: 14px;">What didn't work last time? Anything you'd want different this time?</div>
+        <textarea class="textarea" placeholder="e.g. felt rushed, talked over me, only generic advice..."></textarea>
+        <div class="helper">0/250 characters</div>
+        <div class="helper" style="margin-top: 10px; color: var(--green-add);">✓ maxLength 250 on both backend + frontend</div>
+        <div class="helper" style="color: var(--green-add);">✓ Consent toggle required; unticking wipes any draft text</div>
+        <div class="helper" style="color: var(--green-add);">✓ Persists <code>share_prior_therapy_context: bool</code> for audit</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- 2. DeepMatchSteps.P3 -- p3_resonance consent gate              -->
+  <!-- ============================================================= -->
+  <div class="section">
+    <span class="commit">commit f3beb23</span>
+    <h2>2. DeepMatch P3 — contextual resonance free-text gate</h2>
+    <p class="subtitle">Even though the patient already opted into deep matching one step earlier, the free-text field gets its own per-field consent. Cap reduced from 2000 → 250.</p>
+
+    <div class="ba-row">
+      <!-- BEFORE -->
+      <div class="ba-col before">
+        <h3>Before</h3>
+        <div class="deep-banner">
+          <div class="eyebrow">✦ Deep match · 3 of 3</div>
+        </div>
+        <div class="form-label">What should your therapist already get about you without you having to explain it?</div>
+        <textarea class="textarea" style="min-height: 124px;" placeholder="Try one of these starters:&#10;• My background or culture...&#10;• My work or life situation...&#10;• What didn't work with a past therapist..."></textarea>
+        <div class="helper">20+ characters helps the matching engine score for lived-experience fit. Therapists who opt in to your referral will see what you share here.</div>
+        <div class="pii-warn">
+          <strong>Do not include</strong> your name, phone number, email, address, or any other personally identifiable information.
+        </div>
+        <div class="helper" style="margin-top: 10px; color: var(--red-strike);">⚠ <span class="strike">maxLength: 2000 chars</span></div>
+        <div class="helper" style="color: var(--red-strike);">⚠ Textarea visible the moment the user reaches this step</div>
+      </div>
+
+      <!-- AFTER -->
+      <div class="ba-col after">
+        <h3>After</h3>
+        <div class="deep-banner">
+          <div class="eyebrow">✦ Deep match · 3 of 3</div>
+        </div>
+        <div class="consent-row checked">
+          <div class="checkbox checked"></div>
+          <div class="consent-text">
+            I'd like to share a short note for the matching engine (optional)
+            <span class="sub">250 character max. Please do not include names, addresses, phone numbers, or other identifying info.</span>
+          </div>
+        </div>
+        <div class="form-label">What should your therapist already get about you without you having to explain it?</div>
+        <textarea class="textarea" style="min-height: 104px;" placeholder="Try one of these starters:&#10;• My background or culture...&#10;• My work or life situation..."></textarea>
+        <div class="helper">0/250 characters · 20+ characters helps the matching engine score for lived-experience fit.</div>
+        <div class="helper" style="margin-top: 10px; color: var(--green-add);">✓ maxLength 250 on both backend + frontend</div>
+        <div class="helper" style="color: var(--green-add);">✓ Per-field consent toggle even inside the deep-match opt-in</div>
+        <div class="helper" style="color: var(--green-add);">✓ Persists <code>share_resonance_context: bool</code> for audit</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- 3. PrivacyNotice.jsx -- new sections                          -->
+  <!-- ============================================================= -->
+  <div class="section">
+    <span class="commit">commit 3b35a48</span>
+    <h2>3. Privacy Notice — new scope-out sections</h2>
+    <p class="subtitle">Three new sections + edits to two existing ones. Effective date updated to May 13, 2026.</p>
+
+    <div class="privacy-section new">
+      <h4>SERVICE AREA</h4>
+      <p>TheraVoca is currently available only to Idaho residents. Search Requests submitted from outside Idaho are rejected at the form level and at our servers. If we expand to additional states, we will update this notice before doing so.</p>
+    </div>
+
+    <div class="privacy-section new">
+      <h4>HIPAA, COVERED ENTITIES, AND BUSINESS ASSOCIATES</h4>
+      <p>We want to be clear about TheraVoca's role under U.S. health privacy law:</p>
+      <ul>
+        <li>TheraVoca is a consumer-directed matching and marketing service. We are not a healthcare provider, health plan, or healthcare clearinghouse. We do not render clinical care, bill insurance, diagnose, prescribe, or transmit any HIPAA-covered transaction. As a result, <strong>TheraVoca is not a "Covered Entity" under HIPAA.</strong></li>
+        <li>We do not act on behalf of any Therapist in collecting your information. Patients submit Search Requests directly to TheraVoca; we then share relevant Search Requests with prospective Therapists for marketing purposes. As a result, <strong>TheraVoca is not a "Business Associate" of any Therapist under HIPAA.</strong></li>
+        <li>The Therapist-Patient relationship begins outside the Service, when a Patient independently contacts a Therapist after seeing the matches we deliver.</li>
+      </ul>
+      <p>HIPAA therefore does not apply to the information we collect through the Service. State consumer-health-privacy laws (such as Washington's My Health My Data Act) and federal consumer-protection rules (such as the FTC's Health Breach Notification Rule and FTC Act Section 5) can still apply, and we design the Service to comply with them.</p>
+    </div>
+
+    <div class="privacy-section new">
+      <h4>Section 1 addition — What we do NOT collect</h4>
+      <ul>
+        <li>Medical records, clinical notes, lab results, imaging, or diagnoses;</li>
+        <li>Insurance claim or eligibility data;</li>
+        <li>Government identification numbers (Social Security, driver's license);</li>
+        <li>Full payment card numbers (handled directly by our payment processor).</li>
+      </ul>
+      <p style="margin-top: 10px;">Free-text fields in our Search Request are optional, capped at 250 characters, and gated behind an explicit consent toggle.</p>
+    </div>
+
+    <div class="privacy-section new">
+      <h4>Section 1b addition — No tracking pixels, no data sales (FTC §5 hygiene)</h4>
+      <p><strong>We do not use third-party advertising pixels, conversion trackers, or session-replay tools that identify you on Patient-facing pages of the Service. We do not sell or share your personal information with advertisers, data brokers, social-media platforms, or analytics resellers.</strong></p>
+    </div>
+
+    <div class="privacy-section new">
+      <h4>Section 4c addition — Additional State Rights</h4>
+      <p>Depending on your state of residence, you may have additional rights under state consumer-protection or health-data laws — for example, the right to confirm what consumer health data we hold about you, to withdraw consent, to request deletion, or to appeal a denial of a request. To exercise any such right, contact privacy@theravoca.com.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- 4. Backend Idaho guard (server-side, no UI to mock)           -->
+  <!-- ============================================================= -->
+  <div class="section">
+    <span class="commit">commit 567f316</span>
+    <h2>4. Backend — Idaho-only enforcement guard</h2>
+    <p class="subtitle">No UI change. A direct API POST with <code>location_state: "WA"</code> previously sailed through; now it's rejected with a clear 400 and audit-logged.</p>
+
+    <div class="server-block">
+<span class="comment"># backend/routes/patients.py -- create_request() -- added after consent checks, before DB writes</span>
+
+<span class="new-line"><span class="comment"># --- Geographic eligibility gate (scope-out posture) ---</span></span>
+<span class="new-line"><span class="comment"># The frontend gates this via COVERED_STATES in intakeOptions.js,</span></span>
+<span class="new-line"><span class="comment"># but a direct API POST or a stale browser tab could bypass it. We</span></span>
+<span class="new-line"><span class="comment"># enforce server-side too -- accepting consumer health data from</span></span>
+<span class="new-line"><span class="comment"># residents of states outside our service area would expand our</span></span>
+<span class="new-line"><span class="comment"># regulatory surface (e.g. WA My Health My Data Act, CA SB-1223,</span></span>
+<span class="new-line"><span class="comment"># CT CDPA). We audit-log every rejection so we can prove non-ID</span></span>
+<span class="new-line"><span class="comment"># data was never accepted if a regulator ever asks.</span></span>
+<span class="new-line">submitted_state = (payload.location_state <span class="keyword">or</span> <span class="string">""</span>).strip().upper()</span>
+<span class="new-line"><span class="keyword">if</span> submitted_state <span class="keyword">not in</span> COVERED_STATES:</span>
+<span class="new-line">    audit.emit(</span>
+<span class="new-line">        actor_type=<span class="string">"anonymous"</span>, actor_id=<span class="string">"anonymous"</span>,</span>
+<span class="new-line">        action=<span class="string">"intake_rejected_out_of_area"</span>,</span>
+<span class="new-line">        resource=<span class="string">"request"</span>,</span>
+<span class="new-line">        detail=<span class="string">f"submitted_state={submitted_state or '(empty)'}"</span>,</span>
+<span class="new-line">        ip=request.headers.get(<span class="string">"x-forwarded-for"</span>, <span class="string">""</span>),</span>
+<span class="new-line">        user_agent=request.headers.get(<span class="string">"user-agent"</span>, <span class="string">""</span>),</span>
+<span class="new-line">    )</span>
+<span class="new-line">    <span class="keyword">raise</span> HTTPException(</span>
+<span class="new-line">        400,</span>
+<span class="new-line">        <span class="string">"We're not in that state yet. Join the waitlist at "</span></span>
+<span class="new-line">        <span class="string">"/waitlist and we'll let you know when we launch in your area."</span>,</span>
+<span class="new-line">    )</span>
+    </div>
+    <div class="helper" style="margin-top: 14px;">
+      Reuses the existing module-level <code>COVERED_STATES = {"ID"}</code> set so expansion is a one-line change. Test added in <code>backend/tests/test_iteration21_patient_validation.py::test_out_of_area_state_rejected</code>.
+    </div>
+  </div>
+
+  <div class="section" style="background: #F0FAF5; border-color: #BBF7D0;">
+    <h2 style="color: var(--green-add);">How to verify on staging</h2>
+    <ol style="margin: 8px 0 0 18px; padding: 0; font-size: 14px; line-height: 1.7;">
+      <li>Open <strong>theravoca-production.onrender.com/privacy-notice</strong> — confirm new SERVICE AREA + HIPAA sections are present.</li>
+      <li>Open the intake form, pick "Yes — but didn't fully click" under prior therapy — the new consent toggle should appear instead of an auto-revealed textarea.</li>
+      <li>Click into deep matching, reach step P3 — same consent-gate pattern, no textarea until the box is ticked.</li>
+      <li>Send a direct API POST with <code>location_state: "WA"</code> and a Seattle ZIP — server should return 400 with the waitlist message, audit log records the rejection.</li>
+    </ol>
+  </div>
+
+</div>
+
+</body>
+</html>
