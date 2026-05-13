@@ -35,6 +35,7 @@ import {
   MessageSquareWarning,
   Activity,
   MapPin,
+  Radio,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
@@ -66,6 +67,8 @@ import ReferralAnalyticsPanel from "@/pages/admin/panels/ReferralAnalyticsPanel"
 import CoverageGapPanel from "@/pages/admin/panels/CoverageGapPanel";
 import RecruitDraftsPanel from "@/pages/admin/panels/RecruitDraftsPanel";
 import RecruitingPanel from "@/pages/admin/panels/RecruitingPanel";
+import RecruitingPerRequestPanel from "@/pages/admin/panels/RecruitingPerRequestPanel";
+import RecruitingGapFillPanel from "@/pages/admin/panels/RecruitingGapFillPanel";
 import PatientsByEmailPanel from "@/pages/admin/panels/PatientsByEmailPanel";
 import FeedbackPanel from "@/pages/admin/panels/FeedbackPanel";
 import FeedbackTrackingPanel from "@/pages/admin/panels/FeedbackTrackingPanel";
@@ -1694,6 +1697,22 @@ export default function AdminDashboard() {
 
               {tab === "recruiting" && <RecruitingPanel client={client} />}
 
+              {tab === "recruiting_per_request" && (
+                <RecruitingPerRequestPanel
+                  requests={requests}
+                  openDetail={openDetail}
+                />
+              )}
+
+              {tab === "recruiting_gap_fill" && (
+                <RecruitingGapFillPanel
+                  recruitDrafts={recruitDrafts}
+                  loadRecruitDrafts={loadRecruitDrafts}
+                  generateRecruitDrafts={generateRecruitDrafts}
+                  setTab={setTab}
+                />
+              )}
+
               {tab === "coverage_gap" && (
                 <>
                   <CoverageGapPanel
@@ -3267,7 +3286,6 @@ function AdminTabsBar({
       icon: <Users size={14} />,
       subs: [
         { id: "all_therapists", label: "All providers", count: allTherapists },
-        { id: "recruiting", label: "Recruiting" },
         {
           id: "patients",
           label: "Patients (by email)",
@@ -3284,17 +3302,27 @@ function AdminTabsBar({
           onClick: onLoadCoverageGap,
         },
         {
-          id: "invited_therapists",
-          label: "Invited therapists",
-          count: outreach?.total ?? null,
-          onClick: onLoadOutreach,
-        },
-        {
           id: "opt_outs",
           label: "Opt-outs",
           count: optOuts?.total ?? null,
           onClick: onLoadOptOuts,
         },
+      ],
+    },
+    {
+      id: "recruiting_primary",
+      label: "Recruiting",
+      icon: <Radio size={14} />,
+      subs: [
+        { id: "recruiting_per_request", label: "Per request" },
+        { id: "recruiting_gap_fill", label: "General gap-fill" },
+        {
+          id: "invited_therapists",
+          label: "All outreach",
+          count: outreach?.total ?? null,
+          onClick: onLoadOutreach,
+        },
+        { id: "recruiting", label: "How recruiting works" },
       ],
     },
     {
