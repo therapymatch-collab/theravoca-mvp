@@ -1243,6 +1243,7 @@ def score_therapist(
     #   raw=50 -> 44   |  raw=80  -> 70  |  raw=100 -> 76
     #   raw=120 -> 81  |  raw=140 -> 87  |  raw=160 -> 92
     #   raw=180 -> 94  |  raw=200 -> 97
+    total_precise: float = 0.0
     if isinstance(total, (int, float)) and total > 0:
         raw_total = total
         if raw_total <= 80:
@@ -1251,9 +1252,14 @@ def score_therapist(
             total = 70.0 + (raw_total - 80) * (22.0 / 80.0)
         else:
             total = 92.0 + (raw_total - 160) * 0.125
+        # Keep the un-rounded display value so admin tooling can surface
+        # the differentiation that gets crushed by integer rounding (e.g.
+        # 88.7 vs 89.1 vs 89.3 all show as 89 in the patient view).
+        total_precise = round(max(0.0, min(97.0, total)), 2)
         total = int(round(max(0, min(97, total))))
     return {
         "total": total,
+        "total_precise": total_precise,
         "breakdown": breakdown,
         "filtered": False,
         "research_axes": research_axes,  # rationale + chips for the patient view
@@ -1372,6 +1378,9 @@ def rank_therapists(
         scored.append({
             **t,
             "match_score": result["total"],
+            # Un-rounded display score (e.g. 88.73, 89.16). Lets admin
+            # tooling surface the differentiation lost to integer rounding.
+            "match_score_precise": result.get("total_precise"),
             "match_breakdown": result["breakdown"],
             "research_axes": result.get("research_axes") or {},
             "other_issue_axes": result.get("other_issue_axes") or {},
