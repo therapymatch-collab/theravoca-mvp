@@ -1711,21 +1711,12 @@ export default function AdminDashboard() {
               )}
 
               {tab === "recruiting_gap_fill" && (
-                <RecruitingGapFillPanel
-                  recruitDrafts={recruitDrafts}
-                  loadRecruitDrafts={loadRecruitDrafts}
-                  generateRecruitDrafts={generateRecruitDrafts}
-                  setTab={setTab}
-                />
-              )}
-
-              {tab === "coverage_gap" && (
                 <>
-                  <CoverageGapPanel
-                    data={coverageGap}
-                    loading={coverageGapLoading}
-                    onReload={loadCoverageGap}
-                    client={client}
+                  <RecruitingGapFillPanel
+                    recruitDrafts={recruitDrafts}
+                    loadRecruitDrafts={loadRecruitDrafts}
+                    generateRecruitDrafts={generateRecruitDrafts}
+                    setTab={setTab}
                   />
                   <RecruitDraftsPanel
                     data={recruitDrafts}
@@ -1739,6 +1730,15 @@ export default function AdminDashboard() {
                     onSendPreview={sendPreviewRecruitDrafts}
                   />
                 </>
+              )}
+
+              {tab === "coverage_gap" && (
+                <CoverageGapPanel
+                  data={coverageGap}
+                  loading={coverageGapLoading}
+                  onReload={loadCoverageGap}
+                  client={client}
+                />
               )}
 
               {tab === "referrals" && (
