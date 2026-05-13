@@ -867,15 +867,6 @@ export default function TherapistSignup() {
                   loading="lazy"
                   onError={(e) => { e.currentTarget.style.display = "none"; }}
                 />
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#2D4A3E]/85 via-[#2D4A3E]/30 to-transparent p-5">
-                  <div className="text-white text-sm font-medium leading-snug">
-                    "I get warm, well-fit referrals every week — and I don't pay
-                    per click."
-                  </div>
-                  <div className="text-white/70 text-xs mt-1">
-                    — Licensed clinical social worker, TheraVoca pilot
-                  </div>
-                </div>
               </div>
             </div>
           </div>
