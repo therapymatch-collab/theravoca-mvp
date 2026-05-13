@@ -1292,7 +1292,7 @@ def _tiebreaker(t: dict) -> tuple[float, float, float]:
 def rank_therapists(
     therapists: list[dict],
     request: dict,
-    threshold: float = 70.0,
+    threshold: float = 80.0,
     top_n: int = 30,
     min_results: int = 3,
     *,
@@ -1301,7 +1301,7 @@ def rank_therapists(
     all_scored_out: Optional[list] = None,
 ) -> list[dict]:
     """Score and filter per spec:
-       - hard floor: never include therapists below `threshold` (default 70)
+       - hard floor: never include therapists below `threshold` (default 80)
        - target up to `top_n` matches
        - if fewer than `min_results` clear the floor, return what we have
          (caller should trigger Phase D outreach to find more)

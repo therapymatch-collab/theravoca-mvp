@@ -464,7 +464,7 @@ async def run_simulation(
         # ── Step 1: full matching pipeline ─────────────────────────
         ranked = rank_therapists(
             therapists, req,
-            threshold=70.0,
+            threshold=80.0,
             top_n=notify_top_n,
             min_results=3,
         )

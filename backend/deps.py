@@ -54,7 +54,7 @@ if not ADMIN_PASSWORD:
         "FATAL: ADMIN_PASSWORD environment variable is not set. "
         "Refusing to start with no admin password."
     )
-DEFAULT_THRESHOLD = float(os.environ.get("DEFAULT_MATCH_THRESHOLD", "70"))
+DEFAULT_THRESHOLD = float(os.environ.get("DEFAULT_MATCH_THRESHOLD", "80"))
 MIN_TARGET_MATCHES = int(os.environ.get("MIN_TARGET_MATCHES", "30"))
 AUTO_DELAY_HOURS = float(os.environ.get("AUTO_RESULTS_DELAY_HOURS", "24"))
 PATIENT_DEMO_EMAIL = os.environ.get("PATIENT_DEMO_EMAIL", "")

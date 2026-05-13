@@ -346,7 +346,7 @@ class TestRegression:
         s = r.json()
         for k in ("total_requests", "therapists", "applications", "default_threshold"):
             assert k in s
-        assert s["default_threshold"] in (70, 70.0, 71, 71.0)
+        assert s["default_threshold"] in (80, 80.0)
 
     def test_admin_login_correct(self, session):
         r = session.post(f"{API}/admin/login", json={"password": ADMIN_PASSWORD}, timeout=10)

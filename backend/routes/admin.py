@@ -3068,7 +3068,7 @@ async def admin_get_matching_defaults() -> dict[str, Any]:
 @router.put("/admin/matching-defaults", dependencies=[Depends(require_admin)])
 async def admin_set_matching_defaults(payload: dict) -> dict[str, Any]:
     """Persist global matching defaults. Takes effect on next match run."""
-    threshold = float(payload.get("threshold", 70))
+    threshold = float(payload.get("threshold", 80))
     max_invites = int(payload.get("max_invites", 30))
     if not (0 <= threshold <= 100):
         raise HTTPException(400, "threshold must be 0-100")
@@ -4218,7 +4218,7 @@ async def admin_matching_pipeline() -> dict[str, Any]:
             "all to be considered), then each remaining therapist gets a "
             "weighted score across multiple soft axes, plus bonuses for "
             "deeper signals. The final score is mapped to a 0-97 display "
-            "range; above the patient's threshold (default 70%) we send "
+            "range; above the patient's threshold (default 80%) we send "
             "the top N as matches. Cap of 97 leaves headroom for future "
             "weight tuning without re-norming."
         ),
