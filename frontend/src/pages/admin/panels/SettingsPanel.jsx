@@ -187,6 +187,412 @@ function TurnstileToggleCard({ client: clientProp }) {
   );
 }
 
+// Go-Live runbook. Shows the live state of each pre-launch protective
+// feature (email override, fake therapist emails, backfilled profile
+// data, Track B dry-run, test request data) and lets the admin flip
+// them off one at a time -- OR fire them all in sequence with the
+// "GO LIVE" master button.
+//
+// All actions call existing admin endpoints; this card is purely an
+// orchestration surface. The Render env-var step (remove
+// EMAIL_OVERRIDE_TO, set EMAIL_LIVE_MODE=true) can't be done in-app,
+// so it's surfaced as a final reminder with copy-paste values.
+function GoLiveCard({ client: clientProp }) {
+  const ctxClient = useAdminClient();
+  const client = clientProp || ctxClient;
+  const [emailStatus, setEmailStatus] = useState(null);
+  const [backfillStatus, setBackfillStatus] = useState(null);
+  const [emailPreview, setEmailPreview] = useState(null);
+  const [wipePreview, setWipePreview] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState("");           // step id currently running
+  const [showRenderHelp, setShowRenderHelp] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [masterRunning, setMasterRunning] = useState(false);
+
+  const refreshAll = async () => {
+    setLoading(true);
+    try {
+      const [es, bs, ep, wp] = await Promise.all([
+        client.get("/admin/email-safety-status").catch(() => ({ data: null })),
+        client.get("/admin/backfill-status").catch(() => ({ data: null })),
+        client.get("/admin/email-restoration/preview").catch(() => ({ data: null })),
+        client.get("/admin/wipe-test-data/preview").catch(() => ({ data: null })),
+      ]);
+      setEmailStatus(es.data);
+      setBackfillStatus(bs.data);
+      setEmailPreview(ep.data);
+      setWipePreview(wp.data);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!client) return;
+    refreshAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client]);
+
+  // ---- step checks (status pill per row) ----
+  const emailReady = emailStatus?.mode === "live";
+  const realEmailsReady = (emailPreview?.placeholder_emails || 0) === 0;
+  const backfillCleared = (backfillStatus?.backfilled || 0) === 0;
+  const testDataCleared = !wipePreview || (
+    (wipePreview.requests || 0) === 0 &&
+    (wipePreview.applications || 0) === 0 &&
+    (wipePreview.outreach_invites || 0) === 0
+  );
+
+  const allReady = emailReady && realEmailsReady && backfillCleared && testDataCleared;
+
+  // ---- individual action handlers ----
+  const restoreRealEmails = async () => {
+    const n = emailPreview?.restorable ?? 0;
+    if (n === 0) {
+      toast.success("Nothing to restore -- every imported therapist already has their real email.");
+      return;
+    }
+    if (!confirm(
+      `Promote real_email -> email for ${n} imported therapist(s)?\n\n` +
+      `After this, the directory uses REAL therapist email addresses. ` +
+      `Combined with the EMAIL_LIVE_MODE env var, sends will go to those real addresses.`
+    )) return;
+    setRunning("restore_emails");
+    try {
+      const r = await client.post("/admin/email-restoration/run", {});
+      toast.success(`Restored ${r.data?.restored || 0} real email(s)`);
+      await refreshAll();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Restore failed");
+    } finally {
+      setRunning("");
+    }
+  };
+
+  const stripBackfill = async () => {
+    const n = backfillStatus?.backfilled ?? 0;
+    if (n === 0) {
+      toast.success("Nothing to strip -- no backfilled data on file.");
+      return;
+    }
+    if (!confirm(
+      `Strip backfilled fields from ${n} therapist(s)?\n\n` +
+      `Removes every field that the backfill script populated (specialties, modalities, ` +
+      `availability, fees, etc. that were FILLED IN as defaults). User-edited values are ` +
+      `preserved. Original emails (from before backfill) are restored.\n\nIdempotent.`
+    )) return;
+    setRunning("strip_backfill");
+    try {
+      const r = await client.post("/admin/strip-backfill", {});
+      toast.success(`Stripped ${r.data?.restored || 0} therapist(s) of backfilled data`);
+      await refreshAll();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Strip failed");
+    } finally {
+      setRunning("");
+    }
+  };
+
+  const wipeTestData = async () => {
+    const summary = wipePreview ? (
+      `requests=${wipePreview.requests || 0}, applications=${wipePreview.applications || 0}, ` +
+      `outreach_invites=${wipePreview.outreach_invites || 0}, simulator_runs=${wipePreview.simulator_runs || 0}, ` +
+      `non-seeded therapists=${wipePreview.non_seeded_therapists || 0}`
+    ) : "(unknown counts)";
+    if (!confirm(
+      `WIPE all test data?\n\n${summary}\n\nThis deletes test requests, applications, ` +
+      `simulator runs, and non-seeded therapists. Seeded directory + admin config + ` +
+      `imported_xlsx therapists are preserved.\n\nNot reversible.`
+    )) return;
+    setRunning("wipe");
+    try {
+      const r = await client.post("/admin/wipe-test-data", {});
+      toast.success(`Wiped: ${JSON.stringify(r.data || {}).slice(0, 120)}`, { duration: 8000 });
+      await refreshAll();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Wipe failed");
+    } finally {
+      setRunning("");
+    }
+  };
+
+  const runMasterGoLive = async () => {
+    if (confirmText !== "GO LIVE") return;
+    setMasterRunning(true);
+    try {
+      // Order matters: strip backfill BEFORE restoring real emails so
+      // the email-restoration step writes real_email -> email after
+      // backfilled values are out of the way. Wipe test data last so
+      // any final tests/simulator data we'd want to inspect stay until
+      // the very end.
+      const steps = [
+        { id: "strip_backfill", path: "/admin/strip-backfill", label: "Strip backfilled data" },
+        { id: "restore_emails", path: "/admin/email-restoration/run", label: "Restore real emails" },
+        { id: "wipe", path: "/admin/wipe-test-data", label: "Wipe test data" },
+      ];
+      for (const s of steps) {
+        setRunning(s.id);
+        try {
+          await client.post(s.path, {});
+          toast.success(`${s.label} -- done`);
+        } catch (e) {
+          toast.error(`${s.label} failed: ${e?.response?.data?.detail || e.message}`);
+          // Don't continue if a step failed -- admin should investigate.
+          break;
+        }
+      }
+      setRunning("");
+      setConfirmText("");
+      setShowRenderHelp(true);     // surface the final Render env reminder
+      await refreshAll();
+    } finally {
+      setMasterRunning(false);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-[#E8E5DF] rounded-2xl p-6" data-testid="go-live-card">
+      <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
+        <div>
+          <h3 className="font-serif-display text-2xl text-[#2D4A3E]">Go-live runbook</h3>
+          <p className="text-sm text-[#6D6A65] mt-1.5 max-w-2xl leading-relaxed">
+            Pre-launch protective features that keep test data + fake emails contained.
+            Flip them one at a time, or hit <strong>GO LIVE</strong> at the bottom to
+            run all in-app steps in sequence. The Render env-var step has to be done
+            manually -- the app can't change its own env.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={refreshAll}
+          disabled={loading}
+          className="text-xs text-[#2D4A3E] underline hover:text-[#3A5E50] disabled:opacity-50"
+        >
+          {loading ? "Loading..." : "Refresh"}
+        </button>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {/* Step 1: email mode */}
+        <GoLiveRow
+          ready={emailReady}
+          title="Email delivery mode"
+          detail={
+            emailStatus?.mode === "test_override"
+              ? `TEST MODE -- all outbound email redirected to ${emailStatus.override_to}.`
+              : emailStatus?.mode === "live"
+                ? "LIVE -- emails go to real recipients."
+                : "BLOCKED -- safety guard will silently drop sends until you set either EMAIL_OVERRIDE_TO or EMAIL_LIVE_MODE."
+          }
+          action={
+            <button
+              type="button"
+              onClick={() => setShowRenderHelp(true)}
+              className="text-xs text-[#2D4A3E] underline hover:text-[#3A5E50]"
+            >
+              Render env steps
+            </button>
+          }
+        />
+
+        {/* Step 2: real emails restored */}
+        <GoLiveRow
+          ready={realEmailsReady}
+          title="Therapist directory uses real emails"
+          detail={
+            emailPreview === null
+              ? "Loading..."
+              : realEmailsReady
+                ? "All imported therapists already use their real email in the `email` field."
+                : `${emailPreview.placeholder_emails || 0} imported therapist(s) still use the therapymatch+ placeholder. ${emailPreview.restorable || 0} can be restored from real_email; ${emailPreview.missing_real_email || 0} need manual review.`
+          }
+          action={
+            !realEmailsReady && (
+              <button
+                type="button"
+                onClick={restoreRealEmails}
+                disabled={running !== ""}
+                className="text-xs px-3 py-1.5 rounded-md border border-[#2D4A3E] text-[#2D4A3E] hover:bg-[#FDFBF7] disabled:opacity-50"
+              >
+                {running === "restore_emails" ? (
+                  <><Loader2 size={12} className="inline mr-1 animate-spin" /> Restoring...</>
+                ) : (
+                  "Restore real emails"
+                )}
+              </button>
+            )
+          }
+        />
+
+        {/* Step 3: backfill stripped */}
+        <GoLiveRow
+          ready={backfillCleared}
+          title="Backfilled profile data stripped"
+          detail={
+            backfillStatus === null
+              ? "Loading..."
+              : backfillCleared
+                ? "No backfilled data on file."
+                : `${backfillStatus.backfilled} therapist(s) still have backfilled fields (specialties, modalities, fees, availability defaults). Strip before launch so therapists never see fabricated data.`
+          }
+          action={
+            !backfillCleared && (
+              <button
+                type="button"
+                onClick={stripBackfill}
+                disabled={running !== ""}
+                className="text-xs px-3 py-1.5 rounded-md border border-[#2D4A3E] text-[#2D4A3E] hover:bg-[#FDFBF7] disabled:opacity-50"
+              >
+                {running === "strip_backfill" ? (
+                  <><Loader2 size={12} className="inline mr-1 animate-spin" /> Stripping...</>
+                ) : (
+                  "Strip backfill"
+                )}
+              </button>
+            )
+          }
+        />
+
+        {/* Step 4: test data wiped */}
+        <GoLiveRow
+          ready={testDataCleared}
+          title="Test data wiped"
+          detail={
+            wipePreview === null
+              ? "Loading..."
+              : testDataCleared
+                ? "No test requests, applications, or simulator runs in the database."
+                : `Will delete: ${wipePreview.requests || 0} requests, ${wipePreview.applications || 0} applications, ${wipePreview.outreach_invites || 0} outreach invites, ${wipePreview.simulator_runs || 0} simulator runs, ${wipePreview.non_seeded_therapists || 0} non-seeded therapists.`
+          }
+          action={
+            !testDataCleared && (
+              <button
+                type="button"
+                onClick={wipeTestData}
+                disabled={running !== ""}
+                className="text-xs px-3 py-1.5 rounded-md border border-[#D45D5D] text-[#D45D5D] hover:bg-[#FDF1EF] disabled:opacity-50"
+              >
+                {running === "wipe" ? (
+                  <><Loader2 size={12} className="inline mr-1 animate-spin" /> Wiping...</>
+                ) : (
+                  "Wipe test data"
+                )}
+              </button>
+            )
+          }
+        />
+
+        {/* Step 5: Track B (informational -- still cron.py edit) */}
+        <GoLiveRow
+          ready={false}
+          warningOnly
+          title="Track B (gap-recruit) live"
+          detail={
+            "Currently hardcoded as dry_run=True in cron.py:250. Manual code edit + " +
+            "deploy required to flip live -- separate ticket would move this to a " +
+            "DB-stored toggle so it can be flipped from here."
+          }
+        />
+      </div>
+
+      {/* Render env reminder */}
+      {showRenderHelp && (
+        <div className="mt-5 p-4 bg-[#FDF7EC] border border-[#E8DCC1] rounded-lg text-sm text-[#8B5A1F]">
+          <div className="font-semibold text-[#8B4F1F] flex items-center justify-between">
+            Final step -- update Render env vars
+            <button
+              type="button"
+              onClick={() => setShowRenderHelp(false)}
+              className="text-[10px] underline"
+            >
+              hide
+            </button>
+          </div>
+          <p className="mt-1.5 text-xs leading-relaxed">
+            The app can't change its own env. Go to your Render dashboard for this
+            service → Environment, then:
+          </p>
+          <ul className="mt-2 text-xs space-y-1 leading-relaxed">
+            <li>
+              <strong>Remove</strong> <code className="bg-white/60 px-1 rounded">EMAIL_OVERRIDE_TO</code>
+              {" "}(currently <code className="bg-white/60 px-1 rounded">{emailStatus?.override_to || "?"}</code>)
+            </li>
+            <li>
+              <strong>Add</strong> <code className="bg-white/60 px-1 rounded">EMAIL_LIVE_MODE=true</code>
+            </li>
+          </ul>
+          <p className="mt-2 text-xs leading-relaxed italic">
+            Both required -- the safety guard fails closed otherwise (no sends at all).
+            Render will auto-redeploy in ~3 min. Refresh this card after to verify the
+            email-delivery row turns green.
+          </p>
+        </div>
+      )}
+
+      {/* Master GO LIVE button */}
+      <div className="mt-5 pt-5 border-t border-[#E8E5DF]">
+        <div className="flex items-start gap-3 flex-wrap">
+          <div className="flex-1 min-w-[200px]">
+            <div className="font-medium text-[#2D4A3E] text-sm">
+              Run all in-app steps in sequence
+            </div>
+            <div className="text-xs text-[#6D6A65] mt-1 leading-relaxed">
+              Runs Strip backfill → Restore real emails → Wipe test data. After it
+              finishes, you'll see the Render env-var instructions above.
+              Destructive -- type <code className="bg-[#F2EFE8] px-1 rounded">GO LIVE</code>
+              to enable the button.
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Input
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder="type GO LIVE"
+              className="w-32 text-xs"
+              disabled={masterRunning}
+            />
+            <button
+              type="button"
+              onClick={runMasterGoLive}
+              disabled={confirmText !== "GO LIVE" || masterRunning || allReady}
+              className="px-4 py-2 rounded-lg bg-[#D45D5D] text-white text-sm font-medium hover:bg-[#B84D4D] disabled:opacity-40 disabled:cursor-not-allowed"
+              data-testid="go-live-master-btn"
+            >
+              {masterRunning ? (
+                <><Loader2 size={14} className="inline mr-1.5 animate-spin" /> Running...</>
+              ) : allReady ? (
+                "Already live"
+              ) : (
+                "GO LIVE"
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GoLiveRow({ ready, warningOnly, title, detail, action }) {
+  // Color: ready=green, warningOnly=yellow, else=red
+  const dot = ready
+    ? "bg-[#4A6B5D]"
+    : warningOnly
+      ? "bg-[#D4A843]"
+      : "bg-[#D45D5D]";
+  return (
+    <div className="flex items-start gap-3 p-3 rounded-lg border border-[#E8E5DF] bg-[#FDFBF7]">
+      <div className={`w-3 h-3 rounded-full mt-1 shrink-0 ${dot}`} />
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-[#2D4A3E] text-sm">{title}</div>
+        <div className="text-xs text-[#6D6A65] mt-0.5 leading-relaxed">{detail}</div>
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
+    </div>
+  );
+}
+
 // Master testing-mode toggle. ONE switch that bypasses Turnstile +
 // timing heuristic + per-IP/per-email rate limits + magic-code limits
 // across the entire backend, so AI/E2E test runs aren't blocked.
@@ -590,6 +996,7 @@ export default function SettingsPanel({ client: clientProp }) {
 
   return (
     <div className="mt-6 space-y-6" data-testid="settings-panel">
+      <GoLiveCard client={client} />
       <MasterTestingCard client={client} />
       <TurnstileToggleCard client={client} />
 
