@@ -353,7 +353,10 @@ export function Footer() {
           </p>
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">
             <Link to="/terms" className="hover:text-[#2D4A3E] underline" data-testid="footer-terms">
-              Terms of Use
+              Terms (Patients)
+            </Link>
+            <Link to="/terms/therapist" className="hover:text-[#2D4A3E] underline" data-testid="footer-terms-therapist">
+              Terms (Therapists)
             </Link>
             <Link to="/privacy" className="hover:text-[#2D4A3E] underline" data-testid="footer-privacy">
               Privacy Notice

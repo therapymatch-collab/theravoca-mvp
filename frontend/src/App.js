@@ -32,6 +32,7 @@ import NotFound from "@/pages/NotFound";
 import PromisePreview from "@/pages/PromisePreview";
 import Unsubscribe from "@/pages/Unsubscribe";
 import CrisisResources from "@/pages/CrisisResources";
+import TherapistTerms from "@/pages/TherapistTerms";
 
 function App() {
   useEffect(() => {
@@ -82,6 +83,7 @@ function App() {
             <Route path="/blog/:slug" element={<BlogPost />} />
             <Route path="/preview/promise" element={<PromisePreview />} />
             <Route path="/crisis" element={<CrisisResources />} />
+            <Route path="/terms/therapist" element={<TherapistTerms />} />
             <Route
               path="/unsubscribe/patient/:id"
               element={<Unsubscribe role="patient" />}
