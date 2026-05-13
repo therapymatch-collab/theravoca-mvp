@@ -1077,7 +1077,15 @@ export default function TherapistPortal() {
         </div>
       )}
 
-      <div className="mt-12 mb-4 text-center text-xs text-[#6D6A65]">
+      <div className="mt-12 mb-4 text-center text-xs text-[#6D6A65] flex items-center justify-center gap-4 flex-wrap">
+        <Link
+          to="/portal/therapist/security"
+          className="hover:text-[#2D4A3E] underline"
+          data-testid="therapist-2fa-link"
+        >
+          Security &amp; 2FA
+        </Link>
+        <span className="text-[#C8C4BB]">·</span>
         <Link
           to="/portal/therapist/login-history"
           className="hover:text-[#2D4A3E] underline"

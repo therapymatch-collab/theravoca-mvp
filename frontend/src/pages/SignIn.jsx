@@ -26,7 +26,7 @@ export default function SignIn() {
   const [params] = useSearchParams();
   const initialRole = params.get("role") === "therapist" ? "therapist" : "patient";
   const [role, setRole] = useState(initialRole);
-  // step: email | code | password | setup-password
+  // step: email | code | password | setup-password | 2fa-challenge
   const [step, setStep] = useState("email");
   const [email, setEmail] = useState(params.get("email") || "");
   const [password, setPassword] = useState("");
@@ -35,6 +35,11 @@ export default function SignIn() {
   const [showPw, setShowPw] = useState(false);
   const [code, setCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // 2FA challenge state -- populated after a password/magic-code submit
+  // when the therapist has TOTP enabled.
+  const [challengeToken, setChallengeToken] = useState("");
+  const [twoFaCode, setTwoFaCode] = useState("");
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [hasPassword, setHasPassword] = useState(null); // null = unknown, true/false
   const [method, setMethod] = useState(null); // null = auto, 'password' | 'code'
@@ -115,6 +120,16 @@ export default function SignIn() {
   }, [email, role, step]);
 
   const finishLogin = (data) => {
+    // 2FA gate: backend signals "show the second-factor screen" instead
+    // of issuing the real session token. Save the challenge token and
+    // bounce to the 2fa-challenge step.
+    if (data?.requires_2fa) {
+      setChallengeToken(data.challenge_token || "");
+      setTwoFaCode("");
+      setUseRecoveryCode(false);
+      setStep("2fa-challenge");
+      return;
+    }
     setSession(data);
     if (setupFlag && !data.has_password) {
       // Returning intake flow asked us to nudge for a password — drop them
@@ -125,6 +140,27 @@ export default function SignIn() {
     }
     toast.success("Signed in");
     navigate(nextPath || ROLE_INFO[role].portal);
+  };
+
+  const verify2fa = async () => {
+    const value = twoFaCode.trim();
+    if (!value) {
+      toast.error(useRecoveryCode ? "Enter a recovery code." : "Enter the 6-digit code.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await api.post("/auth/verify-2fa", {
+        challenge_token: challengeToken,
+        code: value,
+        use_recovery_code: useRecoveryCode,
+      });
+      finishLogin(res.data);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Invalid code.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const sendCode = async () => {
@@ -561,6 +597,81 @@ export default function SignIn() {
                 data-testid="signin-newpw-skip"
               >
                 Skip for now — I'll do this later
+              </button>
+            </>
+          )}
+
+          {step === "2fa-challenge" && (
+            <>
+              <div className="mt-2 inline-flex items-center justify-center gap-2 text-xs uppercase tracking-wider text-[#6D6A65] w-full">
+                <Lock size={13} /> Security check
+              </div>
+              <p className="text-sm text-[#2B2A29] text-center mt-3 leading-relaxed">
+                {useRecoveryCode
+                  ? "Enter one of your recovery codes (XXXX-XXXX-XXXX). Each can be used once."
+                  : "Open your authenticator app and type the current 6-digit code for TheraVoca."}
+              </p>
+              <div className="mt-5 text-center">
+                <Input
+                  type="text"
+                  inputMode={useRecoveryCode ? "text" : "numeric"}
+                  autoComplete="one-time-code"
+                  value={twoFaCode}
+                  onChange={(e) => setTwoFaCode(
+                    useRecoveryCode
+                      ? e.target.value.toUpperCase().slice(0, 14)
+                      : e.target.value.replace(/\D/g, "").slice(0, 6),
+                  )}
+                  onKeyDown={(e) => e.key === "Enter" && verify2fa()}
+                  placeholder={useRecoveryCode ? "XXXX-XXXX-XXXX" : "000000"}
+                  className={`text-center font-serif-display tracking-[0.3em] bg-[#FDFBF7] border-[#E8E5DF] rounded-xl ${
+                    useRecoveryCode ? "text-lg" : "text-2xl"
+                  }`}
+                  data-testid="signin-2fa-code"
+                  autoFocus
+                />
+              </div>
+              <button
+                type="button"
+                onClick={verify2fa}
+                disabled={submitting || twoFaCode.length < (useRecoveryCode ? 8 : 6)}
+                className="tv-btn-primary w-full mt-5 justify-center disabled:opacity-50"
+                data-testid="signin-2fa-submit"
+              >
+                {submitting ? "Verifying..." : "Sign in"}
+              </button>
+              <div className="mt-4 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUseRecoveryCode((v) => !v);
+                    setTwoFaCode("");
+                  }}
+                  className="text-xs text-[#6D6A65] hover:text-[#2D4A3E] underline"
+                  data-testid="signin-2fa-toggle-recovery"
+                >
+                  {useRecoveryCode
+                    ? "← Use my authenticator code instead"
+                    : "Use a recovery code instead →"}
+                </button>
+              </div>
+              {!useRecoveryCode && (
+                <p className="mt-4 text-xs text-[#6D6A65] text-center leading-relaxed">
+                  Codes refresh every 30 seconds. If the current one doesn't
+                  work, wait a moment and try the next one.
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setStep("email");
+                  setChallengeToken("");
+                  setTwoFaCode("");
+                  setUseRecoveryCode(false);
+                }}
+                className="w-full mt-3 text-xs text-[#6D6A65] hover:text-[#2D4A3E] inline-flex items-center justify-center gap-1"
+              >
+                <ArrowLeft size={12} /> Back to sign-in
               </button>
             </>
           )}
