@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Shield, ShieldOff } from "lucide-react";
+import { Loader2, Shield, ShieldOff, Rocket, CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import useAdminClient from "@/lib/useAdminClient";
 
@@ -382,10 +382,15 @@ function GoLiveCard({ client: clientProp }) {
   };
 
   return (
-    <div className="bg-white border border-[#E8E5DF] rounded-2xl p-6" data-testid="go-live-card">
-      <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
-        <div>
-          <h3 className="font-serif-display text-2xl text-[#2D4A3E]">Go-live runbook</h3>
+    <div className="bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden" data-testid="go-live-card">
+      {/* Header strip with icon badge + accent gradient */}
+      <div className="bg-gradient-to-br from-[#FBEFE9] to-[#FDFBF7] border-b border-[#F4DDD2] px-6 py-5 flex items-start gap-4">
+        <div className="w-12 h-12 rounded-xl bg-[#C87965] text-white flex items-center justify-center shrink-0 shadow-sm">
+          <Rocket size={20} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[10px] uppercase tracking-widest text-[#8B4F1F] font-semibold">Pre-launch checklist</div>
+          <h3 className="font-serif-display text-2xl text-[#2D4A3E] leading-tight mt-0.5">Go-live runbook</h3>
           <p className="text-sm text-[#6D6A65] mt-1.5 max-w-2xl leading-relaxed">
             Pre-launch protective features that keep test data + fake emails contained.
             Flip them one at a time, or hit <strong>GO LIVE</strong> at the bottom to
@@ -397,11 +402,12 @@ function GoLiveCard({ client: clientProp }) {
           type="button"
           onClick={refreshAll}
           disabled={loading}
-          className="text-xs text-[#2D4A3E] underline hover:text-[#3A5E50] disabled:opacity-50"
+          className="text-xs text-[#2D4A3E] underline hover:text-[#3A5E50] disabled:opacity-50 shrink-0"
         >
           {loading ? "Loading..." : "Refresh"}
         </button>
       </div>
+      <div className="p-6">
 
       <div className="mt-4 space-y-3">
         {/* Step 1: email mode */}
@@ -621,20 +627,36 @@ function GoLiveCard({ client: clientProp }) {
           </div>
         </div>
       </div>
+      </div>
     </div>
   );
 }
 
 function GoLiveRow({ ready, warningOnly, title, detail, action }) {
-  // Color: ready=green, warningOnly=yellow, else=red
-  const dot = ready
-    ? "bg-[#4A6B5D]"
+  // Visual treatment: status icon in colored circle (sage/yellow/coral)
+  // and a matching subtle accent bar on the left of the row.
+  const cfg = ready
+    ? { icon: <CheckCircle2 size={14} />, bg: "#E8F0EA", border: "#C5DCC9", text: "#2D4A3E", accent: "#4A6B5D" }
     : warningOnly
-      ? "bg-[#D4A843]"
-      : "bg-[#D45D5D]";
+      ? { icon: <Clock size={14} />, bg: "#FBEFE9", border: "#F4DDD2", text: "#8B5A1F", accent: "#D4A843" }
+      : { icon: <AlertCircle size={14} />, bg: "#FBE9E5", border: "#F4C7BE", text: "#8B3220", accent: "#D45D5D" };
+
   return (
-    <div className="flex items-start gap-3 p-3 rounded-lg border border-[#E8E5DF] bg-[#FDFBF7]">
-      <div className={`w-3 h-3 rounded-full mt-1 shrink-0 ${dot}`} />
+    <div
+      className="relative flex items-start gap-3 p-3 pl-4 rounded-lg border bg-white"
+      style={{ borderColor: cfg.border }}
+    >
+      {/* left accent bar */}
+      <div
+        className="absolute left-0 top-2 bottom-2 w-1 rounded-r"
+        style={{ background: cfg.accent }}
+      />
+      <div
+        className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5"
+        style={{ background: cfg.bg, color: cfg.accent }}
+      >
+        {cfg.icon}
+      </div>
       <div className="flex-1 min-w-0">
         <div className="font-medium text-[#2D4A3E] text-sm">{title}</div>
         <div className="text-xs text-[#6D6A65] mt-0.5 leading-relaxed">{detail}</div>

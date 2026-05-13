@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronRight, Mail, MessageSquare, Search } from "lucide-react";
+import { ChevronRight, Mail, MessageSquare, Search, Target } from "lucide-react";
 import EmailSafetyBanner from "./EmailSafetyBanner";
 
 // Recruiting -> Per request (Track A).
@@ -26,19 +26,23 @@ export default function RecruitingPerRequestPanel({ requests, openDetail, client
   return (
     <div className="mt-6 space-y-4" data-testid="recruiting-per-request-panel">
       <EmailSafetyBanner client={client} />
-      <div className="bg-white border border-[#E8E5DF] rounded-2xl p-6">
-        <div className="text-xs uppercase tracking-widest text-[#6D6A65] mb-1">
-          Recruiting &middot; Track A
+      {/* Section header card with icon badge -- mockup-style */}
+      <div className="bg-gradient-to-br from-[#EAF2E8] to-[#FDFBF7] border border-[#C5DCC9] rounded-2xl p-6 flex items-start gap-4">
+        <div className="w-12 h-12 rounded-xl bg-[#2D4A3E] text-white flex items-center justify-center shrink-0 shadow-sm">
+          <Target size={20} />
         </div>
-        <h2 className="font-serif-display text-2xl text-[#2D4A3E] leading-tight">
-          Per-request outreach
-        </h2>
-        <p className="text-sm text-[#6D6A65] mt-2 max-w-2xl leading-relaxed">
-          Auto-fires when an incoming patient request gets fewer than the target
-          number of matches. Each row is a request whose outreach run has been
-          completed; click a row for the full request detail (including the
-          invited-therapist list).
-        </p>
+        <div className="flex-1 min-w-0">
+          <div className="text-[10px] uppercase tracking-widest text-[#2D4A3E] font-semibold">Recruiting &middot; Track A</div>
+          <h2 className="font-serif-display text-2xl text-[#2D4A3E] leading-tight mt-0.5">
+            Per-request outreach
+          </h2>
+          <p className="text-sm text-[#6D6A65] mt-1.5 max-w-2xl leading-relaxed">
+            Auto-fires when an incoming patient request gets fewer than the target
+            number of matches. Each row is a request whose outreach run has been
+            completed; click a row for the full request detail (including the
+            invited-therapist list).
+          </p>
+        </div>
       </div>
 
       <div className="bg-white border border-[#E8E5DF] rounded-2xl px-4 py-3 flex items-center gap-3 flex-wrap text-sm">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Mail, MessageSquare, AlertCircle, CheckCircle2, Eye, XCircle, ChevronRight } from "lucide-react";
+import { Loader2, Mail, MessageSquare, AlertCircle, CheckCircle2, Eye, XCircle, ChevronRight, Send, Calendar, BarChart3, AlertTriangle, Webhook, FileText, Inbox as InboxIcon } from "lucide-react";
 
 // Outbound primary tab. Aggregated view of email + SMS delivery state
 // across the system. Reads /admin/outbound/summary, /by-type,
@@ -55,44 +55,65 @@ export default function OutboundPanel({ client }) {
 
   return (
     <div className="mt-6 space-y-4" data-testid="outbound-panel">
-      {/* Subtab pills */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <SubPill active={sub === "recent"} onClick={() => setSub("recent")} label="Recent" />
-        <SubPill active={sub === "scheduled"} onClick={() => setSub("scheduled")} label="Scheduled" />
-        <SubPill active={sub === "by_type"} onClick={() => setSub("by_type")} label="By type" />
-        <SubPill
-          active={sub === "failed"}
-          onClick={() => setSub("failed")}
-          label="Failed"
-          badge={(data?.kpis?.failed_7d || 0) > 0 ? data.kpis.failed_7d : null}
-        />
-        <SubPill active={sub === "stream"} onClick={() => setSub("stream")} label="Webhook stream" />
-        <SubPill active={sub === "templates"} onClick={() => setSub("templates")} label="Templates" />
+      {/* Section header card with icon badge -- mockup-style */}
+      <div className="bg-gradient-to-br from-[#FDF7EC] to-[#FDFBF7] border border-[#E8DCC1] rounded-2xl p-6 flex items-start gap-4">
+        <div className="w-12 h-12 rounded-xl bg-[#2D4A3E] text-white flex items-center justify-center shrink-0 shadow-sm">
+          <Send size={20} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[10px] uppercase tracking-widest text-[#8B5A1F] font-semibold">Operational visibility</div>
+          <h2 className="font-serif-display text-2xl text-[#2D4A3E] leading-tight mt-0.5">Outbound</h2>
+          <p className="text-sm text-[#6D6A65] mt-1.5 max-w-2xl leading-relaxed">
+            Every email + SMS the system sends, with delivery state from the
+            Resend webhook. Use this pre-launch to verify the right messages
+            are firing, post-launch to spot bounces + drift in open rates.
+          </p>
+        </div>
         <button
           type="button"
           onClick={refresh}
           disabled={loading}
-          className="ml-auto text-xs text-[#2D4A3E] underline hover:text-[#3A5E50] disabled:opacity-50"
+          className="text-xs text-[#2D4A3E] underline hover:text-[#3A5E50] disabled:opacity-50 shrink-0"
         >
           {loading ? "Loading..." : "Refresh"}
         </button>
       </div>
 
-      {/* KPI strip */}
+      {/* Subtab pills with icons */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <SubPill active={sub === "recent"} onClick={() => setSub("recent")} label="Recent" icon={<InboxIcon size={12} />} />
+        <SubPill active={sub === "scheduled"} onClick={() => setSub("scheduled")} label="Scheduled" icon={<Calendar size={12} />} />
+        <SubPill active={sub === "by_type"} onClick={() => setSub("by_type")} label="By type" icon={<BarChart3 size={12} />} />
+        <SubPill
+          active={sub === "failed"}
+          onClick={() => setSub("failed")}
+          label="Failed"
+          icon={<AlertTriangle size={12} />}
+          badge={(data?.kpis?.failed_7d || 0) > 0 ? data.kpis.failed_7d : null}
+        />
+        <SubPill active={sub === "stream"} onClick={() => setSub("stream")} label="Webhook stream" icon={<Webhook size={12} />} />
+        <SubPill active={sub === "templates"} onClick={() => setSub("templates")} label="Templates" icon={<FileText size={12} />} />
+      </div>
+
+      {/* KPI strip with accent borders + icons */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <Kpi label="Sent today" value={data?.kpis?.sent_today ?? 0} />
-        <Kpi label="Sent 7d" value={data?.kpis?.sent_7d ?? 0} />
-        <Kpi label="Queued (last hour)" value={data?.kpis?.queued ?? 0} />
+        <Kpi label="Sent today" value={data?.kpis?.sent_today ?? 0} icon={<Send size={14} />} accent="#2D4A3E" />
+        <Kpi label="Sent 7d" value={data?.kpis?.sent_7d ?? 0} icon={<CheckCircle2 size={14} />} accent="#4A6B5D" />
+        <Kpi label="Queued (last hour)" value={data?.kpis?.queued ?? 0} icon={<Loader2 size={14} />} accent="#D4A843" />
         <Kpi
           label="Failed (7d)"
           value={data?.kpis?.failed_7d ?? 0}
           warn={(data?.kpis?.failed_7d ?? 0) > 0}
+          icon={<XCircle size={14} />}
+          accent="#D45D5D"
         />
         <Kpi
           label="Top template (7d)"
           value={byType?.top?.title || byType?.top?.template_key || "—"}
           smallValue
           sub={byType?.top ? `${byType.top.sent_7d} sends` : null}
+          icon={<BarChart3 size={14} />}
+          accent="#C87965"
         />
       </div>
 
@@ -436,18 +457,19 @@ export default function OutboundPanel({ client }) {
   );
 }
 
-function SubPill({ active, onClick, label, badge }) {
+function SubPill({ active, onClick, label, badge, icon }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition ${
-        active ? "bg-[#2D4A3E] text-white" : "bg-[#F2EFE8] text-[#6D6A65] hover:bg-[#E8E5DF]"
+      className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition shadow-sm ${
+        active ? "bg-[#2D4A3E] text-white shadow-md" : "bg-white border border-[#E8E5DF] text-[#6D6A65] hover:border-[#2D4A3E] hover:text-[#2D4A3E]"
       }`}
     >
+      {icon && <span className={active ? "text-white/90" : "text-[#6D6A65]"}>{icon}</span>}
       {label}
       {badge != null && (
-        <span className={`text-[10px] px-1.5 rounded-full ${active ? "bg-white/20" : "bg-[#FBE9E5] text-[#C8412B]"}`}>
+        <span className={`text-[10px] px-1.5 rounded-full font-semibold ${active ? "bg-white/20 text-white" : "bg-[#FBE9E5] text-[#C8412B]"}`}>
           {badge}
         </span>
       )}
@@ -455,11 +477,30 @@ function SubPill({ active, onClick, label, badge }) {
   );
 }
 
-function Kpi({ label, value, warn, smallValue, sub }) {
+function Kpi({ label, value, warn, smallValue, sub, icon, accent }) {
+  const accentColor = accent || (warn ? "#C8412B" : "#2D4A3E");
   return (
-    <div className="bg-white border border-[#E8E5DF] rounded-2xl p-4">
-      <div className="text-[11px] uppercase tracking-wider text-[#6D6A65] font-semibold">{label}</div>
-      <div className={`${smallValue ? "text-base" : "text-3xl"} font-semibold mt-1 ${warn ? "text-[#C8412B]" : "text-[#2D4A3E]"} truncate`}>
+    <div
+      className="bg-white border border-[#E8E5DF] rounded-2xl p-4 relative overflow-hidden"
+      style={{ boxShadow: "0 1px 2px rgba(45,74,62,0.04)" }}
+    >
+      {/* Top accent stripe in card color */}
+      <div className="absolute inset-x-0 top-0 h-1" style={{ background: accentColor }} />
+      <div className="flex items-center gap-2">
+        {icon && (
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+            style={{ background: `${accentColor}15`, color: accentColor }}
+          >
+            {icon}
+          </div>
+        )}
+        <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] font-semibold">{label}</div>
+      </div>
+      <div
+        className={`${smallValue ? "text-base" : "text-3xl"} font-semibold mt-2 truncate`}
+        style={{ color: accentColor }}
+      >
         {value}
       </div>
       {sub && <div className="text-[10px] text-[#6D6A65] mt-1">{sub}</div>}

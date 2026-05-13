@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, AlertTriangle, ExternalLink, Trash2 } from "lucide-react";
+import { Loader2, AlertTriangle, ExternalLink, Trash2, Radio } from "lucide-react";
 import { toast } from "sonner";
 
 // Recruiting -> General gap-fill (Track B).
@@ -84,22 +84,26 @@ export default function RecruitingGapFillPanel({
 
   return (
     <div className="mt-6 space-y-4" data-testid="recruiting-gap-fill-panel">
-      <div className="bg-white border border-[#E8E5DF] rounded-2xl p-6">
+      <div className="bg-gradient-to-br from-[#FBEFE9] to-[#FDFBF7] border border-[#F4DDD2] rounded-2xl p-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <div className="text-xs uppercase tracking-widest text-[#6D6A65] mb-1">
-              Recruiting &middot; Track B
+          <div className="flex items-start gap-4 min-w-0">
+            <div className="w-12 h-12 rounded-xl bg-[#C87965] text-white flex items-center justify-center shrink-0 shadow-sm">
+              <Radio size={20} />
             </div>
-            <h2 className="font-serif-display text-2xl text-[#2D4A3E] leading-tight">
-              General gap-fill
-            </h2>
-            <p className="text-sm text-[#6D6A65] mt-2 max-w-2xl leading-relaxed">
-              Proactive outreach driven by the Coverage gaps report. Currently{" "}
-              <strong>dry-run</strong> &mdash; the nightly cron creates drafts
-              but doesn't send. Flip to live by editing{" "}
-              <code className="text-xs bg-[#F2EFE8] px-1.5 py-0.5 rounded">cron.py</code>
-              {" "}line ~250 (<code className="text-xs">dry_run=False</code>).
-            </p>
+            <div className="min-w-0">
+              <div className="text-[10px] uppercase tracking-widest text-[#8B4F1F] font-semibold">
+                Recruiting &middot; Track B
+              </div>
+              <h2 className="font-serif-display text-2xl text-[#2D4A3E] leading-tight mt-0.5">
+                General gap-fill
+              </h2>
+              <p className="text-sm text-[#6D6A65] mt-1.5 max-w-2xl leading-relaxed">
+                Proactive outreach driven by the Coverage gaps report. Flip
+                between dry-run and live from the{" "}
+                <strong>Operations &rarr; Settings &rarr; Go-live runbook</strong>{" "}
+                (Track B row).
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {generateRecruitDrafts && (
