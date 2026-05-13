@@ -313,6 +313,47 @@ async def portal_me(
     return {"email": session["email"], "role": session["role"]}
 
 
+@router.get("/portal/login-history")
+async def portal_login_history(
+    session: dict[str, Any] = Depends(require_session(("patient", "therapist"))),
+):
+    """Return the signed-in user's last 50 login events.
+
+    Backs the patient + therapist 'My sign-in history' page. Returns
+    events with `is_new_device` flagged client-side-style on the server
+    (first occurrence of a given ip_hash for this account = new device).
+    Raw ip_hash is NOT returned -- not useful to the user, just noise.
+
+    Records live in db.login_events with a 90-day TTL. After 90 days
+    a previously-seen IP looks 'new' again, which is intentional.
+    """
+    from login_alerts import get_login_history
+    events = await get_login_history(session["email"], limit=50)
+    # Annotate each row with is_new_device. We need ip_hash for the
+    # detection but strip it before responding.
+    seen_hashes: set[str] = set()
+    full_cur = db.login_events.find(
+        {"email": session["email"]},
+        {"_id": 0, "ip_hash": 1, "ts": 1, "user_agent": 1, "role": 1},
+    ).sort("ts", 1)  # ascending so we mark FIRST occurrence as new
+    annotated: list[dict] = []
+    async for ev in full_cur:
+        h = ev.get("ip_hash") or ""
+        is_new = bool(h) and h not in seen_hashes
+        if h:
+            seen_hashes.add(h)
+        annotated.append({
+            "ts": ev.get("ts"),
+            "role": ev.get("role"),
+            "user_agent": ev.get("user_agent") or "",
+            "is_new_device": is_new,
+        })
+    # Sort newest-first, cap at 50.
+    annotated.sort(key=lambda e: e.get("ts") or "", reverse=True)
+    annotated = annotated[:50]
+    return {"events": annotated, "count": len(annotated)}
+
+
 @router.get("/portal/therapist/profile")
 async def portal_therapist_profile(
     session: dict[str, Any] = Depends(require_session(("therapist",))),

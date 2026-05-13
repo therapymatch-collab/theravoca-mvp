@@ -1077,6 +1077,16 @@ export default function TherapistPortal() {
         </div>
       )}
 
+      <div className="mt-12 mb-4 text-center text-xs text-[#6D6A65]">
+        <Link
+          to="/portal/therapist/login-history"
+          className="hover:text-[#2D4A3E] underline"
+          data-testid="therapist-login-history-link"
+        >
+          View my sign-in history
+        </Link>
+      </div>
+
       <Footer />
     </div>
   );

@@ -162,6 +162,15 @@ export default function PatientPortal() {
               ))}
             </div>
           )}
+          <div className="mt-12 text-center text-xs text-[#6D6A65]">
+            <Link
+              to="/portal/patient/login-history"
+              className="hover:text-[#2D4A3E] underline"
+              data-testid="patient-login-history-link"
+            >
+              View my sign-in history
+            </Link>
+          </div>
         </div>
       </main>
       <Footer />

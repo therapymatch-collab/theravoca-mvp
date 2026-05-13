@@ -33,6 +33,7 @@ import PromisePreview from "@/pages/PromisePreview";
 import Unsubscribe from "@/pages/Unsubscribe";
 import CrisisResources from "@/pages/CrisisResources";
 import TherapistTerms from "@/pages/TherapistTerms";
+import LoginHistory from "@/pages/LoginHistory";
 
 function App() {
   useEffect(() => {
@@ -61,6 +62,8 @@ function App() {
             <Route path="/portal/patient" element={<PatientPortal />} />
             <Route path="/portal/therapist" element={<TherapistPortal />} />
             <Route path="/portal/therapist/edit" element={<TherapistEditProfile />} />
+            <Route path="/portal/patient/login-history" element={<LoginHistory role="patient" />} />
+            <Route path="/portal/therapist/login-history" element={<LoginHistory role="therapist" />} />
             <Route path="/therapists/join" element={<TherapistSignup />} />
             <Route path="/verify/:token" element={<VerifyEmail />} />
             <Route
