@@ -127,3 +127,9 @@ htmlcov/
 backend/imports/
 imports/
 frontend/package-lock.json
+
+# Paid-ad platform exports (spend, audience, creative -- sensitive)
+docs/ad-data/google/
+docs/ad-data/meta/
+docs/ad-data/tiktok/
+!docs/ad-data/README.md
