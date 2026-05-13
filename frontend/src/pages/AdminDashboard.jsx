@@ -202,7 +202,8 @@ export default function AdminDashboard() {
   const [refOptionsLoaded, setRefOptionsLoaded] = useState(false);
   const [refNewOption, setRefNewOption] = useState("");
   const [refSavingOptions, setRefSavingOptions] = useState(false);
-  // LLM outreach invites — therapists we scraped + emailed (separate from in-app signups)
+  // Outreach invites — therapists we scraped + emailed (separate from in-app signups).
+  // Cascade: Google Places -> Psychology Today -> external dirs -> backup HTML scrapers.
   const [outreach, setOutreach] = useState(null);
   const [outreachLoading, setOutreachLoading] = useState(false);
   const [outreachShowAll, setOutreachShowAll] = useState(false);
@@ -439,7 +440,7 @@ export default function AdminDashboard() {
 
   const runOutreachNow = async (id) => {
     if (!confirm(
-      "Run LLM outreach for this patient now?\n\n" +
+      "Run outreach for this patient now?\n\n" +
       "Searches our external directory pool + Claude for additional Idaho therapists who match this patient's brief, " +
       "then queues invite emails (or SMS for therapists with no public email) to fill the gap. " +
       "Use this if the auto-trigger didn't run or the directory had < 30 matches."
@@ -1517,7 +1518,7 @@ export default function AdminDashboard() {
                       </div>
                     ) : (filteredOutreach?.invites || []).length === 0 ? (
                       <div className="p-10 text-center text-[#6D6A65]">
-                        {search ? "No invites match your search." : "No outreach invites yet. They'll appear once a request triggers the LLM agent (i.e. when a patient request produces fewer than 30 directory matches)."}
+                        {search ? "No invites match your search." : "No outreach invites yet. They'll appear once a request triggers the outreach agent (i.e. when a patient request produces fewer than 30 directory matches)."}
                       </div>
                     ) : (() => {
                       const all = filteredOutreach.invites || [];
@@ -2772,9 +2773,9 @@ export default function AdminDashboard() {
                   className="tv-btn-secondary !py-2 !px-4 text-sm border-[#C87965] text-[#C87965]"
                   onClick={() => runOutreachNow(detail.request.id)}
                   data-testid="run-outreach-btn"
-                  title="Manually fire the LLM outreach for this request — useful if the auto-trigger didn't run or fewer than 30 directory matches were found."
+                  title="Manually fire outreach for this request — useful if the auto-trigger didn't run or fewer than 30 directory matches were found. Cascades through Google Places, Psychology Today, registered directories, and backup scrapers."
                 >
-                  <Send size={14} className="inline mr-1.5" /> Run LLM outreach now
+                  <Send size={14} className="inline mr-1.5" /> Run outreach now
                 </button>
                 <RerunWithCutoffs
                   requestId={detail.request.id}
@@ -2923,17 +2924,17 @@ export default function AdminDashboard() {
               <div data-testid="detail-invited-therapists">
                 <div className="flex items-baseline justify-between gap-3 mb-2">
                   <h4 className="font-semibold text-[#2B2A29]">
-                    LLM-invited therapists ({(detail.invited || []).length})
+                    Invited therapists ({(detail.invited || []).length})
                   </h4>
                   <p className="text-xs text-[#6D6A65]">
-                    External candidates we emailed via the LLM outreach agent
+                    External candidates we emailed via the outreach agent (Places + PT + directories)
                   </p>
                 </div>
                 {(detail.invited || []).length === 0 ? (
                   <p className="text-sm text-[#6D6A65]">
-                    No LLM outreach invites for this request yet. If the directory
+                    No outreach invites for this request yet. If the directory
                     returned fewer than {detail.request.effective_top_n || 30} matches,
-                    click <strong>Run LLM outreach now</strong> above.
+                    click <strong>Run outreach now</strong> above.
                   </p>
                 ) : (
                   <div className="space-y-2 max-h-[360px] overflow-y-auto">

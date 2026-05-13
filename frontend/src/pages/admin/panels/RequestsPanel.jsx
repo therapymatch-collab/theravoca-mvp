@@ -217,7 +217,7 @@ export default function RequestsPanel({
               <td
                 className="p-4 font-semibold text-[#C87965]"
                 data-testid={`request-invited-count-${r.id}`}
-                title="LLM outreach invites sent for this request"
+                title="Outreach invites sent for this request (Places + PT + directories)"
               >
                 {r.invited_count || 0}
               </td>
