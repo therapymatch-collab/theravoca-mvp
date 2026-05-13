@@ -921,13 +921,12 @@ async def send_claim_profile_email(
             '<li style="margin:6px 0;">Your profile is already complete '
             '-- feel free to refine it any time.</li>'
         )
-    intro_html = "".join(
-        f'<p style="font-size:15px;line-height:1.7;color:{BRAND["text"]};">{para.strip()}</p>'
-        for para in intro.split("\n\n") if para.strip()
-    )
+    # `intro` already has <br/> tags from render() for newlines the admin
+    # entered in the template editor. Wrap it in a single <p> so the line
+    # breaks render as visible spacing.
     inner = f"""
     {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
-    {intro_html}
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">{intro}</p>
     <div style="background:{BRAND['bg']};border:1px solid {BRAND['border']};border-radius:12px;padding:18px 22px;margin:22px 0;">
       <div style="font-size:13px;color:{BRAND['muted']};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">
         Your profile is {score}% complete

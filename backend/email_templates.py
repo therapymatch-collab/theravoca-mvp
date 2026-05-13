@@ -429,10 +429,16 @@ async def upsert_template(
 
 
 def render(text: str, **vars_: Any) -> str:
-    """Tolerant {var}-style substitution: missing keys leave the placeholder intact."""
+    """Tolerant {var}-style substitution: missing keys leave the placeholder intact.
+    Newlines in the source text are converted to <br/> tags so blank lines
+    the admin types in the template editor actually render as visible spacing
+    in the outgoing email. (Subjects don't contain newlines so this is safe
+    for them too -- the input field is single-line.)
+    """
     if not text:
         return ""
     result = text
     for k, v in vars_.items():
         result = result.replace("{" + k + "}", str(v))
+    result = result.replace("\r\n", "\n").replace("\n", "<br/>\n")
     return result
