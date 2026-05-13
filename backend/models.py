@@ -171,7 +171,15 @@ class RequestCreate(BaseModel):
     # whose `urgency_capacity` can meet the patient's timeframe pass.
     urgency_strict: bool = False
     prior_therapy: str = Field(default="not_sure", max_length=30)
-    prior_therapy_notes: Optional[str] = Field(default="", max_length=2000)
+    # Cap reduced from 2000 -> 250 (HIPAA scope-out, 2026-05-13). Field
+    # is gated in the UI behind an explicit "share additional context"
+    # consent toggle so it only carries text when the patient
+    # affirmatively opts in.
+    prior_therapy_notes: Optional[str] = Field(default="", max_length=250)
+    # Explicit consent flag persisted alongside the note text so we can
+    # prove (per audit) that the patient ticked the toggle, not just
+    # that text exists. Unchecking the toggle wipes the text in the UI.
+    share_prior_therapy_context: bool = False
     # Preferred therapy language. Defaults to English (no filter / no bonus).
     # When set to a non-English value, the matcher gives a soft bonus to
     # therapists with that language in `languages_spoken`. When the
@@ -220,8 +228,13 @@ class RequestCreate(BaseModel):
     # relationships, self_regulation}.
     p2_change: list[str] = Field(default_factory=list, max_length=2)
     # P3 — "What should your therapist already get about you without
-    # you having to explain it?" Open text, optional.
-    p3_resonance: Optional[str] = Field(default="", max_length=2000)
+    # you having to explain it?" Open text, optional. Cap reduced from
+    # 2000 -> 250 (HIPAA scope-out, 2026-05-13). Gated in the UI behind
+    # an explicit "share additional context" consent toggle.
+    p3_resonance: Optional[str] = Field(default="", max_length=250)
+    # Explicit consent flag for the P3 free-text field. Same rationale
+    # as share_prior_therapy_context above.
+    share_resonance_context: bool = False
     # If True, send the patient an email receipt with a read-only copy
     # of their answers right after submit. They can't self-edit, so the
     # receipt doubles as their paper trail for any post-submit

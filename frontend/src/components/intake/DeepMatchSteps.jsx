@@ -1,4 +1,5 @@
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { P1_OPTIONS, P2_OPTIONS } from "@/components/intake/deepMatchOptions";
 import { Group, Field, PillCol } from "@/components/intake/IntakeUI";
 
@@ -91,35 +92,63 @@ export function P3Step({ data, set, t }) {
   return (
     <div className="space-y-5">
       <DeepMatchBanner stepIndex={3} t={t} />
-      <Field
-        label={t(
-          "intake.deep.p3.label",
-          "What should your therapist already get about you without you having to explain it?",
-        )}
+      {/* Explicit consent gate (HIPAA scope-out, 2026-05-13). Even
+          though the patient already opted into deep matching one step
+          back, the free-text field gets its own affirmative toggle so
+          consent is unambiguous and per-field. Unchecking wipes any
+          draft text from form state. */}
+      <label
+        className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer hover:border-[#2D4A3E] transition"
+        data-testid="p3-consent-row"
       >
-        <Textarea
-          rows={5}
-          maxLength={2000}
-          minLength={20}
-          value={data.p3_resonance}
-          onChange={(e) => set("p3_resonance", e.target.value)}
-          placeholder={t(
-            "intake.deep.p3.placeholder",
-            "Try one of these starters:\n• My background or culture…\n• My work or life situation…\n• What didn't work with a past therapist…\n• The thing most people don't understand about me…",
-          )}
-          className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-          data-testid="p3-input"
+        <Checkbox
+          checked={data.share_resonance_context}
+          onCheckedChange={(v) => {
+            set("share_resonance_context", !!v);
+            if (!v) set("p3_resonance", "");
+          }}
+          data-testid="p3-consent"
         />
-        <p className="text-[11px] text-[#6D6A65] mt-2 leading-snug">
+        <span className="text-sm leading-snug text-[#2D4A3E]">
           {t(
-            "intake.deep.p3.helper",
-            "20+ characters helps the matching engine score for lived-experience fit. Therapists who opt in to your referral will see what you share here.",
+            "intake.deep.p3.consent.label",
+            "I'd like to share a short note for the matching engine (optional)",
           )}
-        </p>
-        <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2 leading-snug">
-          <strong>Do not include</strong> your name, phone number, email, address, or any other personally identifiable information. This field is for describing your situation only.
-        </p>
-      </Field>
+          <span className="block text-[11px] text-[#6D6A65] mt-0.5">
+            {t(
+              "intake.deep.p3.consent.helper",
+              "250 character max. Please do not include names, addresses, phone numbers, or other identifying info.",
+            )}
+          </span>
+        </span>
+      </label>
+      {data.share_resonance_context && (
+        <Field
+          label={t(
+            "intake.deep.p3.label",
+            "What should your therapist already get about you without you having to explain it?",
+          )}
+        >
+          <Textarea
+            rows={4}
+            maxLength={250}
+            minLength={20}
+            value={data.p3_resonance}
+            onChange={(e) => set("p3_resonance", e.target.value)}
+            placeholder={t(
+              "intake.deep.p3.placeholder",
+              "Try one of these starters:\n• My background or culture…\n• My work or life situation…\n• What didn't work with a past therapist…",
+            )}
+            className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+            data-testid="p3-input"
+          />
+          <p className="text-[11px] text-[#6D6A65] mt-2 leading-snug">
+            {(data.p3_resonance || "").length}/250 characters · 20+
+            characters helps the matching engine score for
+            lived-experience fit.
+          </p>
+        </Field>
+      )}
     </div>
   );
 }

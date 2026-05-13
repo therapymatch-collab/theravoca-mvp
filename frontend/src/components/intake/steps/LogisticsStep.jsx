@@ -97,31 +97,59 @@ export default function LogisticsStep({ data, set, toggleArr, hardCapacity }) {
       </Group>
       {(data.prior_therapy === "yes_helped" ||
         data.prior_therapy === "yes_not_helped") && (
-        <Field
-          label={
-            data.prior_therapy === "yes_helped"
-              ? "What worked? Anything you'd want again from a new therapist? (optional)"
-              : "What didn't work last time? Anything you'd want different this time? (optional)"
-          }
-        >
-          <Textarea
-            rows={3}
-            value={data.prior_therapy_notes}
-            onChange={(e) => set("prior_therapy_notes", e.target.value)}
-            maxLength={600}
-            placeholder={
-              data.prior_therapy === "yes_helped"
-                ? "e.g. CBT homework, weekly cadence, direct feedback style…"
-                : "e.g. felt rushed, talked over me, only generic advice…"
-            }
-            className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-            data-testid="prior-notes"
-          />
-          <p className="text-[11px] text-[#6D6A65] mt-1.5 leading-snug">
-            We feed this into matching so therapists who fit what you
-            valued (or avoid what didn't work) rank higher.
-          </p>
-        </Field>
+        <div className="space-y-3">
+          {/* Explicit consent gate (HIPAA scope-out, 2026-05-13).
+              The textarea only renders -- and the field only carries
+              text -- when the patient affirmatively ticks this toggle.
+              Unchecking wipes any draft text from form state. */}
+          <label
+            className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer hover:border-[#2D4A3E] transition"
+            data-testid="prior-notes-consent-row"
+          >
+            <Checkbox
+              checked={data.share_prior_therapy_context}
+              onCheckedChange={(v) => {
+                set("share_prior_therapy_context", !!v);
+                if (!v) set("prior_therapy_notes", "");
+              }}
+              data-testid="prior-notes-consent"
+            />
+            <span className="text-sm leading-snug text-[#2D4A3E]">
+              I'd like to share a short note about my past therapy
+              experience (optional)
+              <span className="block text-[11px] text-[#6D6A65] mt-0.5">
+                250 character max. Helps with matching. Please do not
+                include names, addresses, or other identifying info.
+              </span>
+            </span>
+          </label>
+          {data.share_prior_therapy_context && (
+            <Field
+              label={
+                data.prior_therapy === "yes_helped"
+                  ? "What worked? Anything you'd want again from a new therapist?"
+                  : "What didn't work last time? Anything you'd want different this time?"
+              }
+            >
+              <Textarea
+                rows={3}
+                value={data.prior_therapy_notes}
+                onChange={(e) => set("prior_therapy_notes", e.target.value)}
+                maxLength={250}
+                placeholder={
+                  data.prior_therapy === "yes_helped"
+                    ? "e.g. CBT homework, weekly cadence, direct feedback style…"
+                    : "e.g. felt rushed, talked over me, only generic advice…"
+                }
+                className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+                data-testid="prior-notes"
+              />
+              <p className="text-[11px] text-[#6D6A65] mt-1.5 leading-snug">
+                {(data.prior_therapy_notes || "").length}/250 characters
+              </p>
+            </Field>
+          )}
+        </div>
       )}
     </div>
   );

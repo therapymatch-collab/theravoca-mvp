@@ -211,6 +211,9 @@ export default function IntakeForm() {
     urgency_strict: false,
     prior_therapy: "",
     prior_therapy_notes: "",
+    // Explicit consent toggle for prior_therapy_notes (HIPAA scope-out,
+    // 2026-05-13). Field only renders + carries text when this is true.
+    share_prior_therapy_context: false,
     prior_therapy_helped: "",
     experience_preference: ["no_pref"],
     gender_preference: "no_pref",
@@ -234,6 +237,10 @@ export default function IntakeForm() {
     p1_communication: [],   // pick 2 from P1_OPTIONS
     p2_change: [],          // pick 2 from P2_OPTIONS
     p3_resonance: "",       // open text — what should the therapist 'get' about you
+    // Explicit consent toggle for p3_resonance free text (HIPAA
+    // scope-out, 2026-05-13). Even within the deep-match opt-in flow,
+    // the free-text field gets its own per-field consent gate.
+    share_resonance_context: false,
     email_receipt: false,   // patient ticked "send me a copy" in Review modal
   });
   const set = (k, v) => setData((d) => ({ ...d, [k]: v }));
