@@ -867,6 +867,23 @@ export default function TherapistSignup() {
                   loading="lazy"
                   onError={(e) => { e.currentTarget.style.display = "none"; }}
                 />
+                {/* Floating "Referral received!" chips -- matches the
+                    marketing site's hero treatment on /for-providers. */}
+                <div className="absolute top-6 left-4 sm:left-8 bg-white/95 backdrop-blur rounded-full pl-2 pr-4 py-1.5 shadow-lg flex items-center gap-2 text-sm">
+                  <span className="w-7 h-7 rounded-full bg-[#C87965] text-white text-[11px] flex items-center justify-center font-semibold">JS</span>
+                  <span className="text-[#2B2A29] font-medium">Referral received!</span>
+                  <span className="text-[#4A6B5D]">&#10003;</span>
+                </div>
+                <div className="absolute top-20 right-4 sm:right-8 bg-white/95 backdrop-blur rounded-full pl-2 pr-4 py-1.5 shadow-lg flex items-center gap-2 text-sm">
+                  <span className="w-7 h-7 rounded-full bg-[#4A6B5D] text-white text-[11px] flex items-center justify-center font-semibold">MR</span>
+                  <span className="text-[#2B2A29] font-medium">Referral received!</span>
+                  <span className="text-[#4A6B5D]">&#10003;</span>
+                </div>
+                <div className="absolute top-36 left-4 sm:left-8 bg-white/95 backdrop-blur rounded-full pl-2 pr-4 py-1.5 shadow-lg flex items-center gap-2 text-sm">
+                  <span className="w-7 h-7 rounded-full bg-[#2D4A3E] text-white text-[11px] flex items-center justify-center font-semibold">AK</span>
+                  <span className="text-[#2B2A29] font-medium">Referral received!</span>
+                  <span className="text-[#4A6B5D]">&#10003;</span>
+                </div>
               </div>
             </div>
           </div>
