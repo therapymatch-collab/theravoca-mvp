@@ -371,6 +371,17 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "footer_note": "This is the last survey we'll send. Your responses are completely private and help us improve outcomes for future patients.<br/><br/>To stop receiving these emails, reply STOP or email support@theravoca.com.",
         "available_vars": "request_id",
     },
+    "claim_profile": {
+        "title": "Claim & complete profile",
+        "description": "Sent to existing imported therapists asking them to claim their profile and complete missing fields. The list of missing fields and the percent-complete progress bar render below the intro -- they're code-controlled and aren't editable here.",
+        "subject": "Welcome to TheraVoca -- claim & complete your profile",
+        "heading": "Welcome to TheraVoca",
+        "greeting": "Hi {first_name},",
+        "intro": "We're going live with TheraVoca -- a referral platform that does the logistical work of connecting clients to therapists like you so you can spend more time with patients and less on intake calls.\n\nWe've already pre-loaded your basic credentials. To make sure patients get the best possible match (and so your profile shows up in search), please take 5 minutes to fill in what's missing.",
+        "cta_label": "Complete my profile",
+        "footer_note": "You'll sign in with a one-time code sent to this email -- no password to remember.",
+        "available_vars": "first_name, score, edit_url, portal_url",
+    },
 }
 
 

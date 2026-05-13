@@ -893,30 +893,41 @@ async def send_claim_profile_email(
     """One-time go-live outreach email asking each existing therapist to
     claim their profile and fill in any missing information.
 
-    Renders the actual list of missing fields inline so the therapist
-    knows exactly what to fix before they sign in.
+    Editable copy (subject / greeting / intro / cta_label / footer_note)
+    lives in the `claim_profile` email template -- admin can override via
+    Content -> Email templates. The progress bar + missing-fields list
+    are code-controlled (structural, not text).
     """
+    tpl = await get_template(_db(), "claim_profile")
     first_name = _first_name(therapist_name)
     portal_url = f"{_get_app_url()}/sign-in?role=therapist"
     edit_url = f"{_get_app_url()}/portal/therapist/edit"
-    subject = "Welcome to TheraVoca — claim & complete your profile"
+    vars_ = {
+        "first_name": first_name,
+        "score": score,
+        "edit_url": edit_url,
+        "portal_url": portal_url,
+    }
+    subject = render(tpl["subject"], **vars_)
+    greeting = render(tpl.get("greeting", ""), **vars_)
+    intro = render(tpl["intro"], **vars_)
+    cta_label = render(tpl.get("cta_label", "Complete my profile"), **vars_)
+    footer_note = render(tpl.get("footer_note", ""), **vars_)
     bullets_html = "".join(
         f'<li style="margin:6px 0;">{label}</li>' for label in missing_fields[:10]
     )
     if not bullets_html:
-        bullets_html = '<li style="margin:6px 0;">Your profile is already complete — feel free to refine it any time.</li>'
+        bullets_html = (
+            '<li style="margin:6px 0;">Your profile is already complete '
+            '-- feel free to refine it any time.</li>'
+        )
+    intro_html = "".join(
+        f'<p style="font-size:15px;line-height:1.7;color:{BRAND["text"]};">{para.strip()}</p>'
+        for para in intro.split("\n\n") if para.strip()
+    )
     inner = f"""
-    <p style="font-size:16px;line-height:1.6;">Hi {first_name},</p>
-    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-      We're going live with TheraVoca — a referral platform that does the
-      logistical work of connecting clients to therapists like you so you
-      can spend more time with patients and less on intake calls.
-    </p>
-    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
-      We've already pre-loaded your basic credentials. To make sure
-      patients get the best possible match (and so your profile shows up
-      in search), please take 5 minutes to fill in what's missing.
-    </p>
+    {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
+    {intro_html}
     <div style="background:{BRAND['bg']};border:1px solid {BRAND['border']};border-radius:12px;padding:18px 22px;margin:22px 0;">
       <div style="font-size:13px;color:{BRAND['muted']};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">
         Your profile is {score}% complete
@@ -931,15 +942,13 @@ async def send_claim_profile_email(
     </div>
     <p style="margin:28px 0;text-align:center;">
       <a href="{edit_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">
-        Complete my profile
+        {cta_label}
       </a>
     </p>
-    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;text-align:center;">
-      You'll sign in with a one-time code sent to this email — no password to remember.
-    </p>
+    {f'<p style="color:{BRAND["muted"]};font-size:13px;line-height:1.6;text-align:center;">{footer_note}</p>' if footer_note else ''}
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">
       Already signed in? Pop into your <a href="{portal_url}" style="color:{BRAND['primary']};">portal</a>
-      any time. Reply to this email if anything looks off — we'd love to hear from you.
+      any time. Reply to this email if anything looks off -- we'd love to hear from you.
     </p>
     """
-    await _send(to, subject, _wrap("Claim your TheraVoca profile", inner))
+    await _send(to, subject, _wrap(tpl.get("heading", "Claim your TheraVoca profile"), inner))
