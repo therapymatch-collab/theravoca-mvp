@@ -1598,6 +1598,80 @@ async def admin_email_restoration_run(payload: dict | None = None) -> dict[str, 
     return {"ok": True, "dry_run": False, "restored": restored}
 
 
+# Inverse of /admin/email-restoration/run -- pre-launch safety. Ensures
+# no therapist's `email` field holds a real address; real addresses get
+# tucked into `real_email` and `email` becomes a `therapymatch+...` placeholder.
+@router.post("/admin/strip-real-emails", dependencies=[Depends(require_admin)])
+async def admin_strip_real_emails(payload: dict | None = None) -> dict[str, Any]:
+    """Pre-launch safety: walk every therapist whose `email` is currently a
+    real (non-placeholder) address. Move that real address into `real_email`
+    (the existing canonical store) if it's not already there, and replace
+    `email` with a generated `therapymatch+t<id-prefix>@gmail.com` placeholder.
+
+    Idempotent: therapists whose `email` is already a placeholder are no-ops.
+    Symmetric with `/admin/email-restoration/run` -- run that one at go-live
+    to swap real_email back into email.
+
+    Body: {"dry_run": bool}  (default true; pass false to actually write.)
+    """
+    payload = payload or {}
+    dry_run = bool(payload.get("dry_run", True))
+
+    # Anything not matching `therapymatch+...@gmail.com` is treated as real.
+    placeholder_re = {"$regex": r"^therapymatch\+", "$options": "i"}
+    candidates = await db.therapists.find(
+        {"email": {"$not": placeholder_re}},
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "real_email": 1},
+    ).to_list(5000)
+
+    samples = [
+        {
+            "id": c["id"],
+            "name": c.get("name"),
+            "current_email": c.get("email"),
+            "had_real_email": bool((c.get("real_email") or "").strip()),
+        }
+        for c in candidates[:10]
+    ]
+
+    if dry_run:
+        return {
+            "ok": True,
+            "dry_run": True,
+            "would_strip": len(candidates),
+            "samples": samples,
+        }
+
+    stripped = 0
+    skipped_no_id = 0
+    for t in candidates:
+        tid = (t.get("id") or "").strip()
+        if not tid:
+            skipped_no_id += 1
+            continue
+        current_email = (t.get("email") or "").strip()
+        existing_real = (t.get("real_email") or "").strip()
+        # Only overwrite real_email if it's empty -- never lose an
+        # already-stored real address.
+        update_set: dict[str, Any] = {
+            "email": f"therapymatch+t{tid[:8]}@gmail.com",
+            "_email_stripped_at": _now_iso(),
+            "_email_stripped_was": current_email,
+            "updated_at": _now_iso(),
+        }
+        if not existing_real and current_email:
+            update_set["real_email"] = current_email
+        await db.therapists.update_one({"id": tid}, {"$set": update_set})
+        stripped += 1
+    logger.warning("EMAIL STRIP: stripped=%d skipped_no_id=%d", stripped, skipped_no_id)
+    return {
+        "ok": True,
+        "dry_run": False,
+        "stripped": stripped,
+        "skipped_no_id": skipped_no_id,
+    }
+
+
 @router.get("/admin/backfill-status")
 async def admin_backfill_status(_: bool = Depends(require_admin)):
     """Snapshot of backfill state  --  used by the admin UI to confirm

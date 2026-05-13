@@ -93,6 +93,15 @@ def _wrap(title: str, inner_html: str, unsubscribe_url: Optional[str] = None) ->
 """
 
 
+def _is_safe_test_address(addr: str) -> bool:
+    """Pre-launch safety: anything matching `therapymatch+...@gmail.com` is
+    a fake placeholder we own (Gmail plus-addressing routes them all to a
+    single inbox). Real therapist addresses fail this check.
+    """
+    a = (addr or "").strip().lower()
+    return a.startswith("therapymatch+") and a.endswith("@gmail.com")
+
+
 async def _send(to: str, subject: str, html: str) -> dict[str, Any] | None:
     api_key = _get_api_key()
     if not api_key:
@@ -101,6 +110,23 @@ async def _send(to: str, subject: str, html: str) -> dict[str, Any] | None:
     resend.api_key = api_key
     # Dev/test mode: redirect every outbound email to a single inbox (e.g. for Resend test mode)
     override = os.environ.get("EMAIL_OVERRIDE_TO", "").strip()
+    # Pre-launch safety guard. Three states:
+    #   1. EMAIL_OVERRIDE_TO is set      -> redirect to override (testing safe)
+    #   2. EMAIL_LIVE_MODE=true          -> allow real recipient (go-live)
+    #   3. neither                       -> BLOCK any send to a real address.
+    #      Sends to fake therapymatch+...@gmail.com placeholders still go
+    #      through (those route to our own Gmail and can't leak).
+    # This is the suspenders for the EMAIL_OVERRIDE_TO belt -- if the
+    # override env var ever gets unset by accident, we fail closed.
+    live_mode = os.environ.get("EMAIL_LIVE_MODE", "").strip().lower() == "true"
+    if not override and not live_mode and not _is_safe_test_address(to):
+        logger.warning(
+            "PRELAUNCH BLOCK: refusing to send to %s (real address). "
+            "Set EMAIL_OVERRIDE_TO to redirect to a test inbox, or "
+            "EMAIL_LIVE_MODE=true to go live.",
+            to,
+        )
+        return None
     actual_to = override or to
     actual_subject = f"[was: {to}] {subject}" if override and override != to else subject
     params = {
