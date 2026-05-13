@@ -12,6 +12,7 @@ from .site_copy import router as site_copy_router
 from .stripe_webhook import router as stripe_router
 from .therapists import router as therapists_router
 from .unsubscribe import router as unsubscribe_router
+from .webhooks import router as webhooks_router
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(patients_router)
@@ -26,5 +27,6 @@ api_router.include_router(master_query_router)
 api_router.include_router(site_copy_router)
 api_router.include_router(stripe_router)
 api_router.include_router(unsubscribe_router)
+api_router.include_router(webhooks_router)
 
 __all__ = ["api_router"]

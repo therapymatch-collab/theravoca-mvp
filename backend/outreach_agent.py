@@ -492,7 +492,16 @@ async def _send_outreach_invite(
             email_error = str(e)
             logger.warning("Outreach email exception for invite=%s: %s", invite_id, e)
         if email_result is not None:
-            return {"ok": True, "channel": "email", "error": None}
+            # Capture Resend's email_id so the inbound webhook can match
+            # delivery/bounce/open events back to THIS invite. Without
+            # this, the webhook falls back to a (looser) email + recent
+            # timestamp match.
+            return {
+                "ok": True,
+                "channel": "email",
+                "error": None,
+                "resend_email_id": email_result.get("id") if isinstance(email_result, dict) else None,
+            }
         # Email failed. Fall through to SMS if a phone number is on file;
         # otherwise return the failure so the invite row + counts reflect reality.
         if not phone:
@@ -714,15 +723,22 @@ async def run_outreach_for_request(request_id: str) -> dict[str, Any]:
             sent_email += 1
         elif ok and channel == "sms":
             sent_sms += 1
+        invite_update: dict = {
+            "email_sent": ok and channel == "email",
+            "sms_sent": ok and channel == "sms",
+            "channel": channel,
+            "send_error": result.get("error"),
+            "sent_at": _now_iso() if ok else None,
+        }
+        # Capture Resend's email_id when we have one so the inbound
+        # webhook can match delivery/bounce/open events back precisely
+        # (not just by recipient + timestamp window).
+        resend_id = result.get("resend_email_id")
+        if resend_id:
+            invite_update["resend_email_id"] = resend_id
         await db.outreach_invites.update_one(
             {"id": invite_id},
-            {"$set": {
-                "email_sent": ok and channel == "email",
-                "sms_sent": ok and channel == "sms",
-                "channel": channel,
-                "send_error": result.get("error"),
-                "sent_at": _now_iso() if ok else None,
-            }},
+            {"$set": invite_update},
         )
         # Resend free tier caps at 5/sec; Twilio at ~1/sec for trial — throttle for both
         await asyncio.sleep(0.5)
