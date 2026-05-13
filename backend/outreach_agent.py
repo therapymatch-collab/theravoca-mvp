@@ -534,7 +534,7 @@ async def _filter_existing_contacts(candidates: list[dict]) -> tuple[list[dict],
     Returns `(filtered, stats)` where `stats` reports how many were skipped and why.
     """
     if not candidates:
-        return [], {"skipped_existing_therapist": 0, "skipped_prior_invite": 0}
+        return [], {"skipped_existing_therapist": 0, "skipped_prior_invite": 0, "skipped_hard_bounced": 0}
 
     from sms_service import normalize_us_phone
 
@@ -624,6 +624,21 @@ async def _filter_existing_contacts(candidates: list[dict]) -> tuple[list[dict],
     from outreach_optout import get_opted_out_set
     opted_emails, opted_phones = await get_opted_out_set(emails, phones)
 
+    # Bulk-fetch hard-bounced addresses populated by the Resend webhook.
+    # Re-emailing a hard-bounced address wastes a send AND damages our
+    # sender reputation, so we skip them permanently (no cooldown
+    # expiry).
+    bounced_emails: set[str] = set()
+    if emails:
+        async for row in db.bounced_emails.find(
+            {"email": {"$in": emails}}, {"_id": 0, "email": 1},
+        ):
+            be = (row.get("email") or "").strip().lower()
+            if be:
+                bounced_emails.add(be)
+
+    skip_b = 0
+
     for c in candidates:
         e = (c.get("email") or "").strip().lower()
         p = normalize_us_phone(c.get("phone") or "")
@@ -631,6 +646,11 @@ async def _filter_existing_contacts(candidates: list[dict]) -> tuple[list[dict],
         if (e and e in opted_emails) or (p and p in opted_phones):
             skip_opt += 1
             logger.info("Outreach: skipping candidate (opted out)")
+            continue
+        if e and e in bounced_emails:
+            # Hard-bounced previously per Resend webhook -- never re-send.
+            skip_b += 1
+            logger.info("Outreach: skipping candidate (hard bounced previously)")
             continue
         if (e_for_dedupe and e_for_dedupe in therapist_emails) or (p and p in therapist_phones):
             skip_t += 1
@@ -648,6 +668,7 @@ async def _filter_existing_contacts(candidates: list[dict]) -> tuple[list[dict],
         "skipped_existing_therapist": skip_t,
         "skipped_prior_invite": skip_i,
         "skipped_opted_out": skip_opt,
+        "skipped_hard_bounced": skip_b,
     }
 
 
@@ -761,6 +782,7 @@ async def run_outreach_for_request(request_id: str) -> dict[str, Any]:
         "skipped_existing_therapist": dedupe_stats["skipped_existing_therapist"],
         "skipped_prior_invite": dedupe_stats["skipped_prior_invite"],
         "skipped_opted_out": dedupe_stats.get("skipped_opted_out", 0),
+        "skipped_hard_bounced": dedupe_stats.get("skipped_hard_bounced", 0),
         "request_id": request_id,
     }
 

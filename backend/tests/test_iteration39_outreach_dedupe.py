@@ -139,7 +139,7 @@ def test_filter_handles_empty_and_missing_emails():
     async def go():
         kept, stats = await _filter_existing_emails([])
         assert kept == []
-        assert stats == {"skipped_existing_therapist": 0, "skipped_prior_invite": 0}
+        assert stats == {"skipped_existing_therapist": 0, "skipped_prior_invite": 0, "skipped_hard_bounced": 0}
 
         kept2, _ = await _filter_existing_emails([
             {"name": "no email"},
