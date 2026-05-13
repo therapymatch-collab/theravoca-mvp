@@ -1,4 +1,5 @@
-import { Send, Sparkles, Search, AlertTriangle, CheckCircle2, ArrowRight, Inbox, Target, MapPin, Zap, Mail } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Send, Sparkles, Search, AlertTriangle, CheckCircle2, ArrowRight, Inbox, Target, MapPin, Zap, Mail, Loader2 } from "lucide-react";
 import ScraperTestPanel from "@/pages/admin/panels/ScraperTestPanel";
 
 // Recruiting tab -- plain-English explainer of how TheraVoca grows its
@@ -8,9 +9,30 @@ import ScraperTestPanel from "@/pages/admin/panels/ScraperTestPanel";
 // request). Each track gets a parallel card so the differences are
 // at-a-glance comparable.
 //
-// Pure documentation panel -- no live API fetches. Pointers send the
-// admin to the existing data tabs (Invited therapists, Coverage gaps).
+// The "System config" section pulls live status from
+// GET /admin/recruiting-status so the badges (Live / Needs setup / Not
+// built) reflect actual env + code state, not hardcoded values.
 export default function RecruitingPanel({ client }) {
+  const [statusRows, setStatusRows] = useState(null);
+  const [statusLoading, setStatusLoading] = useState(true);
+
+  useEffect(() => {
+    if (!client) return;
+    let alive = true;
+    (async () => {
+      setStatusLoading(true);
+      try {
+        const r = await client.get("/admin/recruiting-status");
+        if (alive) setStatusRows(r.data?.rows || []);
+      } catch {
+        if (alive) setStatusRows([]);
+      } finally {
+        if (alive) setStatusLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [client]);
+
   return (
     <div className="mt-6 space-y-5" data-testid="recruiting-panel">
       {/* ============= HEADER ============= */}
@@ -205,52 +227,31 @@ export default function RecruitingPanel({ client }) {
         />
       </Section>
 
-      {/* ============= CURRENT CONFIG ============= */}
+      {/* ============= CURRENT CONFIG -- LIVE STATUS ============= */}
       <Section
         icon={<AlertTriangle size={18} className="text-[#C8923A]" />}
         title="System config -- what's live, what needs setup"
         accent="#FBEFE9"
       >
-        <ConfigRow
-          status="ok"
-          label="Track A (per-request) auto-outreach"
-          detail="OUTREACH_AUTO_RUN=true. Fires automatically whenever a request has fewer matches than max-invites."
-        />
-        <ConfigRow
-          status="ok"
-          label="Psychology Today discovery"
-          detail="PT_SCRAPING_ENABLED=true. Returns real therapist names + cities + specialties. Verified live."
-        />
-        <ConfigRow
-          status="ok"
-          label="Contact enricher (real-email finder)"
-          detail="Wired into the live flow 2026-05-12. Scrapes therapist websites for mailto: + visible emails, filters junk. Drops candidates with no real contact before sending."
-        />
-        <ConfigRow
-          status="warn"
-          label="Google Places API key"
-          detail="GOOGLE_PLACES_API_KEY must be set in Render env. Without it, the enricher falls back to direct website scraping only -- coverage drops. Action: enable 'Places API (New)' in Google Cloud Console, generate a key, add to Render env. Use the 'Test Places' button in the Live test section to verify."
-        />
-        <ConfigRow
-          status="warn"
-          label="Twilio SMS (fallback when therapist's website has no email)"
-          detail="Needs TWILIO_ENABLED=true, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER set in Render env. Trial accounts only send to numbers you've manually verified in the Twilio console -- for testing, set TWILIO_DEV_OVERRIDE_TO to your verified number so every outreach SMS reroutes there. Use the 'Test Twilio' button in the Live test section to verify."
-        />
-        <ConfigRow
-          status="warn"
-          label="Track B (proactive gap-recruit)"
-          detail="Currently runs in dry-run mode -- creates drafts but doesn't send emails. Flip to live in cron.py (run_gap_recruitment dry_run=False) when you're ready for ongoing automated recruiting outside of patient requests."
-        />
-        <ConfigRow
-          status="warn"
-          label="Refer-a-colleague payout"
-          detail="Attribution wired (we know who referred who). No automatic reward is applied. Decide on incentive structure (credit, discount, swag) and wire when ready."
-        />
-        <ConfigRow
-          status="gap"
-          label="Re-engagement drip for inactive therapists"
-          detail="Not built. No 'we miss you' / 'profile incomplete' nurture sequence. If retention becomes a priority, this is net-new work."
-        />
+        {statusLoading && (
+          <div className="text-sm text-[#6D6A65] flex items-center gap-2">
+            <Loader2 size={14} className="animate-spin" /> Checking live env state...
+          </div>
+        )}
+        {!statusLoading && (statusRows || []).length === 0 && (
+          <div className="text-sm text-[#6D6A65]">
+            Couldn't load live status (admin endpoint failed). Refresh the page or
+            check the network tab.
+          </div>
+        )}
+        {!statusLoading && (statusRows || []).map((row) => (
+          <ConfigRow
+            key={row.key}
+            status={row.status}
+            label={row.label}
+            detail={row.detail}
+          />
+        ))}
       </Section>
 
       {/* ============= LIVE TEST ============= */}

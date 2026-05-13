@@ -4963,6 +4963,117 @@ async def admin_delete_gap_draft(draft_id: str, _: bool = Depends(require_admin)
     return {"ok": True}
 
 
+@router.get("/admin/recruiting-status", dependencies=[Depends(require_admin)])
+async def admin_recruiting_status() -> dict[str, Any]:
+    """Live status for the "System config -- what's live, what needs setup"
+    section in the Recruiting -> How recruiting works subtab. Replaces the
+    previously-hardcoded badge values with actual env / DB checks so the
+    UI tells the truth.
+    """
+    import os as _os
+
+    def _present(name: str) -> bool:
+        return bool((_os.environ.get(name) or "").strip())
+
+    google_places_set = _present("GOOGLE_PLACES_API_KEY")
+    pt_enabled = (_os.environ.get("PT_SCRAPING_ENABLED", "true") or "").strip().lower() == "true"
+    outreach_auto = (_os.environ.get("OUTREACH_AUTO_RUN", "true") or "").strip().lower() == "true"
+    twilio_enabled = (_os.environ.get("TWILIO_ENABLED", "") or "").strip().lower() == "true"
+    twilio_creds = _present("TWILIO_ACCOUNT_SID") and _present("TWILIO_AUTH_TOKEN") and _present("TWILIO_FROM_NUMBER")
+    twilio_ok = twilio_enabled and twilio_creds
+
+    rows: list[dict[str, Any]] = [
+        {
+            "key": "track_a",
+            "label": "Track A (per-request) auto-outreach",
+            "status": "ok" if outreach_auto else "warn",
+            "detail": (
+                "OUTREACH_AUTO_RUN=true. Fires automatically whenever a request "
+                "has fewer matches than max-invites."
+                if outreach_auto else
+                "OUTREACH_AUTO_RUN is not 'true'. Per-request outreach won't fire "
+                "until you set OUTREACH_AUTO_RUN=true on Render."
+            ),
+        },
+        {
+            "key": "psychology_today",
+            "label": "Psychology Today discovery",
+            "status": "ok" if pt_enabled else "warn",
+            "detail": (
+                "PT_SCRAPING_ENABLED=true. Returns real therapist names + cities + specialties."
+                if pt_enabled else
+                "PT_SCRAPING_ENABLED is off. Set to 'true' on Render to re-enable."
+            ),
+        },
+        {
+            "key": "contact_enricher",
+            "label": "Contact enricher (real-email finder)",
+            "status": "ok",
+            "detail": (
+                "Wired into the live flow. Scrapes therapist websites for mailto: + "
+                "visible emails, filters junk. Drops candidates with no real contact "
+                "before sending."
+            ),
+        },
+        {
+            "key": "google_places",
+            "label": "Google Places API key",
+            "status": "ok" if google_places_set else "warn",
+            "detail": (
+                "GOOGLE_PLACES_API_KEY is set. Enricher uses Places as the primary "
+                "discovery + email source."
+                if google_places_set else
+                "GOOGLE_PLACES_API_KEY is NOT set. Without it, enricher falls back to "
+                "direct website scraping only -- coverage drops. Action: enable "
+                "'Places API (New)' in Google Cloud, generate a key, add to Render env."
+            ),
+        },
+        {
+            "key": "twilio_sms",
+            "label": "Twilio SMS (fallback when therapist's website has no email)",
+            "status": "ok" if twilio_ok else "warn",
+            "detail": (
+                "TWILIO_ENABLED=true and all creds are set. SMS fallback is live."
+                if twilio_ok else
+                f"Twilio not fully configured. enabled={twilio_enabled}, "
+                f"creds_set={twilio_creds}. Use the 'Test Twilio' button in the "
+                f"Recruiting live-test panel for a detailed diagnosis."
+            ),
+        },
+        {
+            "key": "track_b",
+            "label": "Track B (proactive gap-recruit)",
+            "status": "warn",
+            "detail": (
+                "Currently runs in dry-run mode -- creates drafts but doesn't send "
+                "emails. Flip to live in cron.py (run_gap_recruitment dry_run=False) "
+                "when you're ready for ongoing automated recruiting outside of patient "
+                "requests. (Hardcoded in source -- not env-controllable yet.)"
+            ),
+        },
+        {
+            "key": "refer_a_colleague",
+            "label": "Refer-a-colleague payout",
+            "status": "warn",
+            "detail": (
+                "Attribution wired (we know who referred who). No automatic reward is "
+                "applied. Decide on incentive structure (credit, discount, swag) and "
+                "wire when ready."
+            ),
+        },
+        {
+            "key": "reengagement_drip",
+            "label": "Re-engagement drip for inactive therapists",
+            "status": "gap",
+            "detail": (
+                "Not built. No 'we miss you' / 'profile incomplete' nurture sequence. "
+                "If retention becomes a priority, this is net-new work."
+            ),
+        },
+    ]
+    return {"rows": rows}
+
+
 @router.delete("/admin/gap-recruit/drafts", dependencies=[Depends(require_admin)])
 async def admin_wipe_all_gap_drafts(payload: dict | None = None) -> dict[str, Any]:
     """Wipe all recruit drafts (or only the unsent / dry-run subset).
