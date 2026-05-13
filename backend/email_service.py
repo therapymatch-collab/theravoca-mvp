@@ -102,10 +102,61 @@ def _is_safe_test_address(addr: str) -> bool:
     return a.startswith("therapymatch+") and a.endswith("@gmail.com")
 
 
-async def _send(to: str, subject: str, html: str) -> dict[str, Any] | None:
+async def _log_send(
+    *,
+    to: str,
+    actual_to: str,
+    subject: str,
+    template_key: Optional[str],
+    resend_id: Optional[str],
+    sent_ok: bool,
+    blocked: bool = False,
+    block_reason: Optional[str] = None,
+) -> None:
+    """Insert one row into `email_sends` for every outbound email attempt.
+    Powers the Outbound admin tab's per-template aggregation. Imperfect
+    but always-on -- callers don't have to remember to log anything.
+    Failures here are swallowed so the email send isn't blocked by a
+    logging hiccup.
+    """
+    try:
+        from deps import db as _db
+        await _db.email_sends.insert_one({
+            "sent_at": _now_iso(),
+            "to": (to or "").lower(),
+            "actual_to": (actual_to or "").lower(),
+            "subject": subject or "",
+            "template_key": template_key,
+            "resend_email_id": resend_id,
+            "sent_ok": bool(sent_ok),
+            "blocked": bool(blocked),
+            "block_reason": block_reason,
+        })
+    except Exception as e:
+        logger.warning("email_sends log failed: %s", e)
+
+
+def _now_iso() -> str:
+    """Local wrapper to avoid a circular import via helpers.py."""
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
+
+
+async def _send(
+    to: str,
+    subject: str,
+    html: str,
+    *,
+    template_key: Optional[str] = None,
+) -> dict[str, Any] | None:
     api_key = _get_api_key()
     if not api_key:
         logger.warning("RESEND_API_KEY not configured, skipping email send")
+        await _log_send(
+            to=to, actual_to=to, subject=subject, template_key=template_key,
+            resend_id=None, sent_ok=False, blocked=True,
+            block_reason="no_resend_api_key",
+        )
         return None
     resend.api_key = api_key
     # Dev/test mode: redirect every outbound email to a single inbox (e.g. for Resend test mode)
@@ -126,6 +177,11 @@ async def _send(to: str, subject: str, html: str) -> dict[str, Any] | None:
             "EMAIL_LIVE_MODE=true to go live.",
             to,
         )
+        await _log_send(
+            to=to, actual_to=to, subject=subject, template_key=template_key,
+            resend_id=None, sent_ok=False, blocked=True,
+            block_reason="prelaunch_safety_guard",
+        )
         return None
     actual_to = override or to
     actual_subject = f"[was: {to}] {subject}" if override and override != to else subject
@@ -139,9 +195,20 @@ async def _send(to: str, subject: str, html: str) -> dict[str, Any] | None:
     try:
         result = await asyncio.to_thread(resend.Emails.send, params)
         logger.info("Sent email id=%s", result.get("id"))
+        await _log_send(
+            to=to, actual_to=actual_to, subject=actual_subject,
+            template_key=template_key,
+            resend_id=result.get("id") if isinstance(result, dict) else None,
+            sent_ok=True,
+        )
         return result
     except Exception as e:
         logger.exception("Failed to send email: %s", e)
+        await _log_send(
+            to=to, actual_to=actual_to, subject=actual_subject,
+            template_key=template_key, resend_id=None, sent_ok=False,
+            blocked=False, block_reason=f"resend_exception: {str(e)[:100]}",
+        )
         return None
 
 
@@ -171,7 +238,7 @@ async def send_verification_email(to: str, request_id: str, token: str) -> None:
     </p>
     """
     subject = render(tpl["subject"], verify_url=verify_url)
-    await _send(to, subject, _wrap(tpl["heading"], inner))
+    await _send(to, subject, _wrap(tpl["heading"], inner), template_key="verification")
 
 
 async def send_therapist_notification(
@@ -272,7 +339,7 @@ async def send_therapist_notification(
     {bulk_cta}
     """
     subject = render(tpl["subject"], **vars_)
-    await _send(to, subject, _wrap(tpl["heading"], inner))
+    await _send(to, subject, _wrap(tpl["heading"], inner), template_key="therapist_notification")
 
 
 async def send_patient_results(to: str, request_id: str, applications: list[dict[str, Any]]) -> None:
@@ -290,7 +357,7 @@ async def send_patient_results(to: str, request_id: str, applications: list[dict
         tpl_e = await get_template(_db(), "patient_results_empty")
         intro = render(tpl_e["intro"])
         inner = f'<p style="font-size:16px;line-height:1.6;color:{BRAND["text"]};">{intro}</p>'
-        await _send(to, render(tpl_e["subject"]), _wrap(tpl_e["heading"], inner))
+        await _send(to, render(tpl_e["subject"]), _wrap(tpl_e["heading"], inner), template_key="patient_results_empty")
         return
 
     tpl = await get_template(_db(), "patient_results")
@@ -413,7 +480,7 @@ async def send_patient_results(to: str, request_id: str, applications: list[dict
     {cta_html}
     """
     subject = render(tpl["subject"], **vars_)
-    await _send(to, subject, _wrap(tpl["heading"], inner))
+    await _send(to, subject, _wrap(tpl["heading"], inner), template_key="patient_results")
 
 
 async def send_therapist_signup_received(to: str, name: str) -> None:
@@ -428,7 +495,7 @@ async def send_therapist_signup_received(to: str, name: str) -> None:
     <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">{intro}</p>
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">{footer_note}</p>
     """
-    await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner))
+    await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner), template_key="therapist_signup_received")
 
 
 async def send_intake_receipt(to: str, request_id: str, summary_rows: list[tuple[str, str]]) -> None:
@@ -472,6 +539,7 @@ async def send_intake_receipt(to: str, request_id: str, summary_rows: list[tuple
         to,
         "Your TheraVoca referral — a copy for your records",
         _wrap("Your referral on file", inner),
+        template_key="patient_intake_receipt",
     )
 
 
@@ -507,7 +575,7 @@ async def send_therapist_approved(to: str, name: str) -> None:
     </p>
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">{footer_note}</p>
     """
-    await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner))
+    await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner), template_key="therapist_approved")
 
 
 async def send_therapist_rejected(to: str, name: str) -> None:
@@ -526,7 +594,7 @@ async def send_therapist_rejected(to: str, name: str) -> None:
     <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">{body}</p>
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">{footer_note}</p>
     """
-    await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner))
+    await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner), template_key="therapist_rejected")
 
 
 async def _send_simple_cta_template(
@@ -544,7 +612,7 @@ async def _send_simple_cta_template(
     delivery) leave it None."""
     tpl = await get_template(_db(), template_key)
     inner, subject, heading = _build_cta_email_html(tpl, cta_url, vars_)
-    await _send(to, subject, _wrap(heading, inner, unsubscribe_url=unsubscribe_url))
+    await _send(to, subject, _wrap(heading, inner, unsubscribe_url=unsubscribe_url), template_key=template_key)
 
 
 def _build_cta_email_html(
@@ -817,7 +885,7 @@ async def send_magic_code(to: str, code: str, role: str) -> None:
     </p>
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">{footer_note}</p>
     """
-    await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner))
+    await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner), template_key="magic_code")
 
 
 
@@ -845,7 +913,7 @@ async def send_license_expiring_to_therapist(
       If you've already renewed, you can ignore this email — we'll stop reminding you once the new expiration date is on file.
     </p>
     """
-    await _send(to, subject, _wrap("License renewal reminder", inner))
+    await _send(to, subject, _wrap("License renewal reminder", inner), template_key="license_renewal_reminder")
 
 
 async def send_license_expiring_to_admin(
@@ -859,7 +927,7 @@ async def send_license_expiring_to_admin(
       lands in their profile before that date.
     </p>
     """
-    await _send(to, subject, _wrap("License renewal alert", inner))
+    await _send(to, subject, _wrap("License renewal alert", inner), template_key="license_renewal_alert_admin")
 
 
 async def send_availability_prompt(to: str, therapist_name: str) -> None:
@@ -880,7 +948,7 @@ async def send_availability_prompt(to: str, therapist_name: str) -> None:
       If your availability hasn't changed, just hit "Yes, still current" in the portal.
     </p>
     """
-    await _send(to, subject, _wrap("Availability check-in", inner))
+    await _send(to, subject, _wrap("Availability check-in", inner), template_key="availability_prompt")
 
 
 
@@ -950,4 +1018,4 @@ async def send_claim_profile_email(
       any time. Reply to this email if anything looks off -- we'd love to hear from you.
     </p>
     """
-    await _send(to, subject, _wrap(tpl.get("heading", "Claim your TheraVoca profile"), inner))
+    await _send(to, subject, _wrap(tpl.get("heading", "Claim your TheraVoca profile"), inner), template_key="claim_profile")

@@ -2,19 +2,20 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2, Mail, MessageSquare, AlertCircle, CheckCircle2, Eye, XCircle, ChevronRight } from "lucide-react";
 
 // Outbound primary tab. Aggregated view of email + SMS delivery state
-// across the system. Reads /admin/outbound/summary which assembles
-// kpis + outreach_invites + bounced registry + raw email_events.
+// across the system. Reads /admin/outbound/summary, /by-type,
+// /scheduled, plus the existing /admin/email-templates list.
 //
-// Three subtabs:
+// Five subtabs (matches v4 mockup):
 //   - Recent: chronological feed of outreach_invites
-//   - Failed: hard-bounced + send-error rows
+//   - Scheduled: upcoming cron jobs in next 7d
+//   - By type: per-template breakdown w/ open rate + fail %
+//   - Failed: hard-bounced registry + send-error rows
 //   - Webhook stream: raw email_events from Resend (debug)
-//
-// Templates subtab from the v4 mockup is intentionally omitted -- the
-// existing Content -> Email templates panel already covers that and
-// duplicating it here is just redirect noise.
+//   - Templates: link to Content -> Email templates (no mirror)
 export default function OutboundPanel({ client }) {
   const [data, setData] = useState(null);
+  const [byType, setByType] = useState(null);
+  const [scheduled, setScheduled] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sub, setSub] = useState("recent");
   const [filter, setFilter] = useState("all");           // recent feed status filter
@@ -23,10 +24,14 @@ export default function OutboundPanel({ client }) {
     if (!client) return;
     setLoading(true);
     try {
-      const r = await client.get("/admin/outbound/summary");
-      setData(r.data || null);
-    } catch {
-      setData(null);
+      const [s, bt, sc] = await Promise.all([
+        client.get("/admin/outbound/summary").catch(() => ({ data: null })),
+        client.get("/admin/outbound/by-type").catch(() => ({ data: null })),
+        client.get("/admin/outbound/scheduled").catch(() => ({ data: null })),
+      ]);
+      setData(s.data || null);
+      setByType(bt.data || null);
+      setScheduled(sc.data || null);
     } finally {
       setLoading(false);
     }
@@ -53,6 +58,8 @@ export default function OutboundPanel({ client }) {
       {/* Subtab pills */}
       <div className="flex items-center gap-2 flex-wrap">
         <SubPill active={sub === "recent"} onClick={() => setSub("recent")} label="Recent" />
+        <SubPill active={sub === "scheduled"} onClick={() => setSub("scheduled")} label="Scheduled" />
+        <SubPill active={sub === "by_type"} onClick={() => setSub("by_type")} label="By type" />
         <SubPill
           active={sub === "failed"}
           onClick={() => setSub("failed")}
@@ -60,6 +67,7 @@ export default function OutboundPanel({ client }) {
           badge={(data?.kpis?.failed_7d || 0) > 0 ? data.kpis.failed_7d : null}
         />
         <SubPill active={sub === "stream"} onClick={() => setSub("stream")} label="Webhook stream" />
+        <SubPill active={sub === "templates"} onClick={() => setSub("templates")} label="Templates" />
         <button
           type="button"
           onClick={refresh}
@@ -71,7 +79,7 @@ export default function OutboundPanel({ client }) {
       </div>
 
       {/* KPI strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Kpi label="Sent today" value={data?.kpis?.sent_today ?? 0} />
         <Kpi label="Sent 7d" value={data?.kpis?.sent_7d ?? 0} />
         <Kpi label="Queued (last hour)" value={data?.kpis?.queued ?? 0} />
@@ -79,6 +87,12 @@ export default function OutboundPanel({ client }) {
           label="Failed (7d)"
           value={data?.kpis?.failed_7d ?? 0}
           warn={(data?.kpis?.failed_7d ?? 0) > 0}
+        />
+        <Kpi
+          label="Top template (7d)"
+          value={byType?.top?.title || byType?.top?.template_key || "—"}
+          smallValue
+          sub={byType?.top ? `${byType.top.sent_7d} sends` : null}
         />
       </div>
 
@@ -237,6 +251,130 @@ export default function OutboundPanel({ client }) {
         </div>
       )}
 
+      {/* SCHEDULED subtab -- upcoming cron jobs */}
+      {sub === "scheduled" && (
+        <div className="bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-[#E8E5DF] flex items-center justify-between">
+            <div>
+              <div className="font-medium text-[#2D4A3E]">Scheduled (next 7 days)</div>
+              <div className="text-xs text-[#6D6A65]">cron jobs + delayed sends -- estimated targets reflect current data</div>
+            </div>
+          </div>
+          {!scheduled && <div className="p-8 text-center text-[#6D6A65] text-sm">Loading...</div>}
+          {scheduled && (
+            <table className="w-full text-sm">
+              <thead className="bg-[#FDFBF7] text-[#6D6A65]">
+                <tr className="text-left">
+                  <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold">Next fire</th>
+                  <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold">Job</th>
+                  <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold">Schedule</th>
+                  <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold text-right">Targets</th>
+                  <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold">Mode</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(scheduled?.jobs || []).map((j, i) => (
+                  <tr key={i} className="border-t border-[#E8E5DF]">
+                    <td className="p-3 text-xs text-[#6D6A65] whitespace-nowrap">
+                      {j.next_fire ? new Date(j.next_fire).toLocaleString() : "—"}
+                    </td>
+                    <td className="p-3 text-[#2B2A29] font-medium">{j.name}</td>
+                    <td className="p-3 text-xs text-[#6D6A65]">{j.schedule_label}</td>
+                    <td className="p-3 text-right text-[#2D4A3E]">
+                      {j.estimated_targets != null ? j.estimated_targets : "—"}
+                    </td>
+                    <td className="p-3">
+                      <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                        j.mode === "LIVE"
+                          ? "bg-[#E8F0EA] text-[#2D4A3E]"
+                          : "bg-[#FBEFE9] text-[#B8742A]"
+                      }`}>
+                        {j.mode}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* BY TYPE subtab -- per-template aggregation */}
+      {sub === "by_type" && (
+        <div className="bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-[#E8E5DF]">
+            <div className="font-medium text-[#2D4A3E]">By template</div>
+            <div className="text-xs text-[#6D6A65]">
+              counts from email_sends &middot; open rate / fail % computed from
+              webhook events on the matching resend_email_id
+            </div>
+          </div>
+          {!byType && <div className="p-8 text-center text-[#6D6A65] text-sm">Loading...</div>}
+          {byType && (
+            <table className="w-full text-sm">
+              <thead className="bg-[#FDFBF7] text-[#6D6A65]">
+                <tr className="text-left">
+                  <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold">Template</th>
+                  <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold text-right">Today</th>
+                  <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold text-right">7d</th>
+                  <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold text-right">Open rate</th>
+                  <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold text-right">Fail %</th>
+                  <th className="px-4 py-3 text-[11px] uppercase tracking-wider font-semibold">Last sent</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(byType?.rows || []).map((r) => (
+                  <tr key={r.template_key} className="border-t border-[#E8E5DF]">
+                    <td className="p-3">
+                      <div className="text-[#2B2A29] font-medium">{r.title || r.template_key}</div>
+                      <div className="text-[10px] text-[#6D6A65]">{r.template_key}</div>
+                    </td>
+                    <td className="p-3 text-right text-[#2D4A3E]">{r.sent_today}</td>
+                    <td className="p-3 text-right text-[#2D4A3E] font-semibold">{r.sent_7d}</td>
+                    <td className="p-3 text-right text-[#6D6A65]">
+                      {r.open_rate != null ? `${Math.round(r.open_rate * 100)}%` : "—"}
+                    </td>
+                    <td className={`p-3 text-right ${r.fail_pct != null && r.fail_pct > 0.1 ? "text-[#C8412B]" : "text-[#6D6A65]"}`}>
+                      {r.fail_pct != null ? `${Math.round(r.fail_pct * 100)}%` : "—"}
+                    </td>
+                    <td className="p-3 text-xs text-[#6D6A65] whitespace-nowrap">
+                      {r.last_sent_at ? new Date(r.last_sent_at).toLocaleString() : <span className="italic">never</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* TEMPLATES subtab -- link to Content -> Email templates */}
+      {sub === "templates" && (
+        <div className="bg-white border border-[#E8E5DF] rounded-2xl p-6">
+          <div className="font-medium text-[#2D4A3E]">Templates</div>
+          <p className="text-sm text-[#6D6A65] mt-2 max-w-2xl leading-relaxed">
+            Editing template copy lives at <strong>Content &rarr; Email templates</strong>.
+            Open it in a new tab so you can correlate edits with the per-template
+            stats on the <strong>By type</strong> subtab here.
+          </p>
+          <a
+            href="/admin/dashboard"
+            onClick={(e) => {
+              e.preventDefault();
+              // Surface a hint -- the real navigation requires going through
+              // the AdminTabsBar. We can't trigger a tab switch from inside
+              // this child panel without lifting state, so for now we just
+              // tell the admin where to go.
+              alert("Click the Content primary tab at the top, then 'Email templates'.");
+            }}
+            className="mt-3 inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-[#2D4A3E] text-white hover:bg-[#3A5E50]"
+          >
+            Go to Email templates
+          </a>
+        </div>
+      )}
+
       {/* WEBHOOK STREAM subtab -- raw email_events from Resend */}
       {sub === "stream" && (
         <div className="bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
@@ -317,11 +455,14 @@ function SubPill({ active, onClick, label, badge }) {
   );
 }
 
-function Kpi({ label, value, warn }) {
+function Kpi({ label, value, warn, smallValue, sub }) {
   return (
     <div className="bg-white border border-[#E8E5DF] rounded-2xl p-4">
       <div className="text-[11px] uppercase tracking-wider text-[#6D6A65] font-semibold">{label}</div>
-      <div className={`text-3xl font-semibold mt-1 ${warn ? "text-[#C8412B]" : "text-[#2D4A3E]"}`}>{value}</div>
+      <div className={`${smallValue ? "text-base" : "text-3xl"} font-semibold mt-1 ${warn ? "text-[#C8412B]" : "text-[#2D4A3E]"} truncate`}>
+        {value}
+      </div>
+      {sub && <div className="text-[10px] text-[#6D6A65] mt-1">{sub}</div>}
     </div>
   );
 }

@@ -479,6 +479,7 @@ async def _send_outreach_invite(
                 email,
                 subject,
                 _wrap(heading, inner),
+                template_key="new_referral_inquiry",
             )
             if email_result is None:
                 email_error = "send_returned_none"

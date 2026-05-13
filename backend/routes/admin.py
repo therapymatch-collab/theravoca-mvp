@@ -5073,6 +5073,263 @@ async def admin_delete_gap_draft(draft_id: str, _: bool = Depends(require_admin)
     return {"ok": True}
 
 
+@router.get("/admin/outbound/by-type", dependencies=[Depends(require_admin)])
+async def admin_outbound_by_type() -> dict[str, Any]:
+    """Per-template aggregation for the Outbound -> By type subtab.
+
+    Joins email_sends (every outbound attempt logged at send time) with
+    email_events (Resend webhook deliveries/opens/bounces) so each row
+    reports: sent today, sent 7d, fail %, open rate, last sent.
+
+    Templates without ANY recorded send still appear (with zero counts)
+    when they exist in DEFAULTS so admin sees the full template
+    catalog -- including ones that haven't fired yet.
+    """
+    from datetime import datetime, timedelta, timezone
+    from email_templates import DEFAULTS
+
+    now = datetime.now(timezone.utc)
+    today_iso = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    seven_days_iso = (now - timedelta(days=7)).isoformat()
+
+    # ── Aggregate email_sends by template_key (sent counts + last_sent) ──
+    pipeline = [
+        {"$group": {
+            "_id": "$template_key",
+            "sent_total": {"$sum": {"$cond": [{"$eq": ["$sent_ok", True]}, 1, 0]}},
+            "sent_today": {"$sum": {
+                "$cond": [
+                    {"$and": [{"$eq": ["$sent_ok", True]}, {"$gte": ["$sent_at", today_iso]}]},
+                    1, 0,
+                ],
+            }},
+            "sent_7d": {"$sum": {
+                "$cond": [
+                    {"$and": [{"$eq": ["$sent_ok", True]}, {"$gte": ["$sent_at", seven_days_iso]}]},
+                    1, 0,
+                ],
+            }},
+            "blocked_count": {"$sum": {"$cond": [{"$eq": ["$blocked", True]}, 1, 0]}},
+            "error_count": {"$sum": {
+                "$cond": [
+                    {"$and": [{"$eq": ["$sent_ok", False]}, {"$eq": ["$blocked", False]}]},
+                    1, 0,
+                ],
+            }},
+            "last_sent_at": {"$max": "$sent_at"},
+            "resend_email_ids_7d": {"$push": {
+                "$cond": [
+                    {"$and": [{"$eq": ["$sent_ok", True]}, {"$gte": ["$sent_at", seven_days_iso]}]},
+                    "$resend_email_id",
+                    None,
+                ],
+            }},
+        }},
+        {"$sort": {"sent_7d": -1}},
+    ]
+    agg_rows = await db.email_sends.aggregate(pipeline).to_list(length=200)
+
+    # ── For each template, look up delivery+open+bounce events from
+    # email_events so we can compute open rate + fail %. We restrict
+    # to events that match a resend_email_id seen in the last 7d for
+    # this template -- avoids cross-template noise. ──
+    by_key: dict = {}
+    for row in agg_rows:
+        key = row["_id"] or "(unknown)"
+        ids = [i for i in (row.get("resend_email_ids_7d") or []) if i]
+        opened_7d = 0
+        bounced_7d = 0
+        complained_7d = 0
+        if ids:
+            opened_7d = await db.email_events.count_documents({
+                "event_type": "email.opened",
+                "resend_email_id": {"$in": ids},
+            })
+            bounced_7d = await db.email_events.count_documents({
+                "event_type": "email.bounced",
+                "resend_email_id": {"$in": ids},
+            })
+            complained_7d = await db.email_events.count_documents({
+                "event_type": "email.complained",
+                "resend_email_id": {"$in": ids},
+            })
+        sent_7d = row.get("sent_7d") or 0
+        open_rate = (opened_7d / sent_7d) if sent_7d > 0 else None
+        fail_pct = (
+            ((bounced_7d + complained_7d + (row.get("error_count") or 0)) / sent_7d)
+            if sent_7d > 0 else None
+        )
+        by_key[key] = {
+            "template_key": key,
+            "title": (DEFAULTS.get(key, {}).get("title")) if key in DEFAULTS else key,
+            "sent_today": row.get("sent_today") or 0,
+            "sent_7d": sent_7d,
+            "blocked_count": row.get("blocked_count") or 0,
+            "error_count": row.get("error_count") or 0,
+            "opened_7d": opened_7d,
+            "bounced_7d": bounced_7d,
+            "complained_7d": complained_7d,
+            "open_rate": round(open_rate, 3) if open_rate is not None else None,
+            "fail_pct": round(fail_pct, 3) if fail_pct is not None else None,
+            "last_sent_at": row.get("last_sent_at"),
+        }
+
+    # Backfill rows for known templates that haven't sent at all.
+    for key in DEFAULTS.keys():
+        if key not in by_key:
+            by_key[key] = {
+                "template_key": key,
+                "title": DEFAULTS[key].get("title", key),
+                "sent_today": 0,
+                "sent_7d": 0,
+                "blocked_count": 0,
+                "error_count": 0,
+                "opened_7d": 0,
+                "bounced_7d": 0,
+                "complained_7d": 0,
+                "open_rate": None,
+                "fail_pct": None,
+                "last_sent_at": None,
+            }
+
+    rows = sorted(
+        by_key.values(),
+        key=lambda r: (-(r.get("sent_7d") or 0), r.get("template_key") or ""),
+    )
+
+    # Top template by 7d volume -- powers the 5th KPI on the Outbound tab.
+    top = rows[0] if rows and (rows[0].get("sent_7d") or 0) > 0 else None
+
+    return {
+        "rows": rows,
+        "top": top,
+    }
+
+
+@router.get("/admin/outbound/scheduled", dependencies=[Depends(require_admin)])
+async def admin_outbound_scheduled() -> dict[str, Any]:
+    """Returns the cron schedule -- what the system will fire in the
+    next 7 days. Hardcoded against cron.py's actual job list (since
+    those are Python functions, not config rows).
+    """
+    from datetime import datetime, timedelta, timezone
+
+    # Pull live counts from the relevant collections so the "Targets"
+    # column reflects current state (not a guess at a build-time number).
+    active_therapists = await db.therapists.count_documents(
+        {"is_active": {"$ne": False}, "pending_approval": {"$ne": True}},
+    )
+    # Patient surveys eligible for each milestone -- approximate by counting
+    # results-sent requests within the relevant window. The cron itself
+    # double-checks; we just want a UI-display estimate.
+    now = datetime.now(timezone.utc)
+
+    async def _count_results_within(min_days: int, max_days: int) -> int:
+        gte = (now - timedelta(days=max_days)).isoformat()
+        lte = (now - timedelta(days=min_days)).isoformat()
+        return await db.requests.count_documents({
+            "results_sent_at": {"$gte": gte, "$lte": lte},
+        })
+
+    survey_48h_targets = await _count_results_within(2, 5)
+    survey_3w_targets = await _count_results_within(21, 28)
+    survey_9w_targets = await _count_results_within(63, 70)
+    survey_15w_targets = await _count_results_within(105, 112)
+
+    # Track B dry-run state from app_config so admin can see "live" vs "drafts"
+    tb_cfg = await db.app_config.find_one(
+        {"key": "track_b_config"}, {"_id": 0, "dry_run": 1},
+    ) or {}
+    tb_dry = bool(tb_cfg.get("dry_run", True))
+
+    # Crude "next fire" calc -- the actual cron uses APScheduler/cron syntax;
+    # we just compute the next instance of the descriptive schedule to give
+    # the admin a "this will fire approximately when" estimate.
+    def _next_daily(hour: int, minute: int = 0) -> str:
+        target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if target <= now:
+            target += timedelta(days=1)
+        return target.isoformat()
+
+    def _next_weekly(weekday: int, hour: int = 8) -> str:
+        # Monday = 0
+        target = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+        days_ahead = (weekday - target.weekday()) % 7
+        if days_ahead == 0 and target <= now:
+            days_ahead = 7
+        return (target + timedelta(days=days_ahead)).isoformat()
+
+    jobs = [
+        {
+            "name": "Track B gap-recruit",
+            "schedule_label": "Daily 2:00 AM MT",
+            "next_fire": _next_daily(2),
+            "templates": ["new_referral_inquiry (gap-fill)"],
+            "estimated_targets": 30,
+            "mode": "DRY-RUN" if tb_dry else "LIVE",
+        },
+        {
+            "name": "Weekly availability prompt",
+            "schedule_label": "Mon 8:00 AM",
+            "next_fire": _next_weekly(0, 8),
+            "templates": ["availability_prompt"],
+            "estimated_targets": active_therapists,
+            "mode": "LIVE",
+        },
+        {
+            "name": "Patient survey 48h cron",
+            "schedule_label": "Daily 8:00 AM (per-request 48h after results)",
+            "next_fire": _next_daily(8),
+            "templates": ["patient_survey_v2_48h"],
+            "estimated_targets": survey_48h_targets,
+            "mode": "LIVE",
+        },
+        {
+            "name": "Patient survey 3w cron",
+            "schedule_label": "Daily 8:00 AM (per-request 3w after results)",
+            "next_fire": _next_daily(8),
+            "templates": ["patient_survey_v2_3w"],
+            "estimated_targets": survey_3w_targets,
+            "mode": "LIVE",
+        },
+        {
+            "name": "Patient survey 9w cron",
+            "schedule_label": "Daily 8:00 AM (per-request 9w after results)",
+            "next_fire": _next_daily(8),
+            "templates": ["patient_survey_v2_9w"],
+            "estimated_targets": survey_9w_targets,
+            "mode": "LIVE",
+        },
+        {
+            "name": "Patient survey 15w cron",
+            "schedule_label": "Daily 8:00 AM (per-request 15w after results)",
+            "next_fire": _next_daily(8),
+            "templates": ["patient_survey_v2_15w"],
+            "estimated_targets": survey_15w_targets,
+            "mode": "LIVE",
+        },
+        {
+            "name": "Therapist follow-up 2w cron",
+            "schedule_label": "Daily 8:00 AM (per-therapist 2w after first referrals)",
+            "next_fire": _next_daily(8),
+            "templates": ["therapist_followup_2w"],
+            "estimated_targets": None,
+            "mode": "LIVE",
+        },
+        {
+            "name": "License expiry reminder",
+            "schedule_label": "Daily 8:00 AM (per-therapist 30d before expiry)",
+            "next_fire": _next_daily(8),
+            "templates": ["license_renewal_reminder", "license_renewal_alert_admin"],
+            "estimated_targets": None,
+            "mode": "LIVE",
+        },
+    ]
+    # Sort by next-fire ascending so the soonest job is at the top.
+    jobs.sort(key=lambda j: j["next_fire"])
+    return {"jobs": jobs, "now": now.isoformat()}
+
+
 @router.get("/admin/outbound/summary", dependencies=[Depends(require_admin)])
 async def admin_outbound_summary() -> dict[str, Any]:
     """Aggregate view for the Outbound admin tab.
