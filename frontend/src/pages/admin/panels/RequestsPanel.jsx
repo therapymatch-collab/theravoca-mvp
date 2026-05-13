@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronRight } from "lucide-react";
 import { Th } from "./_shared";
 
@@ -8,6 +8,21 @@ import { Th } from "./_shared";
 // Mirrors the 30-target used by the matching simulator + hard-capacity
 // guard.
 const TARGET_NOTIFIED = 30;
+
+// Status filter options + the actual status sets they map to. Mirrors
+// the activeRequestsCount logic in AdminDashboard.jsx -- "active" is
+// non-terminal statuses, "matched_completed" + "terminal" cover the
+// rest. The Active sub-pill click auto-selects "active" + flips date
+// range to "all time" so admins immediately see the requests driving
+// the red dot.
+const STATUS_FILTERS = {
+  all:                  { label: "All statuses",                                 statuses: null }, // null = no filter
+  active:               { label: "Active (open + pending verification)",          statuses: ["open", "pending_verification"] },
+  pending_verification: { label: "Pending verification",                          statuses: ["pending_verification"] },
+  open:                 { label: "Open",                                          statuses: ["open"] },
+  matched_completed:    { label: "Matched / completed",                           statuses: ["matched", "completed", "results_sent", "delivered"] },
+  terminal:             { label: "Failed / cancelled / expired",                  statuses: ["failed", "cancelled", "expired"] },
+};
 
 // Build a YYYY-MM-DD string from a Date for use with <input type="date">.
 function toDateInput(d) {
@@ -33,19 +48,36 @@ export default function RequestsPanel({
   );
   const [startDate, setStartDate] = useState(toDateInput(thirtyDaysAgo));
   const [endDate, setEndDate] = useState(toDateInput(today));
+  // Status filter -- default "all" so existing behavior is unchanged.
+  // Admin can scope to "active" / specific statuses via the dropdown.
+  // See STATUS_FILTERS map at top of file.
+  const [statusFilter, setStatusFilter] = useState("all");
 
-  const dateFilteredRequests = useMemo(() => {
+  const fullyFilteredRequests = useMemo(() => {
     const startMs = startDate ? new Date(`${startDate}T00:00:00`).getTime() : null;
     const endMs = endDate ? new Date(`${endDate}T23:59:59.999`).getTime() : null;
+    const statusSet = STATUS_FILTERS[statusFilter]?.statuses;
     return filteredRequests.filter((r) => {
-      if (!r.created_at) return true;
-      const t = new Date(r.created_at).getTime();
-      if (Number.isNaN(t)) return true;
-      if (startMs != null && t < startMs) return false;
-      if (endMs != null && t > endMs) return false;
+      // Date range
+      if (r.created_at) {
+        const t = new Date(r.created_at).getTime();
+        if (!Number.isNaN(t)) {
+          if (startMs != null && t < startMs) return false;
+          if (endMs != null && t > endMs) return false;
+        }
+      }
+      // Status (null statusSet = "all", skip)
+      if (statusSet) {
+        const s = String(r.status || "").toLowerCase();
+        if (!statusSet.includes(s)) return false;
+      }
       return true;
     });
-  }, [filteredRequests, startDate, endDate]);
+  }, [filteredRequests, startDate, endDate, statusFilter]);
+
+  // Backward-compat alias for any code below that still references the
+  // old name. Identical content.
+  const dateFilteredRequests = fullyFilteredRequests;
 
   const resetDateRange = () => {
     setStartDate(toDateInput(thirtyDaysAgo));
@@ -89,10 +121,51 @@ export default function RequestsPanel({
         >
           All time
         </button>
+
+        {/* divider */}
+        <span className="w-px h-5 bg-[#E8E5DF] mx-1" aria-hidden="true" />
+
+        <span className="text-xs uppercase tracking-wider text-[#6D6A65] font-semibold">Status</span>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          data-testid="requests-status-filter"
+          className={`border rounded-md px-2 py-1 text-sm focus:outline-none focus:border-[#2D4A3E] ${
+            statusFilter === "all"
+              ? "border-[#E8E5DF] bg-white text-[#2B2A29]"
+              : "border-[#2D4A3E] bg-[#2D4A3E] text-white font-medium"
+          }`}
+          title="Filter the table by request status. 'Active' = open + pending verification (drives the red dot on the Requests tab)."
+        >
+          {Object.entries(STATUS_FILTERS).map(([key, val]) => (
+            <option key={key} value={key}>{val.label}</option>
+          ))}
+        </select>
+
         <span className="ml-auto text-xs text-[#6D6A65]">
           Showing <strong className="text-[#2B2A29]">{dateFilteredRequests.length}</strong> of {requests.length}
         </span>
       </div>
+
+      {/* Helpful hint: filtered to "active" but the date range hides them all. */}
+      {statusFilter === "active" && dateFilteredRequests.length === 0 && (
+        (startDate || endDate) ? (
+          <div className="bg-[#FCF6E5] border border-[#E8D7A6] rounded-xl px-4 py-2.5 text-sm text-[#6D5A29] flex items-center gap-3"
+               data-testid="requests-active-empty-hint">
+            <span>
+              No active requests in this date range. They may be older &mdash;
+              try widening the window.
+            </span>
+            <button
+              type="button"
+              onClick={clearDateRange}
+              className="ml-auto text-xs font-semibold text-[#2D4A3E] underline"
+            >
+              Show all time
+            </button>
+          </div>
+        ) : null
+      )}
 
       <div className="bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
       <table className="w-full text-sm" data-testid="requests-table">
