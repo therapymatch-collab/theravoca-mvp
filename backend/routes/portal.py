@@ -208,6 +208,18 @@ async def auth_verify_code(payload: MagicCodeVerify, request: Request):
     await db.magic_codes.update_one(
         {"id": rec["id"]}, {"$set": {"used": True, "used_at": now_iso}}
     )
+    # If the user is a therapist with 2FA enrolled, don't issue the
+    # real session token yet -- return a short-lived challenge token
+    # the frontend trades for a session at /auth/verify-2fa.
+    user = await _find_user_doc(email, payload.role)
+    if payload.role == "therapist" and user and user.get("totp_enabled_at"):
+        from totp_service import create_challenge_token
+        return {
+            "requires_2fa": True,
+            "challenge_token": create_challenge_token(email, payload.role),
+            "role": payload.role,
+            "email": email,
+        }
     token = _create_session_token(email, payload.role)
     # New-IP login alert (fire-and-forget). Records the event regardless
     # of whether an alert fires; alerts only on second+ login from a
@@ -220,7 +232,6 @@ async def auth_verify_code(payload: MagicCodeVerify, request: Request):
     )
     # Tell the client whether this account already has a password — used by
     # the portal to nudge first-time users to set one for password login.
-    user = await _find_user_doc(email, payload.role)
     has_password = bool(user and user.get("password_hash"))
     return {
         "token": token,
@@ -271,6 +282,15 @@ async def auth_login_password(payload: dict[str, Any], request: Request):
         raise HTTPException(401, "Email or password is incorrect")
 
     await _password_reset_failures(key)
+    # 2FA gate (therapists only, opt-in).
+    if role == "therapist" and user.get("totp_enabled_at"):
+        from totp_service import create_challenge_token
+        return {
+            "requires_2fa": True,
+            "challenge_token": create_challenge_token(email, role),
+            "role": role,
+            "email": email,
+        }
     token = _create_session_token(email, role)
     from login_alerts import check_and_record_login
     await check_and_record_login(
@@ -732,3 +752,252 @@ async def portal_therapist_availability_confirm(
         update["urgency_capacity"] = str(payload["urgency_capacity"])[:50]
     await db.therapists.update_one({"id": therapist["id"]}, {"$set": update})
     return {"ok": True, "updated": list(update.keys())}
+
+
+# ─── 2FA (TOTP) -- therapist-only ─────────────────────────────────────────────
+# Optional second factor for therapist sign-ins. Patients are NOT in scope
+# at this stage (their account scope is "see my own intake" -- not worth
+# the friction).
+#
+# Enrollment is 3 steps:
+#   1. POST /portal/therapist/2fa/enroll/start  -- get otpauth URI + secret
+#   2. POST /portal/therapist/2fa/enroll/verify -- prove the app is set up
+#                                                  by entering a current code;
+#                                                  receives 10 plaintext
+#                                                  recovery codes ONCE
+#   3. (frontend stores codes, optionally lets user download/print)
+#
+# Sign-in change: when therapist has totp_enabled_at set, the existing
+# password/magic-code endpoints return {requires_2fa, challenge_token}
+# instead of a session token. Client exchanges those at /auth/verify-2fa.
+
+async def _find_therapist_doc(email: str) -> Optional[dict[str, Any]]:
+    email_norm = (email or "").lower()
+    return await db.therapists.find_one(
+        {"email": {"$regex": f"^{re.escape(email_norm)}$", "$options": "i"}},
+        {"_id": 0},
+    )
+
+
+@router.post("/portal/therapist/2fa/enroll/start")
+async def therapist_2fa_enroll_start(
+    session: dict[str, Any] = Depends(require_session(("therapist",))),
+):
+    """Step 1 of enrollment. Generates a fresh TOTP secret and returns
+    the otpauth URI for the frontend to render as a QR code. Does NOT
+    persist anything yet -- enrollment is only confirmed once the user
+    proves they set up the authenticator correctly via /enroll/verify.
+
+    Returning the same secret on repeated calls would be cleaner UX but
+    means a stale tab can hijack enrollment. Forcing a fresh secret on
+    each /start call is the safer trade-off.
+    """
+    from totp_service import generate_secret, otpauth_uri
+    therapist = await _find_therapist_doc(session["email"])
+    if not therapist:
+        raise HTTPException(404, "Therapist profile not found")
+    if therapist.get("totp_enabled_at"):
+        raise HTTPException(409, "Two-factor authentication is already enabled. Disable it first to re-enroll.")
+    secret = generate_secret()
+    uri = otpauth_uri(secret, therapist["email"])
+    return {"secret": secret, "otpauth_uri": uri}
+
+
+@router.post("/portal/therapist/2fa/enroll/verify")
+async def therapist_2fa_enroll_verify(
+    payload: dict[str, Any],
+    session: dict[str, Any] = Depends(require_session(("therapist",))),
+):
+    """Step 2 of enrollment. User submits the secret they were shown +
+    the current 6-digit code their authenticator app is displaying. If
+    the code verifies, we persist the secret + 10 bcrypt-hashed recovery
+    codes, return the recovery codes in plaintext ONCE.
+
+    Body: {"secret": "BASE32...", "code": "123456"}
+    """
+    from totp_service import (
+        verify_code, generate_recovery_codes, hash_recovery_code,
+    )
+    secret = (payload.get("secret") or "").strip()
+    code = (payload.get("code") or "").strip()
+    if not secret or not code:
+        raise HTTPException(400, "secret and code are required")
+    if not verify_code(secret, code):
+        raise HTTPException(401, "That code didn't match. Double-check the time on your phone and try the next one (codes refresh every 30 seconds).")
+    therapist = await _find_therapist_doc(session["email"])
+    if not therapist:
+        raise HTTPException(404, "Therapist profile not found")
+    if therapist.get("totp_enabled_at"):
+        raise HTTPException(409, "Two-factor authentication is already enabled.")
+    recovery_plain = generate_recovery_codes()
+    recovery_hashes = [hash_recovery_code(c) for c in recovery_plain]
+    await db.therapists.update_one(
+        {"id": therapist["id"]},
+        {"$set": {
+            "totp_secret": secret,
+            "totp_enabled_at": _now_iso(),
+            "totp_recovery_hashes": recovery_hashes,
+            "updated_at": _now_iso(),
+        }},
+    )
+    audit.emit(
+        actor_type="therapist", actor_id=therapist["id"],
+        action="enable_2fa", resource="therapist", resource_id=therapist["id"],
+    )
+    return {
+        "enabled": True,
+        "recovery_codes": recovery_plain,
+        "enabled_at": _now_iso(),
+    }
+
+
+@router.post("/portal/therapist/2fa/regenerate-recovery")
+async def therapist_2fa_regenerate_recovery(
+    payload: dict[str, Any],
+    session: dict[str, Any] = Depends(require_session(("therapist",))),
+):
+    """Rotate recovery codes. Requires a fresh valid TOTP code (so a
+    stolen session can't silently regenerate them and lock the user out).
+
+    Body: {"code": "123456"}
+    """
+    from totp_service import (
+        verify_code, generate_recovery_codes, hash_recovery_code,
+    )
+    code = (payload.get("code") or "").strip()
+    therapist = await _find_therapist_doc(session["email"])
+    if not therapist or not therapist.get("totp_enabled_at"):
+        raise HTTPException(404, "2FA is not enabled on this account.")
+    if not verify_code(therapist.get("totp_secret", ""), code):
+        raise HTTPException(401, "Invalid 2FA code.")
+    recovery_plain = generate_recovery_codes()
+    recovery_hashes = [hash_recovery_code(c) for c in recovery_plain]
+    await db.therapists.update_one(
+        {"id": therapist["id"]},
+        {"$set": {
+            "totp_recovery_hashes": recovery_hashes,
+            "updated_at": _now_iso(),
+        }},
+    )
+    audit.emit(
+        actor_type="therapist", actor_id=therapist["id"],
+        action="regenerate_2fa_recovery", resource="therapist",
+        resource_id=therapist["id"],
+    )
+    return {"recovery_codes": recovery_plain}
+
+
+@router.post("/portal/therapist/2fa/disable")
+async def therapist_2fa_disable(
+    payload: dict[str, Any],
+    session: dict[str, Any] = Depends(require_session(("therapist",))),
+):
+    """Turn 2FA off. Requires a fresh valid TOTP code so a stolen
+    session can't silently disable it.
+
+    Body: {"code": "123456"}
+    """
+    from totp_service import verify_code
+    code = (payload.get("code") or "").strip()
+    therapist = await _find_therapist_doc(session["email"])
+    if not therapist or not therapist.get("totp_enabled_at"):
+        raise HTTPException(404, "2FA is not enabled on this account.")
+    if not verify_code(therapist.get("totp_secret", ""), code):
+        raise HTTPException(401, "Invalid 2FA code.")
+    await db.therapists.update_one(
+        {"id": therapist["id"]},
+        {"$unset": {"totp_secret": "", "totp_enabled_at": "",
+                    "totp_recovery_hashes": ""},
+         "$set": {"updated_at": _now_iso()}},
+    )
+    audit.emit(
+        actor_type="therapist", actor_id=therapist["id"],
+        action="disable_2fa", resource="therapist",
+        resource_id=therapist["id"],
+    )
+    return {"enabled": False}
+
+
+@router.get("/portal/therapist/2fa/status")
+async def therapist_2fa_status(
+    session: dict[str, Any] = Depends(require_session(("therapist",))),
+):
+    """Light status check the settings UI uses to render the right
+    state (off vs on). Returns enabled_at + recovery_codes_remaining
+    when enabled."""
+    therapist = await _find_therapist_doc(session["email"])
+    if not therapist:
+        raise HTTPException(404, "Therapist profile not found")
+    enabled = bool(therapist.get("totp_enabled_at"))
+    return {
+        "enabled": enabled,
+        "enabled_at": therapist.get("totp_enabled_at"),
+        "recovery_codes_remaining": len(therapist.get("totp_recovery_hashes") or []) if enabled else 0,
+    }
+
+
+@router.post("/auth/verify-2fa")
+async def auth_verify_2fa(payload: dict[str, Any], request: Request):
+    """Complete the sign-in after the 2FA challenge.
+
+    Body: {
+      "challenge_token": "<from /auth/login-password or /auth/verify-code>",
+      "code": "<6-digit TOTP code>",
+      "use_recovery_code": false,   // when true, `code` is treated as
+                                    // a recovery code (XXXX-XXXX-XXXX)
+    }
+    """
+    from totp_service import (
+        verify_challenge_token, verify_code, verify_and_consume_recovery_code,
+    )
+    from login_alerts import check_and_record_login
+
+    challenge = (payload.get("challenge_token") or "").strip()
+    code = (payload.get("code") or "").strip()
+    use_recovery = bool(payload.get("use_recovery_code"))
+    if not challenge or not code:
+        raise HTTPException(400, "challenge_token and code are required")
+    verified = verify_challenge_token(challenge)
+    if not verified:
+        raise HTTPException(401, "Sign-in challenge expired. Please sign in again.")
+    if verified.get("role") != "therapist":
+        # Only therapists have 2FA today; defensive guard.
+        raise HTTPException(400, "2FA not configured for this role.")
+    email = verified["email"]
+    therapist = await _find_therapist_doc(email)
+    if not therapist or not therapist.get("totp_enabled_at"):
+        # Race: user disabled 2FA between sign-in and verify. Reject
+        # so they retry the normal sign-in path.
+        raise HTTPException(409, "2FA state changed. Please sign in again.")
+
+    if use_recovery:
+        ok, remaining = verify_and_consume_recovery_code(
+            code, therapist.get("totp_recovery_hashes") or [],
+        )
+        if not ok:
+            raise HTTPException(401, "That recovery code didn't match.")
+        await db.therapists.update_one(
+            {"id": therapist["id"]},
+            {"$set": {
+                "totp_recovery_hashes": remaining,
+                "updated_at": _now_iso(),
+            }},
+        )
+    else:
+        if not verify_code(therapist.get("totp_secret", ""), code):
+            raise HTTPException(401, "That code didn't match. Codes refresh every 30 seconds -- try the next one.")
+
+    token = _create_session_token(email, "therapist")
+    await check_and_record_login(
+        email=email, role="therapist",
+        ip=_client_ip(request),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    return {
+        "token": token,
+        "role": "therapist",
+        "email": email,
+        "has_password": bool(therapist.get("password_hash")),
+        "recovery_used": use_recovery,
+    }
+
