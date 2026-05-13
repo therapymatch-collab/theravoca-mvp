@@ -333,6 +333,13 @@ export function Footer() {
               </>,
             )}
           </p>
+          <Link
+            to="/crisis"
+            className="mt-3 inline-block text-xs text-[#2D4A3E] underline hover:no-underline"
+            data-testid="footer-crisis"
+          >
+            See all crisis resources
+          </Link>
         </div>
         <div>
           <div className="text-[#2B2A29] font-semibold mb-2">
