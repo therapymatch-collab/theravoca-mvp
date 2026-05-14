@@ -204,6 +204,20 @@ async def lifespan(_app: FastAPI):
             {"key": "new_referral_inquiry", _field: _val},
             {"$unset": {_field: ""}},
         )
+    # Reset the availability-prompt cron to Mondays only. Josh asked
+    # 2026-05-14 to drop the Friday cadence -- the code default in
+    # deps.py is already Mon (0) but a DB override or Render env var
+    # can still push it to Mon+Fri. Reset the DB override here so the
+    # cron honours Mon-only regardless of any historical admin toggle.
+    # Admins can still re-set custom days via PUT /admin/availability-prompt
+    # after startup if they want to broaden the cadence again later.
+    await db.app_config.update_one(
+        {"key": "availability_prompt"},
+        {"$set": {"key": "availability_prompt", "days": [0]}},
+        upsert=True,
+    )
+    import deps as _deps
+    _deps.AVAILABILITY_PROMPT_DAYS = (0,)
     logger.info(
         "Started results sweep loop (every %ds) + daily-task scheduler",
         sweep_interval,

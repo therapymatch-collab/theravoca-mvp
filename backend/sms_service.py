@@ -275,7 +275,8 @@ async def send_patient_intake_receipt_sms(to: str) -> dict[str, Any] | None:
 async def send_availability_prompt_sms(
     to: str, therapist_first_name: str, portal_url: str
 ) -> dict[str, Any] | None:
-    """Mon/Fri SMS reminder asking the therapist to refresh availability."""
+    """Weekly SMS reminder (Mondays) asking the therapist to refresh
+    availability. Email + SMS fire together from the same cron path."""
     first = (therapist_first_name or "there").split(" ")[0]
     template = await _get_template("sms.availability_prompt")
     body = template.format(first_name=first, portal_url=portal_url)
