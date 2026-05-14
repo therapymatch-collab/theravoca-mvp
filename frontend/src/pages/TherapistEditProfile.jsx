@@ -33,6 +33,11 @@ import {
   T4_OPTIONS,
   T6_OPTIONS,
 } from "@/pages/therapist/deepMatchOptions";
+import { ISSUES } from "@/pages/therapist/steps/signupOptions";
+
+// slug -> human label for the patient-preview specialty chips.
+const ISSUE_LABEL_MAP = Object.fromEntries(ISSUES.map((i) => [i.v, i.l]));
+const issueLabel = (slug) => ISSUE_LABEL_MAP[slug] || slug.replace(/_/g, " ");
 
 const AGE_GROUP_OPTIONS = [
   { v: "children", l: "Children (<12)" },
@@ -760,6 +765,95 @@ function ProfilePreviewModal({ profile, onClose }) {
                       span={2}
                     />
                   )}
+
+                  {/* Specialties chips, color-coded by tier (primary /
+                      secondary / general). Same color system patients see
+                      in the matched-card chips. */}
+                  {((t.primary_specialties || []).length > 0 ||
+                    (t.secondary_specialties || []).length > 0 ||
+                    (t.general_treats || []).length > 0) && (
+                    <div className="col-span-2 sm:col-span-4">
+                      <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-1.5">
+                        Specialties
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(t.primary_specialties || []).map((s) => (
+                          <SpecialtyChip key={`p-${s}`} label={issueLabel(s)} tier="primary" />
+                        ))}
+                        {(t.secondary_specialties || []).map((s) => (
+                          <SpecialtyChip key={`s-${s}`} label={issueLabel(s)} tier="secondary" />
+                        ))}
+                        {(t.general_treats || []).map((s) => (
+                          <SpecialtyChip key={`g-${s}`} label={issueLabel(s)} tier="general" />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(t.client_types || []).length > 0 && (
+                    <PreviewKV
+                      label="Client types"
+                      value={(t.client_types || []).map((x) => x.replace(/_/g, " ")).join(", ")}
+                      span={2}
+                    />
+                  )}
+                  {(t.age_groups || []).length > 0 && (
+                    <PreviewKV
+                      label="Age groups"
+                      value={(t.age_groups || []).map((a) => a.replace(/_/g, " ")).join(", ")}
+                      span={2}
+                    />
+                  )}
+                  {t.gender && (
+                    <PreviewKV
+                      label="Gender"
+                      value={t.gender}
+                    />
+                  )}
+                  {t.urgency_capacity && (
+                    <PreviewKV
+                      label="Caseload"
+                      value={t.urgency_capacity.replace(/_/g, " ")}
+                    />
+                  )}
+
+                  {(t.style_tags || []).length > 0 && (
+                    <div className="col-span-2 sm:col-span-4">
+                      <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-1.5">
+                        Style
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(t.style_tags || []).map((s) => (
+                          <span
+                            key={s}
+                            className="text-[11px] px-2 py-0.5 rounded-full bg-[#F2EFE8] text-[#2D4A3E] font-medium"
+                          >
+                            {s.replace(/_/g, " ")}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(t.availability_windows || []).length > 0 && (
+                    <PreviewKV
+                      label="Availability"
+                      value={(t.availability_windows || [])
+                        .map((w) => w.replace(/_/g, " "))
+                        .join(", ")}
+                      span={2}
+                    />
+                  )}
+
+                  {/* Show any office addresses BEYOND the first one
+                      (first one is rendered above in the existing block). */}
+                  {(t.office_addresses || []).length > 1 && (
+                    <PreviewKV
+                      label="Other offices"
+                      value={(t.office_addresses || []).slice(1).join(" · ")}
+                      span={2}
+                    />
+                  )}
                 </div>
                 {t.bio && (
                   <p className="mt-4 text-sm text-[#2B2A29] leading-relaxed border-l-2 border-[#C87965] pl-3">
@@ -788,6 +882,23 @@ function PreviewKV({ label, value, span = 1 }) {
       </div>
       <div className="font-medium text-[#2B2A29] break-words">{value || "—"}</div>
     </div>
+  );
+}
+
+function SpecialtyChip({ label, tier }) {
+  const cls =
+    tier === "primary"
+      ? "bg-[#2D4A3E]/12 text-[#2D4A3E] border border-[#2D4A3E]/35"
+      : tier === "secondary"
+      ? "bg-[#C87965]/10 text-[#8B4F3B]"
+      : "bg-[#F2EFE8] text-[#6D6A65]";
+  return (
+    <span
+      className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${cls}`}
+      data-testid={`specialty-chip-${tier}`}
+    >
+      {label} {tier !== "general" && `(${tier})`}
+    </span>
   );
 }
 
