@@ -186,6 +186,7 @@ function BuilderView({ client, campaign, onBack }) {
         notify_email: true,
       },
       recipient_paste: campaign?.recipient_paste || "",
+      paste_format: campaign?.paste_format || "emails",
       mode: campaign?.recipient_paste ? "paste" : "filter",
     }),
     [campaign],
@@ -224,6 +225,7 @@ function BuilderView({ client, campaign, onBack }) {
     use_real_email: draft.use_real_email,
     recipient_filter: draft.mode === "filter" ? draft.recipient_filter : null,
     recipient_paste: draft.mode === "paste" ? draft.recipient_paste : null,
+    paste_format: draft.mode === "paste" ? draft.paste_format : "emails",
   });
 
   const saveDraft = async () => {
@@ -437,18 +439,38 @@ function BuilderView({ client, campaign, onBack }) {
               </div>
             ) : (
               <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <label className="text-[11px] uppercase tracking-wider text-[#6D6A65] font-semibold">
+                    Pasting:
+                  </label>
+                  <select
+                    value={draft.paste_format}
+                    onChange={(e) => set("paste_format", e.target.value)}
+                    disabled={isSent}
+                    className="text-sm px-3 py-1.5 rounded-lg bg-white border border-[#E8E5DF] font-medium"
+                    data-testid="broadcast-paste-format"
+                  >
+                    <option value="emails">Emails (send directly)</option>
+                    <option value="phones">Phones (look up therapist + use their email)</option>
+                  </select>
+                </div>
                 <textarea
                   rows={5}
                   value={draft.recipient_paste}
                   onChange={(e) => set("recipient_paste", e.target.value)}
-                  placeholder="One per line or comma-separated. Phones (+12085551234) or emails (sarah@example.com). Phones are matched against therapist.phone / phone_alert."
+                  placeholder={
+                    draft.paste_format === "phones"
+                      ? "One phone per line or comma-separated. e.g. +12085551234, +12089998765. Each phone is matched against therapist.phone or phone_alert."
+                      : "One email per line or comma-separated. e.g. sarah@example.com, marcus@example.com. Emails not in our DB are sent as-is with first_name=\"there\"."
+                  }
                   disabled={isSent}
                   className="w-full px-3 py-2 text-sm rounded-xl bg-white border border-[#E8E5DF] font-mono text-xs"
                   data-testid="broadcast-paste"
                 />
                 <p className="text-[11px] text-[#8A8780] mt-1">
-                  Mixed phones + emails are OK. Phones resolved against existing therapists.
-                  Emails not in the DB are sent as-is with first_name="there".
+                  {draft.paste_format === "phones"
+                    ? "Tokens that don't look like 10-digit US phones are skipped silently."
+                    : "Tokens without an @ are skipped silently."}
                 </p>
               </div>
             )}

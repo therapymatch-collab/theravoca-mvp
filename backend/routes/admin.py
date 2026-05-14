@@ -2413,6 +2413,7 @@ async def _resolve_campaign_recipients(
     *,
     recipient_filter: dict | None,
     recipient_paste: str | None,
+    paste_format: str = "emails",
     use_real_email: bool = True,
 ) -> list[dict[str, Any]]:
     """Resolve a campaign's recipient list to concrete (email, vars) rows.
@@ -2421,9 +2422,18 @@ async def _resolve_campaign_recipients(
       - recipient_filter: a dict of Mongo-style filters applied to
         the therapists collection (source, is_active, notify_email,
         subscription_status, etc.). Matched docs become recipients.
-      - recipient_paste: a comma/whitespace-separated string of emails
-        and/or phone numbers (we resolve phones via the same helper
-        the incident-apology endpoint uses).
+      - recipient_paste: a comma/whitespace-separated string of
+        identifiers. The companion `paste_format` field declares what
+        TYPE of identifier is in the textarea:
+          "phones" -> look each token up against therapist.phone /
+                      phone_alert, use that therapist's email.
+          "emails" -> use each token as the destination email
+                      directly. If the email matches a therapist in
+                      our DB, their first_name is used for merge fields;
+                      otherwise first_name falls back to "there".
+        The explicit format guards against the auto-detect behaviour
+        accidentally treating an oddly-formatted token as the wrong
+        type (e.g. an email with no @ getting routed as a phone).
 
     Returns a list of dicts with keys: email, first_name, name, source,
     therapist_id (None for paste-only entries not in our DB). Skips
@@ -2497,11 +2507,13 @@ async def _resolve_campaign_recipients(
         tokens = [
             tok.strip() for tok in _re.split(r"[\s,;]+", recipient_paste) if tok.strip()
         ]
-        # Pre-build a phone -> therapist map for the phone tokens.
-        phone_tokens = [t for t in tokens if "@" not in t]
-        email_tokens = [t for t in tokens if "@" in t]
-        by_digits: dict[str, dict] = {}
-        if phone_tokens:
+        fmt = (paste_format or "emails").lower()
+        if fmt == "phones":
+            # Phones-only: each token must normalise to a 10-digit US
+            # number. Anything that doesn't (e.g. an email pasted by
+            # mistake) is skipped silently -- preview will surface the
+            # count mismatch so the admin notices.
+            by_digits: dict[str, dict] = {}
             cur = db.therapists.find(
                 {"$or": [
                     {"phone": {"$exists": True, "$ne": ""}},
@@ -2515,42 +2527,44 @@ async def _resolve_campaign_recipients(
                     d = _digits10(t.get(fld, ""))
                     if d and d not in by_digits:
                         by_digits[d] = t
-        for p in phone_tokens:
-            d = _digits10(p)
-            if not d:
-                continue
-            t = by_digits.get(d)
-            if not t:
-                continue
-            email = _resolve_email(t)
-            if not email or email.lower() in seen_emails:
-                continue
-            seen_emails.add(email.lower())
-            rows.append(_row(t))
-        # For pasted emails, look up the therapist row by email if we
-        # have one, else create a minimal row.
-        for e in email_tokens:
-            el = e.lower()
-            if el in seen_emails:
-                continue
-            seen_emails.add(el)
-            t = await db.therapists.find_one(
-                {"$or": [{"email": e}, {"real_email": e}]},
-                {"_id": 0, "id": 1, "name": 1, "email": 1, "real_email": 1,
-                 "source": 1, "credential_type": 1},
-            )
-            if t:
-                rows.append(_row(t, email_override=e))
-            else:
-                # External email; first_name falls back to "there"
-                rows.append({
-                    "therapist_id": None,
-                    "email": e,
-                    "first_name": "there",
-                    "name": "",
-                    "credential_type": "",
-                    "source": "external_paste",
-                })
+            for p in tokens:
+                d = _digits10(p)
+                if not d:
+                    continue
+                t = by_digits.get(d)
+                if not t:
+                    continue
+                email = _resolve_email(t)
+                if not email or email.lower() in seen_emails:
+                    continue
+                seen_emails.add(email.lower())
+                rows.append(_row(t))
+        else:
+            # Emails-only: each token must contain "@" to be processed.
+            for e in tokens:
+                if "@" not in e:
+                    continue
+                el = e.lower()
+                if el in seen_emails:
+                    continue
+                seen_emails.add(el)
+                t = await db.therapists.find_one(
+                    {"$or": [{"email": e}, {"real_email": e}]},
+                    {"_id": 0, "id": 1, "name": 1, "email": 1, "real_email": 1,
+                     "source": 1, "credential_type": 1},
+                )
+                if t:
+                    rows.append(_row(t, email_override=e))
+                else:
+                    # External email; first_name falls back to "there"
+                    rows.append({
+                        "therapist_id": None,
+                        "email": e,
+                        "first_name": "there",
+                        "name": "",
+                        "credential_type": "",
+                        "source": "external_paste",
+                    })
 
     return rows
 
@@ -2581,6 +2595,7 @@ async def admin_create_campaign(
         "reply_to": (payload.get("reply_to") or "").strip()[:200] or None,
         "recipient_filter": payload.get("recipient_filter") or None,
         "recipient_paste": payload.get("recipient_paste") or None,
+        "paste_format": (payload.get("paste_format") or "emails").lower(),
         "use_real_email": bool(payload.get("use_real_email", True)),
         "transactional": bool(payload.get("transactional", False)),
         "status": "draft",
@@ -2620,7 +2635,8 @@ async def admin_update_campaign(cid: str, payload: dict) -> dict[str, Any]:
         raise HTTPException(409, "Cannot edit a campaign that's already been sent")
     allowed = {
         "subject", "body_html", "reply_to",
-        "recipient_filter", "recipient_paste", "use_real_email", "transactional",
+        "recipient_filter", "recipient_paste", "paste_format",
+        "use_real_email", "transactional",
     }
     update: dict = {}
     for k in allowed:
@@ -2628,6 +2644,8 @@ async def admin_update_campaign(cid: str, payload: dict) -> dict[str, Any]:
             v = payload[k]
             if k in ("subject", "reply_to") and isinstance(v, str):
                 update[k] = v.strip()[:200] if k == "subject" else v.strip()[:200] or None
+            elif k == "paste_format" and isinstance(v, str):
+                update[k] = v.lower() if v.lower() in ("phones", "emails") else "emails"
             else:
                 update[k] = v
     update["updated_at"] = _now_iso()
@@ -2656,6 +2674,7 @@ async def admin_campaign_preview(cid: str) -> dict[str, Any]:
     rows = await _resolve_campaign_recipients(
         recipient_filter=doc.get("recipient_filter"),
         recipient_paste=doc.get("recipient_paste"),
+        paste_format=doc.get("paste_format", "emails"),
         use_real_email=doc.get("use_real_email", True),
     )
     if rows:
@@ -2689,6 +2708,7 @@ async def admin_campaign_test(
     rows = await _resolve_campaign_recipients(
         recipient_filter=doc.get("recipient_filter"),
         recipient_paste=doc.get("recipient_paste"),
+        paste_format=doc.get("paste_format", "emails"),
         use_real_email=doc.get("use_real_email", True),
     )
     sample = rows[0] if rows else {"first_name": "there", "name": "", "email": to}
@@ -2723,6 +2743,7 @@ async def admin_campaign_send(cid: str, request: Request) -> dict[str, Any]:
     rows = await _resolve_campaign_recipients(
         recipient_filter=doc.get("recipient_filter"),
         recipient_paste=doc.get("recipient_paste"),
+        paste_format=doc.get("paste_format", "emails"),
         use_real_email=doc.get("use_real_email", True),
     )
     # Idempotency: skip recipients already in email_sends.
