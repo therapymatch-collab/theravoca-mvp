@@ -1368,18 +1368,6 @@ function PortalAnalyticsCard({ analytics }) {
           </div>
         )}
       </div>
-      {a.referral_code && (
-        <div className="mt-5 border-t border-[#E8E5DF] pt-4 text-xs text-[#6D6A65]">
-          Refer-a-colleague code:{" "}
-          <span className="font-mono text-[#2D4A3E] bg-[#FDFBF7] border border-[#E8E5DF] rounded px-1.5 py-0.5">
-            {a.referral_code}
-          </span>
-          {" — "}
-          {a.referrals_made > 0
-            ? `${a.referrals_made} colleague${a.referrals_made === 1 ? "" : "s"} have signed up using your code.`
-            : "no signups via your code yet."}
-        </div>
-      )}
     </section>
   );
 }
