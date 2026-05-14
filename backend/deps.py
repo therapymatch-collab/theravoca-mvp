@@ -83,6 +83,23 @@ AVAILABILITY_PROMPT_HOUR_LOCAL = int(
     os.environ.get("AVAILABILITY_PROMPT_HOUR", "9"),
 )
 
+# SMS scope policy (set 2026-05-14, Josh's call):
+# Reserve SMS strictly for cold-recruitment outreach to therapists we
+# can't reach by email (the path in outreach_agent.py). For signed-up
+# therapists and patients we have their email and SMS is expensive +
+# intrusive, so the send-paths in helpers.py / cron.py / patients.py
+# short-circuit on this flag.
+#
+# The function code and frontend fields are intentionally NOT deleted
+# so a policy flip (env flag override or hard-coded toggle to False)
+# re-enables the old behaviour without code re-archaeology.
+#
+# To re-enable broad SMS: set SMS_RECRUITING_ONLY=false on Render OR
+# flip the default here.
+SMS_RECRUITING_ONLY = (
+    os.environ.get("SMS_RECRUITING_ONLY", "true").strip().lower() != "false"
+)
+
 # Phase 2 patient surveys: v2 cron only sends for requests whose
 # results_sent_at >= this date. v1 cron only sends for requests
 # whose results_sent_at < this date. Override via env for staging tests.
@@ -348,7 +365,8 @@ __all__ = [
     "ADMIN_PASSWORD", "DEFAULT_THRESHOLD", "AUTO_DELAY_HOURS", "PATIENT_DEMO_EMAIL",
     "ADMIN_NOTIFY_EMAIL", "LICENSE_WARN_DAYS", "AVAILABILITY_PROMPT_DAYS",
     "DAILY_TASK_HOUR_LOCAL", "DAILY_TASK_TZ_OFFSET_HOURS", "DAILY_TASK_TZ",
-    "AVAILABILITY_PROMPT_HOUR_LOCAL", "PHASE_2_LAUNCH_DATE",
+    "AVAILABILITY_PROMPT_HOUR_LOCAL", "SMS_RECRUITING_ONLY",
+    "PHASE_2_LAUNCH_DATE",
     "JWT_SECRET", "JWT_ALGO", "SESSION_TTL_DAYS", "ADMIN_SESSION_TTL_HOURS",
     "THERAPIST_SESSION_TTL_DAYS",
     "MAGIC_CODE_TTL_MINUTES",

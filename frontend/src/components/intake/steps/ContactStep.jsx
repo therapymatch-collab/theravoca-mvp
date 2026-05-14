@@ -102,33 +102,13 @@ export default function ContactStep({
           </p>
         )}
       </Field>
-      <Field label="Phone (optional — for an instant text receipt)">
-        <Input
-          type="tel"
-          inputMode="tel"
-          maxLength={12}
-          value={data.phone}
-          onChange={(e) => set("phone", formatUsPhone(e.target.value))}
-          placeholder="208-555-0123"
-          className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-          data-testid="phone-input"
-        />
-        {data.phone && (
-          <label className="flex items-start gap-3 mt-2 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5 cursor-pointer hover:border-[#2D4A3E] transition">
-            <Checkbox
-              checked={data.sms_opt_in}
-              onCheckedChange={(v) => set("sms_opt_in", !!v)}
-              className="mt-0.5 border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
-              data-testid="sms-opt-in"
-            />
-            <span className="text-sm text-[#2B2A29] leading-relaxed">
-              Text me a quick receipt confirming my referral was
-              received. We'll never share your number. Reply STOP
-              anytime.
-            </span>
-          </label>
-        )}
-      </Field>
+      {/* Phone + SMS opt-in hidden 2026-05-14 -- TheraVoca currently
+          reserves SMS for cold-recruit outreach to therapists we can't
+          reach by email. Patients always have email; an SMS receipt
+          isn't worth the cost and intrusion. Restore this block to
+          bring back the option. `phone` and `sms_opt_in` defaults in
+          the form data layer are still in place, so re-enabling is
+          purely a UI restore. */}
       <Field label="How did you hear about us?">
         {referralSourceError ? (
           <div className="rounded-xl border border-[#D45D5D]/30 bg-[#D45D5D]/5 px-4 py-3 text-sm text-[#6D6A65]">

@@ -1182,15 +1182,11 @@ export default function TherapistSignup() {
                     />
                     <span className="text-sm text-[#2B2A29]">Email me each new referral</span>
                   </label>
-                  <label className="flex items-center gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer">
-                    <Checkbox
-                      checked={data.notify_sms}
-                      onCheckedChange={(v) => set("notify_sms", !!v)}
-                      data-testid="signup-notify-sms"
-                      className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E]"
-                    />
-                    <span className="text-sm text-[#2B2A29]">Text me each new referral</span>
-                  </label>
+                  {/* SMS opt-in hidden 2026-05-14 -- TheraVoca currently
+                      reserves SMS for cold-recruit outreach to therapists
+                      we can't reach by email. Signed-up therapists get
+                      email notifications only. Restore this block + the
+                      `notify_sms` default below to bring it back. */}
                 </Group>
                 <Group title="Agreement">
                   <label className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer">

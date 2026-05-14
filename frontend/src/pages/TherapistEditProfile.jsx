@@ -505,12 +505,10 @@ export default function TherapistEditProfile() {
               label="Email me when a new referral matches my profile"
               testid="chk-notify-email"
             />
-            <CheckLine
-              checked={draft.notify_by_sms}
-              onChange={(v) => set("notify_by_sms", v)}
-              label="Text my alert phone when a new referral matches"
-              testid="chk-notify-sms"
-            />
+            {/* SMS opt-in hidden 2026-05-14 -- TheraVoca currently
+                reserves SMS for cold-recruit outreach. Signed-up
+                therapists get email notifications only. Restore this
+                CheckLine to bring back the option. */}
           </div>
         </Section>
 

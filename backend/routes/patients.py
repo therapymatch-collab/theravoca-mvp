@@ -494,8 +494,16 @@ async def create_request(payload: RequestCreate, request: Request):
         except Exception:
             pass
     await send_verification_email(payload.email, rid, token)
-    # Optional SMS receipt — only if patient gave a phone AND opted in
-    if payload.sms_opt_in and (payload.phone or "").strip():
+    # Optional SMS receipt -- gated behind SMS_RECRUITING_ONLY (deps.py).
+    # Default policy 2026-05-14: skip patient SMS receipt entirely
+    # (they always have email; SMS is reserved for therapist recruiting
+    # outreach when we can't reach by email). Flip the flag to re-enable.
+    from deps import SMS_RECRUITING_ONLY
+    if (
+        not SMS_RECRUITING_ONLY
+        and payload.sms_opt_in
+        and (payload.phone or "").strip()
+    ):
         try:
             await send_patient_intake_receipt_sms(payload.phone)
         except Exception:

@@ -234,8 +234,13 @@ async def _run_availability_prompts() -> dict[str, int]:
                 sent_email += 1
             except Exception as e:
                 logger.warning("Availability email failed for therapist=%s: %s", t.get("id"), e)
+        # SMS gated by SMS_RECRUITING_ONLY (deps.py). Default policy
+        # 2026-05-14: skip availability-prompt SMS to signed-up
+        # therapists; the email above covers them. Flip the flag to
+        # re-enable.
+        from deps import SMS_RECRUITING_ONLY
         sms_to = t.get("phone_alert") or t.get("phone") or ""
-        if sms_to and t.get("notify_sms", True):
+        if sms_to and t.get("notify_sms", True) and not SMS_RECRUITING_ONLY:
             try:
                 await send_availability_prompt_sms(sms_to, t["name"], portal_url)
                 sent_sms += 1

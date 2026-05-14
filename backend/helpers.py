@@ -740,8 +740,12 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None, 
                 summary=summary,
                 gaps=gaps,
             )
+        # SMS to signed-up therapists is gated behind SMS_RECRUITING_ONLY
+        # (deps.py). Default policy: skip -- they have email and SMS is
+        # expensive + intrusive. To re-enable broad SMS, flip the flag.
+        from deps import SMS_RECRUITING_ONLY
         phone = m.get("phone_alert") or m.get("phone") or ""
-        if phone and notify_sms:
+        if phone and notify_sms and not SMS_RECRUITING_ONLY:
             from routes.therapists import generate_signed_url
             apply_url = generate_signed_url(public_url, req["id"], m["id"], "apply")
             try:
