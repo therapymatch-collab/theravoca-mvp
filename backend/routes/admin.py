@@ -4079,6 +4079,85 @@ async def admin_list_sms_sends(limit: int = 100) -> dict[str, Any]:
     return {"sms_sends": docs, "total": len(docs)}
 
 
+@router.get("/admin/therapists/lookup-by-phones", dependencies=[Depends(require_admin)])
+async def admin_lookup_by_phones(phones: str) -> dict[str, Any]:
+    """Map a comma-separated list of phone numbers (any format -- E.164,
+    raw digits, formatted) to therapist details. Built for triaging the
+    SMS-in-pre-launch incident: Twilio export gives us +1XXXXXXXXXX, our
+    DB stores `xxx-xxx-xxxx` (or anything else the importer accepted),
+    so we normalise both sides to bare digits and match on the last 10.
+
+    Returns: { lookups: [{ phone_input, normalized, matched: bool,
+                           name, real_email, email, id, source }] }
+    """
+    import re as _re
+    raw_list = [p.strip() for p in (phones or "").split(",") if p.strip()]
+    if not raw_list:
+        raise HTTPException(400, "Pass ?phones=+1...,+1...")
+
+    def _digits10(p: str) -> str:
+        d = _re.sub(r"\D", "", p or "")
+        if len(d) == 11 and d.startswith("1"):
+            d = d[1:]
+        return d if len(d) == 10 else ""
+
+    normalised = {p: _digits10(p) for p in raw_list}
+    needles = sorted({d for d in normalised.values() if d})
+    if not needles:
+        raise HTTPException(400, "No valid 10-digit US numbers found")
+
+    # Pull every therapist that COULD match at least one needle. Mongo
+    # doesn't have a "digits-only" comparator; instead we fetch all rows
+    # whose phone or phone_alert contains any of the area code + local
+    # patterns, then filter in Python. That's fine -- the directory is
+    # small (~hundreds), and this is a one-shot triage tool.
+    cur = db.therapists.find(
+        {"$or": [
+            {"phone": {"$exists": True, "$ne": ""}},
+            {"phone_alert": {"$exists": True, "$ne": ""}},
+        ]},
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "real_email": 1,
+         "phone": 1, "phone_alert": 1, "source": 1, "notify_sms": 1,
+         "is_active": 1, "subscription_status": 1},
+    )
+    by_digits: dict[str, dict] = {}
+    async for t in cur:
+        for fld in ("phone", "phone_alert"):
+            d = _digits10(t.get(fld, ""))
+            if d and d not in by_digits:
+                by_digits[d] = t
+
+    lookups = []
+    for raw, dig in normalised.items():
+        if not dig:
+            lookups.append({
+                "phone_input": raw, "normalized": None, "matched": False,
+                "reason": "couldn't normalise to a 10-digit US number",
+            })
+            continue
+        t = by_digits.get(dig)
+        if not t:
+            lookups.append({
+                "phone_input": raw, "normalized": dig, "matched": False,
+                "reason": "no therapist row with this phone",
+            })
+            continue
+        lookups.append({
+            "phone_input": raw,
+            "normalized": dig,
+            "matched": True,
+            "id": t.get("id"),
+            "name": t.get("name"),
+            "email_in_db": t.get("email"),     # may be a fake placeholder
+            "real_email": t.get("real_email"),  # what to actually message
+            "source": t.get("source"),
+            "notify_sms": t.get("notify_sms", True),
+            "is_active": t.get("is_active", True),
+            "subscription_status": t.get("subscription_status"),
+        })
+    return {"lookups": lookups, "matched": sum(1 for l in lookups if l["matched"])}
+
+
 @router.get("/admin/sms-twilio-history", dependencies=[Depends(require_admin)])
 async def admin_sms_twilio_history(
     limit: int = 200,
