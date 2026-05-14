@@ -43,7 +43,11 @@ from typing import Any
 
 from deps import db
 from email_service import _get_app_url, _send, _wrap, BRAND
-from helpers import _now_iso, _safe_summary_for_therapist, extract_outreach_first_name
+from helpers import (
+    _now_iso,
+    _minimal_summary_for_outreach,
+    extract_outreach_first_name,
+)
 from pt_scraper import scrape_pt_candidates
 from directory_scrapers import scrape_all_backup_sources
 from sms_service import send_therapist_referral_sms
@@ -372,7 +376,11 @@ async def _send_outreach_invite(
     attempt for analytics + audit. `invite_id` is used to build an
     unguessable one-click opt-out URL embedded in every send.
     """
-    summary = _safe_summary_for_therapist(request)
+    # Cold outreach to UN-signed-up therapists -- intentionally a
+    # trimmed teaser, not the full intake. The full summary unlocks
+    # AFTER signup when the therapist actually agrees to receive
+    # referrals. See `_minimal_summary_for_outreach` for the rationale.
+    summary = _minimal_summary_for_outreach(request)
     # Use the strict outreach-name parser -- scraped names sometimes
     # contain company strings ("Acme Therapy LLC"), and "Hi Acme,"
     # reads broken. Falls back to "there" when the parser can't

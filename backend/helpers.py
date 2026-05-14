@@ -462,6 +462,66 @@ def _safe_summary_for_therapist(req: dict[str, Any]) -> dict[str, Any]:
     return summary
 
 
+def _minimal_summary_for_outreach(req: dict[str, Any]) -> dict[str, Any]:
+    """Trimmed referral summary for COLD outreach to therapists who have
+    not signed up yet. The full summary (`_safe_summary_for_therapist`)
+    is appropriate AFTER a therapist signs up and explicitly opts into
+    referrals; sending it to an un-signed-up therapist surfaces patient
+    detail (style/relationship preferences, deep-match answers, prior
+    therapy notes, free-text) before they've agreed to anything. Keep
+    this teaser to: where the patient is, how they want to meet, how
+    they pay, what they're broadly looking for, and how soon -- enough
+    for a therapist to decide whether it's worth claiming the referral
+    by signing up. The rest unlocks once they're in.
+    """
+    location_bits = []
+    if req.get("location_city"):
+        location_bits.append(req["location_city"])
+    if req.get("location_zip"):
+        location_bits.append(req["location_zip"])
+    location_str = ", ".join(location_bits) or "Idaho"
+
+    # Payment: just the type + carrier name when relevant. No specific
+    # cash budget (it's a negotiation lever the patient hasn't agreed
+    # to share with strangers yet).
+    payment_type_raw = (req.get("payment_type") or "either").lower()
+    insurance_name = (req.get("insurance_name") or "").strip()
+    if payment_type_raw == "insurance":
+        payment_label = (
+            f"Insurance ({insurance_name})" if insurance_name else "Insurance"
+        )
+    elif payment_type_raw == "cash":
+        payment_label = "Cash / out-of-pocket"
+    else:
+        payment_label = (
+            f"Insurance or cash ({insurance_name})" if insurance_name
+            else "Insurance or cash"
+        )
+
+    # Issue category: single primary item, no severities, no free-text,
+    # no "(4/5)" clinical scoring. Just the category.
+    issues = req.get("presenting_issues") or []
+    primary_issue = ""
+    if isinstance(issues, list) and issues:
+        primary_issue = str(issues[0]).replace("_", " ").title()
+
+    summary: dict[str, Any] = {}
+    age_group = (req.get("age_group") or "").replace("_", " ").title()
+    if age_group:
+        summary["Age group"] = age_group
+    summary["Location"] = location_str
+    fmt = (req.get("modality_preference") or "").replace("_", " ").title()
+    if fmt:
+        summary["Session format"] = fmt
+    summary["Payment"] = payment_label
+    if primary_issue:
+        summary["Primary concern"] = primary_issue
+    urgency = (req.get("urgency") or "").replace("_", " ").title()
+    if urgency:
+        summary["Urgency"] = urgency
+    return summary
+
+
 async def _build_decline_history(
     req: dict, therapist_ids: list[str],
 ) -> dict[str, dict]:
