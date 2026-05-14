@@ -249,3 +249,164 @@ async def resend_webhook(request: Request) -> dict[str, Any]:
         "invite_matched": bool(invite),
         "hard_bounce": is_hard_bounce,
     }
+
+
+# ─── Telnyx (SMS) ──────────────────────────────────────────────────────
+#
+# Single webhook URL for all Telnyx event types:
+#   POST /api/webhooks/telnyx
+#
+# Telnyx signs the payload with Ed25519. Headers:
+#   - Telnyx-Signature-Ed25519   base64 64-byte signature
+#   - Telnyx-Timestamp           unix-seconds timestamp
+# Signed payload = `timestamp|raw_body`. Public key lives in the
+# TELNYX_PUBLIC_KEY env (paste from Telnyx Mission Control dashboard).
+# When the env is unset we log + accept anyway -- early-test convenience
+# so the URL works as soon as it's saved in Telnyx, before secrets are
+# wired up. Tighten that to required once we're live.
+#
+# Event types we care about today:
+#   - message.finalized -> updates sms_sends row by message id with the
+#                          delivery status (delivered / failed /
+#                          undelivered) and error code
+#   - message.received  -> inbound SMS. Auto-records STOP replies into
+#                          outreach_opt_outs (matching the existing
+#                          Twilio inbound path's behaviour) and logs
+#                          everything else for triage.
+#   - message.sent      -> creation ack; we already have the sms_sends
+#                          row from outbound, so just log.
+
+TELNYX_TOLERANCE_SECONDS = 5 * 60
+
+
+def _verify_telnyx_ed25519(
+    public_key_b64: str, body: bytes, signature_b64: str, timestamp: str,
+) -> bool:
+    """Verify a Telnyx Ed25519 signature against `timestamp|body`."""
+    try:
+        ts = int(timestamp)
+    except (ValueError, TypeError):
+        return False
+    if abs(int(time.time()) - ts) > TELNYX_TOLERANCE_SECONDS:
+        logger.warning("Telnyx webhook: timestamp outside tolerance window")
+        return False
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        pub_bytes = base64.b64decode(public_key_b64)
+        sig_bytes = base64.b64decode(signature_b64)
+        payload = f"{timestamp}|".encode() + body
+        Ed25519PublicKey.from_public_bytes(pub_bytes).verify(sig_bytes, payload)
+        return True
+    except Exception as e:
+        logger.warning("Telnyx webhook: signature verification failed: %s", e)
+        return False
+
+
+@router.post("/webhooks/telnyx")
+async def telnyx_webhook(request: Request) -> dict[str, Any]:
+    """Telnyx webhook receiver. Single endpoint for all event types --
+    outbound status updates, inbound replies, and creation acks. Handles
+    signature verification when TELNYX_PUBLIC_KEY is configured;
+    otherwise accepts + logs a warning so the URL is reachable for
+    initial setup without env-var blocking. Tighten verification after
+    go-live."""
+    body = await request.body()
+    signature = request.headers.get("Telnyx-Signature-Ed25519", "")
+    timestamp = request.headers.get("Telnyx-Timestamp", "")
+    public_key = os.environ.get("TELNYX_PUBLIC_KEY", "").strip()
+    if public_key:
+        if not _verify_telnyx_ed25519(public_key, body, signature, timestamp):
+            raise HTTPException(401, "Invalid Telnyx signature")
+    else:
+        logger.warning(
+            "Telnyx webhook: TELNYX_PUBLIC_KEY not set -- accepting without "
+            "signature verification (tighten this for production)."
+        )
+
+    try:
+        import json as _json
+        payload = _json.loads(body.decode("utf-8"))
+    except Exception:
+        raise HTTPException(400, "Malformed JSON body")
+
+    data = payload.get("data") or {}
+    etype = (data.get("event_type") or "").lower()
+    msg = data.get("payload") or {}
+    msg_id = msg.get("id") or ""
+
+    # ── Outbound status update ──
+    # Telnyx tracks each destination separately; we look at the FIRST
+    # `to` entry's status which is the carrier delivery status. The
+    # `errors` array carries human-readable error context when status is
+    # `delivery_failed` / `sending_failed`.
+    if etype in ("message.finalized", "message.sent"):
+        to_list = msg.get("to") or []
+        to_status = (to_list[0].get("status") if to_list else "") or ""
+        errors = msg.get("errors") or []
+        error_code = errors[0].get("code") if errors else None
+        error_message = errors[0].get("title") if errors else None
+        update: dict[str, Any] = {
+            "telnyx_status": to_status,
+            "telnyx_event_at": _now_iso(),
+        }
+        if error_code:
+            update["telnyx_error_code"] = error_code
+            update["telnyx_error_message"] = error_message
+        # Match against sms_sends by Telnyx message ID. When we cut
+        # over the outbound path from Twilio to Telnyx we'll start
+        # populating sms_sends.telnyx_id at send time; until then the
+        # lookup misses and we just log.
+        if msg_id:
+            res = await db.sms_sends.update_one(
+                {"telnyx_id": msg_id},
+                {"$set": update},
+            )
+            matched = res.matched_count
+        else:
+            matched = 0
+        logger.info(
+            "Telnyx webhook: %s msg_id=%s status=%s err=%s matched_sms_sends=%d",
+            etype, msg_id, to_status, error_code, matched,
+        )
+        return {
+            "ok": True, "event": etype, "msg_id": msg_id,
+            "status": to_status, "matched": matched,
+        }
+
+    # ── Inbound SMS ──
+    # Auto-handle STOP replies the same way Twilio's inbound flow does:
+    # add the sender phone to outreach_opt_outs so the outreach agent
+    # never texts them again. Telnyx's payload has the inbound text in
+    # `payload.text` and the sender in `payload.from.phone_number`.
+    if etype == "message.received":
+        text = (msg.get("text") or "").strip()
+        sender = ((msg.get("from") or {}).get("phone_number") or "").strip()
+        is_stop = (
+            text.lower() in ("stop", "stopall", "unsubscribe", "cancel", "end", "quit")
+            or (len(text) < 60 and " stop " in f" {text.lower()} ")
+        )
+        if is_stop and sender:
+            try:
+                from outreach_optout import record_opt_out
+                await record_opt_out(
+                    email="", phone=sender,
+                    reason="STOP reply (Telnyx)",
+                    source="sms_stop_reply_telnyx",
+                )
+                logger.info(
+                    "Telnyx webhook: STOP reply from %s -- added to opt-out registry",
+                    sender,
+                )
+            except Exception as e:
+                logger.warning("Telnyx opt-out record failed: %s", e)
+        else:
+            logger.info(
+                "Telnyx webhook: inbound from %s text=%s",
+                sender, text[:80],
+            )
+        return {"ok": True, "event": etype, "from": sender, "is_stop": is_stop}
+
+    # Anything else (delivery_updated, message.attachment_*, etc.)
+    # is logged + 200'd so Telnyx doesn't retry-storm us.
+    logger.info("Telnyx webhook: unhandled event_type=%s msg_id=%s", etype, msg_id)
+    return {"ok": True, "event": etype, "handled": False}

@@ -48,6 +48,10 @@ _PUBLIC_PREFIXES = (
     "/api/blog",
     # Backend API — Stripe webhook (has its own signature verification)
     "/api/stripe/webhook",
+    # Backend API — inbound webhooks (Resend, Telnyx, etc.) -- each has
+    # its own signature verification. Must bypass staging basic auth so
+    # third-party services can post to us.
+    "/api/webhooks/",
     # Backend API — portal (has its own JWT session auth)
     "/api/portal/",
     # Backend API — admin (has its own require_admin auth: X-Admin-Password
