@@ -2734,9 +2734,15 @@ async def admin_campaign_preview(cid: str) -> dict[str, Any]:
         recipient_ids=doc.get("recipient_ids") or None,
         use_real_email=doc.get("use_real_email", True),
     )
+    from email_service import _inject_email_block_styles
     if rows:
         sample = rows[0]
         rendered = _render_campaign_body(doc.get("body_html") or "", sample)
+        # Apply the same paragraph-margin / heading-spacing injection
+        # that _wrap() does on the actual send -- otherwise the panel's
+        # inline preview shows cramped wall-of-text even though the
+        # delivered email renders correctly. Keeps preview honest.
+        rendered = _inject_email_block_styles(rendered)
     else:
         sample, rendered = None, ""
     return {
