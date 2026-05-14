@@ -1,8 +1,15 @@
-import { Loader2, RotateCw } from "lucide-react";
+import { useState } from "react";
+import { Loader2, RotateCw, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Th } from "./_shared";
+import { sessionClient, getSession } from "@/lib/api";
 
 export default function OptOutsPanel({ data, loading, onReload, filter }) {
   const rows = data?.opt_outs || [];
+  const [removingKey, setRemovingKey] = useState(null);
+  const session = getSession();
+  const client = sessionClient(session?.token);
+
   const q = (filter || "").trim().toLowerCase();
   const visible = q
     ? rows.filter(
@@ -12,6 +19,32 @@ export default function OptOutsPanel({ data, loading, onReload, filter }) {
           (r.last_source || "").toLowerCase().includes(q),
       )
     : rows;
+
+  const handleRemove = async (row) => {
+    const label = row.email || row.phone || "this opt-out";
+    if (!window.confirm(
+      `Remove opt-out for ${label}?\n\n` +
+      "They'll be eligible for cold outreach again. Use this for test " +
+      "addresses that clicked unsubscribe by mistake, or for therapists " +
+      "who emailed asking to be put back on the list."
+    )) return;
+    const key = `${row.email || ""}::${row.phone || ""}`;
+    setRemovingKey(key);
+    try {
+      const params = new URLSearchParams();
+      if (row.email) params.set("email", row.email);
+      if (row.phone) params.set("phone", row.phone);
+      await client.delete(`/admin/outreach/opt-outs?${params.toString()}`);
+      toast.success(`Removed opt-out for ${label}`);
+      onReload?.();
+    } catch (err) {
+      toast.error(
+        err?.response?.data?.detail || "Couldn't remove opt-out",
+      );
+    } finally {
+      setRemovingKey(null);
+    }
+  };
 
   return (
     <div className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden" data-testid="opt-outs-panel">
@@ -53,10 +86,14 @@ export default function OptOutsPanel({ data, loading, onReload, filter }) {
               <Th>Opted out</Th>
               <Th>Reason</Th>
               <Th>Linked to invite</Th>
+              <Th>{""}</Th>
             </tr>
           </thead>
           <tbody>
-            {visible.map((r, idx) => (
+            {visible.map((r, idx) => {
+              const rowKey = `${r.email || ""}::${r.phone || ""}`;
+              const isRemoving = removingKey === rowKey;
+              return (
               <tr
                 key={`${r.email || ""}-${r.phone || ""}-${idx}`}
                 className="border-t border-[#E8E5DF] hover:bg-[#FDFBF7]"
@@ -74,8 +111,24 @@ export default function OptOutsPanel({ data, loading, onReload, filter }) {
                 <td className="p-4 text-xs text-[#6D6A65] font-mono break-all">
                   {r.last_invite_id ? r.last_invite_id.slice(0, 8) + "…" : "—"}
                 </td>
+                <td className="p-4 text-right whitespace-nowrap">
+                  <button
+                    onClick={() => handleRemove(r)}
+                    disabled={isRemoving}
+                    className="inline-flex items-center gap-1 text-xs text-[#8B3220] hover:text-[#6E2618] disabled:opacity-40"
+                    title="Remove opt-out — therapist becomes eligible for cold outreach again"
+                    data-testid={`opt-out-remove-${idx}`}
+                  >
+                    {isRemoving ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Trash2 size={14} />
+                    )}
+                  </button>
+                </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       )}
