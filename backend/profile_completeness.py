@@ -76,8 +76,20 @@ REQUIRED_FIELDS = [
     ("primary_specialties", "At least one primary specialty", _nonempty_list(1)),
     ("age_groups", "Age groups you treat", _nonempty_list(1)),
     ("client_types", "Client types (individuals/couples/etc.)", _nonempty_list(1)),
+    # Therapy modalities promoted to REQUIRED 2026-05-14. A therapist who
+    # picks no approach can't realistically be matched -- the matcher has
+    # nothing to score against. Signup flow already enforces >=1 (see
+    # TherapistSignup canNext at line 376), and backfill populates 2-4
+    # for every imported therapist, so promoting won't strand existing
+    # rows or break new signups.
+    ("modalities", "Therapy modalities (CBT, DBT, etc.)", _nonempty_list(1)),
     ("modality_offering", "Session format (virtual / in-person / both)", _truthy),
     ("cash_rate", "Cash rate per session", _truthy),
+    # Availability windows promoted to REQUIRED 2026-05-14. Same
+    # reasoning as modalities -- the matcher's schedule-fit axis is
+    # zeroed if there are no windows, dragging match quality. Signup
+    # already enforces >=1; backfill seeds 2-4.
+    ("availability_windows", "Availability windows (when you have openings)", _nonempty_list(1)),
     # Office vs. telehealth — at least one practice location/option must be set.
     ("__office_or_telehealth__", "At least one office address OR telehealth", _has_office_or_telehealth),
 ]
@@ -85,7 +97,6 @@ REQUIRED_FIELDS = [
 ENHANCING_FIELDS = [
     ("years_experience", "Years of experience", _truthy),
     ("secondary_specialties", "Secondary specialties (broadens matches)", _nonempty_list(1)),
-    ("modalities", "Therapy modalities (CBT, DBT, etc.)", _nonempty_list(1)),
     ("insurance_accepted", "Insurance plans accepted", _nonempty_list(1)),
     ("languages_spoken", "Languages beyond English", _nonempty_list(1)),
     ("free_consult", "Offers a free initial consult", _truthy),

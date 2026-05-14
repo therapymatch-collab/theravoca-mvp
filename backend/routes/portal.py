@@ -411,7 +411,7 @@ _SELF_EDITABLE_FIELDS = {
     "insurance_accepted",
     "cash_rate", "sliding_scale", "free_consult",
     "languages_spoken",
-    "availability", "availability_notes",
+    "availability", "availability_notes", "availability_windows",
     "profile_picture",
     "notify_by_email", "notify_by_sms",
     # Deep-match style answers (v5). Therapists fill or update these

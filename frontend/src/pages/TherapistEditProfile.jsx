@@ -105,7 +105,12 @@ export default function TherapistEditProfile() {
           modalities: [...(r.data.modalities || [])],
           insurance_accepted: [...(r.data.insurance_accepted || [])],
           languages_spoken: [...(r.data.languages_spoken || ["English"])],
-          availability: [...(r.data.availability || [])],
+          // Backend stores `availability_windows`; the load + save here
+          // had been reading/writing a phantom `availability` field that
+          // the GET endpoint never returns. Existing data was invisible
+          // to the form and form edits never persisted. Realign to the
+          // backend name so existing windows surface and saves stick.
+          availability_windows: [...(r.data.availability_windows || [])],
           age_groups: [...(r.data.age_groups || [])],
           notify_by_email: r.data.notify_by_email !== false,
           notify_by_sms: r.data.notify_by_sms !== false,
@@ -423,48 +428,72 @@ export default function TherapistEditProfile() {
 
         {/* 4. Approaches */}
         <Section title="Therapy approaches & modalities">
-          <p className="text-xs text-[#6D6A65] mb-3">
-            Which evidence-based approaches do you actively practice?
-          </p>
-          <ChipRow
-            options={MODALITY_OPTIONS.map((o) => o.v)}
-            labels={Object.fromEntries(MODALITY_OPTIONS.map((o) => [o.v, o.l]))}
-            selected={draft.modalities}
-            onToggle={(v) => toggleList("modalities", v)}
-            testidPrefix="modality"
-          />
-          <div className="pt-5 border-t border-[#E8E5DF]">
-            <p className="text-sm font-medium text-[#2B2A29] mb-1">
-              Age groups you work with{" "}
-              <span className="text-xs text-[#6D6A65] font-normal">
-                (pick up to 3)
-              </span>
-            </p>
+          <Field
+            label="Which evidence-based approaches do you actively practice?"
+            {...req("modalities")}
+          >
             <ChipRow
-              options={AGE_GROUP_OPTIONS.map((o) => o.v)}
-              labels={Object.fromEntries(AGE_GROUP_OPTIONS.map((o) => [o.v, o.l]))}
-              selected={draft.age_groups}
-              onToggle={(v) => toggleList("age_groups", v, 3)}
-              testidPrefix="agegroup"
+              options={MODALITY_OPTIONS.map((o) => o.v)}
+              labels={Object.fromEntries(MODALITY_OPTIONS.map((o) => [o.v, o.l]))}
+              selected={draft.modalities}
+              onToggle={(v) => toggleList("modalities", v)}
+              testidPrefix="modality"
             />
+          </Field>
+          <div className="pt-5 border-t border-[#E8E5DF]">
+            <Field
+              label={
+                <>
+                  Age groups you work with{" "}
+                  <span className="text-xs text-[#6D6A65] font-normal">
+                    (pick up to 3)
+                  </span>
+                </>
+              }
+              {...req("age_groups")}
+            >
+              <ChipRow
+                options={AGE_GROUP_OPTIONS.map((o) => o.v)}
+                labels={Object.fromEntries(AGE_GROUP_OPTIONS.map((o) => [o.v, o.l]))}
+                selected={draft.age_groups}
+                onToggle={(v) => toggleList("age_groups", v, 3)}
+                testidPrefix="agegroup"
+              />
+            </Field>
           </div>
         </Section>
 
         {/* 5. Availability & alerts */}
         <Section title="Availability & alerts">
-          <Field label="Time slots where I currently have openings">
+          <Field
+            label="Time slots where I currently have openings"
+            {...req("availability_windows")}
+          >
             <ChipRow
               options={AVAILABILITY_OPTIONS.map((o) => o.v)}
               labels={Object.fromEntries(AVAILABILITY_OPTIONS.map((o) => [o.v, o.l]))}
-              selected={draft.availability}
-              onToggle={(v) => toggleList("availability", v)}
+              selected={draft.availability_windows}
+              onToggle={(v) => toggleList("availability_windows", v)}
               testidPrefix="avail"
             />
           </Field>
-          <Field label="Private alert phone (TheraVoca SMS referrals — not public)" {...req("phone")}>
+          <Field
+            label="Contact phone (TheraVoca uses this for SMS referral alerts -- not public)"
+            {...req("phone")}
+          >
             <Input
               value={draft.phone_alert}
-              onChange={(e) => set("phone_alert", e.target.value)}
+              onChange={(e) => {
+                // Write to both fields so the asterisk on this input
+                // accurately maps to the required `phone` slot. The
+                // matching engine reads phone_alert with phone as a
+                // fallback (helpers.py:743), and the importer writes
+                // identical values to both -- keeping them in sync
+                // here removes the historical edit-page divergence
+                // where phone_alert had a UI but phone didn't.
+                set("phone_alert", e.target.value);
+                set("phone", e.target.value);
+              }}
               placeholder="(208) 555-0123"
               data-testid="input-phone-alert"
             />
@@ -667,8 +696,10 @@ function missingKeySet(completeness) {
 // the full backend key list across the JSX.
 const REQUIRED_KEYS = new Set([
   "name", "email", "phone", "license_number", "license_expires_at",
+  "license_document",
   "bio", "profile_picture", "primary_specialties", "age_groups",
   "client_types", "modality_offering", "cash_rate", "office_or_telehealth",
+  "modalities", "availability_windows",
 ]);
 
 
