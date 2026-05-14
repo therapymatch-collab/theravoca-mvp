@@ -67,7 +67,6 @@ export default function Step2License({ data, set }) {
     <>
       <Group
         title="License & verification"
-        hint="We verify every therapist's license before they go live."
       >
         <Field
           label={<>License state <Req /></>}
