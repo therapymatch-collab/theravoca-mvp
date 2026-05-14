@@ -3978,6 +3978,7 @@ async def admin_sms_status() -> dict[str, Any]:
     enabled = os.environ.get("TWILIO_ENABLED", "").lower() == "true"
     override_to = os.environ.get("TWILIO_DEV_OVERRIDE_TO", "").strip()
     sms_live_mode = os.environ.get("SMS_LIVE_MODE", "").strip().lower() == "true"
+    sms_dry_run = os.environ.get("SMS_DRY_RUN", "").strip().lower() == "true"
     has_creds = bool(
         os.environ.get("TWILIO_ACCOUNT_SID")
         and os.environ.get("TWILIO_AUTH_TOKEN"),
@@ -3986,7 +3987,11 @@ async def admin_sms_status() -> dict[str, Any]:
     last_error = last.get("error_code")
     # Pre-launch safety state -- the same three-state model as email.
     # Mirrors the prelaunch_safety_guard inside sms_service.send_sms.
-    if override_to:
+    # Dry-run takes precedence in the display because it changes meaning
+    # of any "send" (none of them actually call Twilio).
+    if sms_dry_run:
+        safety_state = "dry_run"           # full pipeline, no Twilio call
+    elif override_to:
         safety_state = "override_routed"   # all SMS rerouted to override
     elif sms_live_mode:
         safety_state = "live"              # real recipients allowed
@@ -4022,6 +4027,7 @@ async def admin_sms_status() -> dict[str, Any]:
         "from_number": os.environ.get("TWILIO_FROM_NUMBER", ""),
         "dev_override_to": override_to,
         "sms_live_mode": sms_live_mode,
+        "sms_dry_run": sms_dry_run,
         "safety_state": safety_state,
         "sms_24h_sent": sms_24h_sent,
         "sms_24h_blocked": sms_24h_blocked,

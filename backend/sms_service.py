@@ -170,6 +170,25 @@ async def send_sms(to: str, body: str, *, force: bool = False) -> dict[str, Any]
     if override and override != intended_to:
         actual_body = f"[was: {intended_to}]\n{body}"
 
+    # Dry-run mode: short-circuit BEFORE the Twilio call so we exercise
+    # the whole code path (cron triggers, normalization, audit log) but
+    # never spend a Twilio credit or page anyone. Use this when you want
+    # to verify "would the right therapists have been SMS'd?" without
+    # hammering your own cell. Marks the audit row with a recognisable
+    # status so it's easy to filter out of real-traffic dashboards.
+    dry_run = os.environ.get("SMS_DRY_RUN", "").strip().lower() == "true"
+    if dry_run:
+        logger.info(
+            "SMS_DRY_RUN: would have sent to %s (intended=%s) body=%s",
+            actual_to, intended_to, actual_body[:80],
+        )
+        await _log_sms_send(
+            intended_to=intended_to, actual_to=actual_to, body=actual_body,
+            sid="dry-run", status="dry_run", sent_ok=True,
+        )
+        return {"sid": "dry-run", "to": actual_to,
+                "intended_to": intended_to, "status": "dry_run"}
+
     def _send_sync() -> Any:
         return client.messages.create(to=actual_to, from_=from_, body=actual_body)
 
