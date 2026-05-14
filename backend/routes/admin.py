@@ -2414,6 +2414,7 @@ async def _resolve_campaign_recipients(
     recipient_filter: dict | None,
     recipient_paste: str | None,
     paste_format: str = "emails",
+    recipient_ids: list[str] | None = None,
     use_real_email: bool = True,
 ) -> list[dict[str, Any]]:
     """Resolve a campaign's recipient list to concrete (email, vars) rows.
@@ -2502,6 +2503,20 @@ async def _resolve_campaign_recipients(
             seen_emails.add(email.lower())
             rows.append(_row(t))
 
+    # ----- Pick-from-list mode (explicit therapist IDs) -----
+    if recipient_ids:
+        cur = db.therapists.find(
+            {"id": {"$in": list(recipient_ids)}},
+            {"_id": 0, "id": 1, "name": 1, "email": 1, "real_email": 1,
+             "source": 1, "credential_type": 1},
+        )
+        async for t in cur:
+            email = _resolve_email(t)
+            if not email or email.lower() in seen_emails:
+                continue
+            seen_emails.add(email.lower())
+            rows.append(_row(t))
+
     # ----- Paste mode -----
     if recipient_paste:
         tokens = [
@@ -2569,6 +2584,46 @@ async def _resolve_campaign_recipients(
     return rows
 
 
+@router.get("/admin/broadcast/therapist-emails", dependencies=[Depends(require_admin)])
+async def admin_broadcast_therapist_emails() -> dict[str, Any]:
+    """Roster of every therapist with a usable email (real_email preferred,
+    falls back to the email field if it isn't a therapymatch+ placeholder).
+    Powers the broadcast tool's 'Pick from list' recipient mode.
+    Returns up to ~5000 rows sorted by name."""
+    cur = db.therapists.find(
+        {
+            "unsubscribed": {"$ne": True},
+            "hard_bounced": {"$ne": True},
+        },
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "real_email": 1,
+         "source": 1, "subscription_status": 1, "is_active": 1,
+         "credential_type": 1},
+    ).sort("name", 1)
+    rows: list[dict[str, Any]] = []
+    async for t in cur:
+        real = (t.get("real_email") or "").strip()
+        fallback = (t.get("email") or "").strip()
+        if real and "@" in real:
+            email = real
+            email_source = "real_email"
+        elif fallback and "therapymatch+" not in fallback.lower() and "@" in fallback:
+            email = fallback
+            email_source = "email"
+        else:
+            continue  # no usable email -> skip from picker
+        rows.append({
+            "id": t.get("id"),
+            "name": t.get("name") or "",
+            "email": email,
+            "email_source": email_source,
+            "source": t.get("source") or "",
+            "subscription_status": t.get("subscription_status") or "",
+            "is_active": t.get("is_active", True),
+            "credential_type": t.get("credential_type") or "",
+        })
+    return {"therapists": rows, "total": len(rows)}
+
+
 @router.get("/admin/email-campaigns", dependencies=[Depends(require_admin)])
 async def admin_list_campaigns(limit: int = 100) -> dict[str, Any]:
     """List recent broadcast campaigns, newest-first."""
@@ -2596,6 +2651,7 @@ async def admin_create_campaign(
         "recipient_filter": payload.get("recipient_filter") or None,
         "recipient_paste": payload.get("recipient_paste") or None,
         "paste_format": (payload.get("paste_format") or "emails").lower(),
+        "recipient_ids": payload.get("recipient_ids") or None,
         "use_real_email": bool(payload.get("use_real_email", True)),
         "transactional": bool(payload.get("transactional", False)),
         "status": "draft",
@@ -2636,7 +2692,7 @@ async def admin_update_campaign(cid: str, payload: dict) -> dict[str, Any]:
     allowed = {
         "subject", "body_html", "reply_to",
         "recipient_filter", "recipient_paste", "paste_format",
-        "use_real_email", "transactional",
+        "recipient_ids", "use_real_email", "transactional",
     }
     update: dict = {}
     for k in allowed:
@@ -2675,6 +2731,7 @@ async def admin_campaign_preview(cid: str) -> dict[str, Any]:
         recipient_filter=doc.get("recipient_filter"),
         recipient_paste=doc.get("recipient_paste"),
         paste_format=doc.get("paste_format", "emails"),
+        recipient_ids=doc.get("recipient_ids") or None,
         use_real_email=doc.get("use_real_email", True),
     )
     if rows:
@@ -2709,6 +2766,7 @@ async def admin_campaign_test(
         recipient_filter=doc.get("recipient_filter"),
         recipient_paste=doc.get("recipient_paste"),
         paste_format=doc.get("paste_format", "emails"),
+        recipient_ids=doc.get("recipient_ids") or None,
         use_real_email=doc.get("use_real_email", True),
     )
     sample = rows[0] if rows else {"first_name": "there", "name": "", "email": to}
@@ -2744,6 +2802,7 @@ async def admin_campaign_send(cid: str, request: Request) -> dict[str, Any]:
         recipient_filter=doc.get("recipient_filter"),
         recipient_paste=doc.get("recipient_paste"),
         paste_format=doc.get("paste_format", "emails"),
+        recipient_ids=doc.get("recipient_ids") or None,
         use_real_email=doc.get("use_real_email", True),
     )
     # Idempotency: skip recipients already in email_sends.

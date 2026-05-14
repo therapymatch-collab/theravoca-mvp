@@ -187,7 +187,12 @@ function BuilderView({ client, campaign, onBack }) {
       },
       recipient_paste: campaign?.recipient_paste || "",
       paste_format: campaign?.paste_format || "emails",
-      mode: campaign?.recipient_paste ? "paste" : "filter",
+      recipient_ids: campaign?.recipient_ids || [],
+      mode: campaign?.recipient_ids?.length
+        ? "pick"
+        : campaign?.recipient_paste
+          ? "paste"
+          : "filter",
     }),
     [campaign],
   );
@@ -197,7 +202,28 @@ function BuilderView({ client, campaign, onBack }) {
   const [sending, setSending] = useState(false);
   const [testTo, setTestTo] = useState("");
   const [preview, setPreview] = useState(null); // {recipient_count, sample_recipient, sample_rendered_body}
+  const [livePreviewOpen, setLivePreviewOpen] = useState(false);
+  // Therapist roster for the Pick-from-list mode; lazy-loaded when the
+  // user opens that tab. Kept in panel state so switching tabs doesn't
+  // re-fetch on every flip.
+  const [roster, setRoster] = useState(null);
+  const [rosterLoading, setRosterLoading] = useState(false);
+  const [rosterSearch, setRosterSearch] = useState("");
   const isSent = campaign?.status === "sent";
+
+  useEffect(() => {
+    if (draft.mode === "pick" && roster === null && !rosterLoading) {
+      setRosterLoading(true);
+      client
+        .get("/admin/broadcast/therapist-emails")
+        .then((r) => setRoster(r.data?.therapists || []))
+        .catch((e) =>
+          toast.error(e?.response?.data?.detail || "Couldn't load therapist list"),
+        )
+        .finally(() => setRosterLoading(false));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.mode]);
 
   const set = (k, v) => setDraft((d) => ({ ...d, [k]: v }));
 
@@ -226,6 +252,7 @@ function BuilderView({ client, campaign, onBack }) {
     recipient_filter: draft.mode === "filter" ? draft.recipient_filter : null,
     recipient_paste: draft.mode === "paste" ? draft.recipient_paste : null,
     paste_format: draft.mode === "paste" ? draft.paste_format : "emails",
+    recipient_ids: draft.mode === "pick" ? (draft.recipient_ids || []) : null,
   });
 
   const saveDraft = async () => {
@@ -381,6 +408,15 @@ function BuilderView({ client, campaign, onBack }) {
             </button>
             <button
               type="button"
+              onClick={() => set("mode", "pick")}
+              disabled={isSent}
+              className={`px-4 py-2 text-sm rounded-t-lg ${draft.mode === "pick" ? "bg-white border border-b-white border-[#E8E5DF] -mb-px font-semibold text-[#2D4A3E]" : "text-[#6D6A65]"}`}
+              data-testid="broadcast-mode-pick"
+            >
+              Pick from list{draft.mode === "pick" && (draft.recipient_ids?.length || 0) > 0 ? ` (${draft.recipient_ids.length})` : ""}
+            </button>
+            <button
+              type="button"
               onClick={() => set("mode", "paste")}
               disabled={isSent}
               className={`px-4 py-2 text-sm rounded-t-lg ${draft.mode === "paste" ? "bg-white border border-b-white border-[#E8E5DF] -mb-px font-semibold text-[#2D4A3E]" : "text-[#6D6A65]"}`}
@@ -390,7 +426,17 @@ function BuilderView({ client, campaign, onBack }) {
             </button>
           </div>
           <div className="border border-t-0 border-[#E8E5DF] rounded-b-lg rounded-tr-lg p-4 bg-[#FDFBF7]">
-            {draft.mode === "filter" ? (
+            {draft.mode === "pick" ? (
+              <PickFromListMode
+                roster={roster}
+                loading={rosterLoading}
+                search={rosterSearch}
+                onSearch={setRosterSearch}
+                selectedIds={draft.recipient_ids || []}
+                onSelectedChange={(ids) => set("recipient_ids", ids)}
+                disabled={isSent}
+              />
+            ) : draft.mode === "filter" ? (
               <div className="space-y-3">
                 <FilterChipRow
                   label="Source"
@@ -478,18 +524,45 @@ function BuilderView({ client, campaign, onBack }) {
         </div>
 
         <div>
-          <label className="block text-xs uppercase tracking-wider text-[#6D6A65] font-semibold mb-1.5">Body (HTML) *</label>
-          <textarea
-            rows={14}
-            value={draft.body_html}
-            onChange={(e) => set("body_html", e.target.value)}
-            disabled={isSent}
-            className="w-full px-3 py-2 text-sm rounded-xl bg-[#FDFBF7] border border-[#E8E5DF] font-mono text-xs leading-relaxed"
-            data-testid="broadcast-body"
-          />
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-xs uppercase tracking-wider text-[#6D6A65] font-semibold">Body (HTML) *</label>
+            <button
+              type="button"
+              onClick={() => setLivePreviewOpen((v) => !v)}
+              className="text-xs text-[#2D4A3E] hover:underline inline-flex items-center gap-1"
+              data-testid="broadcast-live-preview-toggle"
+            >
+              <Eye size={12} /> {livePreviewOpen ? "Hide live preview" : "Show live preview"}
+            </button>
+          </div>
+          <div className={livePreviewOpen ? "grid grid-cols-2 gap-3" : ""}>
+            <textarea
+              rows={14}
+              value={draft.body_html}
+              onChange={(e) => set("body_html", e.target.value)}
+              disabled={isSent}
+              className="w-full px-3 py-2 text-sm rounded-xl bg-[#FDFBF7] border border-[#E8E5DF] font-mono text-xs leading-relaxed"
+              data-testid="broadcast-body"
+            />
+            {livePreviewOpen && (
+              <div
+                className="w-full px-4 py-3 text-sm rounded-xl bg-white border border-[#E8E5DF] overflow-auto leading-relaxed"
+                style={{ minHeight: "200px", maxHeight: "400px" }}
+                data-testid="broadcast-live-preview"
+              >
+                <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-2 font-semibold">
+                  Live preview (raw HTML, merge fields unsubstituted)
+                </div>
+                <div
+                  dangerouslySetInnerHTML={{ __html: draft.body_html || "<em style=\"color:#aaa\">(empty body)</em>" }}
+                />
+              </div>
+            )}
+          </div>
           <p className="text-[11px] text-[#8A8780] mt-1">
             Merge fields: <code>{"{{first_name}}"}</code>, <code>{"{{name}}"}</code>, <code>{"{{email}}"}</code>, <code>{"{{credential_type}}"}</code>.
             Body is wrapped in the standard TheraVoca shell (logo + footer) automatically.
+            For a preview with real recipient data substituted, click <strong>Preview</strong> below.
           </p>
           <label className="inline-flex items-center gap-2 cursor-pointer text-sm mt-3">
             <input
@@ -578,6 +651,135 @@ function BuilderView({ client, campaign, onBack }) {
               Live send fires real emails to real therapist addresses. Always preview + send test to your own inbox first.
             </span>
           </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PickFromListMode({
+  roster, loading, search, onSearch,
+  selectedIds, onSelectedChange, disabled,
+}) {
+  const selectedSet = useMemo(() => new Set(selectedIds || []), [selectedIds]);
+  const q = (search || "").trim().toLowerCase();
+  const visible = useMemo(() => {
+    if (!roster) return [];
+    if (!q) return roster;
+    return roster.filter(
+      (t) =>
+        (t.name || "").toLowerCase().includes(q) ||
+        (t.email || "").toLowerCase().includes(q) ||
+        (t.source || "").toLowerCase().includes(q) ||
+        (t.credential_type || "").toLowerCase().includes(q),
+    );
+  }, [roster, q]);
+
+  const visibleIds = visible.map((t) => t.id);
+  const allVisibleSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedSet.has(id));
+
+  const toggleOne = (id) => {
+    if (disabled) return;
+    const next = new Set(selectedSet);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onSelectedChange(Array.from(next));
+  };
+
+  const selectAllVisible = () => {
+    if (disabled) return;
+    const next = new Set(selectedSet);
+    visibleIds.forEach((id) => next.add(id));
+    onSelectedChange(Array.from(next));
+  };
+
+  const clearAllVisible = () => {
+    if (disabled) return;
+    const next = new Set(selectedSet);
+    visibleIds.forEach((id) => next.delete(id));
+    onSelectedChange(Array.from(next));
+  };
+
+  if (loading && !roster) {
+    return (
+      <div className="text-center py-8 text-[#6D6A65]">
+        <Loader2 className="animate-spin inline" /> Loading therapist list…
+      </div>
+    );
+  }
+  if (!roster) {
+    return <div className="text-[#6D6A65] text-sm">Loading…</div>;
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => onSearch(e.target.value)}
+          placeholder={`Search ${roster.length} therapists by name, email, source…`}
+          disabled={disabled}
+          className="flex-1 px-3 py-2 text-sm rounded-lg bg-white border border-[#E8E5DF] min-w-[200px]"
+          data-testid="broadcast-pick-search"
+        />
+        <button
+          type="button"
+          onClick={allVisibleSelected ? clearAllVisible : selectAllVisible}
+          disabled={disabled || visibleIds.length === 0}
+          className="text-xs px-3 py-2 rounded-lg border border-[#E8E5DF] text-[#2D4A3E] hover:bg-white disabled:opacity-50"
+          data-testid="broadcast-pick-select-all"
+        >
+          {allVisibleSelected ? "Clear all visible" : `Select all visible (${visibleIds.length})`}
+        </button>
+      </div>
+      <div className="text-xs text-[#6D6A65] mb-2">
+        <strong className="text-[#2D4A3E]">{selectedIds?.length || 0} selected</strong> of {roster.length} total · {visible.length} match the search
+      </div>
+      <div
+        className="border border-[#E8E5DF] rounded-lg bg-white overflow-y-auto"
+        style={{ maxHeight: "320px" }}
+      >
+        {visible.length === 0 ? (
+          <div className="text-center py-8 text-[#6D6A65] text-sm">No matches.</div>
+        ) : (
+          visible.map((t) => {
+            const on = selectedSet.has(t.id);
+            return (
+              <label
+                key={t.id}
+                className={`flex items-center gap-3 px-3 py-2 border-b border-[#E8E5DF] last:border-b-0 hover:bg-[#FDFBF7] cursor-pointer ${disabled ? "opacity-60 cursor-not-allowed" : ""}`}
+                data-testid={`broadcast-pick-row-${t.id}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={on}
+                  onChange={() => toggleOne(t.id)}
+                  disabled={disabled}
+                  className="cursor-pointer"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-[#2B2A29] truncate">
+                    {t.name || <em className="text-[#C8C4BB]">(unnamed)</em>}
+                    {t.credential_type && (
+                      <span className="text-xs text-[#6D6A65] font-normal ml-2">{t.credential_type}</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-[#6D6A65] truncate">
+                    {t.email}
+                    {t.email_source === "email" && (
+                      <span className="text-[10px] text-[#C87965] ml-2">no real_email</span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-[10px] text-[#8A8780] whitespace-nowrap">
+                  {t.source && <span className="px-1.5 py-0.5 rounded bg-[#FDFBF7] border border-[#E8E5DF] mr-1">{t.source}</span>}
+                  {t.subscription_status && <span>{t.subscription_status}</span>}
+                </div>
+              </label>
+            );
+          })
         )}
       </div>
     </div>
