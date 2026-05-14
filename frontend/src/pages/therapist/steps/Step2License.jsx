@@ -164,8 +164,14 @@ export default function Step2License({ data, set }) {
                       onChange={async (e) => {
                         const f = e.target.files?.[0];
                         if (!f) return;
+                        const isPdf = (f.type || "").toLowerCase() === "application/pdf";
+                        // PDFs bypass the 256x256 image resize -- they go in
+                        // raw with a 5 MB cap (matches the portal-edit
+                        // license-document upload limit). Images go through
+                        // the resize path so the data URL stays small.
+                        const limit = isPdf ? 5 * 1024 * 1024 : 500 * 1024;
                         try {
-                          const url = await imageToDataUrl(f);
+                          const url = await imageToDataUrl(f, limit);
                           set("license_picture", url);
                         } catch (err) {
                           toast.error(err.message || "Couldn't process file");

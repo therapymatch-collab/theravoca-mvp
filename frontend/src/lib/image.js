@@ -1,6 +1,8 @@
 // Convert a File into a downscaled JPEG data URL (base64) for storage in MongoDB.
-// Caps at 256x256 max dimension and ~80% JPEG quality. Returns null if image
-// load fails. Throws if the resulting payload would exceed sizeLimitBytes.
+// Caps at 256x256 max dimension and ~80% JPEG quality. PDFs skip the canvas
+// resize (you can't draw a PDF onto a 2D canvas) and pass through as-is, so
+// the caller can store the original bytes. Throws if the resulting payload
+// would exceed sizeLimitBytes.
 export async function imageToDataUrl(file, sizeLimitBytes = 500 * 1024) {
   if (!file) return null;
   const dataUrl = await new Promise((resolve, reject) => {
@@ -9,6 +11,16 @@ export async function imageToDataUrl(file, sizeLimitBytes = 500 * 1024) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+  // PDFs can't be rendered through Image()/canvas. Return the raw data
+  // URL and let the caller's size cap apply directly to the file bytes.
+  if ((file.type || "").toLowerCase() === "application/pdf") {
+    if (dataUrl.length > sizeLimitBytes) {
+      throw new Error(
+        `PDF too large (${Math.round(dataUrl.length / 1024)}KB). Try a smaller file.`,
+      );
+    }
+    return dataUrl;
+  }
   const img = await new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
