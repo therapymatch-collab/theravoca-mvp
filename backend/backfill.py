@@ -290,6 +290,63 @@ def backfill_therapist(t: dict[str, Any], idx: int) -> dict[str, Any]:
     if (set_fields.get("offers_in_person") or t.get("offers_in_person")) and not t.get("office_locations"):
         set_fields["office_locations"] = random.sample(IDAHO_CITIES, random.randint(1, 2))
 
+    # Office addresses (full street-level, only if in-person). Patient
+    # results page renders the FIRST address as a clickable Google Maps
+    # link, so backfill at least one realistic address per in-person
+    # therapist. Synthesised from a small Idaho-flavoured street name +
+    # number pool -- intentionally low-quality so admins glancing at
+    # the doc viewer immediately see "this is fake test data."
+    _IDAHO_STREETS = [
+        "Bannock St", "State St", "Capitol Blvd", "Front St", "Main St",
+        "Idaho St", "Bishop Blvd", "Yellowstone Ave", "Sherman Ave",
+        "Pocatello Creek Rd", "Lincoln Ave", "Broadway Ave", "Park Blvd",
+        "Vista Ave", "Federal Way", "Eagle Rd", "Fairview Ave",
+    ]
+    _IDAHO_ZIPS_BY_CITY = {
+        "Boise": "83702", "Meridian": "83642", "Nampa": "83651",
+        "Caldwell": "83605", "Eagle": "83616", "Idaho Falls": "83401",
+        "Pocatello": "83201", "Twin Falls": "83301",
+        "Coeur d'Alene": "83814", "Lewiston": "83501", "Moscow": "83843",
+        "Sandpoint": "83864", "Sun Valley": "83353", "Ketchum": "83340",
+    }
+    if (set_fields.get("offers_in_person") or t.get("offers_in_person")) \
+            and not t.get("office_addresses"):
+        cities = (
+            set_fields.get("office_locations")
+            or t.get("office_locations")
+            or random.sample(IDAHO_CITIES, 1)
+        )
+        addrs = []
+        for city in cities[:2]:
+            number = random.randint(120, 9899)
+            street = random.choice(_IDAHO_STREETS)
+            unit = "" if random.random() < 0.65 else f", Suite {random.randint(100, 410)}"
+            zipc = _IDAHO_ZIPS_BY_CITY.get(city, "83702")
+            addrs.append(f"{number} {street}{unit}, {city}, ID {zipc}")
+        set_fields["office_addresses"] = addrs
+
+    # Office phone (public, separate from the private alert `phone`).
+    # Same Idaho 208 area-code format, different last 7 digits so the
+    # two values don't collide.
+    if not (t.get("office_phone") or "").strip():
+        set_fields["office_phone"] = (
+            f"(208) {random.randint(200, 999)}-{random.randint(1000, 9999)}"
+        )
+
+    # Website -- plausible-looking practice URL derived from the first
+    # name. Not a real domain (uses .example so no accidental DNS hit
+    # if a curious admin clicks). Strip-backfill removes this so the
+    # therapist enters their real URL on first login.
+    if not (t.get("website") or "").strip():
+        slug = first_name.lower().strip()[:18]
+        # Sprinkle a few realistic suffix variations so admins reviewing
+        # a list don't see "lin-therapy.example" 30 times.
+        suffix = random.choice([
+            "therapy", "counseling", "wellness", "psychology",
+            "clinic", "practice",
+        ])
+        set_fields["website"] = f"https://{slug}-{suffix}.example"
+
     # Age groups
     if not t.get("age_groups"):
         set_fields["age_groups"] = random.sample(AGE_GROUPS, random.randint(2, 4))
