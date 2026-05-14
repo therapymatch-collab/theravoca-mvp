@@ -13,11 +13,10 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Loader2, RotateCw, Send, Mail, Eye, ArrowLeft, Plus, AlertTriangle,
+  Loader2, RotateCw, Send, Mail, Eye, Trash2, ArrowLeft, Plus, AlertTriangle,
+  Bold, Italic, Link as LinkIcon, List, Heading2, Heading3, Pilcrow,
 } from "lucide-react";
 import { toast } from "sonner";
-import ReactQuill from "react-quill-new";
-import "react-quill-new/dist/quill.snow.css";
 import useAdminClient from "@/lib/useAdminClient";
 import { Th } from "./_shared";
 
@@ -207,6 +206,7 @@ function BuilderView({ client, campaign, onBack }) {
   const [sending, setSending] = useState(false);
   const [testTo, setTestTo] = useState("");
   const [preview, setPreview] = useState(null); // {recipient_count, sample_recipient, sample_rendered_body}
+  const [livePreviewOpen, setLivePreviewOpen] = useState(false);
   // Therapist roster for the Pick-from-list mode; lazy-loaded when the
   // user opens that tab. Kept in panel state so switching tabs doesn't
   // re-fetch on every flip.
@@ -528,15 +528,50 @@ function BuilderView({ client, campaign, onBack }) {
         </div>
 
         <div>
-          <label className="block text-xs uppercase tracking-wider text-[#6D6A65] font-semibold mb-1.5">Body *</label>
-          <RichBodyEditor
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-xs uppercase tracking-wider text-[#6D6A65] font-semibold">Body (HTML) *</label>
+            <button
+              type="button"
+              onClick={() => setLivePreviewOpen((v) => !v)}
+              className="text-xs text-[#2D4A3E] hover:underline inline-flex items-center gap-1"
+              data-testid="broadcast-live-preview-toggle"
+            >
+              <Eye size={12} /> {livePreviewOpen ? "Hide live preview" : "Show live preview"}
+            </button>
+          </div>
+          <HtmlEditorToolbar
             value={draft.body_html}
             onChange={(v) => set("body_html", v)}
             disabled={isSent}
           />
+          <div className={livePreviewOpen ? "grid grid-cols-2 gap-3" : ""}>
+            <textarea
+              ref={undefined}
+              id="broadcast-body-textarea"
+              rows={14}
+              value={draft.body_html}
+              onChange={(e) => set("body_html", e.target.value)}
+              disabled={isSent}
+              className="w-full px-3 py-2 text-sm rounded-b-xl rounded-t-none bg-[#FDFBF7] border border-t-0 border-[#E8E5DF] font-mono text-xs leading-relaxed"
+              data-testid="broadcast-body"
+            />
+            {livePreviewOpen && (
+              <div
+                className="w-full px-4 py-3 text-sm rounded-xl bg-white border border-[#E8E5DF] overflow-auto leading-relaxed"
+                style={{ minHeight: "200px", maxHeight: "400px" }}
+                data-testid="broadcast-live-preview"
+              >
+                <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] mb-2 font-semibold">
+                  Live preview (raw HTML, merge fields unsubstituted)
+                </div>
+                <div
+                  dangerouslySetInnerHTML={{ __html: draft.body_html || "<em style=\"color:#aaa\">(empty body)</em>" }}
+                />
+              </div>
+            )}
+          </div>
           <p className="text-[11px] text-[#8A8780] mt-1">
             Merge fields: <code>{"{{first_name}}"}</code>, <code>{"{{name}}"}</code>, <code>{"{{email}}"}</code>, <code>{"{{credential_type}}"}</code>.
-            They render literally in the editor and get substituted on send.
             Body is wrapped in the standard TheraVoca shell (logo + footer) automatically.
             For a preview with real recipient data substituted, click <strong>Preview</strong> below.
           </p>
@@ -633,72 +668,100 @@ function BuilderView({ client, campaign, onBack }) {
   );
 }
 
-function RichBodyEditor({ value, onChange, disabled }) {
-  // Quill-based WYSIWYG. Generates clean semantic HTML that flows
-  // through _wrap() on the backend. Merge fields ({{first_name}})
-  // render as literal text in the editor and get substituted server-
-  // side at send time.
-  const quillRef = useRef(null);
+function HtmlEditorToolbar({ value, onChange, disabled }) {
+  // Lightweight toolbar that wraps the current textarea selection in
+  // common HTML tags. Plays well with the existing plain textarea --
+  // no rich-editor dependency, no contenteditable shenanigans. Each
+  // button operates on document.activeElement when it's the body
+  // textarea so the user's cursor / selection survives the click.
+  const getTextarea = () =>
+    document.getElementById("broadcast-body-textarea");
 
-  const insertMergeField = (field) => {
-    const editor = quillRef.current?.getEditor?.();
-    if (!editor) return;
-    const range = editor.getSelection(true);
-    const at = range ? range.index : editor.getLength();
-    editor.insertText(at, `{{${field}}}`, "user");
-    editor.setSelection(at + `{{${field}}}`.length, 0, "user");
+  const wrap = (openTag, closeTag, placeholder = "") => {
+    const ta = getTextarea();
+    if (!ta || disabled) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const before = value.slice(0, start);
+    const selected = value.slice(start, end) || placeholder;
+    const after = value.slice(end);
+    const next = before + openTag + selected + closeTag + after;
+    onChange(next);
+    // Restore cursor inside the new tag
+    setTimeout(() => {
+      ta.focus();
+      const cursorAt = start + openTag.length + selected.length;
+      ta.setSelectionRange(cursorAt, cursorAt);
+    }, 0);
   };
 
-  const modules = useMemo(
-    () => ({
-      toolbar: [
-        [{ header: [2, 3, false] }],
-        ["bold", "italic", "underline"],
-        [{ list: "ordered" }, { list: "bullet" }],
-        ["link", "blockquote"],
-        ["clean"],
-      ],
-    }),
-    [],
-  );
+  const insert = (snippet) => {
+    const ta = getTextarea();
+    if (!ta || disabled) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const before = value.slice(0, start);
+    const after = value.slice(end);
+    onChange(before + snippet + after);
+    setTimeout(() => {
+      ta.focus();
+      const cursorAt = start + snippet.length;
+      ta.setSelectionRange(cursorAt, cursorAt);
+    }, 0);
+  };
 
-  const formats = [
-    "header", "bold", "italic", "underline",
-    "list", "bullet", "link", "blockquote",
-  ];
+  const insertLink = () => {
+    if (disabled) return;
+    const url = window.prompt("Link URL (https://...)");
+    if (!url) return;
+    wrap(`<a href="${url}">`, "</a>", "link text");
+  };
+
+  const Btn = ({ onClick, title, children, testid }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="px-2.5 py-1.5 hover:bg-[#FDFBF7] text-[#2B2A29] disabled:opacity-40 flex items-center gap-1 text-xs"
+      data-testid={testid}
+    >
+      {children}
+    </button>
+  );
 
   return (
     <div
-      data-testid="broadcast-rich-body"
-      className={disabled ? "opacity-60 pointer-events-none" : ""}
+      className="flex flex-wrap items-center gap-0 bg-white border border-[#E8E5DF] rounded-t-xl divide-x divide-[#E8E5DF]"
+      data-testid="broadcast-body-toolbar"
     >
-      <ReactQuill
-        ref={quillRef}
-        theme="snow"
-        value={value}
-        onChange={onChange}
-        readOnly={disabled}
-        modules={modules}
-        formats={formats}
-        placeholder="Write your email body. Use the toolbar for formatting; merge fields can be inserted below."
-      />
-      <div className="mt-2 flex items-center gap-1.5 flex-wrap text-[11px]">
-        <span className="uppercase tracking-wider text-[#6D6A65] font-semibold mr-1">
-          Insert merge field:
-        </span>
-        {["first_name", "name", "email", "credential_type"].map((f) => (
-          <button
-            key={f}
-            type="button"
-            onClick={() => insertMergeField(f)}
-            disabled={disabled}
-            className="px-2 py-1 rounded-md border border-[#E8E5DF] bg-[#FDFBF7] hover:bg-white text-[#2D4A3E] font-mono disabled:opacity-50"
-            data-testid={`broadcast-merge-${f}`}
-          >
-            {`{{${f}}}`}
-          </button>
-        ))}
+      <Btn onClick={() => wrap("<strong>", "</strong>", "bold")} title="Bold" testid="tb-bold"><Bold size={13} /></Btn>
+      <Btn onClick={() => wrap("<em>", "</em>", "italic")} title="Italic" testid="tb-italic"><Italic size={13} /></Btn>
+      <Btn onClick={() => wrap(`<h2 style="font-family:Georgia,serif;font-size:22px;color:#2D4A3E;margin:24px 0 8px;">`, "</h2>", "Heading")} title="Heading 2" testid="tb-h2"><Heading2 size={13} /></Btn>
+      <Btn onClick={() => wrap(`<h3 style="font-family:Georgia,serif;font-size:18px;color:#2D4A3E;margin:20px 0 6px;">`, "</h3>", "Subheading")} title="Heading 3" testid="tb-h3"><Heading3 size={13} /></Btn>
+      <Btn onClick={() => wrap(`<p style="font-size:15px;line-height:1.7;">`, "</p>", "paragraph")} title="Paragraph" testid="tb-p"><Pilcrow size={13} /></Btn>
+      <Btn onClick={() => insert(`<ul style="font-size:15px;line-height:1.7;padding-left:18px;">\n  <li>item</li>\n  <li>item</li>\n</ul>\n`)} title="List" testid="tb-ul"><List size={13} /></Btn>
+      <Btn onClick={insertLink} title="Link" testid="tb-link"><LinkIcon size={13} /></Btn>
+      <Btn
+        onClick={() => insert(`<a href="https://theravoca-production.onrender.com/therapists/join" style="display:inline-block;background:#2D4A3E;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:999px;font-weight:600;">Button text</a>`)}
+        title="Insert TheraVoca-styled button"
+        testid="tb-btn"
+      >
+        <span className="text-[10px] uppercase tracking-wider font-bold">Btn</span>
+      </Btn>
+      <div className="flex items-center pl-2 pr-1 text-[10px] uppercase tracking-wider text-[#6D6A65] font-semibold ml-auto border-l-0">
+        Merge:
       </div>
+      {["first_name", "name", "email", "credential_type"].map((f) => (
+        <Btn
+          key={f}
+          onClick={() => insert(`{{${f}}}`)}
+          title={`Insert {{${f}}} merge field`}
+          testid={`tb-merge-${f}`}
+        >
+          <code className="text-[10px]">{`{{${f}}}`}</code>
+        </Btn>
+      ))}
     </div>
   );
 }

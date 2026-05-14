@@ -78,7 +78,7 @@ def _wrap(title: str, inner_html: str, unsubscribe_url: Optional[str] = None) ->
         <tr><td style="padding:28px 32px;border-bottom:1px solid {BRAND['border']};">
           <span style="font-family:Georgia,serif;font-size:22px;color:{BRAND['primary']};letter-spacing:-0.5px;">TheraVoca</span>
         </td></tr>
-        <tr><td style="padding:32px;font-size:15px;line-height:1.7;color:{BRAND['text']};">
+        <tr><td style="padding:32px;">
           <h1 style="margin:0 0 16px;font-family:Georgia,serif;font-size:26px;color:{BRAND['primary']};line-height:1.2;">{title}</h1>
           {inner_html}
         </td></tr>
