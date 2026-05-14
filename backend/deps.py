@@ -196,7 +196,9 @@ def require_admin(
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin credentials")
 
 
-def _create_session_token(email: str, role: str) -> str:
+def _create_session_token(
+    email: str, role: str, admin_role: Optional[str] = None,
+) -> str:
     # TTL by role -- tighter for higher blast radius:
     #   admin     8h   (sees everything; HIPAA hygiene)
     #   therapist 7d   (sees patient clinical preferences; tighter than
@@ -214,7 +216,85 @@ def _create_session_token(email: str, role: str) -> str:
         "exp": exp,
         "iat": datetime.now(timezone.utc),
     }
+    # admin_role sub-claim drives the new view/edit/admin permission
+    # tiers (require_role factory). Only meaningful when role=="admin".
+    # Tokens issued before this field was introduced (or via the legacy
+    # X-Admin-Password header path) get treated as admin_role="admin"
+    # for backward compat.
+    if role == "admin" and admin_role and admin_role in ADMIN_ROLES:
+        payload["admin_role"] = admin_role
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+
+
+# ─── Admin role hierarchy ────────────────────────────────────────────────────
+# Three permission tiers for admin team members:
+#   view   -- read-only across the admin (dashboards, lists, exports).
+#             Cannot mutate anything.
+#   edit   -- view + day-to-day writes (approve therapists, edit content,
+#             send manual matches, fire test surveys). Cannot touch team /
+#             roles / Go-Live runbook / wipe / Stripe-config / rate-limits.
+#   admin  -- everything (current behavior). Required for team management
+#             and any launch-critical switch.
+ADMIN_ROLES: tuple[str, ...] = ("view", "edit", "admin")
+_ADMIN_ROLE_LEVEL: dict[str, int] = {"view": 1, "edit": 2, "admin": 3}
+
+
+def _admin_role_at_least(actual: Optional[str], minimum: str) -> bool:
+    """Compare an admin's role against a minimum required tier."""
+    a = _ADMIN_ROLE_LEVEL.get((actual or "").lower(), 0)
+    m = _ADMIN_ROLE_LEVEL.get((minimum or "").lower(), 0)
+    return m > 0 and a >= m
+
+
+def require_role(min_role: str):
+    """Dependency factory enforcing a minimum admin role tier.
+
+    Auth path mirrors `require_admin`:
+      - Legacy X-Admin-Password header always satisfies (treated as admin).
+      - Bearer JWT with role=admin + admin_role >= min_role passes.
+      - Bearer JWT with role=admin but no admin_role claim is treated
+        as admin_role="admin" for backward compat (legacy tokens).
+
+    Returns a FastAPI dependency function.
+
+    Usage:
+        @router.get("/admin/foo", dependencies=[Depends(require_role("view"))])
+    """
+    if min_role not in ADMIN_ROLES:
+        raise ValueError(f"Invalid admin role: {min_role}")
+
+    def _dep(
+        x_admin_password: Optional[str] = Header(None),
+        authorization: Optional[str] = Header(None),
+    ) -> bool:
+        # Master password = full admin (legacy path).
+        if x_admin_password and _hmac.compare_digest(
+            x_admin_password.encode("utf-8"), ADMIN_PASSWORD.encode("utf-8")
+        ):
+            return True
+        if authorization and authorization.lower().startswith("bearer "):
+            token = authorization.split(" ", 1)[1].strip()
+            try:
+                payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+            except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+                payload = None
+            if payload and payload.get("role") == "admin":
+                # Backward compat: missing admin_role on a valid admin
+                # token = full admin (the JWT was issued before tiering).
+                actual = payload.get("admin_role") or "admin"
+                if _admin_role_at_least(actual, min_role):
+                    return True
+                # Authenticated but insufficient role -> 403.
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"This action requires '{min_role}' role or higher.",
+                )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid admin credentials",
+        )
+
+    return _dep
 
 
 def require_session(allowed_roles: tuple[str, ...]):
@@ -259,6 +339,8 @@ __all__ = [
     "MAGIC_CODE_TTL_MINUTES",
     "MAGIC_CODE_MAX_PER_HOUR", "LOGIN_MAX_FAILURES", "LOGIN_LOCKOUT_MINUTES",
     "_login_attempts", "_client_ip", "_check_lockout", "_record_failure", "_reset_failures",
-    "require_admin", "require_session", "_create_session_token",
+    "require_admin", "require_session", "require_role",
+    "ADMIN_ROLES",
+    "_create_session_token",
     "_decode_session_from_authorization",
 ]

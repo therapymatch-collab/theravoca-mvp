@@ -18,6 +18,7 @@ from deps import (
     db, logger, ADMIN_PASSWORD, DEFAULT_THRESHOLD,
     LOGIN_MAX_FAILURES, _check_lockout, _client_ip,
     _login_attempts, _record_failure, _reset_failures, require_admin,
+    require_role, ADMIN_ROLES,
 )
 from email_service import send_therapist_approved, send_therapist_rejected
 from email_templates import DEFAULTS as EMAIL_TEMPLATE_DEFAULTS, list_templates, upsert_template
@@ -99,7 +100,13 @@ async def admin_login_with_email(payload: dict, request: Request):
     await db.admin_users.update_one(
         {"id": user["id"]}, {"$set": {"last_login_at": _now_iso()}}
     )
-    token = _create_session_token(email, "admin")
+    # Admin sub-role drives the view/edit/admin permission tier baked
+    # into the JWT. Existing users without a role field (or with the
+    # legacy "staff") get treated as full admin for backward compat --
+    # the new field is enforced on FUTURE invites + role changes.
+    user_role = (user.get("role") or "").lower()
+    admin_role = user_role if user_role in ADMIN_ROLES else "admin"
+    token = _create_session_token(email, "admin", admin_role=admin_role)
     from login_alerts import check_and_record_login
     await check_and_record_login(
         email=email, role="admin",
@@ -109,6 +116,7 @@ async def admin_login_with_email(payload: dict, request: Request):
     return {
         "token": token,
         "role": "admin",
+        "admin_role": admin_role,
         "email": email,
         "name": user.get("name") or email,
     }
@@ -117,24 +125,41 @@ async def admin_login_with_email(payload: dict, request: Request):
 @router.get("/admin/team")
 async def admin_list_team(_: bool = Depends(require_admin)):
     rows = await db.admin_users.find({}, {"_id": 0, "password_hash": 0}).sort("created_at", 1).to_list(200)
+    # Backfill the role field on the response so old records (which
+    # only had role="staff") render as "admin" in the UI without a
+    # separate migration. Stored value is unchanged; this is purely
+    # cosmetic for the API response.
+    for r in rows:
+        if (r.get("role") or "").lower() not in ADMIN_ROLES:
+            r["role"] = "admin"
     return {"team": rows, "total": len(rows)}
 
 
-@router.post("/admin/team")
-async def admin_invite_team_member(payload: dict, _: bool = Depends(require_admin)):
-    """Create a new team member with email + initial password. The inviter
-    shares the credentials out-of-band (Slack, secure DM). For lean MVP we
-    skip an email-based invite flow.
+@router.post("/admin/team", dependencies=[Depends(require_role("admin"))])
+async def admin_invite_team_member(payload: dict):
+    """Create a new team member with email + initial password + role.
+    The inviter shares the credentials out-of-band (Slack, secure DM).
+    For lean MVP we skip an email-based invite flow.
+
+    Body: { email, name, password, role }
+    Role must be one of: view / edit / admin. Defaults to "edit".
+    Only admins can invite (require_role("admin")) -- a new admin
+    can never grant themselves a higher role than they already have.
     """
     email = (payload.get("email") or "").strip().lower()
     name = (payload.get("name") or "").strip()
     password = payload.get("password") or ""
+    requested_role = (payload.get("role") or "edit").lower()
     if "@" not in email:
         raise HTTPException(400, "Valid email required")
     if not name:
         raise HTTPException(400, "Name required")
     if len(password) < 8:
         raise HTTPException(400, "Password must be at least 8 characters")
+    if requested_role not in ADMIN_ROLES:
+        raise HTTPException(
+            400, f"Invalid role. Must be one of: {', '.join(ADMIN_ROLES)}"
+        )
     if await db.admin_users.find_one({"email": email}):
         raise HTTPException(409, "A team member with that email already exists")
     record = {
@@ -142,7 +167,7 @@ async def admin_invite_team_member(payload: dict, _: bool = Depends(require_admi
         "email": email,
         "name": name,
         "password_hash": _hash_pw(password),
-        "role": "staff",
+        "role": requested_role,
         "is_active": True,
         "created_at": _now_iso(),
         "last_login_at": None,
@@ -151,6 +176,28 @@ async def admin_invite_team_member(payload: dict, _: bool = Depends(require_admi
     record.pop("password_hash", None)
     record.pop("_id", None)
     return record
+
+
+@router.put("/admin/team/{member_id}/role", dependencies=[Depends(require_role("admin"))])
+async def admin_set_team_role(member_id: str, payload: dict):
+    """Change a team member's role. Admin-only.
+
+    Body: { role: "view" | "edit" | "admin" }
+    Effective on the user's NEXT sign-in (we don't invalidate live
+    JWTs -- the 8h admin TTL caps how stale a tier change can be).
+    """
+    new_role = (payload.get("role") or "").lower()
+    if new_role not in ADMIN_ROLES:
+        raise HTTPException(
+            400, f"Invalid role. Must be one of: {', '.join(ADMIN_ROLES)}"
+        )
+    res = await db.admin_users.update_one(
+        {"id": member_id},
+        {"$set": {"role": new_role, "role_updated_at": _now_iso()}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(404, "Team member not found")
+    return {"ok": True, "role": new_role}
 
 
 @router.delete("/admin/team/{member_id}")
