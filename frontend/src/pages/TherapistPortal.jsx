@@ -17,6 +17,9 @@ import {
   Calendar,
   AlertCircle,
   Zap,
+  ShieldCheck,
+  ShieldOff,
+  ClipboardList,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header, Footer } from "@/components/SiteShell";
@@ -123,6 +126,9 @@ export default function TherapistPortal() {
   const [analytics, setAnalytics] = useState(null);
   const [error, setError] = useState(null);
   const [sub, setSub] = useState(null);
+  // 2FA status drives the Security chip color (red/off vs green/on).
+  // Null = not yet loaded; chip renders neutral until the fetch lands.
+  const [twoFaEnabled, setTwoFaEnabled] = useState(null);
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
   const [availDraft, setAvailDraft] = useState({ availability_windows: [], urgency_capacity: "" });
   const [selected, setSelected] = useState(new Set());
@@ -235,6 +241,12 @@ export default function TherapistPortal() {
       return;
     }
     loadAll();
+    // Side-fetch the 2FA status so the chip renders the right color
+    // without having to wait for the user to navigate into the page.
+    sessionClient()
+      .get("/portal/therapist/2fa/status")
+      .then((r) => setTwoFaEnabled(!!r.data?.enabled))
+      .catch(() => setTwoFaEnabled(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -363,6 +375,56 @@ export default function TherapistPortal() {
                 <Settings size={14} /> Edit profile
               </Link>
             </div>
+          </div>
+
+          {/* Account + security chips. Visible on every render of the
+              therapist portal so they're discoverable without burying
+              at the page bottom. The Security chip flips between
+              red-tinged "OFF" and calm "ON" so therapists notice when
+              they haven't enrolled yet. */}
+          <div className="mt-5 flex items-center gap-2 flex-wrap">
+            <Link
+              to="/portal/therapist/security"
+              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium transition ${
+                twoFaEnabled === true
+                  ? "bg-[#F2F7F1] border-[#D2E2D0] text-[#3F6F4A] hover:bg-[#E6EFE3]"
+                  : twoFaEnabled === false
+                  ? "bg-[#FDF1EF] border-[#E8C4BB] text-[#8B3220] hover:bg-[#FBE6E1]"
+                  : "bg-[#FDFBF7] border-[#E8E5DF] text-[#6D6A65]"
+              }`}
+              data-testid="therapist-2fa-chip"
+              title={
+                twoFaEnabled === true
+                  ? "Two-factor authentication is on"
+                  : twoFaEnabled === false
+                  ? "Two-factor authentication is OFF -- recommended for therapist accounts"
+                  : "Two-factor authentication"
+              }
+            >
+              {twoFaEnabled === true
+                ? <ShieldCheck size={13} strokeWidth={2.2} />
+                : <ShieldOff size={13} strokeWidth={2.2} />}
+              Security &amp; 2FA
+              {twoFaEnabled === true && (
+                <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[#3F6F4A]/15 text-[#3F6F4A]">
+                  ON
+                </span>
+              )}
+              {twoFaEnabled === false && (
+                <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[#8B3220]/15 text-[#8B3220]">
+                  OFF
+                </span>
+              )}
+            </Link>
+            <Link
+              to="/portal/therapist/login-history"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#E8E5DF] bg-[#FDFBF7] text-xs font-medium text-[#2D4A3E] hover:bg-[#E8E5DF] transition"
+              data-testid="therapist-login-history-chip"
+              title="See your recent sign-ins"
+            >
+              <ClipboardList size={13} strokeWidth={2.2} />
+              Sign-in history
+            </Link>
           </div>
 
           {error && (
@@ -1076,24 +1138,6 @@ export default function TherapistPortal() {
           </div>
         </div>
       )}
-
-      <div className="mt-12 mb-4 text-center text-xs text-[#6D6A65] flex items-center justify-center gap-4 flex-wrap">
-        <Link
-          to="/portal/therapist/security"
-          className="hover:text-[#2D4A3E] underline"
-          data-testid="therapist-2fa-link"
-        >
-          Security &amp; 2FA
-        </Link>
-        <span className="text-[#C8C4BB]">·</span>
-        <Link
-          to="/portal/therapist/login-history"
-          className="hover:text-[#2D4A3E] underline"
-          data-testid="therapist-login-history-link"
-        >
-          View my sign-in history
-        </Link>
-      </div>
 
       <Footer />
     </div>

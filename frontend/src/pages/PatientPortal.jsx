@@ -10,6 +10,7 @@ import {
   Users,
   Sparkles,
   ClipboardCheck,
+  ClipboardList,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import SetPasswordPrompt from "@/components/SetPasswordPrompt";
@@ -94,6 +95,19 @@ export default function PatientPortal() {
             </div>
           </div>
 
+          {/* Account chip -- single, since patients don't get 2FA. */}
+          <div className="mt-5 flex items-center gap-2 flex-wrap">
+            <Link
+              to="/portal/patient/login-history"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#E8E5DF] bg-[#FDFBF7] text-xs font-medium text-[#2D4A3E] hover:bg-[#E8E5DF] transition"
+              data-testid="patient-login-history-chip"
+              title="See your recent sign-ins"
+            >
+              <ClipboardList size={13} strokeWidth={2.2} />
+              Sign-in history
+            </Link>
+          </div>
+
           {requests === null && (
             <div className="flex justify-center py-20">
               <Loader2 className="animate-spin text-[#2D4A3E]" />
@@ -162,15 +176,6 @@ export default function PatientPortal() {
               ))}
             </div>
           )}
-          <div className="mt-12 text-center text-xs text-[#6D6A65]">
-            <Link
-              to="/portal/patient/login-history"
-              className="hover:text-[#2D4A3E] underline"
-              data-testid="patient-login-history-link"
-            >
-              View my sign-in history
-            </Link>
-          </div>
         </div>
       </main>
       <Footer />
