@@ -148,7 +148,13 @@ async def _send(
     html: str,
     *,
     template_key: Optional[str] = None,
+    force: bool = False,
 ) -> dict[str, Any] | None:
+    """Send an email via Resend. Respects the pre-launch safety guard
+    unless force=True (reserved for explicit operational sends like an
+    incident apology where we MUST reach real addresses outside of the
+    normal launch toggle). force=True still respects EMAIL_OVERRIDE_TO
+    redirect; it only bypasses the BLOCK on real recipients."""
     api_key = _get_api_key()
     if not api_key:
         logger.warning("RESEND_API_KEY not configured, skipping email send")
@@ -170,7 +176,7 @@ async def _send(
     # This is the suspenders for the EMAIL_OVERRIDE_TO belt -- if the
     # override env var ever gets unset by accident, we fail closed.
     live_mode = os.environ.get("EMAIL_LIVE_MODE", "").strip().lower() == "true"
-    if not override and not live_mode and not _is_safe_test_address(to):
+    if not force and not override and not live_mode and not _is_safe_test_address(to):
         logger.warning(
             "PRELAUNCH BLOCK: refusing to send to %s (real address). "
             "Set EMAIL_OVERRIDE_TO to redirect to a test inbox, or "
@@ -213,6 +219,96 @@ async def _send(
 
 
 # ─── Templates ─────────────────────────────────────────────────────────────────
+
+async def send_incident_apology(
+    to: str, first_name: str, *, force: bool = True,
+) -> dict[str, Any] | None:
+    """One-shot apology to therapists who received unintended SMS during
+    the 2026-05-13 pre-launch test incident. Hard-coded copy (not in
+    the editable template store) so it can't drift between draft and
+    send for what should be a single batch run.
+
+    `force=True` bypasses the pre-launch safety guard -- we WANT this
+    to land on real addresses; that's the entire point of the apology.
+    The send is logged in email_sends so we have an audit trail of who
+    received it.
+    """
+    first = first_name or "there"
+    subject = "An apology from TheraVoca -- and a promise"
+    signup_url = f"{_get_app_url()}/therapists/join"
+    inner = f"""
+    <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">Hi {first},</p>
+
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      I'm writing to apologize. You may have recently received an
+      unexpected text from TheraVoca &mdash; possibly more than one &mdash;
+      about a "referral match" for a patient. I owe you a real explanation.
+    </p>
+
+    <h3 style="font-family:Georgia,serif;font-size:18px;color:{BRAND['primary']};margin:24px 0 8px;">
+      What happened
+    </h3>
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      TheraVoca is a small Idaho-only patient-therapist matching service,
+      currently pre-launch. While testing the system in the past week, a
+      configuration mistake on my end caused our outbound SMS path to fire
+      real messages to therapists we'd identified from public practice
+      listings (Psychology Today, state board directories) &mdash;
+      including yours. You never opted in, and we never had a prior
+      relationship. I should have caught this before going anywhere near
+      a real phone number.
+    </p>
+
+    <h3 style="font-family:Georgia,serif;font-size:18px;color:{BRAND['primary']};margin:24px 0 8px;">
+      What I did about it
+    </h3>
+    <ul style="font-size:15px;line-height:1.7;color:{BRAND['text']};padding-left:18px;">
+      <li>Added a hard safety guard that physically blocks any SMS or email
+          to a real address unless a "live mode" flag is explicitly set.
+          The same config mistake can't repeat.</li>
+      <li>Built an audit log of every message attempt so I can see exactly
+          what shipped, to whom, and when.</li>
+      <li>Removed your number from our outreach list. You won't hear from
+          us again unless you actively sign up.</li>
+    </ul>
+
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      If you'd like to opt in &mdash; TheraVoca is genuinely useful for
+      Idaho therapists looking for a steady stream of warm patient matches
+      without paying for a Psychology Today subscription &mdash; you can
+      claim your profile here:
+    </p>
+    <p style="margin:18px 0;">
+      <a href="{signup_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:999px;font-weight:600;">
+        Claim your profile
+      </a>
+    </p>
+
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      But if you'd rather we leave you alone, you don't need to do
+      anything. That's the default state from here on out.
+    </p>
+
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">
+      If you have questions, frustrations, or want me to elaborate on any
+      of the above &mdash; reply to this email. It goes to me directly,
+      not a support queue.
+    </p>
+
+    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};margin-top:24px;">
+      Sincerely,<br/>
+      Josh Rosenthal<br/>
+      Founder, TheraVoca
+    </p>
+    """
+    return await _send(
+        to,
+        subject,
+        _wrap("An apology from TheraVoca", inner),
+        template_key="incident_apology_2026_05_13",
+        force=force,
+    )
+
 
 async def send_verification_email(to: str, request_id: str, token: str) -> None:
     tpl = await get_template(_db(), "verification")

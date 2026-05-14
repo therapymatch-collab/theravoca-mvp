@@ -2177,6 +2177,216 @@ async def admin_list_outreach(_: bool = Depends(require_role("view"))):
     return {"invites": docs, "total": len(docs)}
 
 
+# 115 delivered-SMS recipients from the 2026-05-13 Twilio CSV. Hard-coded
+# so this one-shot apology campaign is reproducible + auditable -- the
+# exact list lives in source control and can't drift between preview and
+# send. Extracted by parsing the Twilio messaging-logs CSV for rows
+# where Direction=outbound-api AND Status=delivered. The 5 STOP-replied
+# phones are included in this list (they got at least one delivery
+# before they replied STOP).
+INCIDENT_APOLOGY_PHONES_2026_05_13 = [
+    "+12053789369", "+12062077095", "+12082032781", "+12082132677",
+    "+12082188950", "+12082439395", "+12082446424", "+12082545450",
+    "+12082589107", "+12082683674", "+12082744565", "+12082861529",
+    "+12082911835", "+12082973698", "+12083156717", "+12083159094",
+    "+12083455250", "+12083520343", "+12083573104", "+12083912990",
+    "+12083913168", "+12083915345", "+12084028713", "+12084238375",
+    "+12084288444", "+12084505437", "+12084505645", "+12084647385",
+    "+12084771158", "+12084955591", "+12084972783", "+12085020330",
+    "+12085059786", "+12085469095", "+12085469318", "+12085573430",
+    "+12085977639", "+12086060100", "+12086060469", "+12086062783",
+    "+12086063001", "+12086063008", "+12086094111", "+12086140719",
+    "+12086141602", "+12086142385", "+12086392480", "+12086494962",
+    "+12086720260", "+12086996817", "+12087594777", "+12087847910",
+    "+12087935631", "+12088170234", "+12088208010", "+12088561562",
+    "+12089171362", "+12089172084", "+12089181368", "+12089182419",
+    "+12089188700", "+12089199555", "+12089252473", "+12089324784",
+    "+12089654502", "+12089810431", "+12089945774", "+12812058786",
+    "+12812419088", "+13037369354", "+13073317869", "+13608361563",
+    "+13609807906", "+13853252624", "+13853982757", "+14056538012",
+    "+14066376395", "+14069617510", "+14084446124", "+14153554024",
+    "+14158903562", "+14246672434", "+14252707420", "+14356101015",
+    "+14357671282", "+15032085536", "+15093341133", "+15095066305",
+    "+15095994485", "+15099036024", "+15099036384", "+15099064676",
+    "+15127654698", "+15302385102", "+16012072103", "+16194481216",
+    "+16513559045", "+17192573027", "+17205078020", "+17207729735",
+    "+17859151688", "+18012030037", "+18013960024", "+18014490425",
+    "+18015059022", "+18016555450", "+18016823795", "+18018724454",
+    "+18035971281", "+18054097457", "+18654070685", "+19073138919",
+    "+19096670940", "+19192833959", "+19492295156",
+]
+
+
+@router.post("/admin/incident-apology/{action}", dependencies=[Depends(require_admin)])
+async def admin_incident_apology(
+    action: str,
+    request: Request,
+    payload: dict | None = None,
+):
+    """One-shot apology email send to the therapists who received
+    unintended SMS during the 2026-05-13 pre-launch test incident.
+
+    Three actions:
+      - preview      : returns the recipient list (no sends). Each row
+                       carries phone, name, real_email, first_name,
+                       resolved (bool). Use this to verify the list
+                       before any send.
+      - test         : send ONE email to the configured test recipient
+                       (payload.test_recipient) so you can eyeball the
+                       rendered HTML in your own inbox.
+      - live         : send the apology to every resolved recipient.
+
+    Body params (POST JSON):
+      phones         : optional list of phone numbers (overrides the
+                       hard-coded INCIDENT_APOLOGY_PHONES_2026_05_13
+                       constant). Useful if you want to dry-run against
+                       a smaller subset first.
+      test_recipient : the email address to send the test to (action=test
+                       only). Required for action=test.
+
+    Idempotency: live send checks email_sends for prior successful sends
+    with template_key=incident_apology_2026_05_13 and skips them, so
+    re-running won't double-send.
+    """
+    import re as _re
+    from email_service import send_incident_apology
+    payload = payload or {}
+    phones = payload.get("phones") or list(INCIDENT_APOLOGY_PHONES_2026_05_13)
+    if action not in ("preview", "test", "live"):
+        raise HTTPException(400, "action must be preview, test, or live")
+
+    def _digits10(p: str) -> str:
+        d = _re.sub(r"\D", "", p or "")
+        if len(d) == 11 and d.startswith("1"):
+            d = d[1:]
+        return d if len(d) == 10 else ""
+
+    # Resolve phones -> therapist rows the same way lookup-by-phones does.
+    normalised = {p: _digits10(p) for p in phones}
+    cur = db.therapists.find(
+        {"$or": [
+            {"phone": {"$exists": True, "$ne": ""}},
+            {"phone_alert": {"$exists": True, "$ne": ""}},
+        ]},
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "real_email": 1,
+         "phone": 1, "phone_alert": 1, "source": 1},
+    )
+    by_digits: dict[str, dict] = {}
+    async for t in cur:
+        for fld in ("phone", "phone_alert"):
+            d = _digits10(t.get(fld, ""))
+            if d and d not in by_digits:
+                by_digits[d] = t
+
+    recipients = []
+    for raw, dig in normalised.items():
+        if not dig:
+            recipients.append({
+                "phone_input": raw, "resolved": False,
+                "reason": "couldn't normalise to 10-digit US number",
+            })
+            continue
+        t = by_digits.get(dig)
+        if not t:
+            recipients.append({
+                "phone_input": raw, "resolved": False,
+                "reason": "no therapist row found for this phone",
+            })
+            continue
+        # Prefer real_email (the unscrambled address); fall back to email
+        # only if it isn't a therapymatch+ placeholder.
+        real = (t.get("real_email") or "").strip()
+        fallback = (t.get("email") or "").strip()
+        if real and "@" in real:
+            target = real
+        elif fallback and "therapymatch+" not in fallback.lower() and "@" in fallback:
+            target = fallback
+        else:
+            recipients.append({
+                "phone_input": raw, "resolved": False,
+                "name": t.get("name"),
+                "reason": "no usable real_email (only therapymatch+ placeholder)",
+            })
+            continue
+        # Derive first name from the licensed-credential-aware parser.
+        from helpers import extract_outreach_first_name
+        first = extract_outreach_first_name(t.get("name")) or "there"
+        recipients.append({
+            "phone_input": raw,
+            "resolved": True,
+            "id": t.get("id"),
+            "name": t.get("name"),
+            "first_name": first,
+            "real_email": target,
+            "source": t.get("source"),
+        })
+
+    resolved = [r for r in recipients if r.get("resolved")]
+    audit.emit(
+        actor_type="admin", actor_id="admin",
+        action=f"incident_apology_{action}",
+        resource="incident_apology_2026_05_13",
+        detail=f"phones={len(phones)} resolved={len(resolved)}",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+
+    if action == "preview":
+        return {
+            "action": "preview",
+            "total_phones": len(phones),
+            "resolved_count": len(resolved),
+            "recipients": recipients,
+        }
+
+    if action == "test":
+        test_to = (payload.get("test_recipient") or "").strip()
+        if not test_to or "@" not in test_to:
+            raise HTTPException(400, "test_recipient (an email address) is required for action=test")
+        # Use first resolved recipient's first_name so the rendered
+        # email looks identical to what a real recipient gets.
+        sample_first = resolved[0]["first_name"] if resolved else "there"
+        res = await send_incident_apology(test_to, sample_first, force=True)
+        return {
+            "action": "test",
+            "test_recipient": test_to,
+            "sample_first_name": sample_first,
+            "sent": res is not None,
+        }
+
+    # action == "live"
+    # Idempotency: skip recipients we've already successfully sent to.
+    prior = await db.email_sends.find(
+        {"template_key": "incident_apology_2026_05_13", "sent_ok": True},
+        {"_id": 0, "to": 1},
+    ).to_list(2000)
+    already_sent = {(p.get("to") or "").lower() for p in prior}
+    sent = 0
+    skipped_already = 0
+    failed = 0
+    for r in resolved:
+        addr = (r["real_email"] or "").lower()
+        if addr in already_sent:
+            skipped_already += 1
+            continue
+        res = await send_incident_apology(addr, r["first_name"], force=True)
+        if res is None:
+            failed += 1
+        else:
+            sent += 1
+            already_sent.add(addr)
+        # Polite to Resend's API -- small delay between sends.
+        import asyncio as _asyncio
+        await _asyncio.sleep(0.2)
+    return {
+        "action": "live",
+        "resolved": len(resolved),
+        "sent": sent,
+        "skipped_already_sent": skipped_already,
+        "failed": failed,
+    }
+
+
 @router.get("/admin/outreach/opt-outs")
 async def admin_list_opt_outs(_: bool = Depends(require_role("view"))):
     """Full opt-out roster so admins can audit who asked to be removed
