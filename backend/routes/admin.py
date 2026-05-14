@@ -2187,6 +2187,44 @@ async def admin_list_opt_outs(_: bool = Depends(require_role("view"))):
     return {"opt_outs": docs, "total": len(docs)}
 
 
+@router.delete("/admin/outreach/opt-outs")
+async def admin_delete_opt_out(
+    email: str | None = None,
+    phone: str | None = None,
+    request: Request = None,
+    _: bool = Depends(require_role("admin")),
+):
+    """Manually remove an outreach opt-out so the address/number is
+    eligible for outreach again. Edge cases this exists for:
+      - A test address (e.g. our own dogfooding email) clicked the
+        unsubscribe link and is now permanently blocked from outreach.
+      - A therapist asks us to put them back on the list after opting
+        out by mistake.
+    Pass either ?email= or ?phone= (or both). Returns the count of
+    deleted records.
+    """
+    or_clauses: list[dict] = []
+    if email:
+        or_clauses.append({"email": email.strip().lower()})
+    if phone:
+        # Match on the same normalisation outreach_optout uses.
+        digits = "".join(c for c in phone if c.isdigit())
+        if digits:
+            or_clauses.append({"phone": digits})
+    if not or_clauses:
+        raise HTTPException(400, "Pass ?email= or ?phone= (at least one)")
+    if request is not None:
+        audit.emit(
+            actor_type="admin", actor_id="admin", action="delete_opt_out",
+            resource="outreach_opt_out",
+            detail=f"email={email or ''} phone={phone or ''}",
+            ip=request.headers.get("x-forwarded-for", ""),
+            user_agent=request.headers.get("user-agent", ""),
+        )
+    res = await db.outreach_opt_outs.delete_many({"$or": or_clauses})
+    return {"ok": True, "deleted": res.deleted_count}
+
+
 @router.get("/admin/feedback")
 async def admin_list_feedback(request: Request, _: bool = Depends(require_role("view"))):
     audit.emit(
