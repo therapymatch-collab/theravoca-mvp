@@ -132,7 +132,12 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "greeting": "",
         "intro": "Use this code to sign in. It expires in {ttl_minutes} minutes.",
         "cta_label": "",
-        "footer_note": "If you didn't request this, you can safely ignore this email.<br/><br/>To stop receiving these emails, reply STOP or email support@theravoca.com.",
+        # Footer is intentionally short. The global wrapper already
+        # supplies "If this wasn't you, please ignore this message" +
+        # support contact, so repeating either here was creating the
+        # duplicate-paragraph noise users complained about. Sign-in
+        # codes are also transactional -- there is no "STOP" option.
+        "footer_note": "Codes are for one-time sign-in only. Never share this code with anyone -- TheraVoca staff will never ask you for it.",
         "available_vars": "code, ttl_minutes",
     },
     "new_referral_inquiry": {

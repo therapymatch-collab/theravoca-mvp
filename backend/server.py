@@ -163,6 +163,21 @@ async def lifespan(_app: FastAPI):
             "interrupted_by_restart": True,
         }},
     )
+    # One-time cleanup: clear the old verbose magic_code footer override
+    # if it still matches the pre-2026-05-13 default verbatim. Without
+    # this, the DB override shadows the new (de-duped) DEFAULT and the
+    # email keeps printing duplicate "if this wasn't you" copy. Safe to
+    # leave in place after the cleanup runs -- the match is exact, so
+    # any admin-edited value is left alone.
+    _old_magic_footer = (
+        "If you didn't request this, you can safely ignore this email."
+        "<br/><br/>To stop receiving these emails, reply STOP or email "
+        "support@theravoca.com."
+    )
+    await db.email_templates.update_one(
+        {"key": "magic_code", "footer_note": _old_magic_footer},
+        {"$unset": {"footer_note": ""}},
+    )
     logger.info(
         "Started results sweep loop (every %ds) + daily-task scheduler",
         sweep_interval,
