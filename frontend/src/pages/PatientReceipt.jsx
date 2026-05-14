@@ -27,10 +27,23 @@ export default function PatientReceipt() {
     const load = async () => {
       try {
         const tokenQuery = t ? `?t=${encodeURIComponent(t)}` : "";
-        const session = getSession();
-        const headers = session?.token
-          ? { Authorization: `Bearer ${session.token}` }
-          : undefined;
+        // Auth precedence:
+        //   1. URL view_token (?t=...) -- the email link's authority.
+        //      Always sufficient on its own; never mix with a session
+        //      bearer because cross-tab sessionStorage can leak the
+        //      wrong patient's bearer to this tab and confuse routing.
+        //   2. No URL token -> fall back to whatever session bearer
+        //      is in sessionStorage (probably the same patient that
+        //      just signed in via magic code).
+        let headers;
+        if (t) {
+          headers = undefined;
+        } else {
+          const session = getSession();
+          headers = session?.token
+            ? { Authorization: `Bearer ${session.token}` }
+            : undefined;
+        }
         const r = await api.get(
           `/requests/${requestId}/receipt${tokenQuery}`,
           { headers },
