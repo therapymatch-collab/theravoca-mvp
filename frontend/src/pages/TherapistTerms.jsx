@@ -159,13 +159,19 @@ export default function TherapistTerms() {
                 to invite the Patient into your practice. Patient information
                 you receive may have been submitted by the Patient directly or
                 by a Searcher acting on the Patient's behalf (for example, a
-                parent submitting on behalf of a teen). You may decline any
-                referral for any reason that complies with applicable law and
-                your professional ethics. If you accept a referral, you
-                contact the Patient (or the Searcher who submitted on the
-                Patient's behalf) directly outside of TheraVoca and from
-                that point forward operate independently of TheraVoca with
-                respect to that Patient's care.
+                parent submitting on behalf of a teen).{" "}
+                <strong>
+                  You have no way to tell from the referral itself whether
+                  the Searcher is the Patient or a different person submitting
+                  on the Patient's behalf, and TheraVoca does not surface that
+                  distinction.
+                </strong>{" "}
+                You may decline any referral for any reason that complies
+                with applicable law and your professional ethics. If you
+                accept a referral, you contact the Patient (or the Searcher
+                who submitted on the Patient's behalf) directly outside of
+                TheraVoca and from that point forward operate independently
+                of TheraVoca with respect to that Patient's care.
               </p>
               <p className="mt-3">
                 You agree not to share Patient information you receive
