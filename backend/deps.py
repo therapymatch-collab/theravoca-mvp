@@ -67,7 +67,21 @@ LICENSE_WARN_DAYS = int(os.environ.get("LICENSE_WARN_DAYS", "30"))
 _avail_days_env = os.environ.get("AVAILABILITY_PROMPT_DAYS", "0")
 AVAILABILITY_PROMPT_DAYS = tuple(int(d.strip()) for d in _avail_days_env.split(",") if d.strip().isdigit())
 DAILY_TASK_HOUR_LOCAL = int(os.environ.get("DAILY_TASK_HOUR", "2"))
+# Legacy fixed-offset (kept for any consumer that still references it).
+# The cron itself now uses DAILY_TASK_TZ (IANA name) below for proper DST.
 DAILY_TASK_TZ_OFFSET_HOURS = int(os.environ.get("DAILY_TASK_TZ_OFFSET", "-7"))
+# Proper IANA timezone for the cron clock. Defaults to America/Boise so
+# the daily window auto-tracks Mountain DST (UTC-7 winter, UTC-6 summer).
+# Most of Idaho is Mountain; the panhandle is Pacific but we run on the
+# bulk-of-state clock for now. Override via env if we expand later.
+DAILY_TASK_TZ = os.environ.get("DAILY_TASK_TZ", "America/Boise")
+# Availability-prompt cron has its own hour gate (default 9am local) so
+# it lands in therapists' workday inbox/SMS instead of riding along with
+# 2am billing/license sweeps. Set independently so the off-hours batch
+# stays off-hours.
+AVAILABILITY_PROMPT_HOUR_LOCAL = int(
+    os.environ.get("AVAILABILITY_PROMPT_HOUR", "9"),
+)
 
 # Phase 2 patient surveys: v2 cron only sends for requests whose
 # results_sent_at >= this date. v1 cron only sends for requests
@@ -333,7 +347,8 @@ __all__ = [
     "db", "logger",
     "ADMIN_PASSWORD", "DEFAULT_THRESHOLD", "AUTO_DELAY_HOURS", "PATIENT_DEMO_EMAIL",
     "ADMIN_NOTIFY_EMAIL", "LICENSE_WARN_DAYS", "AVAILABILITY_PROMPT_DAYS",
-    "DAILY_TASK_HOUR_LOCAL", "DAILY_TASK_TZ_OFFSET_HOURS", "PHASE_2_LAUNCH_DATE",
+    "DAILY_TASK_HOUR_LOCAL", "DAILY_TASK_TZ_OFFSET_HOURS", "DAILY_TASK_TZ",
+    "AVAILABILITY_PROMPT_HOUR_LOCAL", "PHASE_2_LAUNCH_DATE",
     "JWT_SECRET", "JWT_ALGO", "SESSION_TTL_DAYS", "ADMIN_SESSION_TTL_HOURS",
     "THERAPIST_SESSION_TTL_DAYS",
     "MAGIC_CODE_TTL_MINUTES",

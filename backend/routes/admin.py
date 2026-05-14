@@ -3496,7 +3496,11 @@ _DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 
 @router.get("/admin/availability-prompt", dependencies=[Depends(require_admin)])
 async def admin_get_availability_prompt() -> dict[str, Any]:
-    from deps import AVAILABILITY_PROMPT_DAYS, DAILY_TASK_HOUR_LOCAL
+    from deps import (
+        AVAILABILITY_PROMPT_DAYS,
+        AVAILABILITY_PROMPT_HOUR_LOCAL,
+        DAILY_TASK_TZ,
+    )
     doc = await db.app_config.find_one(
         {"key": "availability_prompt"}, {"_id": 0},
     )
@@ -3506,7 +3510,8 @@ async def admin_get_availability_prompt() -> dict[str, Any]:
     return {
         "days": days,
         "day_names": [_DAY_NAMES[d] for d in days if 0 <= d <= 6],
-        "send_hour_local": DAILY_TASK_HOUR_LOCAL,
+        "send_hour_local": AVAILABILITY_PROMPT_HOUR_LOCAL,
+        "timezone": DAILY_TASK_TZ,
     }
 
 

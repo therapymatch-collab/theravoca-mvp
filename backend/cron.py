@@ -5,12 +5,14 @@ import asyncio
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import stripe_service
 from deps import (
     db, logger, AUTO_DELAY_HOURS, ADMIN_NOTIFY_EMAIL,
     LICENSE_WARN_DAYS, AVAILABILITY_PROMPT_DAYS,
     DAILY_TASK_HOUR_LOCAL, DAILY_TASK_TZ_OFFSET_HOURS,
+    DAILY_TASK_TZ, AVAILABILITY_PROMPT_HOUR_LOCAL,
     PHASE_2_LAUNCH_DATE,
 )
 import audit
@@ -98,7 +100,15 @@ async def _sweep_loop(interval_seconds: int = 300) -> None:
 # ─── Daily cron tasks ────────────────────────────────────────────────────────
 
 def _now_local() -> datetime:
-    return datetime.now(timezone.utc) + timedelta(hours=DAILY_TASK_TZ_OFFSET_HOURS)
+    """Wall-clock time in DAILY_TASK_TZ (default America/Boise) -- DST-aware.
+    Falls back to the legacy fixed offset if zoneinfo can't resolve the name
+    (e.g. tzdata not installed in a stripped container)."""
+    try:
+        return datetime.now(ZoneInfo(DAILY_TASK_TZ))
+    except ZoneInfoNotFoundError:
+        return datetime.now(timezone.utc) + timedelta(
+            hours=DAILY_TASK_TZ_OFFSET_HOURS,
+        )
 
 
 async def _get_testing_mode() -> bool:
@@ -689,7 +699,11 @@ async def _daily_loop() -> None:
                     )
                     bill = await _run_daily_billing_charges()
                     lic = await _run_license_expiry_alerts()
-                    avail = await _run_availability_prompts()
+                    # availability prompts now have their own hour gate
+                    # (see AVAILABILITY_PROMPT_HOUR_LOCAL block below) --
+                    # they land in therapists' workday instead of the
+                    # 2am off-hours sweep.
+                    avail = {"sent_email": 0, "sent_sms": 0, "reason": "moved_to_workday_hour_block"}
                     t_follow = await _run_therapist_2w_followups()
                     t_surveys = await _run_therapist_surveys()
                     stale = await _run_stale_profile_nag()
@@ -721,6 +735,32 @@ async def _daily_loop() -> None:
                             "v2_reminders": v2_reminders,
                             "auto_recruit_weekly": auto_rec,
                             "cron_health_alert": health,
+                        }},
+                    )
+            # ── Workday-hour block (separate hour gate from 2am bundle) ──
+            # Tasks here run during therapists' actual working hours so
+            # their inbox/SMS pings them when they're awake. Each task
+            # is dedup'd by its own cron_runs row so we don't re-fire
+            # on consecutive 30-minute polls within the same hour.
+            if local.hour == AVAILABILITY_PROMPT_HOUR_LOCAL:
+                rec = await db.cron_runs.find_one(
+                    {"name": "workday_tasks", "date": today_iso}, {"_id": 0}
+                )
+                if not rec:
+                    logger.info(
+                        "Running workday tasks for %s (local hour=%d, tz=%s)",
+                        today_iso, local.hour, DAILY_TASK_TZ,
+                    )
+                    await db.cron_runs.insert_one(
+                        {"name": "workday_tasks", "date": today_iso,
+                         "started_at": _now_iso()}
+                    )
+                    workday_avail = await _run_availability_prompts()
+                    await db.cron_runs.update_one(
+                        {"name": "workday_tasks", "date": today_iso},
+                        {"$set": {
+                            "completed_at": _now_iso(),
+                            "availability": workday_avail,
                         }},
                     )
         except Exception as e:
