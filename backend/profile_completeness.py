@@ -47,12 +47,30 @@ def _has_office_or_telehealth(t: dict) -> bool:
     return isinstance(addrs, list) and len(addrs) > 0
 
 
+def _has_license_document(t: dict) -> bool:
+    """A profile counts as having a license document if EITHER the legacy
+    inline `license_picture` data URL OR the newer `license_document`
+    upload (separate field, populated by the portal-edit uploader) is
+    present. Without one of these the profile cannot legitimately go
+    live -- admins have no document to verify against.
+    """
+    if t.get("license_picture"):
+        return True
+    doc = t.get("license_document") or {}
+    return bool(doc and doc.get("data_base64"))
+
+
 REQUIRED_FIELDS = [
     ("name", "Full name with credentials", _nonempty_str(2)),
     ("email", "Email", _nonempty_str(3)),
     ("phone", "Contact phone", _nonempty_str(7)),
     ("license_number", "License number", _nonempty_str(2)),
     ("license_expires_at", "License expiration date", _truthy),
+    # License document upload -- previously enhancing-only, which let
+    # therapists go "live" with no proof of license at all. Promoted to
+    # REQUIRED 2026-05-13 after Josh spotted a profile marked live in
+    # the portal with "No license document on file yet" still showing.
+    ("__license_document__", "License document upload", _has_license_document),
     ("bio", "Bio (40+ characters)", _nonempty_str(40)),
     ("profile_picture", "Profile photo", _truthy),
     ("primary_specialties", "At least one primary specialty", _nonempty_list(1)),
@@ -70,7 +88,6 @@ ENHANCING_FIELDS = [
     ("modalities", "Therapy modalities (CBT, DBT, etc.)", _nonempty_list(1)),
     ("insurance_accepted", "Insurance plans accepted", _nonempty_list(1)),
     ("languages_spoken", "Languages beyond English", _nonempty_list(1)),
-    ("license_picture", "License document upload", _truthy),
     ("free_consult", "Offers a free initial consult", _truthy),
     ("sliding_scale", "Sliding scale availability", _truthy),
     ("website", "Website / Psychology-Today profile", _nonempty_str(4)),
