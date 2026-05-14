@@ -4079,6 +4079,78 @@ async def admin_list_sms_sends(limit: int = 100) -> dict[str, Any]:
     return {"sms_sends": docs, "total": len(docs)}
 
 
+@router.get("/admin/sms-twilio-history", dependencies=[Depends(require_admin)])
+async def admin_sms_twilio_history(
+    limit: int = 200,
+    days: int = 14,
+) -> dict[str, Any]:
+    """Pull the last N messages directly from Twilio's Messages API so we
+    can audit what shipped BEFORE the local sms_sends collection existed
+    (added 2026-05-14 with the pre-launch safety guard). For each message
+    returns to/from/body/status/error_code/date_sent. Filters to outbound
+    sends only. The local sms_sends table is the source of truth going
+    forward; this endpoint exists for retroactive triage.
+    """
+    import os as _os
+    from datetime import datetime, timezone, timedelta
+    sid = _os.environ.get("TWILIO_ACCOUNT_SID", "").strip()
+    token = _os.environ.get("TWILIO_AUTH_TOKEN", "").strip()
+    if not sid or not token:
+        raise HTTPException(400, "Twilio credentials not configured")
+    limit = max(1, min(int(limit or 200), 1000))
+    days = max(1, min(int(days or 14), 60))
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    try:
+        from twilio.rest import Client
+        client = Client(sid, token)
+        # Twilio SDK is sync; run in a thread so we don't block the loop.
+        import asyncio as _asyncio
+        msgs = await _asyncio.to_thread(
+            lambda: list(
+                client.messages.list(date_sent_after=since, limit=limit)
+            ),
+        )
+    except Exception as e:
+        raise HTTPException(502, f"Twilio API error: {str(e)[:200]}")
+    out = []
+    delivered = 0
+    failed = 0
+    other = 0
+    for m in msgs:
+        # Outbound only -- the inbound STOP replies aren't relevant for
+        # the "did we send X" audit.
+        if (m.direction or "").startswith("inbound"):
+            continue
+        status = m.status or ""
+        if status == "delivered":
+            delivered += 1
+        elif status in ("failed", "undelivered"):
+            failed += 1
+        else:
+            other += 1
+        out.append({
+            "sid": m.sid,
+            "to": m.to,
+            "from": m.from_,
+            "body": (m.body or "")[:300],
+            "status": status,
+            "error_code": m.error_code,
+            "error_message": (m.error_message or "")[:200] if m.error_message else None,
+            "date_sent": m.date_sent.isoformat() if m.date_sent else None,
+            "direction": m.direction,
+            "price": m.price,
+        })
+    return {
+        "messages": out,
+        "total": len(out),
+        "delivered": delivered,
+        "failed_or_undelivered": failed,
+        "other_status": other,
+        "since": since.isoformat(),
+        "days": days,
+    }
+
+
 # --- SMS templates (editable via site_copy) --------------------------------
 @router.get("/admin/sms-templates", dependencies=[Depends(require_admin)])
 async def admin_list_sms_templates() -> dict[str, Any]:
