@@ -58,7 +58,40 @@ BRAND = {
 }
 
 
+def _inject_email_block_styles(html: str) -> str:
+    """Email clients (Gmail, Outlook) aggressively strip default <p>
+    margins, so even well-formed HTML renders as one wall-of-text
+    block. Inject explicit inline styles on bare opening tags for the
+    common block-level elements Quill / hand-written copy produces.
+    Tags that already carry a `style=` attribute are left untouched
+    to respect author intent.
+    """
+    if not html:
+        return html
+    import re as _re
+    rules: dict[str, str] = {
+        "p": "margin:0 0 14px 0;",
+        "h2": "font-family:Georgia,serif;font-size:20px;color:#2D4A3E;margin:24px 0 8px;line-height:1.3;",
+        "h3": "font-family:Georgia,serif;font-size:16px;color:#2D4A3E;margin:20px 0 6px;line-height:1.3;",
+        "ul": "margin:0 0 14px 0;padding-left:22px;",
+        "ol": "margin:0 0 14px 0;padding-left:22px;",
+        "li": "margin:0 0 4px 0;",
+        "blockquote": "border-left:3px solid #E8E5DF;margin:14px 0;padding:4px 12px;color:#6D6A65;",
+    }
+    for tag, style in rules.items():
+        # Match `<tag>` or `<tag attr=...>` but skip ones that already
+        # have `style=` -- author-set inline styles win.
+        pattern = _re.compile(rf"<{tag}(?![^>]*\bstyle=)([^>]*)>", _re.IGNORECASE)
+        html = pattern.sub(rf'<{tag}\1 style="{style}">', html)
+    return html
+
+
 def _wrap(title: str, inner_html: str, unsubscribe_url: Optional[str] = None) -> str:
+    # Inject block-level margins on every <p>, <h2>, <h3>, <ul>, etc. in
+    # the body. Without this, Quill-produced HTML (bare <p> tags) renders
+    # as a wall of text in Gmail / Outlook because they strip browser
+    # default <p> margins.
+    inner_html = _inject_email_block_styles(inner_html)
     # CAN-SPAM: any recurring/promotional email gets a one-click unsubscribe
     # link in the footer. Transactional emails (verification, results) pass
     # unsubscribe_url=None to omit the link.
