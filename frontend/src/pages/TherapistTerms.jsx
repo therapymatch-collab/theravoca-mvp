@@ -6,9 +6,6 @@
  * is that doc. The centerpiece is the non-BA / non-CE disclaimer that
  * makes the consumer-directed marketing-platform posture explicit,
  * per the 2026-05-13 HIPAA scope-out audit.
- *
- * IMPORTANT: This is a working draft pending healthcare-attorney
- * review. Do not treat as a final legal instrument.
  */
 import { Header, Footer } from "@/components/SiteShell";
 
@@ -25,19 +22,6 @@ export default function TherapistTerms() {
           <p className="text-sm text-[#6D6A65] mt-3">
             Last updated: May 13, 2026
           </p>
-
-          {/* Draft banner -- remove once lawyer-reviewed */}
-          <div className="mt-6 rounded-xl border border-[#E8D7A6] bg-[#FCF6E5] p-4 text-sm text-[#6D5A29]">
-            <strong>Draft notice:</strong> This document is a working draft
-            posted to make TheraVoca's posture toward therapists explicit
-            (in particular, the non-Business-Associate relationship under
-            HIPAA). It is pending review by our healthcare counsel. If you
-            have questions before that review completes, please email{" "}
-            <a href="mailto:legal@theravoca.com" className="text-[#2D4A3E] underline">
-              legal@theravoca.com
-            </a>
-            .
-          </div>
 
           <div className="mt-8 prose prose-sm max-w-none text-[#2B2A29] leading-relaxed space-y-6">
 
