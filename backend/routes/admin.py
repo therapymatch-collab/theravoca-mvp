@@ -3976,12 +3976,22 @@ async def admin_sms_status() -> dict[str, Any]:
         {"key": "last_test_sms"}, {"_id": 0},
     ) or {}
     enabled = os.environ.get("TWILIO_ENABLED", "").lower() == "true"
+    override_to = os.environ.get("TWILIO_DEV_OVERRIDE_TO", "").strip()
+    sms_live_mode = os.environ.get("SMS_LIVE_MODE", "").strip().lower() == "true"
     has_creds = bool(
         os.environ.get("TWILIO_ACCOUNT_SID")
         and os.environ.get("TWILIO_AUTH_TOKEN"),
     )
     last_status = last.get("final_status")
     last_error = last.get("error_code")
+    # Pre-launch safety state -- the same three-state model as email.
+    # Mirrors the prelaunch_safety_guard inside sms_service.send_sms.
+    if override_to:
+        safety_state = "override_routed"   # all SMS rerouted to override
+    elif sms_live_mode:
+        safety_state = "live"              # real recipients allowed
+    else:
+        safety_state = "blocked"           # any real send is refused
     # Deliverability verdict  --  pessimistic by design.
     if not has_creds:
         verdict = "missing_credentials"
@@ -3995,12 +4005,26 @@ async def admin_sms_status() -> dict[str, Any]:
         verdict = "blocked"
     else:
         verdict = "untested"
+    # Quick aggregate from the new sms_sends audit log so the dashboard
+    # can show "we blocked X / sent Y in the last 24h" at a glance.
+    from datetime import datetime, timezone, timedelta
+    since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    sms_24h_sent = await db.sms_sends.count_documents(
+        {"sent_at": {"$gte": since}, "sent_ok": True},
+    )
+    sms_24h_blocked = await db.sms_sends.count_documents(
+        {"sent_at": {"$gte": since}, "blocked": True},
+    )
     return {
         "verdict": verdict,
         "twilio_enabled": enabled,
         "has_credentials": has_creds,
         "from_number": os.environ.get("TWILIO_FROM_NUMBER", ""),
-        "dev_override_to": os.environ.get("TWILIO_DEV_OVERRIDE_TO", ""),
+        "dev_override_to": override_to,
+        "sms_live_mode": sms_live_mode,
+        "safety_state": safety_state,
+        "sms_24h_sent": sms_24h_sent,
+        "sms_24h_blocked": sms_24h_blocked,
         "a2p_brand_id": cfg.get("brand_id") or "",
         "a2p_campaign_id": cfg.get("campaign_id") or "",
         "a2p_status": cfg.get("status") or "unregistered",
@@ -4029,6 +4053,19 @@ async def admin_set_a2p(payload: dict) -> dict[str, Any]:
         {"key": "a2p_10dlc"}, {"$set": cfg}, upsert=True,
     )
     return cfg
+
+
+@router.get("/admin/sms-sends", dependencies=[Depends(require_admin)])
+async def admin_list_sms_sends(limit: int = 100) -> dict[str, Any]:
+    """Recent SMS send attempts -- live successes, pre-launch blocks, and
+    failures. Use this to audit "did we accidentally page a real therapist"
+    by filtering for blocked=false + intended_to not matching the dev
+    override. Sorted newest-first."""
+    limit = max(1, min(int(limit or 100), 500))
+    docs = await db.sms_sends.find(
+        {}, {"_id": 0},
+    ).sort("sent_at", -1).to_list(limit)
+    return {"sms_sends": docs, "total": len(docs)}
 
 
 # --- SMS templates (editable via site_copy) --------------------------------

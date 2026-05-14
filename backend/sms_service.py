@@ -62,32 +62,109 @@ def normalize_us_phone(raw: str) -> str | None:
     return None
 
 
+async def _log_sms_send(
+    *,
+    intended_to: str,
+    actual_to: str,
+    body: str,
+    sid: str | None,
+    status: str | None,
+    sent_ok: bool,
+    blocked: bool = False,
+    block_reason: str | None = None,
+) -> None:
+    """Insert one row into `sms_sends` for every SMS attempt -- mirrors the
+    `email_sends` audit table. Lets ops answer "what got SMS'd to real
+    therapists" without relying on the Twilio console. Failures here are
+    swallowed so a logging hiccup never blocks the actual send.
+    """
+    try:
+        from deps import db as _db
+        from datetime import datetime, timezone
+        await _db.sms_sends.insert_one({
+            "sent_at": datetime.now(timezone.utc).isoformat(),
+            "intended_to": intended_to,
+            "actual_to": actual_to,
+            "body_preview": (body or "")[:160],
+            "twilio_sid": sid,
+            "twilio_status": status,
+            "sent_ok": bool(sent_ok),
+            "blocked": bool(blocked),
+            "block_reason": block_reason,
+        })
+    except Exception as e:
+        logger.warning("sms_sends log failed: %s", e)
+
+
 async def send_sms(to: str, body: str, *, force: bool = False) -> dict[str, Any] | None:
     """Send an SMS. Returns Twilio message dict on success, None on skip/failure.
 
-    Honors:
-      * TWILIO_ENABLED=false → no-op (dev kill switch)
-      * TWILIO_DEV_OVERRIDE_TO → reroutes every SMS to a single verified number
-        (essential for Twilio trial accounts)
+    Safety order (every send goes through ALL of these):
+      1. TWILIO_ENABLED!=true       -> kill switch, skip entirely.
+      2. Pre-launch safety guard    -> if TWILIO_DEV_OVERRIDE_TO is unset
+         AND SMS_LIVE_MODE!=true, refuse to send to any real number.
+         Mirrors EMAIL_OVERRIDE_TO + EMAIL_LIVE_MODE -- "fail closed" so
+         a misconfigured staging env can never page real therapists.
+      3. TWILIO_DEV_OVERRIDE_TO     -> reroutes the message to the
+         verified test number, prefixed with [was: <intended>].
+      4. Twilio creds + from-number -> required, else skip.
 
-    If force=True, bypasses the TWILIO_ENABLED check (for admin test-sms).
+    If force=True, bypasses #1 and #2 (for the admin test-SMS endpoint
+    where the admin explicitly chose to fire a live send).
     """
     if not force and not _enabled():
         logger.info("SMS disabled (TWILIO_ENABLED!=true), skipping send")
+        await _log_sms_send(
+            intended_to=to, actual_to=to, body=body,
+            sid=None, status=None, sent_ok=False,
+            blocked=True, block_reason="twilio_disabled",
+        )
         return None
 
     client = _client()
     from_ = _from_number()
     if client is None or not from_:
         logger.warning("Twilio not fully configured, skipping SMS send")
+        await _log_sms_send(
+            intended_to=to, actual_to=to, body=body,
+            sid=None, status=None, sent_ok=False,
+            blocked=True, block_reason="not_configured",
+        )
         return None
 
     intended_to = normalize_us_phone(to)
     if not intended_to:
         logger.warning("Invalid phone format, skipping SMS")
+        await _log_sms_send(
+            intended_to=to, actual_to=to, body=body,
+            sid=None, status=None, sent_ok=False,
+            blocked=True, block_reason="invalid_phone_format",
+        )
         return None
 
     override = normalize_us_phone(_override_to())
+    # Pre-launch safety guard. Same three-state pattern as email:
+    #   1. TWILIO_DEV_OVERRIDE_TO set -> redirect (safe testing).
+    #   2. SMS_LIVE_MODE=true         -> allow real recipient (go-live).
+    #   3. neither                    -> BLOCK any real send.
+    # Without this guard, flipping TWILIO_ENABLED=true on a staging env
+    # whose DEV_OVERRIDE_TO got unset would silently SMS every real
+    # therapist phone in the imported_xlsx directory. Fail closed.
+    live_mode = os.environ.get("SMS_LIVE_MODE", "").strip().lower() == "true"
+    if not force and not override and not live_mode:
+        logger.warning(
+            "PRELAUNCH BLOCK: refusing to SMS %s (real number). "
+            "Set TWILIO_DEV_OVERRIDE_TO to redirect to a test phone, or "
+            "SMS_LIVE_MODE=true to go live.",
+            intended_to,
+        )
+        await _log_sms_send(
+            intended_to=intended_to, actual_to=intended_to, body=body,
+            sid=None, status=None, sent_ok=False,
+            blocked=True, block_reason="prelaunch_safety_guard",
+        )
+        return None
+
     actual_to = override or intended_to
     actual_body = body
     if override and override != intended_to:
@@ -99,10 +176,19 @@ async def send_sms(to: str, body: str, *, force: bool = False) -> dict[str, Any]
     try:
         msg = await asyncio.to_thread(_send_sync)
         logger.info("Sent SMS sid=%s status=%s", msg.sid, msg.status)
+        await _log_sms_send(
+            intended_to=intended_to, actual_to=actual_to, body=actual_body,
+            sid=msg.sid, status=msg.status, sent_ok=True,
+        )
         return {"sid": msg.sid, "to": actual_to, "intended_to": intended_to,
                 "status": msg.status}
     except Exception as e:
         logger.exception("Failed to send SMS: %s", e)
+        await _log_sms_send(
+            intended_to=intended_to, actual_to=actual_to, body=actual_body,
+            sid=None, status=None, sent_ok=False,
+            blocked=True, block_reason=f"twilio_exception:{str(e)[:120]}",
+        )
         return None
 
 
