@@ -9,7 +9,6 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 
@@ -34,10 +33,16 @@ SIGNED_URL_TTL_HOURS = int(os.environ.get("SIGNED_URL_TTL_HOURS", "72"))
 
 
 def generate_action_signature(
-    request_id: str, therapist_id: str, action: str, expires_iso: str,
+    request_id: str, therapist_id: str, action: str, expires_token: str,
 ) -> str:
-    """Create HMAC-SHA256 signature for an email action link."""
-    msg = f"{request_id}:{therapist_id}:{action}:{expires_iso}"
+    """Create HMAC-SHA256 signature for an email action link.
+
+    `expires_token` is whatever value will appear in the URL's `exp`
+    query param verbatim. Pass the EXACT string the verifier will read
+    -- if the URL form differs from the signed form (e.g. URL-encoding
+    converts a `+` to a space), the signature won't match.
+    """
+    msg = f"{request_id}:{therapist_id}:{action}:{expires_token}"
     return hmac.new(
         JWT_SECRET.encode(), msg.encode(), hashlib.sha256,
     ).hexdigest()[:32]
@@ -46,13 +51,29 @@ def generate_action_signature(
 def generate_signed_url(
     base_url: str, request_id: str, therapist_id: str, action: str,
 ) -> str:
-    """Build a full signed URL for email links (apply/decline)."""
-    expires = (
+    """Build a full signed URL for email links (apply/decline).
+
+    `exp` is a Unix-epoch integer (seconds), NOT an ISO timestamp.
+    Earlier versions used isoformat() and URL-encoded the `+00:00`
+    timezone offset as `%2B00%3A00`. Some email clients (notably
+    Gmail web) silently un-escape `%2B` back to a literal `+` before
+    handing the URL to the browser. The browser then sends `+`, which
+    FastAPI's query-string parser converts to a space per the HTML-
+    form spec. The signed payload then no longer matches the value
+    the verifier sees, every link comes back "Invalid link signature".
+    Integer epoch seconds are URL-safe and round-trip cleanly.
+    """
+    expires_dt = (
         datetime.now(timezone.utc) + timedelta(hours=SIGNED_URL_TTL_HOURS)
-    ).isoformat()
-    sig = generate_action_signature(request_id, therapist_id, action, expires)
-    exp_encoded = quote(expires, safe="")
-    return f"{base_url}/therapist/{action}/{request_id}/{therapist_id}?sig={sig}&exp={exp_encoded}"
+    )
+    expires_token = str(int(expires_dt.timestamp()))
+    sig = generate_action_signature(
+        request_id, therapist_id, action, expires_token,
+    )
+    return (
+        f"{base_url}/therapist/{action}/{request_id}/{therapist_id}"
+        f"?sig={sig}&exp={expires_token}"
+    )
 
 
 async def _verify_action_signature(
@@ -69,6 +90,10 @@ async def _verify_action_signature(
     matches the therapist_id in the URL, signature verification is
     skipped -- the therapist is already authenticated via their portal
     session and owns this resource.
+
+    Accepts BOTH the new integer-epoch `exp` format and the legacy
+    ISO-string format, so any signed URLs sent before the format
+    change keep working until they expire (72h TTL).
     """
     # -- Authenticated-session bypass (Bug C fix) --
     # A logged-in therapist accessing their own referral from the
@@ -90,14 +115,29 @@ async def _verify_action_signature(
         )
     if not exp:
         raise HTTPException(403, "Link is missing expiration")
-    # Check expiry
-    try:
-        exp_dt = datetime.fromisoformat(exp)
-    except ValueError:
-        raise HTTPException(403, "Invalid link -- please use the link from your email")
+    # Resolve exp to a datetime, accepting either int-epoch or ISO.
+    exp_dt: Optional[datetime] = None
+    if exp.isdigit() or (exp.startswith("-") and exp[1:].isdigit()):
+        try:
+            exp_dt = datetime.fromtimestamp(int(exp), tz=timezone.utc)
+        except (ValueError, OverflowError):
+            exp_dt = None
+    if exp_dt is None:
+        try:
+            exp_dt = datetime.fromisoformat(exp)
+        except ValueError:
+            raise HTTPException(
+                403,
+                "Invalid link -- please use the link from your email",
+            )
     if exp_dt < datetime.now(timezone.utc):
-        raise HTTPException(403, "This link has expired. Please check your email for a newer notification.")
-    expected = generate_action_signature(request_id, therapist_id, action, exp)
+        raise HTTPException(
+            403,
+            "This link has expired. Please check your email for a newer notification.",
+        )
+    expected = generate_action_signature(
+        request_id, therapist_id, action, exp,
+    )
     if not hmac.compare_digest(sig, expected):
         raise HTTPException(403, "Invalid link signature")
 
