@@ -39,26 +39,33 @@ import { ISSUES } from "@/pages/therapist/steps/signupOptions";
 const ISSUE_LABEL_MAP = Object.fromEntries(ISSUES.map((i) => [i.v, i.l]));
 const issueLabel = (slug) => ISSUE_LABEL_MAP[slug] || slug.replace(/_/g, " ");
 
+// Values must match the canonical set used in signupOptions.js (and
+// in the backend matching engine + patient intake). Earlier versions
+// of this file used UI-pluralised values like "children" / "young_adults"
+// and lower-cased modalities like "cbt" -- those didn't match what's
+// stored in the DB (which uses backend canonical "child" / "young_adult"
+// / "CBT"), so chips rendered as unselected even when the therapist
+// had data. Keep these values in lock-step with signupOptions.js.
 const AGE_GROUP_OPTIONS = [
-  { v: "children", l: "Children (<12)" },
-  { v: "teens", l: "Teens (13–17)" },
-  { v: "young_adults", l: "Young adults (18–29)" },
-  { v: "adults", l: "Adults (30–64)" },
-  { v: "seniors", l: "Seniors (65+)" },
+  { v: "child", l: "Child (under 13)" },
+  { v: "teen", l: "Teen (13–17)" },
+  { v: "young_adult", l: "Young adult (18–25)" },
+  { v: "adult", l: "Adult (26–64)" },
+  { v: "older_adult", l: "Older adult (65+)" },
 ];
 
 const MODALITY_OPTIONS = [
-  { v: "cbt", l: "CBT" },
-  { v: "dbt", l: "DBT" },
-  { v: "emdr", l: "EMDR" },
-  { v: "ifs", l: "Internal Family Systems" },
-  { v: "aedp", l: "AEDP" },
-  { v: "ppt", l: "Positive Psychology / strengths-based" },
-  { v: "psychodynamic", l: "Psychodynamic" },
-  { v: "mindfulness", l: "Mindfulness / ACT" },
-  { v: "somatic", l: "Somatic" },
-  { v: "gottman", l: "Gottman Method (couples)" },
-  { v: "play_therapy", l: "Play therapy (kids)" },
+  { v: "CBT", l: "CBT" },
+  { v: "DBT", l: "DBT" },
+  { v: "EMDR", l: "EMDR" },
+  { v: "Mindfulness-Based", l: "Mindfulness-Based" },
+  { v: "Psychodynamic", l: "Psychodynamic" },
+  { v: "ACT", l: "ACT" },
+  { v: "Solution-Focused", l: "Solution-Focused" },
+  { v: "Gottman", l: "Gottman" },
+  { v: "IFS", l: "Internal Family Systems (IFS)" },
+  { v: "Somatic Experiencing", l: "Somatic Experiencing" },
+  { v: "Person-Centered", l: "Person-Centered" },
 ];
 
 const AVAILABILITY_OPTIONS = [
