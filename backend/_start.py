@@ -50,6 +50,15 @@ _PUBLIC_PREFIXES = (
     "/api/stripe/webhook",
     # Backend API — portal (has its own JWT session auth)
     "/api/portal/",
+    # Backend API — admin (has its own require_admin auth: X-Admin-Password
+    # header or admin Bearer JWT). The frontend's adminClient explicitly
+    # sets Authorization: Bearer on these, which would otherwise override
+    # the browser-cached Basic Auth header and trip the staging
+    # middleware's WWW-Authenticate challenge -- producing a login-loop
+    # popup that the user can't dismiss (browser keeps re-prompting after
+    # each failed XHR). Admin endpoints are safe to exempt here because
+    # require_admin is the actual gate; staging basic auth is redundant.
+    "/api/admin/",
     # Backend API — feedback (public, patient-facing)
     "/api/feedback",
     # Backend API — build version (public, read-only)
