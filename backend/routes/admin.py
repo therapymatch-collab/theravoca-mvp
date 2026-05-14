@@ -238,7 +238,7 @@ from helpers import _spawn_bg as _bg_spawn  # noqa: E402
 
 
 @router.get("/admin/profile-completeness")
-async def admin_profile_completeness(_: bool = Depends(require_admin)):
+async def admin_profile_completeness(_: bool = Depends(require_role("view"))):
     """Roster of every active therapist with their completion score and
     list of missing fields. Used by the admin to see who needs nudging
     before / after the go-live cutover.
@@ -358,7 +358,7 @@ async def admin_send_claim_campaign(
 
 
 @router.get("/admin/requests", response_model=list)
-async def admin_list_requests(request: Request, _: bool = Depends(require_admin)):
+async def admin_list_requests(request: Request, _: bool = Depends(require_role("view"))):
     audit.emit(
         actor_type="admin", actor_id="admin", action="list_requests",
         resource="request", detail="limit=500",
@@ -398,7 +398,7 @@ async def admin_list_requests(request: Request, _: bool = Depends(require_admin)
 @router.get("/admin/audit-log")
 async def admin_audit_log(
     request: Request,
-    _: bool = Depends(require_admin),
+    _: bool = Depends(require_role("view")),
     limit: int = 100,
     actor_type: Optional[str] = None,
     action: Optional[str] = None,
@@ -436,7 +436,7 @@ async def admin_audit_log(
 
 
 @router.get("/admin/requests/{request_id}", response_model=dict)
-async def admin_request_detail(request_id: str, request: Request, _: bool = Depends(require_admin)):
+async def admin_request_detail(request_id: str, request: Request, _: bool = Depends(require_role("view"))):
     audit.emit(
         actor_type="admin", actor_id="admin", action="view_request",
         resource="request", resource_id=request_id,
@@ -729,7 +729,7 @@ async def _explain_match_gap(req: dict, notified_count: int, target: int = 30) -
 
 
 @router.post("/admin/requests/{request_id}/trigger-results")
-async def admin_trigger_results(request_id: str, request: Request, _: bool = Depends(require_admin)):
+async def admin_trigger_results(request_id: str, request: Request, _: bool = Depends(require_role("edit"))):
     audit.emit(
         actor_type="admin", actor_id="admin", action="trigger_results",
         resource="request", resource_id=request_id,
@@ -740,7 +740,7 @@ async def admin_trigger_results(request_id: str, request: Request, _: bool = Dep
 
 
 @router.post("/admin/requests/{request_id}/resend-notifications")
-async def admin_resend_notifications(request_id: str, request: Request, _: bool = Depends(require_admin)):
+async def admin_resend_notifications(request_id: str, request: Request, _: bool = Depends(require_role("edit"))):
     audit.emit(
         actor_type="admin", actor_id="admin", action="resend_notifications",
         resource="request", resource_id=request_id,
@@ -869,7 +869,7 @@ async def admin_request_score_detail(request_id: str) -> dict[str, Any]:
 
 @router.put("/admin/requests/{request_id}/threshold")
 async def admin_update_threshold(
-    request_id: str, payload: dict, _: bool = Depends(require_admin),
+    request_id: str, payload: dict, _: bool = Depends(require_role("edit")),
 ):
     threshold = float(payload.get("threshold", DEFAULT_THRESHOLD))
     await db.requests.update_one({"id": request_id}, {"$set": {"threshold": threshold}})
@@ -880,7 +880,7 @@ async def admin_update_threshold(
 async def admin_list_therapists(
     request: Request,
     pending: Optional[bool] = None,
-    _: bool = Depends(require_admin),
+    _: bool = Depends(require_role("view")),
 ):
     from license_verify import compute_license_status, dopl_verification_url
 
@@ -1056,7 +1056,7 @@ async def _attach_value_tags(pending_rows: list[dict]) -> None:
 
 @router.get("/admin/therapists/{therapist_id}")
 async def admin_therapist_detail(
-    therapist_id: str, request: Request, _: bool = Depends(require_admin),
+    therapist_id: str, request: Request, _: bool = Depends(require_role("view")),
 ):
     """Return the full therapist document (minus password_hash) for admin
     debugging. Unlike the list endpoint this includes _backfill_audit,
@@ -1076,7 +1076,7 @@ async def admin_therapist_detail(
 
 
 @router.post("/admin/therapists/{therapist_id}/approve")
-async def admin_approve_therapist(therapist_id: str, _: bool = Depends(require_admin)):
+async def admin_approve_therapist(therapist_id: str, _: bool = Depends(require_role("edit"))):
     import asyncio
     t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0, "password_hash": 0, "password_set_at": 0})
     if not t:
@@ -1093,7 +1093,7 @@ async def admin_approve_therapist(therapist_id: str, _: bool = Depends(require_a
 
 
 @router.post("/admin/therapists/{therapist_id}/reject")
-async def admin_reject_therapist(therapist_id: str, _: bool = Depends(require_admin)):
+async def admin_reject_therapist(therapist_id: str, _: bool = Depends(require_role("edit"))):
     import asyncio
     t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0, "password_hash": 0, "password_set_at": 0})
     if not t:
@@ -1180,7 +1180,7 @@ async def admin_auto_decline_duplicates(
 
 @router.post("/admin/therapists/{therapist_id}/clear-reapproval")
 async def admin_clear_reapproval(
-    therapist_id: str, _: bool = Depends(require_admin),
+    therapist_id: str, _: bool = Depends(require_role("edit")),
 ):
     """Admin has reviewed the therapist's specialty/license self-edit and
     blessed it  --  clear the pending_reapproval flag so the updated profile
@@ -1200,7 +1200,7 @@ async def admin_clear_reapproval(
 
 @router.put("/admin/therapists/{therapist_id}")
 async def admin_update_therapist(
-    therapist_id: str, payload: dict, _: bool = Depends(require_admin),
+    therapist_id: str, payload: dict, _: bool = Depends(require_role("edit")),
 ):
     """Whitelisted update of a therapist profile."""
     allowed = {
@@ -1411,13 +1411,13 @@ async def admin_test_sms(payload: dict, _: bool = Depends(require_admin)):
 
 
 @router.get("/admin/email-templates")
-async def admin_list_email_templates(_: bool = Depends(require_admin)):
+async def admin_list_email_templates(_: bool = Depends(require_role("view"))):
     return await list_templates(db)
 
 
 @router.put("/admin/email-templates/{key}")
 async def admin_update_email_template(
-    key: str, payload: dict, _: bool = Depends(require_admin),
+    key: str, payload: dict, _: bool = Depends(require_role("edit")),
 ):
     if key not in EMAIL_TEMPLATE_DEFAULTS:
         raise HTTPException(404, f"Unknown template key: {key}")
@@ -1426,7 +1426,7 @@ async def admin_update_email_template(
 
 @router.post("/admin/email-templates/{key}/preview")
 async def admin_preview_email_template(
-    key: str, payload: dict | None = None, _: bool = Depends(require_admin),
+    key: str, payload: dict | None = None, _: bool = Depends(require_role("edit")),
 ):
     """Render the template against realistic sample data and return
     `{subject, html}` so the admin can see what the email will look
@@ -1442,7 +1442,7 @@ async def admin_preview_email_template(
 
 @router.post("/admin/email-templates/{key}/send-test")
 async def admin_send_test_email(
-    key: str, payload: dict, _: bool = Depends(require_admin),
+    key: str, payload: dict, _: bool = Depends(require_role("edit")),
 ):
     """Render a template with realistic sample data and actually email it
     to the address in `payload.to` (typically the admin themselves) so
@@ -1486,7 +1486,7 @@ _ADMIN_CRON_ALLOWLIST: dict[str, tuple[str, str]] = {
 
 
 @router.get("/admin/cron/list")
-async def admin_list_crons(_: bool = Depends(require_admin)):
+async def admin_list_crons(_: bool = Depends(require_role("view"))):
     """Return the allowlisted cron jobs an admin can fire manually."""
     return {
         "crons": [
@@ -1497,7 +1497,7 @@ async def admin_list_crons(_: bool = Depends(require_admin)):
 
 
 @router.get("/admin/cron/health")
-async def admin_cron_health(_: bool = Depends(require_admin)):
+async def admin_cron_health(_: bool = Depends(require_role("view"))):
     """Cron observability snapshot (BACKLOG #25).
 
     Returns:
@@ -1555,7 +1555,7 @@ async def admin_cron_health(_: bool = Depends(require_admin)):
 
 
 @router.post("/admin/cron/run")
-async def admin_run_cron(payload: dict, _: bool = Depends(require_admin)):
+async def admin_run_cron(payload: dict, _: bool = Depends(require_role("edit"))):
     """Manually fire one of the allowlisted cron functions. Useful when
     verifying a fix shipped to staging without waiting for the next
     scheduled tick. Synchronous -- the response includes whatever the
@@ -1586,7 +1586,7 @@ async def admin_run_cron(payload: dict, _: bool = Depends(require_admin)):
 
 
 @router.get("/admin/declines")
-async def admin_list_declines(_: bool = Depends(require_admin)):
+async def admin_list_declines(_: bool = Depends(require_role("view"))):
     declines = await db.declines.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
     counts: dict[str, int] = {}
     for d in declines:
@@ -2003,7 +2003,7 @@ async def admin_wipe_test_data(payload: dict, _: bool = Depends(require_admin)):
 
 
 @router.post("/admin/seed")
-async def admin_seed(_: bool = Depends(require_admin)):
+async def admin_seed(_: bool = Depends(require_role("edit"))):
     existing = await db.therapists.count_documents({})
     if existing > 0:
         return {"ok": True, "skipped": True, "existing": existing}
@@ -2013,7 +2013,7 @@ async def admin_seed(_: bool = Depends(require_admin)):
 
 
 @router.get("/admin/stats")
-async def admin_stats(_: bool = Depends(require_admin)):
+async def admin_stats(_: bool = Depends(require_role("view"))):
     total_requests = await db.requests.count_documents({})
     pending = await db.requests.count_documents({"status": "pending_verification"})
     open_ = await db.requests.count_documents({"status": {"$in": ["open", "matched"]}})
@@ -2034,7 +2034,7 @@ async def admin_stats(_: bool = Depends(require_admin)):
 
 
 @router.post("/admin/run-daily-tasks")
-async def admin_run_daily_tasks(_: bool = Depends(require_admin)):
+async def admin_run_daily_tasks(_: bool = Depends(require_role("edit"))):
     """Manual trigger for the daily cron  --  useful for testing without waiting until 2am MT."""
     bill = await _run_daily_billing_charges()
     lic = await _run_license_expiry_alerts()
@@ -2043,7 +2043,7 @@ async def admin_run_daily_tasks(_: bool = Depends(require_admin)):
 
 
 @router.get("/admin/followups")
-async def admin_list_followups(_: bool = Depends(require_admin)):
+async def admin_list_followups(_: bool = Depends(require_role("view"))):
     """All follow-up survey responses across all milestones."""
     docs = await db.followups.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
     counts = {"48h": 0, "3wk": 0, "9wk": 0, "15wk": 0, "2wk": 0, "6wk": 0}
@@ -2068,7 +2068,7 @@ async def admin_list_followups(_: bool = Depends(require_admin)):
 
 
 @router.post("/admin/therapists/bulk-approve")
-async def admin_bulk_approve_therapists(payload: dict, _: bool = Depends(require_admin)):
+async def admin_bulk_approve_therapists(payload: dict, _: bool = Depends(require_role("edit"))):
     """Approve a list of pending therapists in one shot."""
     import asyncio
     ids = [str(x) for x in (payload or {}).get("therapist_ids") or []][:200]
@@ -2126,7 +2126,7 @@ async def admin_export_therapists_csv(_: bool = Depends(require_admin)):
 
 
 @router.get("/admin/waitlist")
-async def admin_waitlist(_: bool = Depends(require_admin)):
+async def admin_waitlist(_: bool = Depends(require_role("view"))):
     """Waitlist entries aggregated by state for demand-signal visibility."""
     entries = await db.waitlist.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
     by_state: dict[str, int] = {}
@@ -2143,7 +2143,7 @@ async def admin_waitlist(_: bool = Depends(require_admin)):
 
 
 @router.get("/admin/therapist-waitlist")
-async def admin_therapist_waitlist(_: bool = Depends(require_admin)):
+async def admin_therapist_waitlist(_: bool = Depends(require_role("view"))):
     """Therapist waitlist  --  out-of-state providers interested in joining."""
     entries = await db.therapist_waitlist.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
     by_state: dict[str, int] = {}
@@ -2158,27 +2158,27 @@ async def admin_therapist_waitlist(_: bool = Depends(require_admin)):
     }
 
 @router.post("/admin/outreach/run/{request_id}")
-async def admin_run_outreach(request_id: str, _: bool = Depends(require_admin)):
+async def admin_run_outreach(request_id: str, _: bool = Depends(require_role("edit"))):
     """Trigger LLM outreach agent for a single request. Idempotent."""
     from outreach_agent import run_outreach_for_request
     return await run_outreach_for_request(request_id)
 
 
 @router.post("/admin/outreach/run-all")
-async def admin_run_outreach_all(_: bool = Depends(require_admin)):
+async def admin_run_outreach_all(_: bool = Depends(require_role("edit"))):
     """Run LLM outreach agent on all recent requests with outreach gap."""
     from outreach_agent import run_outreach_for_all_pending
     return await run_outreach_for_all_pending()
 
 
 @router.get("/admin/outreach")
-async def admin_list_outreach(_: bool = Depends(require_admin)):
+async def admin_list_outreach(_: bool = Depends(require_role("view"))):
     docs = await db.outreach_invites.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
     return {"invites": docs, "total": len(docs)}
 
 
 @router.get("/admin/outreach/opt-outs")
-async def admin_list_opt_outs(_: bool = Depends(require_admin)):
+async def admin_list_opt_outs(_: bool = Depends(require_role("view"))):
     """Full opt-out roster so admins can audit who asked to be removed
     from outreach. Sorted newest-first."""
     docs = await db.outreach_opt_outs.find(
@@ -2188,7 +2188,7 @@ async def admin_list_opt_outs(_: bool = Depends(require_admin)):
 
 
 @router.get("/admin/feedback")
-async def admin_list_feedback(request: Request, _: bool = Depends(require_admin)):
+async def admin_list_feedback(request: Request, _: bool = Depends(require_role("view"))):
     audit.emit(
         actor_type="admin", actor_id="admin", action="list_feedback",
         resource="feedback", detail="limit=1000",
@@ -2200,7 +2200,7 @@ async def admin_list_feedback(request: Request, _: bool = Depends(require_admin)
 
 
 @router.get("/admin/outcome-tracking")
-async def admin_outcome_tracking(request: Request, _: bool = Depends(require_admin)):
+async def admin_outcome_tracking(request: Request, _: bool = Depends(require_role("view"))):
     """Aggregated feedback data: responses by milestone, Match Strength scores, therapist reliability."""
     audit.emit(
         actor_type="admin", actor_id="admin", action="view_outcome_tracking",
@@ -2365,7 +2365,7 @@ async def admin_feedback_dashboard(
     request: Request,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    _: bool = Depends(require_admin),
+    _: bool = Depends(require_role("view")),
 ):
     """Aggregated data for the Outcomes admin dashboard. One round-trip,
     one JSON blob -- no per-chart endpoints. See render at /admin -> Outcomes.
@@ -2880,7 +2880,7 @@ async def admin_cleanup_v1_followup_flags() -> dict[str, Any]:
 
 
 @router.get("/admin/patients")
-async def admin_list_patients_by_email(request: Request, _: bool = Depends(require_admin)):
+async def admin_list_patients_by_email(request: Request, _: bool = Depends(require_role("view"))):
     """Aggregate every email that has submitted a request and how many
     requests they've filed. Useful for spotting power users / repeat
     submitters. Sorted by most-recent request first.
@@ -2941,7 +2941,7 @@ async def admin_list_patients_by_email(request: Request, _: bool = Depends(requi
 
 @router.post("/admin/outreach/{invite_id}/convert")
 async def admin_convert_outreach_invite(
-    invite_id: str, _: bool = Depends(require_admin),
+    invite_id: str, _: bool = Depends(require_role("edit")),
 ):
     """Convert an LLM-invited candidate (`outreach_invites`) into a draft
     therapist profile (`therapists`). Carries over name/email/license/city/state
@@ -3060,7 +3060,7 @@ async def admin_convert_outreach_invite(
 async def admin_referral_sources(
     start: Optional[str] = None,
     end: Optional[str] = None,
-    _: bool = Depends(require_admin),
+    _: bool = Depends(require_role("view")),
 ):
     """Aggregate patient requests by `referral_source` between optional ISO
     dates. Empty source is bucketed as `(unspecified)`.
@@ -3172,7 +3172,7 @@ async def admin_get_referral_source_options() -> dict[str, Any]:
     return {"options": _reorder_referral_options(options)}
 
 
-@router.put("/admin/referral-source-options", dependencies=[Depends(require_admin)])
+@router.put("/admin/referral-source-options", dependencies=[Depends(require_role("view"))])
 async def admin_set_referral_source_options(payload: dict) -> dict[str, Any]:
     options = payload.get("options")
     if (
@@ -3227,7 +3227,7 @@ async def admin_get_deep_match_weights() -> dict[str, Any]:
     }
 
 
-@router.put("/admin/deep-match-weights", dependencies=[Depends(require_admin)])
+@router.put("/admin/deep-match-weights", dependencies=[Depends(require_role("view"))])
 async def admin_set_deep_match_weights(payload: dict) -> dict[str, Any]:
     """Validate + persist deep-match weights. Each weight must be in
     [0.05, 0.6]  --  same guardrail bounds as the v2 spec's auto-tuning
@@ -3277,7 +3277,7 @@ async def admin_get_matching_defaults() -> dict[str, Any]:
     }
 
 
-@router.put("/admin/matching-defaults", dependencies=[Depends(require_admin)])
+@router.put("/admin/matching-defaults", dependencies=[Depends(require_role("view"))])
 async def admin_set_matching_defaults(payload: dict) -> dict[str, Any]:
     """Persist global matching defaults. Takes effect on next match run."""
     threshold = float(payload.get("threshold", 80))
@@ -3299,7 +3299,7 @@ async def admin_set_matching_defaults(payload: dict) -> dict[str, Any]:
     return {"saved": True, "threshold": threshold, "max_invites": max_invites}
 
 
-@router.get("/admin/intake-rate-limit", dependencies=[Depends(require_admin)])
+@router.get("/admin/intake-rate-limit", dependencies=[Depends(require_role("edit"))])
 async def admin_get_intake_rate_limit() -> dict[str, Any]:
     doc = await db.app_config.find_one(
         {"key": "intake_rate_limit"}, {"_id": 0},
@@ -3472,7 +3472,7 @@ async def admin_get_availability_prompt() -> dict[str, Any]:
     }
 
 
-@router.put("/admin/availability-prompt", dependencies=[Depends(require_admin)])
+@router.put("/admin/availability-prompt", dependencies=[Depends(require_role("view"))])
 async def admin_set_availability_prompt(payload: dict) -> dict[str, Any]:
     raw_days = payload.get("days")
     if not isinstance(raw_days, list) or not raw_days:
@@ -3873,7 +3873,7 @@ async def admin_get_scrape_sources() -> dict[str, Any]:
     return {"sources": sources}
 
 
-@router.put("/admin/scrape-sources", dependencies=[Depends(require_admin)])
+@router.put("/admin/scrape-sources", dependencies=[Depends(require_role("view"))])
 async def admin_set_scrape_sources(payload: dict) -> dict[str, Any]:
     raw = payload.get("sources")
     if not isinstance(raw, list):
@@ -3897,7 +3897,7 @@ async def get_enabled_scrape_sources() -> list[dict]:
     return [s for s in sources if s.get("enabled", True) and s.get("url")]
 
 
-@router.post("/admin/scrape-sources/test", dependencies=[Depends(require_admin)])
+@router.post("/admin/scrape-sources/test", dependencies=[Depends(require_role("edit"))])
 async def admin_scrape_sources_test(payload: dict) -> dict[str, Any]:
     """Live-fetch ONE source URL and report how many therapist cards we
     can extract (JSON-LD strategy first, LLM fallback). Lets the admin
@@ -4018,7 +4018,7 @@ async def admin_list_sms_templates() -> dict[str, Any]:
     return {"templates": templates}
 
 
-@router.put("/admin/sms-templates", dependencies=[Depends(require_admin)])
+@router.put("/admin/sms-templates", dependencies=[Depends(require_role("view"))])
 async def admin_update_sms_template(payload: dict) -> dict[str, Any]:
     """Update an SMS template. Body: {key, value}. Set value="" to reset to default."""
     key = (payload.get("key") or "").strip()
@@ -4068,7 +4068,7 @@ async def admin_get_research_enrichment() -> dict[str, Any]:
     }
 
 
-@router.put("/admin/research-enrichment", dependencies=[Depends(require_admin)])
+@router.put("/admin/research-enrichment", dependencies=[Depends(require_role("view"))])
 async def admin_set_research_enrichment(payload: dict) -> dict[str, Any]:
     from research_enrichment import set_enabled
     enabled = bool(payload.get("enabled"))
@@ -4346,7 +4346,7 @@ async def admin_hard_capacity() -> dict[str, Any]:
     return await hard_capacity.compute_capacity_cached(db)
 
 
-@router.get("/admin/turnstile-settings", dependencies=[Depends(require_admin)])
+@router.get("/admin/turnstile-settings", dependencies=[Depends(require_role("view"))])
 async def admin_get_turnstile_settings() -> dict[str, Any]:
     doc = await db.app_config.find_one(
         {"key": "turnstile_settings"}, {"_id": 0, "disabled": 1, "disabled_at": 1, "disabled_reason": 1},
@@ -4363,7 +4363,7 @@ async def admin_get_turnstile_settings() -> dict[str, Any]:
     }
 
 
-@router.put("/admin/turnstile-settings", dependencies=[Depends(require_admin)])
+@router.put("/admin/turnstile-settings", dependencies=[Depends(require_role("view"))])
 async def admin_set_turnstile_settings(payload: dict) -> dict[str, Any]:
     """Flip the runtime disable toggle. `{disabled: true, reason?: str}`.
     When disabled, BOTH backend verification and the frontend widget
@@ -4385,7 +4385,7 @@ async def admin_set_turnstile_settings(payload: dict) -> dict[str, Any]:
     return {"ok": True, "disabled": disabled}
 
 
-@router.get("/admin/matching/pipeline", dependencies=[Depends(require_admin)])
+@router.get("/admin/matching/pipeline", dependencies=[Depends(require_role("edit"))])
 async def admin_matching_pipeline() -> dict[str, Any]:
     """Read-only description of the matching pipeline + current scoring
     weights. Source of truth for the Admin > Operations > Matching
@@ -4554,7 +4554,7 @@ async def admin_get_master_testing_mode() -> dict[str, Any]:
     return await testing_mode.status()
 
 
-@router.put("/admin/master-testing-mode", dependencies=[Depends(require_admin)])
+@router.put("/admin/master-testing-mode", dependencies=[Depends(require_role("view"))])
 async def admin_set_master_testing_mode(payload: dict) -> dict[str, Any]:
     """Flip the master testing-mode toggle. Payload:
         {"enabled": true, "hours": 1, "reason": "playwright e2e"}
@@ -4693,7 +4693,7 @@ async def outreach_opt_out(invite_id: str, reason: str | None = None):
 
 @router.post("/admin/requests/{request_id}/run-outreach")
 async def admin_run_outreach_now(
-    request_id: str, request: Request, _: bool = Depends(require_admin),
+    request_id: str, request: Request, _: bool = Depends(require_role("edit")),
 ):
     """Manually re-run the LLM outreach for a request whose initial run was
     skipped or failed. Clears the `outreach_run_at` flag first so the agent
@@ -4716,7 +4716,7 @@ async def admin_run_outreach_now(
 
 
 @router.get("/admin/coverage-gap-analysis")
-async def admin_coverage_gap_analysis(_: bool = Depends(require_admin)):
+async def admin_coverage_gap_analysis(_: bool = Depends(require_role("view"))):
     """Coverage gap analysis across the active therapist directory.
 
     Returns counts per dimension (specialty, modality, age group, insurance,
@@ -5033,7 +5033,7 @@ async def _compute_coverage_gap_analysis() -> dict:
 
 @router.post("/admin/gap-recruit/run")
 async def admin_run_gap_recruit(
-    payload: dict | None = None, _: bool = Depends(require_admin),
+    payload: dict | None = None, _: bool = Depends(require_role("edit")),
 ):
     """Manually trigger the gap recruiter. Pre-launch, runs in dry-run mode
     (fake `therapymatch+recruitNNN@gmail.com` emails). Post-launch, set
@@ -5045,7 +5045,7 @@ async def admin_run_gap_recruit(
 
 
 @router.get("/admin/gap-recruit/drafts")
-async def admin_list_gap_drafts(_: bool = Depends(require_admin)):
+async def admin_list_gap_drafts(_: bool = Depends(require_role("view"))):
     """All recruit-draft rows, newest first."""
     docs = await db.recruit_drafts.find(
         {}, {"_id": 0},
@@ -5065,7 +5065,7 @@ async def admin_list_gap_drafts(_: bool = Depends(require_admin)):
 
 
 @router.get("/admin/referral-analytics")
-async def admin_referral_analytics(request: Request, _: bool = Depends(require_admin)):
+async def admin_referral_analytics(request: Request, _: bool = Depends(require_role("view"))):
     """Referral analytics:
     - patient `referred_by_patient_code` chains
     - therapist `referred_by_code` chains
@@ -5168,7 +5168,7 @@ async def admin_referral_analytics(request: Request, _: bool = Depends(require_a
 
 
 @router.delete("/admin/gap-recruit/drafts/{draft_id}")
-async def admin_delete_gap_draft(draft_id: str, _: bool = Depends(require_admin)):
+async def admin_delete_gap_draft(draft_id: str, _: bool = Depends(require_role("edit"))):
     res = await db.recruit_drafts.delete_one({"id": draft_id})
     if res.deleted_count == 0:
         raise HTTPException(404)
@@ -5720,7 +5720,7 @@ async def admin_wipe_all_gap_drafts(payload: dict | None = None) -> dict[str, An
 
 
 @router.post("/admin/gap-recruit/send-all")
-async def admin_send_gap_drafts(_: bool = Depends(require_admin)):
+async def admin_send_gap_drafts(_: bool = Depends(require_role("edit"))):
     """Fire off all pending non-dry-run drafts via Resend. Pre-launch this
     endpoint will return 0 sent because every draft is `dry_run=true`."""
     from gap_recruiter import send_pending_drafts
@@ -5729,7 +5729,7 @@ async def admin_send_gap_drafts(_: bool = Depends(require_admin)):
 
 @router.post("/admin/gap-recruit/send-preview")
 async def admin_send_gap_preview(
-    payload: dict | None = None, _: bool = Depends(require_admin),
+    payload: dict | None = None, _: bool = Depends(require_role("edit")),
 ):
     """Send a small sample of pre-launch DRY-RUN drafts via Resend so the
     admin can see what the actual recruit email looks like in their inbox.
@@ -5749,7 +5749,7 @@ async def admin_send_gap_preview(
 
 
 @router.post("/admin/seed/reset")
-async def admin_seed_reset(_: bool = Depends(require_admin)):
+async def admin_seed_reset(_: bool = Depends(require_role("edit"))):
     """DESTRUCTIVE  --  clears requests/applications/declines/therapists/magic_codes
     and re-seeds 100 fresh therapists (v3 schema). Also kicks off office geocoding."""
     cleared = {
@@ -5781,7 +5781,7 @@ async def admin_seed_reset(_: bool = Depends(require_admin)):
 @router.post("/admin/simulator/run")
 async def simulator_run(
     payload: dict,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_role("edit")),
 ):
     """Kick off a simulator run synchronously. A 50-request run
     against a ~120-therapist pool completes in ~1-2 seconds because
@@ -5813,7 +5813,7 @@ async def simulator_run(
 
 @router.get("/admin/simulator/runs")
 async def simulator_list_runs(
-    _: None = Depends(require_admin),
+    _: None = Depends(require_role("view")),
     limit: int = 30,
 ):
     """List recent simulator runs  --  lightweight summary only."""
@@ -5824,7 +5824,7 @@ async def simulator_list_runs(
 @router.get("/admin/simulator/runs/{run_id}")
 async def simulator_get_run(
     run_id: str,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_role("view")),
 ):
     """Fetch the full report (with per-request detail) for one run."""
     import simulator
@@ -5837,7 +5837,7 @@ async def simulator_get_run(
 @router.delete("/admin/simulator/runs/{run_id}")
 async def simulator_delete_run(
     run_id: str,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_role("edit")),
 ):
     """Delete one run + all its synthetic requests."""
     import simulator
@@ -5853,7 +5853,7 @@ async def admin_get_feedback_testing() -> dict[str, Any]:
     doc = await db.app_config.find_one({"key": "feedback_testing"}, {"_id": 0})
     return {"enabled": bool((doc or {}).get("enabled", False))}
 
-@router.put("/admin/feedback-testing", dependencies=[Depends(require_admin)])
+@router.put("/admin/feedback-testing", dependencies=[Depends(require_role("view"))])
 async def admin_set_feedback_testing(payload: dict) -> dict[str, Any]:
     enabled = bool(payload.get("enabled", False))
     await db.app_config.update_one(
@@ -5863,7 +5863,7 @@ async def admin_set_feedback_testing(payload: dict) -> dict[str, Any]:
     )
     return {"enabled": enabled}
 
-@router.post("/admin/feedback-testing/trigger", dependencies=[Depends(require_admin)])
+@router.post("/admin/feedback-testing/trigger", dependencies=[Depends(require_role("edit"))])
 async def admin_trigger_test_feedback(payload: dict) -> dict[str, Any]:
     """Manually trigger a specific milestone email for a request."""
     from email_service import (
@@ -6143,7 +6143,7 @@ async def get_scraper_job(job_id: str):
     return job
 
 
-@router.post("/admin/places-test", dependencies=[Depends(require_admin)])
+@router.post("/admin/places-test", dependencies=[Depends(require_role("view"))])
 async def places_test(payload: dict | None = None):
     """Diagnostic ping of Google Places API (New).
 
@@ -6407,7 +6407,7 @@ async def list_scraper_jobs():
 
 # ── Provider directory import (real data over backfill placeholders) ──────
 
-@router.post("/admin/run-provider-import", dependencies=[Depends(require_admin)])
+@router.post("/admin/run-provider-import", dependencies=[Depends(require_role("view"))])
 async def run_provider_import(payload: dict):
     """Run the provider directory xlsx import inline.
 
@@ -6784,5 +6784,4 @@ async def fire_test_therapist_survey(
         "therapist_id": therapist_id,
         "therapist_email": email,
     }
-
 
