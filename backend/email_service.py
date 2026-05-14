@@ -84,14 +84,25 @@ def _inject_email_block_styles(html: str) -> str:
         html,
         flags=_re.IGNORECASE,
     )
+    # Margin tightened from 14px -> 8px on 2026-05-14: 14px gave nice
+    # body separation but made signature blocks (Best, / Name / Title)
+    # look like there was an extra blank line between every line. 8px
+    # is still visually distinct between body paragraphs but tight
+    # enough that signature blocks read naturally. If you want bigger
+    # section breaks, hit Enter twice in the editor and the empty
+    # paragraph will be preserved (the strip-empty regex above only
+    # catches truly empty <p><br></p> -- but Quill writes those when
+    # you hit Enter twice, so users can't actually create deliberate
+    # blank-line spacing today; if that becomes a problem, loosen the
+    # strip regex).
     rules: dict[str, str] = {
-        "p": "margin:0 0 14px 0;",
-        "h2": "font-family:Georgia,serif;font-size:20px;color:#2D4A3E;margin:24px 0 8px;line-height:1.3;",
-        "h3": "font-family:Georgia,serif;font-size:16px;color:#2D4A3E;margin:20px 0 6px;line-height:1.3;",
-        "ul": "margin:0 0 14px 0;padding-left:22px;",
-        "ol": "margin:0 0 14px 0;padding-left:22px;",
+        "p": "margin:0 0 8px 0;",
+        "h2": "font-family:Georgia,serif;font-size:20px;color:#2D4A3E;margin:22px 0 8px;line-height:1.3;",
+        "h3": "font-family:Georgia,serif;font-size:16px;color:#2D4A3E;margin:18px 0 6px;line-height:1.3;",
+        "ul": "margin:0 0 10px 0;padding-left:22px;",
+        "ol": "margin:0 0 10px 0;padding-left:22px;",
         "li": "margin:0 0 4px 0;",
-        "blockquote": "border-left:3px solid #E8E5DF;margin:14px 0;padding:4px 12px;color:#6D6A65;",
+        "blockquote": "border-left:3px solid #E8E5DF;margin:12px 0;padding:4px 12px;color:#6D6A65;",
     }
     for tag, style in rules.items():
         # Match `<tag>` or `<tag attr=...>` but skip ones that already
