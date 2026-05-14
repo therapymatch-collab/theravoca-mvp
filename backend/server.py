@@ -178,6 +178,32 @@ async def lifespan(_app: FastAPI):
         {"key": "magic_code", "footer_note": _old_magic_footer},
         {"$unset": {"footer_note": ""}},
     )
+    # Same one-time cleanup for the cold-outreach template (subject,
+    # intro, pricing_note) -- the old copy quoted a specific "{score}%"
+    # which was misleading since the actual score depends on factors
+    # that vary day-to-day. New default uses "strong fit" wording.
+    _old_nri = {
+        "subject": "TheraVoca referral request — {score}% estimated match",
+        "intro": (
+            "I run TheraVoca, a small Idaho-based therapist matching "
+            "service. We just received a referral request that looks "
+            "like a strong fit for your practice — estimated "
+            "<strong>{score}% match</strong> based on your public "
+            "practice information."
+        ),
+        "pricing_note": (
+            "To apply, create your free profile (30-day free trial, "
+            "$45/mo after). You'll be auto-matched with this referral "
+            "the moment your profile is live, and you'll only get "
+            "notifications for future patients who score 70%+ on your "
+            "specialties and schedule."
+        ),
+    }
+    for _field, _val in _old_nri.items():
+        await db.email_templates.update_one(
+            {"key": "new_referral_inquiry", _field: _val},
+            {"$unset": {_field: ""}},
+        )
     logger.info(
         "Started results sweep loop (every %ds) + daily-task scheduler",
         sweep_interval,

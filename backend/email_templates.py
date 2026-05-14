@@ -150,14 +150,13 @@ DEFAULTS: dict[str, dict[str, str]] = {
             "targets coverage holes proactively); this fires per-request "
             "to fill specific patient matches."
         ),
-        "subject": "TheraVoca referral request — {score}% estimated match",
+        "subject": "TheraVoca referral request -- strong fit",
         "heading": "New referral inquiry",
         "greeting": "Hi {first_name},",
         "intro": (
             "I run TheraVoca, a small Idaho-based therapist matching "
             "service. We just received a referral request that looks "
-            "like a strong fit for your practice — estimated "
-            "<strong>{score}% match</strong> based on your public "
+            "like a strong fit for your practice based on your public "
             "practice information."
         ),
         "rationale": "{rationale}",
@@ -166,8 +165,8 @@ DEFAULTS: dict[str, dict[str, str]] = {
             "To apply, create your free profile (30-day free trial, "
             "$45/mo after). You'll be auto-matched with this referral "
             "the moment your profile is live, and you'll only get "
-            "notifications for future patients who score 70%+ on your "
-            "specialties and schedule."
+            "notifications for future patients who are a strong fit "
+            "for your specialties and schedule."
         ),
         "footer_note": (
             "If this isn't a fit, no need to reply — we won't contact "
