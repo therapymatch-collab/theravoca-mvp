@@ -770,7 +770,7 @@ async def send_magic_code(to: str, code: str, role: str) -> None:
     <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">{intro}</p>
     <div style="margin:32px 0;text-align:center;">
       <div style="display:inline-block;background:{BRAND['bg']};border:1px solid {BRAND['border']};border-radius:14px;padding:22px 36px;">
-        <div style="font-family:Georgia,serif;font-size:38px;letter-spacing:0.4em;color:{BRAND['primary']};font-weight:600;">{code}</div>
+        <div style="font-family:'SFMono-Regular','Menlo','Consolas','Courier New',monospace;font-size:38px;letter-spacing:0.4em;color:{BRAND['primary']};font-weight:700;">{code}</div>
         <div style="font-size:11px;color:{BRAND['muted']};margin-top:8px;text-transform:uppercase;letter-spacing:0.15em;">Expires in {ttl} minutes</div>
       </div>
     </div>
