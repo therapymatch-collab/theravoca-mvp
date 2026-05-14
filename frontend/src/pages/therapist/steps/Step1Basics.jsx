@@ -145,8 +145,8 @@ export default function Step1Basics({
           )}
         </Field>
         <Field
-          label={<>Phone (private, alerts)</>}
-          hint="Optional — for SMS alerts when new referrals match. Never shown to patients."
+          label={<>Contact phone (private)</>}
+          hint="Optional — we'll use it only if we need to reach you about your account. Never shown to patients."
         >
           <Input
             type="tel"

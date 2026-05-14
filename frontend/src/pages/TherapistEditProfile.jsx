@@ -485,7 +485,7 @@ export default function TherapistEditProfile() {
             />
           </Field>
           <Field
-            label="Contact phone (TheraVoca uses this for SMS referral alerts -- not public)"
+            label="Contact phone (private -- for account issues, not shown to patients)"
             {...req("phone")}
           >
             <Input
