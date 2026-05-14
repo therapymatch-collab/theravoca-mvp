@@ -2387,6 +2387,403 @@ async def admin_incident_apology(
     }
 
 
+# ─── Broadcast email campaigns ─────────────────────────────────────────
+# Reusable admin tool to send one-off broadcast emails to filtered or
+# pasted recipient lists. Each campaign is a row in the email_campaigns
+# collection; individual sends still land in email_sends (with
+# template_key=campaign:<id>) so all the existing dashboards keep
+# working.
+
+_CAMPAIGN_MERGE_FIELDS = ("first_name", "name", "email", "credential_type")
+
+
+def _render_campaign_body(body_html: str, vars_: dict[str, str]) -> str:
+    """Substitute {{var}} placeholders. Trusted-ish data path (admin
+    composes the body, vars come from our therapist DB), but we still
+    html-escape values to keep stored-XSS out of the rendered email."""
+    import html as _html
+    out = body_html or ""
+    for key in _CAMPAIGN_MERGE_FIELDS:
+        val = _html.escape(str(vars_.get(key, "") or ""))
+        out = out.replace("{{" + key + "}}", val)
+    return out
+
+
+async def _resolve_campaign_recipients(
+    *,
+    recipient_filter: dict | None,
+    recipient_paste: str | None,
+    use_real_email: bool = True,
+) -> list[dict[str, Any]]:
+    """Resolve a campaign's recipient list to concrete (email, vars) rows.
+
+    Two modes (mutually exclusive):
+      - recipient_filter: a dict of Mongo-style filters applied to
+        the therapists collection (source, is_active, notify_email,
+        subscription_status, etc.). Matched docs become recipients.
+      - recipient_paste: a comma/whitespace-separated string of emails
+        and/or phone numbers (we resolve phones via the same helper
+        the incident-apology endpoint uses).
+
+    Returns a list of dicts with keys: email, first_name, name, source,
+    therapist_id (None for paste-only entries not in our DB). Skips
+    entries with no usable email.
+    """
+    import re as _re
+    from helpers import extract_outreach_first_name
+
+    def _digits10(p: str) -> str:
+        d = _re.sub(r"\D", "", p or "")
+        if len(d) == 11 and d.startswith("1"):
+            d = d[1:]
+        return d if len(d) == 10 else ""
+
+    def _resolve_email(t: dict) -> str:
+        if use_real_email:
+            r = (t.get("real_email") or "").strip()
+            if r and "@" in r:
+                return r
+        f = (t.get("email") or "").strip()
+        if f and "therapymatch+" not in f.lower() and "@" in f:
+            return f
+        return ""
+
+    def _row(t: dict, email_override: str | None = None) -> dict[str, Any]:
+        first = extract_outreach_first_name(t.get("name")) or "there"
+        return {
+            "therapist_id": t.get("id"),
+            "email": email_override or _resolve_email(t),
+            "first_name": first,
+            "name": t.get("name") or "",
+            "credential_type": t.get("credential_type") or "",
+            "source": t.get("source") or "",
+        }
+
+    rows: list[dict[str, Any]] = []
+    seen_emails: set[str] = set()
+
+    # ----- Filter mode -----
+    if recipient_filter:
+        q: dict[str, Any] = {}
+        src = recipient_filter.get("source")
+        if isinstance(src, list) and src:
+            q["source"] = {"$in": src}
+        if "is_active" in recipient_filter:
+            q["is_active"] = {"$ne": False} if recipient_filter["is_active"] else False
+        if "pending_approval" in recipient_filter:
+            q["pending_approval"] = bool(recipient_filter["pending_approval"])
+        if "notify_email" in recipient_filter:
+            q["notify_email"] = {"$ne": False} if recipient_filter["notify_email"] else False
+        sub_status = recipient_filter.get("subscription_status")
+        if isinstance(sub_status, list) and sub_status:
+            q["subscription_status"] = {"$in": sub_status}
+        # Always skip already-unsubscribed + hard-bounced therapists.
+        q.setdefault("unsubscribed", {"$ne": True})
+        q.setdefault("hard_bounced", {"$ne": True})
+
+        cur = db.therapists.find(q, {
+            "_id": 0, "id": 1, "name": 1, "email": 1, "real_email": 1,
+            "source": 1, "credential_type": 1,
+        })
+        async for t in cur:
+            email = _resolve_email(t)
+            if not email or email.lower() in seen_emails:
+                continue
+            seen_emails.add(email.lower())
+            rows.append(_row(t))
+
+    # ----- Paste mode -----
+    if recipient_paste:
+        tokens = [
+            tok.strip() for tok in _re.split(r"[\s,;]+", recipient_paste) if tok.strip()
+        ]
+        # Pre-build a phone -> therapist map for the phone tokens.
+        phone_tokens = [t for t in tokens if "@" not in t]
+        email_tokens = [t for t in tokens if "@" in t]
+        by_digits: dict[str, dict] = {}
+        if phone_tokens:
+            cur = db.therapists.find(
+                {"$or": [
+                    {"phone": {"$exists": True, "$ne": ""}},
+                    {"phone_alert": {"$exists": True, "$ne": ""}},
+                ]},
+                {"_id": 0, "id": 1, "name": 1, "email": 1, "real_email": 1,
+                 "phone": 1, "phone_alert": 1, "source": 1, "credential_type": 1},
+            )
+            async for t in cur:
+                for fld in ("phone", "phone_alert"):
+                    d = _digits10(t.get(fld, ""))
+                    if d and d not in by_digits:
+                        by_digits[d] = t
+        for p in phone_tokens:
+            d = _digits10(p)
+            if not d:
+                continue
+            t = by_digits.get(d)
+            if not t:
+                continue
+            email = _resolve_email(t)
+            if not email or email.lower() in seen_emails:
+                continue
+            seen_emails.add(email.lower())
+            rows.append(_row(t))
+        # For pasted emails, look up the therapist row by email if we
+        # have one, else create a minimal row.
+        for e in email_tokens:
+            el = e.lower()
+            if el in seen_emails:
+                continue
+            seen_emails.add(el)
+            t = await db.therapists.find_one(
+                {"$or": [{"email": e}, {"real_email": e}]},
+                {"_id": 0, "id": 1, "name": 1, "email": 1, "real_email": 1,
+                 "source": 1, "credential_type": 1},
+            )
+            if t:
+                rows.append(_row(t, email_override=e))
+            else:
+                # External email; first_name falls back to "there"
+                rows.append({
+                    "therapist_id": None,
+                    "email": e,
+                    "first_name": "there",
+                    "name": "",
+                    "credential_type": "",
+                    "source": "external_paste",
+                })
+
+    return rows
+
+
+@router.get("/admin/email-campaigns", dependencies=[Depends(require_admin)])
+async def admin_list_campaigns(limit: int = 100) -> dict[str, Any]:
+    """List recent broadcast campaigns, newest-first."""
+    limit = max(1, min(int(limit or 100), 500))
+    docs = await db.email_campaigns.find({}, {"_id": 0}).sort(
+        "created_at", -1,
+    ).to_list(limit)
+    return {"campaigns": docs, "total": len(docs)}
+
+
+@router.post("/admin/email-campaigns", dependencies=[Depends(require_admin)])
+async def admin_create_campaign(
+    payload: dict, request: Request,
+) -> dict[str, Any]:
+    """Create a new broadcast campaign in `draft` status. Subject + body
+    can be edited later via PUT. Recipients are not resolved until
+    preview/send."""
+    import uuid as _uuid
+    cid = str(_uuid.uuid4())
+    doc = {
+        "id": cid,
+        "subject": (payload.get("subject") or "").strip()[:200],
+        "body_html": payload.get("body_html") or "",
+        "reply_to": (payload.get("reply_to") or "").strip()[:200] or None,
+        "recipient_filter": payload.get("recipient_filter") or None,
+        "recipient_paste": payload.get("recipient_paste") or None,
+        "use_real_email": bool(payload.get("use_real_email", True)),
+        "transactional": bool(payload.get("transactional", False)),
+        "status": "draft",
+        "created_at": _now_iso(),
+        "created_by": "admin",
+        "sent_at": None,
+        "sent_counts": None,
+    }
+    await db.email_campaigns.insert_one(doc)
+    audit.emit(
+        actor_type="admin", actor_id="admin", action="create_campaign",
+        resource="email_campaign", resource_id=cid,
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    doc.pop("_id", None)
+    return doc
+
+
+@router.get("/admin/email-campaigns/{cid}", dependencies=[Depends(require_admin)])
+async def admin_get_campaign(cid: str) -> dict[str, Any]:
+    doc = await db.email_campaigns.find_one({"id": cid}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Campaign not found")
+    return doc
+
+
+@router.put("/admin/email-campaigns/{cid}", dependencies=[Depends(require_admin)])
+async def admin_update_campaign(cid: str, payload: dict) -> dict[str, Any]:
+    """Update a campaign's editable fields. Sent campaigns are locked --
+    we don't allow rewriting the subject/body of an already-sent send
+    so the email_sends audit trail stays meaningful."""
+    existing = await db.email_campaigns.find_one({"id": cid}, {"_id": 0})
+    if not existing:
+        raise HTTPException(404, "Campaign not found")
+    if existing.get("status") == "sent":
+        raise HTTPException(409, "Cannot edit a campaign that's already been sent")
+    allowed = {
+        "subject", "body_html", "reply_to",
+        "recipient_filter", "recipient_paste", "use_real_email", "transactional",
+    }
+    update: dict = {}
+    for k in allowed:
+        if k in payload:
+            v = payload[k]
+            if k in ("subject", "reply_to") and isinstance(v, str):
+                update[k] = v.strip()[:200] if k == "subject" else v.strip()[:200] or None
+            else:
+                update[k] = v
+    update["updated_at"] = _now_iso()
+    await db.email_campaigns.update_one({"id": cid}, {"$set": update})
+    return await db.email_campaigns.find_one({"id": cid}, {"_id": 0})
+
+
+@router.delete("/admin/email-campaigns/{cid}", dependencies=[Depends(require_admin)])
+async def admin_delete_campaign(cid: str) -> dict[str, Any]:
+    existing = await db.email_campaigns.find_one({"id": cid}, {"_id": 0})
+    if not existing:
+        raise HTTPException(404, "Campaign not found")
+    if existing.get("status") == "sent":
+        raise HTTPException(409, "Cannot delete a sent campaign (audit trail). Archive via UI instead.")
+    res = await db.email_campaigns.delete_one({"id": cid})
+    return {"ok": True, "deleted": res.deleted_count}
+
+
+@router.post("/admin/email-campaigns/{cid}/preview", dependencies=[Depends(require_admin)])
+async def admin_campaign_preview(cid: str) -> dict[str, Any]:
+    """Resolve recipients + render the body for the first sample
+    recipient so the admin sees what an actual recipient gets."""
+    doc = await db.email_campaigns.find_one({"id": cid}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Campaign not found")
+    rows = await _resolve_campaign_recipients(
+        recipient_filter=doc.get("recipient_filter"),
+        recipient_paste=doc.get("recipient_paste"),
+        use_real_email=doc.get("use_real_email", True),
+    )
+    if rows:
+        sample = rows[0]
+        rendered = _render_campaign_body(doc.get("body_html") or "", sample)
+    else:
+        sample, rendered = None, ""
+    return {
+        "campaign_id": cid,
+        "recipient_count": len(rows),
+        "sample_recipient": sample,
+        "sample_rendered_body": rendered,
+        "subject": doc.get("subject"),
+    }
+
+
+@router.post("/admin/email-campaigns/{cid}/test", dependencies=[Depends(require_admin)])
+async def admin_campaign_test(
+    cid: str, payload: dict,
+) -> dict[str, Any]:
+    """Send one rendered-with-first-recipient-data email to a test
+    inbox so the admin can eyeball it before firing live."""
+    from email_service import send_broadcast
+    doc = await db.email_campaigns.find_one({"id": cid}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Campaign not found")
+    to = (payload or {}).get("test_recipient") or ""
+    to = to.strip()
+    if not to or "@" not in to:
+        raise HTTPException(400, "test_recipient (email) is required")
+    rows = await _resolve_campaign_recipients(
+        recipient_filter=doc.get("recipient_filter"),
+        recipient_paste=doc.get("recipient_paste"),
+        use_real_email=doc.get("use_real_email", True),
+    )
+    sample = rows[0] if rows else {"first_name": "there", "name": "", "email": to}
+    rendered = _render_campaign_body(doc.get("body_html") or "", sample)
+    res = await send_broadcast(
+        to, doc.get("subject") or "(no subject)", rendered,
+        campaign_id=cid,
+        # Test sends to the admin's own inbox -- no unsubscribe needed
+        # (it's not promotional, and the admin can find the campaign UI
+        # to delete the draft if they don't want it sent).
+        unsubscribe_url=None,
+        force=True,
+    )
+    return {"sent": res is not None, "to": to, "recipient_count": len(rows)}
+
+
+@router.post("/admin/email-campaigns/{cid}/send", dependencies=[Depends(require_admin)])
+async def admin_campaign_send(cid: str, request: Request) -> dict[str, Any]:
+    """Fire the campaign to all resolved recipients. Idempotent: skips
+    recipients already in email_sends with template_key=campaign:<cid>.
+
+    Marks the campaign status=sent after the run; the campaign becomes
+    immutable (subject/body locked for audit).
+    """
+    import asyncio as _asyncio
+    from email_service import send_broadcast, _therapist_unsub_url
+    doc = await db.email_campaigns.find_one({"id": cid}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Campaign not found")
+    if doc.get("status") == "sent":
+        raise HTTPException(409, "Campaign already sent")
+    rows = await _resolve_campaign_recipients(
+        recipient_filter=doc.get("recipient_filter"),
+        recipient_paste=doc.get("recipient_paste"),
+        use_real_email=doc.get("use_real_email", True),
+    )
+    # Idempotency: skip recipients already in email_sends.
+    prior_to = set()
+    async for p in db.email_sends.find(
+        {"template_key": f"campaign:{cid}", "sent_ok": True}, {"_id": 0, "to": 1},
+    ):
+        prior_to.add((p.get("to") or "").lower())
+
+    is_transactional = bool(doc.get("transactional"))
+    sent, skipped, failed = 0, 0, 0
+    for r in rows:
+        addr = (r.get("email") or "").lower()
+        if not addr or addr in prior_to:
+            skipped += 1
+            continue
+        rendered = _render_campaign_body(doc.get("body_html") or "", r)
+        unsub_url = (
+            None if is_transactional
+            else (_therapist_unsub_url(r["therapist_id"]) if r.get("therapist_id") else None)
+        )
+        res = await send_broadcast(
+            addr,
+            doc.get("subject") or "(no subject)",
+            rendered,
+            campaign_id=cid,
+            unsubscribe_url=unsub_url,
+            force=True,
+        )
+        if res is None:
+            failed += 1
+        else:
+            sent += 1
+            prior_to.add(addr)
+        # Polite throttle for Resend's API.
+        await _asyncio.sleep(0.2)
+
+    sent_counts = {
+        "resolved": len(rows),
+        "sent": sent,
+        "skipped": skipped,
+        "failed": failed,
+    }
+    await db.email_campaigns.update_one(
+        {"id": cid},
+        {"$set": {
+            "status": "sent",
+            "sent_at": _now_iso(),
+            "sent_counts": sent_counts,
+        }},
+    )
+    audit.emit(
+        actor_type="admin", actor_id="admin", action="send_campaign",
+        resource="email_campaign", resource_id=cid,
+        detail=f"sent={sent} skipped={skipped} failed={failed}",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    return {"campaign_id": cid, **sent_counts}
+
+
 @router.get("/admin/outreach/opt-outs")
 async def admin_list_opt_outs(_: bool = Depends(require_role("view"))):
     """Full opt-out roster so admins can audit who asked to be removed

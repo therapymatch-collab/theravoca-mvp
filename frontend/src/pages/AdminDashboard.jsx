@@ -48,7 +48,9 @@ import { STATUS_UNAUTHORIZED } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import OptOutsPanel from "@/pages/admin/panels/OptOutsPanel";import ProfileCompletionPanel from "@/pages/admin/panels/ProfileCompletionPanel";
+import OptOutsPanel from "@/pages/admin/panels/OptOutsPanel";
+import BroadcastEmailsPanel from "@/pages/admin/panels/BroadcastEmailsPanel";
+import ProfileCompletionPanel from "@/pages/admin/panels/ProfileCompletionPanel";
 import TeamPanel from "@/pages/admin/panels/TeamPanel";
 import MasterQueryPanel from "@/pages/admin/panels/MasterQueryPanel";
 import BlogAdminPanel from "@/pages/admin/panels/BlogAdminPanel";
@@ -1226,7 +1228,7 @@ export default function AdminDashboard() {
 
               {/* Per-tab search — only for tabs with filterable lists */}
               {["requests", "therapists", "all_therapists", "invited_therapists",
-                "opt_outs", "feedback", "patients", "completion"].includes(tab) && (
+                "opt_outs", "broadcast_emails", "feedback", "patients", "completion"].includes(tab) && (
               <div className="mt-6 flex items-center gap-2 max-w-md" data-testid="admin-search-wrap">
                 <div className="relative flex-1">
                   <Search
@@ -1257,7 +1259,7 @@ export default function AdminDashboard() {
 
               {/* Consistent spacing between tab links and panel content */}
               {!["requests", "therapists", "all_therapists", "invited_therapists",
-                "opt_outs", "feedback", "patients", "completion"].includes(tab) && (
+                "opt_outs", "broadcast_emails", "feedback", "patients", "completion"].includes(tab) && (
                 <div className="mt-8" />
               )}
 
@@ -1707,6 +1709,10 @@ export default function AdminDashboard() {
                   onReload={loadOptOuts}
                   filter={search}
                 />
+              )}
+
+              {tab === "broadcast_emails" && (
+                <BroadcastEmailsPanel filter={search} />
               )}
 
               {tab === "feedback" && (
@@ -3603,6 +3609,10 @@ function AdminTabsBar({
           label: "Opt-outs",
           count: optOuts?.total ?? null,
           onClick: onLoadOptOuts,
+        },
+        {
+          id: "broadcast_emails",
+          label: "Broadcast emails",
         },
       ],
     },

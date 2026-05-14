@@ -220,6 +220,33 @@ async def _send(
 
 # ─── Templates ─────────────────────────────────────────────────────────────────
 
+async def send_broadcast(
+    to: str,
+    subject: str,
+    body_html: str,
+    *,
+    heading: str = "TheraVoca",
+    unsubscribe_url: Optional[str] = None,
+    campaign_id: str = "broadcast",
+    force: bool = True,
+) -> dict[str, Any] | None:
+    """Send one rendered broadcast-campaign email. The body_html is the
+    already-substituted body for THIS recipient (variable substitution
+    happens upstream in the campaign-send loop). This helper just adds
+    the standard wrap + dispatches via _send.
+
+    campaign_id flows through to email_sends via template_key so the
+    Outbound admin tab can group + count per-campaign metrics.
+    """
+    return await _send(
+        to,
+        subject,
+        _wrap(heading, body_html, unsubscribe_url=unsubscribe_url),
+        template_key=f"campaign:{campaign_id}",
+        force=force,
+    )
+
+
 async def send_incident_apology(
     to: str, first_name: str, *, force: bool = True,
 ) -> dict[str, Any] | None:
