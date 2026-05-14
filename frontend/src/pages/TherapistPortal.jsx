@@ -24,8 +24,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header, Footer } from "@/components/SiteShell";
-import SetPasswordPrompt from "@/components/SetPasswordPrompt";
-import ProfileCompletionMeter from "@/components/ProfileCompletionMeter";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { api, sessionClient, getSession, clearSession } from "@/lib/api";
@@ -51,71 +49,178 @@ const URGENCY = [
   { v: "full", l: "Currently full" },
 ];
 
-// ─── Deep-match back-fill banner (Iter-90) ─────────────────────────
-// Shown at the top of the portal when an existing therapist hasn't
-// v5: checks T6/T6b (primary matching signal) + T2/T4/T5 style-fit
-// questions. Soft, dismissible per-session. No backend changes — we
-// just check for empty fields on the therapist doc the portal loads.
-function DeepMatchBackfillBanner({ therapist }) {
-  const [dismissed, setDismissed] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return !!window.sessionStorage.getItem("tv_deep_backfill_dismissed");
-  });
-  if (!therapist || dismissed) return null;
+// ─── Deep-match missing helper (Iter-90) ──────────────────────────
+// Returns the list of human labels for missing deep-match T-fields.
+// Hoisted out of DeepMatchBackfillBanner so PortalActionChips can
+// reuse the same trigger logic without duplicating the field checks.
+function _deepMatchMissingLabels(therapist) {
+  if (!therapist) return [];
   const missing = [];
   if (!therapist.t6_session_expectations || therapist.t6_session_expectations.length < 1)
-    missing.push("what sessions 1–3 look like with you");
+    missing.push("what sessions 1-3 look like with you");
   if ((therapist.t6_early_sessions_description || "").trim().length < 30)
     missing.push("a description of your early sessions");
   if (!therapist.t4_hard_truth)
     missing.push("how you push past comfort zones");
   if ((therapist.t5_lived_experience || "").trim().length < 30)
     missing.push("life experience you understand from the inside");
-  if (missing.length === 0) return null;
+  return missing;
+}
+
+// ─── Portal action chips (Combo-2 reorg, 2026-05-14) ──────────────
+// Collapses what used to be 5+ full-width banners (DeepMatchBackfill,
+// AddPaymentMethod, NoSubscription, ProfileCompletionMeter, SetPassword)
+// into a single compact row of color-coded chips that vanishes entirely
+// when there's nothing to act on -- so a fully-set-up therapist sees a
+// clean page with just account/security chips + their referrals.
+//
+// Each chip routes to the same destination the banner CTA used to, so
+// the underlying flows are unchanged.
+function PortalActionChips({ therapist, sub, onStartCheckout }) {
+  const chips = [];
+  const completeness = therapist?.completeness;
+
+  // Profile incomplete -- urgent / red. Tooltip lists the missing labels
+  // so the therapist gets a hint without the old full-width meter card.
+  if (completeness && completeness.publishable === false) {
+    const missing = completeness.required_missing || [];
+    const labels = missing.map((m) => m.label).slice(0, 6).join(", ");
+    chips.push({
+      key: "profile",
+      kind: "urgent",
+      label: "Profile incomplete",
+      badge: missing.length ? `${missing.length} missing` : null,
+      title: labels
+        ? `Missing: ${labels}${missing.length > 6 ? ", ..." : ""}`
+        : "Required fields missing",
+      to: "/portal/therapist/edit",
+    });
+  }
+
+  // Add payment method -- urgent / red. Two subcases:
+  //   1. No Stripe subscription at all -> "Start free trial"
+  //   2. Existing subscription in a bad state -> "Update billing"
+  if (therapist) {
+    const subStatus = sub?.subscription_status;
+    if (!sub) {
+      chips.push({
+        key: "billing",
+        kind: "urgent",
+        label: "Start free trial",
+        title: "Add a payment method to start your 30-day free trial",
+        onClick: onStartCheckout,
+      });
+    } else if (["incomplete", "past_due", "canceled", "unpaid"].includes(subStatus)) {
+      chips.push({
+        key: "billing",
+        kind: "urgent",
+        label: "Update billing",
+        badge: subStatus.replace(/_/g, " "),
+        title:
+          subStatus === "past_due"
+            ? "Your last payment failed -- update your card to resume matching"
+            : subStatus === "canceled"
+            ? "Subscription canceled -- reactivate to continue"
+            : "Subscription needs attention",
+        onClick: onStartCheckout,
+      });
+    }
+  }
+
+  // Set password -- todo / amber. Only shown for magic-code-only users
+  // who never set a fallback password.
+  if (therapist && !therapist.has_password) {
+    chips.push({
+      key: "password",
+      kind: "todo",
+      label: "Set password",
+      title: "Optional -- adds a password fallback for magic-code-only accounts",
+      to: "/portal/therapist/security",
+    });
+  }
+
+  // Deep-match questions -- todo / amber. Same trigger as the old
+  // DeepMatchBackfillBanner; respects the per-session dismissal so a
+  // therapist who clicked "Remind me later" doesn't see it bounce back.
+  const deepMissing = _deepMatchMissingLabels(therapist);
+  const deepDismissed =
+    typeof window !== "undefined" &&
+    !!window.sessionStorage.getItem("tv_deep_backfill_dismissed");
+  if (deepMissing.length > 0 && !deepDismissed) {
+    chips.push({
+      key: "deepmatch",
+      kind: "todo",
+      label: "Deep-match questions",
+      badge: `${deepMissing.length} left`,
+      title: `5 quick questions unlock deep-match scoring. Missing: ${deepMissing.join(", ")}.`,
+      to: "/portal/therapist/edit#deep-match",
+    });
+  }
+
+  // Per Combo-2 spec: the entire row collapses when there's nothing todo.
+  if (chips.length === 0) return null;
+
+  const kindClass = (k) =>
+    k === "urgent"
+      ? "bg-[#FDF1EF] border-[#E8C4BB] text-[#8B3220] hover:bg-[#FBE6E1]"
+      : "bg-[#FCF6E5] border-[#E8D7A6] text-[#6D5A29] hover:bg-[#F8EFD2]";
+
+  const badgeClass = (k) =>
+    k === "urgent"
+      ? "bg-[#8B3220]/15 text-[#8B3220]"
+      : "bg-[#6D5A29]/15 text-[#6D5A29]";
+
   return (
     <div
-      className="mt-6 bg-[#FBE9E5] border border-[#F4C7BE] rounded-2xl p-5"
-      data-testid="deep-match-backfill-banner"
+      className="mt-2 flex items-center gap-2 flex-wrap"
+      data-testid="portal-action-chips"
     >
-      <div className="flex items-start gap-3">
-        <Sparkles size={20} className="text-[#C8412B] mt-0.5 flex-shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-[#2D4A3E]">
-            5 quick questions unlock our deep-match scoring for you
-          </p>
-          <p className="text-xs text-[#2B2A29]/85 mt-1.5 leading-relaxed">
-            Patients who opt into our deeper intake are matched on
-            relationship style, way of working, and lived experience —
-            not just specialty + insurance. Until you answer these,
-            those patients won't see you in the deep-match results.
-          </p>
-          <p className="text-[11px] text-[#8B3220] mt-2">
-            You're missing: {missing.join(", ")}.
-          </p>
-          <div className="flex gap-3 mt-4 flex-wrap">
-            <Link
-              to="/portal/therapist/edit#deep-match"
-              className="tv-btn-primary text-sm"
-              data-testid="deep-match-backfill-cta"
-            >
-              Fill these now (~3 min)
-            </Link>
+      {chips.map((c) => {
+        const inner = (
+          <>
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                c.kind === "urgent" ? "bg-[#8B3220]" : "bg-[#C8A23E]"
+              }`}
+            />
+            {c.label}
+            {c.badge && (
+              <span
+                className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full font-semibold ${badgeClass(c.kind)}`}
+              >
+                {c.badge}
+              </span>
+            )}
+          </>
+        );
+        const className = `inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium transition ${kindClass(c.kind)}`;
+        const testid = `portal-chip-${c.key}`;
+        if (c.onClick) {
+          return (
             <button
+              key={c.key}
               type="button"
-              onClick={() => {
-                window.sessionStorage.setItem(
-                  "tv_deep_backfill_dismissed", "1",
-                );
-                setDismissed(true);
-              }}
-              className="text-sm text-[#6D6A65] underline hover:text-[#2D4A3E] self-center"
-              data-testid="deep-match-backfill-dismiss"
+              onClick={c.onClick}
+              className={className}
+              title={c.title}
+              data-testid={testid}
             >
-              Remind me later
+              {inner}
             </button>
-          </div>
-        </div>
-      </div>
+          );
+        }
+        return (
+          <Link
+            key={c.key}
+            to={c.to}
+            className={className}
+            title={c.title}
+            data-testid={testid}
+          >
+            {inner}
+          </Link>
+        );
+      })}
     </div>
   );
 }
@@ -426,7 +531,38 @@ export default function TherapistPortal() {
               <ClipboardList size={13} strokeWidth={2.2} />
               Sign-in history
             </Link>
+            {therapist?.referral_code && !isPending && (
+              <button
+                type="button"
+                onClick={() => {
+                  const url = `${window.location.origin}/therapists/join?ref=${therapist.referral_code}`;
+                  navigator.clipboard.writeText(url).then(() => {
+                    toast.success("Invite link copied!");
+                  }).catch(() => toast.error("Couldn't copy link"));
+                }}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#E8E5DF] bg-[#FDFBF7] text-xs font-medium text-[#2D4A3E] hover:bg-[#E8E5DF] transition"
+                data-testid="refer-colleague-chip"
+                title="Copy your referral invite link -- colleagues skip the waitlist on first matches"
+              >
+                <Sparkles size={13} className="text-[#C87965]" />
+                Refer a colleague
+              </button>
+            )}
           </div>
+
+          {/* Action chips: only renders when there's at least one urgent
+              or todo item (Profile incomplete / Add payment / Set
+              password / Deep-match questions). Vanishes entirely once
+              the therapist is fully set up so the page is uncluttered
+              for live accounts. Replaces 5 separate full-width banners
+              + the ProfileCompletionMeter card. */}
+          {therapist && !isPending && (
+            <PortalActionChips
+              therapist={therapist}
+              sub={sub}
+              onStartCheckout={startCheckout}
+            />
+          )}
 
           {error && (
             <div className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl p-6 text-center">
@@ -439,15 +575,6 @@ export default function TherapistPortal() {
               <Loader2 className="animate-spin text-[#2D4A3E]" />
             </div>
           )}
-
-          {/* Deep-match T-field back-fill banner. Shown when any of
-              the 5 therapist style-fit fields (T1–T5) is missing or
-              under the v2-spec minimum. Existing therapists who
-              signed up before iter-89 land here on next portal login;
-              clicking the CTA jumps to /therapists/profile/edit
-              where they can fill the answers. Soft prompt — they can
-              dismiss per-session via sessionStorage. */}
-          <DeepMatchBackfillBanner therapist={therapist} />
 
           {/* Pending approval — show the submitted profile preview */}
           {isPending && (
@@ -532,64 +659,6 @@ export default function TherapistPortal() {
                 data-testid="availability-prompt-btn"
               >
                 Review availability
-              </button>
-            </div>
-          )}
-
-          {/* Subscription banner (incomplete / past_due / canceled / unpaid) */}
-          {sub && ["incomplete", "past_due", "canceled", "unpaid"].includes(sub.subscription_status) && (
-            <div
-              className="mt-6 bg-[#FDF7EC] border border-[#E8DCC1] rounded-2xl p-5 flex items-start justify-between gap-4 flex-wrap"
-              data-testid="subscription-banner"
-            >
-              <div className="flex items-start gap-3">
-                <AlertTriangle size={18} className="text-[#C87965] mt-1 shrink-0" />
-                <div>
-                  <div className="text-sm font-semibold text-[#2B2A29]">
-                    Add a payment method to continue receiving referrals
-                  </div>
-                  <p className="text-sm text-[#6D6A65] mt-1 leading-relaxed">
-                    {sub.subscription_status === "past_due"
-                      ? "Your last payment failed. Update your card to resume matching."
-                      : sub.subscription_status === "canceled"
-                      ? "Your subscription was canceled. Reactivate to continue."
-                      : "Your free trial has not started yet — add a card to begin."}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={startCheckout}
-                className="tv-btn-primary !py-2 !px-4 text-sm shrink-0"
-                data-testid="portal-checkout-btn"
-              >
-                <CreditCard size={14} className="inline mr-1.5" /> Add payment method
-              </button>
-            </div>
-          )}
-
-          {/* No subscription at all — fresh signup, needs to start trial */}
-          {therapist && !isPending && !sub && (
-            <div
-              className="mt-6 bg-[#EFF6F2] border border-[#C8DDD3] rounded-2xl p-5 flex items-start justify-between gap-4 flex-wrap"
-              data-testid="no-subscription-banner"
-            >
-              <div className="flex items-start gap-3">
-                <AlertTriangle size={18} className="text-[#2D4A3E] mt-1 shrink-0" />
-                <div>
-                  <div className="text-sm font-semibold text-[#2B2A29]">
-                    Start your free trial to receive referrals
-                  </div>
-                  <p className="text-sm text-[#6D6A65] mt-1 leading-relaxed">
-                    You won't receive patient referrals until you add a payment method and start your 30-day free trial. You won't be charged until the trial ends.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={startCheckout}
-                className="tv-btn-primary !py-2 !px-4 text-sm shrink-0"
-                data-testid="portal-start-trial-btn"
-              >
-                Start free trial
               </button>
             </div>
           )}
@@ -898,50 +967,6 @@ export default function TherapistPortal() {
             <ProfileHealthCallouts therapist={therapist} />
           )}
 
-          {/* Go-live profile completion meter — surfaces score + missing fields. */}
-          {therapist && !isPending && (
-            <ProfileCompletionMeter completeness={therapist.completeness} />
-          )}
-
-          {/* Set-a-password prompt — magic-code-only users */}
-          {therapist && !isPending && !therapist.has_password && (
-            <SetPasswordPrompt onDone={loadAll} />
-          )}
-
-          {/* Refer-a-colleague tile — least urgent, anchored at the
-              very bottom. Compact one-row layout to avoid the
-              wasted-space feel of the old card. */}
-          {therapist?.referral_code && !isPending && (
-            <div
-              className="mt-6 bg-white border border-[#E8E5DF] rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap"
-              data-testid="refer-tile"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <Sparkles size={14} className="text-[#C87965] shrink-0" />
-                <div className="min-w-0">
-                  <span className="text-sm font-medium text-[#2B2A29]">
-                    Refer a colleague
-                  </span>
-                  <span className="text-xs text-[#6D6A65] ml-2">
-                    They skip the waitlist on first matches.
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const url = `${window.location.origin}/therapists/join?ref=${therapist.referral_code}`;
-                  navigator.clipboard.writeText(url).then(() => {
-                    toast.success("Invite link copied!");
-                  }).catch(() => toast.error("Couldn't copy link"));
-                }}
-                className="text-xs text-[#2D4A3E] hover:underline font-medium inline-flex items-center gap-1.5 shrink-0"
-                data-testid="refer-copy-btn"
-              >
-                Copy invite link
-              </button>
-            </div>
-          )}
         </div>
       </main>
 
