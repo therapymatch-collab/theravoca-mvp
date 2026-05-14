@@ -85,10 +85,16 @@ export function adminClient(password) {
   );
 }
 
-export function setAdminTokenSession({ token, email, name }) {
+export function setAdminTokenSession({ token, email, name, admin_role }) {
   sessionStorage.setItem("tv_admin_token", token);
   sessionStorage.setItem("tv_admin_email", email);
   sessionStorage.setItem("tv_admin_name", name || email);
+  // admin_role = "view" | "edit" | "admin". Drives the canDo() helper
+  // and the disabled-button/role-badge UI. Backend sends this on
+  // /admin/login-with-email; missing/legacy = "admin" for backward compat.
+  if (admin_role) {
+    sessionStorage.setItem("tv_admin_role", admin_role);
+  }
 }
 
 export function clearAdminSession() {
@@ -96,6 +102,7 @@ export function clearAdminSession() {
   sessionStorage.removeItem("tv_admin_email");
   sessionStorage.removeItem("tv_admin_name");
   sessionStorage.removeItem("tv_admin_pwd");
+  sessionStorage.removeItem("tv_admin_role");
 }
 
 export function getAdminIdentity() {
@@ -104,6 +111,12 @@ export function getAdminIdentity() {
     email: sessionStorage.getItem("tv_admin_email"),
     name: sessionStorage.getItem("tv_admin_name"),
     masterPwd: sessionStorage.getItem("tv_admin_pwd"),
+    // Master-password sessions and tokens issued before role-tiering
+    // get treated as full admin (matches the backend's backward-compat
+    // path in deps.require_role).
+    adminRole:
+      sessionStorage.getItem("tv_admin_role") ||
+      (sessionStorage.getItem("tv_admin_pwd") ? "admin" : "admin"),
   };
 }
 
