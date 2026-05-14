@@ -29,16 +29,20 @@ export default function TherapistTerms() {
             <p>
               TheraVoca, LLC ("<strong>TheraVoca</strong>", "<strong>we</strong>",
               "<strong>us</strong>", "<strong>our</strong>") operates the
-              TheraVoca platform that helps people in Idaho who are searching
-              for outpatient mental and behavioral health services
-              ("<strong>Patients</strong>") to find licensed therapists
+              TheraVoca platform that helps people in Idaho
+              ("<strong>Searchers</strong>") find licensed therapists
               ("<strong>Therapists</strong>", "<strong>you</strong>",
-              "<strong>your</strong>"). These Therapist Terms of Use
-              ("<strong>Therapist Terms</strong>") govern your access to and
-              use of TheraVoca in your capacity as a Therapist. The Patient-
-              facing{" "}
+              "<strong>your</strong>") for themselves or for the
+              individual they are seeking care for (each, a
+              "<strong>Patient</strong>"). A Searcher and a Patient are
+              often the same person, but a Searcher may also be a
+              parent, partner, or other family member submitting on the
+              Patient's behalf. These Therapist Terms of Use
+              ("<strong>Therapist Terms</strong>") govern your access to
+              and use of TheraVoca in your capacity as a Therapist. The
+              Patient-facing{" "}
               <a href="/terms" className="text-[#2D4A3E] underline">Patient Terms of Use</a>{" "}
-              govern Patients' use of TheraVoca.
+              govern Searchers' and Patients' use of TheraVoca.
             </p>
             <p>
               By signing up, listing your profile, or accepting referrals on
@@ -152,10 +156,14 @@ export default function TherapistTerms() {
               <p className="mt-3">
                 When you receive a referral notification, TheraVoca shares
                 only the minimum information needed to let you decide whether
-                to invite the Patient into your practice. You may decline any
+                to invite the Patient into your practice. Patient information
+                you receive may have been submitted by the Patient directly or
+                by a Searcher acting on the Patient's behalf (for example, a
+                parent submitting on behalf of a teen). You may decline any
                 referral for any reason that complies with applicable law and
                 your professional ethics. If you accept a referral, you
-                contact the Patient directly outside of TheraVoca and from
+                contact the Patient (or the Searcher who submitted on the
+                Patient's behalf) directly outside of TheraVoca and from
                 that point forward operate independently of TheraVoca with
                 respect to that Patient's care.
               </p>
