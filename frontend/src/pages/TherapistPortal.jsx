@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   ShieldOff,
   ClipboardList,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header, Footer } from "@/components/SiteShell";
@@ -606,39 +607,17 @@ export default function TherapistPortal() {
             />
           )}
 
-          {/* Empty state for approved therapists — moved up so referrals
-              area is the first thing the eye lands on after critical
-              alerts are handled. */}
+          {/* Empty state for approved therapists -- state-aware hero
+              that reflects ACTUAL readiness (profile complete + admin-
+              approved + subscription healthy). The old version always
+              said "PROFILE LIVE" even when the therapist hadn't started
+              their trial -- contradicting the trial banner above and
+              misleading the user. */}
           {!isPending && data?.referrals?.length === 0 && (
-            <div className="mt-6 bg-white border border-[#E8E5DF] rounded-3xl p-8 sm:p-10" data-testid="therapist-referrals-empty">
-              <div className="text-center">
-                <Sparkles className="mx-auto text-[#C87965] mb-3" size={28} strokeWidth={1.5} />
-                <h2 className="font-serif-display text-xl text-[#2D4A3E]">You're all set — referrals are on the way</h2>
-                <p className="text-sm text-[#6D6A65] mt-1.5 max-w-lg mx-auto leading-relaxed">
-                  Your profile is live and matched against every new patient request. When a patient
-                  matches your specialties and location (70%+), it shows up here and we email you.
-                </p>
-              </div>
-              <div className="mt-8 grid sm:grid-cols-3 gap-4 text-center">
-                <div className="bg-[#FDFBF7] rounded-xl p-4">
-                  <CheckCircle2 className="mx-auto text-[#4A6B5D] mb-2" size={20} />
-                  <p className="text-xs font-semibold text-[#2B2A29] uppercase tracking-wider">Profile live</p>
-                  <p className="text-xs text-[#6D6A65] mt-1">Patients can find you now</p>
-                </div>
-                <div className="bg-[#FDFBF7] rounded-xl p-4">
-                  <Clock className="mx-auto text-[#C87965] mb-2" size={20} />
-                  <p className="text-xs font-semibold text-[#2B2A29] uppercase tracking-wider">Auto-matching</p>
-                  <p className="text-xs text-[#6D6A65] mt-1">We scan requests for you 24/7</p>
-                </div>
-                <div className="bg-[#FDFBF7] rounded-xl p-4">
-                  <Calendar className="mx-auto text-[#2D4A3E] mb-2" size={20} />
-                  <p className="text-xs font-semibold text-[#2B2A29] uppercase tracking-wider">Stay current</p>
-                  <p className="text-xs text-[#6D6A65] mt-1">
-                    <Link to="/portal/therapist/edit" className="text-[#2D4A3E] underline">Update availability</Link> anytime
-                  </p>
-                </div>
-              </div>
-            </div>
+            <HeroState
+              completeness={therapist?.completeness}
+              sub={sub}
+            />
           )}
 
           {!isPending && data?.referrals?.length > 0 && (() => {
@@ -1397,6 +1376,155 @@ function Stat({ label, value, hue }) {
 
 // ─── Option C — top-of-page KPI strip ────────────────────────────────
 //
+// State-aware "you have no referrals yet" hero. The OLD version always
+// said "PROFILE LIVE" / "Patients can find you now" even when the
+// therapist's subscription was incomplete -- contradicting the
+// trial-not-started banner above and lying to the user. This version
+// picks the right state based on profile completeness + subscription
+// status. State priority: incomplete -> payment-issue -> trial-not-started
+// -> live. (Pending-approval is filtered out by the caller.)
+function HeroState({ completeness, sub }) {
+  const publishable = !!completeness?.publishable;
+  const subStatus = sub?.subscription_status || null;
+  let state;
+  if (!publishable) state = "incomplete";
+  else if (sub && ["past_due", "canceled", "unpaid"].includes(subStatus)) state = "payment_issue";
+  else if (!sub) state = "no_subscription";
+  else state = "live";
+
+  const config = {
+    incomplete: {
+      icon: <FileText className="mx-auto text-[#C87965] mb-3" size={28} strokeWidth={1.5} />,
+      title: "Finish your profile to go live",
+      body: `${(completeness?.required_missing || []).length} required field${(completeness?.required_missing || []).length === 1 ? "" : "s"} missing. Patients can't match with you until your profile is complete.`,
+      cards: [
+        {
+          icon: <AlertTriangle className="mx-auto text-[#8B3220] mb-2" size={20} />,
+          label: "Profile incomplete",
+          tone: "bad",
+          body: `${(completeness?.required_missing || []).length} required field${(completeness?.required_missing || []).length === 1 ? "" : "s"} missing`,
+        },
+        {
+          icon: <Clock className="mx-auto text-[#C8C4BB] mb-2" size={20} />,
+          label: "Auto-matching",
+          tone: "muted",
+          body: "Active once profile is complete",
+        },
+        {
+          icon: <Calendar className="mx-auto text-[#2D4A3E] mb-2" size={20} />,
+          label: "Edit profile",
+          tone: "ok",
+          body: <Link to="/portal/therapist/edit" className="text-[#2D4A3E] underline">Pick up where you left off</Link>,
+        },
+      ],
+    },
+    payment_issue: {
+      icon: <AlertTriangle className="mx-auto text-[#8B3220] mb-3" size={28} strokeWidth={1.5} />,
+      title: "Profile paused — payment needs attention",
+      body: "Update your billing to start receiving referrals again.",
+      cards: [
+        {
+          icon: <AlertTriangle className="mx-auto text-[#8B3220] mb-2" size={20} />,
+          label: "Profile paused",
+          tone: "bad",
+          body: "Billing issue blocking referrals",
+        },
+        {
+          icon: <Clock className="mx-auto text-[#C8C4BB] mb-2" size={20} />,
+          label: "Auto-matching",
+          tone: "muted",
+          body: "Resumes once billing is fixed",
+        },
+        {
+          icon: <Calendar className="mx-auto text-[#2D4A3E] mb-2" size={20} />,
+          label: "Stay current",
+          tone: "ok",
+          body: "Edit profile any time",
+        },
+      ],
+    },
+    no_subscription: {
+      icon: <CreditCard className="mx-auto text-[#C87965] mb-3" size={28} strokeWidth={1.5} />,
+      title: "Almost ready — one step left",
+      body: "Add a payment method to start your 30-day free trial. You won't be charged until the trial ends.",
+      cards: [
+        {
+          icon: <AlertTriangle className="mx-auto text-[#8B3220] mb-2" size={20} />,
+          label: "Profile paused",
+          tone: "bad",
+          body: "Patients can't see you until trial starts",
+        },
+        {
+          icon: <Clock className="mx-auto text-[#C8C4BB] mb-2" size={20} />,
+          label: "Auto-matching",
+          tone: "muted",
+          body: "Active once trial begins",
+        },
+        {
+          icon: <Calendar className="mx-auto text-[#2D4A3E] mb-2" size={20} />,
+          label: "Stay current",
+          tone: "ok",
+          body: "Edit profile any time",
+        },
+      ],
+    },
+    live: {
+      icon: <Sparkles className="mx-auto text-[#C87965] mb-3" size={28} strokeWidth={1.5} />,
+      title: "You're all set — referrals are on the way",
+      body: "Your profile is live and matched against every new patient request. When a patient matches your specialties and location (70%+), it shows up here and we email you.",
+      cards: [
+        {
+          icon: <CheckCircle2 className="mx-auto text-[#4A6B5D] mb-2" size={20} />,
+          label: "Profile live",
+          tone: "ok",
+          body: "Patients can find you now",
+        },
+        {
+          icon: <Clock className="mx-auto text-[#C87965] mb-2" size={20} />,
+          label: "Auto-matching",
+          tone: "ok",
+          body: "We scan requests for you 24/7",
+        },
+        {
+          icon: <Calendar className="mx-auto text-[#2D4A3E] mb-2" size={20} />,
+          label: "Stay current",
+          tone: "ok",
+          body: <><Link to="/portal/therapist/edit" className="text-[#2D4A3E] underline">Update availability</Link> anytime</>,
+        },
+      ],
+    },
+  };
+
+  const c = config[state];
+  const labelToneClass = {
+    ok: "text-[#2B2A29]",
+    muted: "text-[#C8C4BB]",
+    bad: "text-[#8B3220]",
+  };
+  return (
+    <div className="mt-6 bg-white border border-[#E8E5DF] rounded-3xl p-8 sm:p-10"
+         data-testid={`therapist-hero-${state}`}>
+      <div className="text-center">
+        {c.icon}
+        <h2 className="font-serif-display text-xl text-[#2D4A3E]">{c.title}</h2>
+        <p className="text-sm text-[#6D6A65] mt-1.5 max-w-lg mx-auto leading-relaxed">{c.body}</p>
+      </div>
+      <div className="mt-8 grid sm:grid-cols-3 gap-4 text-center">
+        {c.cards.map((card, i) => (
+          <div key={i} className="bg-[#FDFBF7] rounded-xl p-4">
+            {card.icon}
+            <p className={`text-xs font-semibold uppercase tracking-wider ${labelToneClass[card.tone] || labelToneClass.ok}`}>
+              {card.label}
+            </p>
+            <p className="text-xs text-[#6D6A65] mt-1">{card.body}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
 // 4 most-important numbers laid out in equal-width chips above the
 // referrals list. Compact (<60px tall) so it doesn't push the
 // referrals off-screen. Each chip is empty-state safe — falls back to
