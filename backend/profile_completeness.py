@@ -48,13 +48,22 @@ def _has_office_or_telehealth(t: dict) -> bool:
 
 
 def _has_license_document(t: dict) -> bool:
-    """A profile counts as having a license document if EITHER the legacy
-    inline `license_picture` data URL OR the newer `license_document`
-    upload (separate field, populated by the portal-edit uploader) is
-    present. Without one of these the profile cannot legitimately go
-    live -- admins have no document to verify against.
+    """A profile counts as having a license document if EITHER:
+      - `license_picture` is a real upload (a `data:` URL the legacy
+        signup flow stored), OR
+      - `license_document` (the newer dedicated-endpoint upload) carries
+        actual base64 bytes.
+
+    Backfill stores a `https://placehold.co/...` placeholder image on
+    `license_picture` so the patient-facing pages don't render as
+    broken images during testing. Those placeholders MUST NOT count as
+    a real license document -- otherwise backfilled therapists pass
+    the publishable check despite having no admin-verifiable license.
+    Strip-backfill would normally clear them before launch, but until
+    then we filter explicitly here.
     """
-    if t.get("license_picture"):
+    lp = t.get("license_picture") or ""
+    if isinstance(lp, str) and lp.startswith("data:"):
         return True
     doc = t.get("license_document") or {}
     return bool(doc and doc.get("data_base64"))
