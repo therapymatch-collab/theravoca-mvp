@@ -65,10 +65,25 @@ def _inject_email_block_styles(html: str) -> str:
     common block-level elements Quill / hand-written copy produces.
     Tags that already carry a `style=` attribute are left untouched
     to respect author intent.
+
+    Also strips Quill's empty-paragraph artifacts (`<p><br></p>`,
+    `<p></p>`, `<p>&nbsp;</p>`) -- when an author hits Enter twice for
+    "extra spacing", Quill stores the gap as an empty paragraph. With
+    our margin injector, those empty paragraphs balloon into a full
+    14px+line-height gap on top of the existing paragraph margin,
+    creating signature-line spacing surprises. Cleaner to drop them
+    and rely on the consistent 14px paragraph margin instead.
     """
     if not html:
         return html
     import re as _re
+    # Strip empty paragraphs first.
+    html = _re.sub(
+        r"<p(?:\s+[^>]*)?>\s*(?:<br\s*/?>|&nbsp;| )?\s*</p>",
+        "",
+        html,
+        flags=_re.IGNORECASE,
+    )
     rules: dict[str, str] = {
         "p": "margin:0 0 14px 0;",
         "h2": "font-family:Georgia,serif;font-size:20px;color:#2D4A3E;margin:24px 0 8px;line-height:1.3;",

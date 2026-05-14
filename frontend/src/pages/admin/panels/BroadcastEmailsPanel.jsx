@@ -552,15 +552,16 @@ function BuilderView({ client, campaign, onBack }) {
         </div>
 
         {preview && (
-          <div className="border border-dashed border-[#E8E5DF] rounded-xl p-5 bg-[#FDFBF7]">
-            <div className="text-xs text-[#6D6A65] border-b border-dashed border-[#E8E5DF] pb-3 mb-3">
+          <div className="border border-dashed border-[#E8E5DF] rounded-xl p-5 bg-[#FDFBF7] overflow-hidden">
+            <div className="text-xs text-[#6D6A65] border-b border-dashed border-[#E8E5DF] pb-3 mb-3 break-words">
               <strong>Preview · sample recipient 1 of {preview.recipient_count}</strong><br/>
               From: TheraVoca Support &lt;support@theravoca.com&gt;<br/>
               To: {preview.sample_recipient?.email || "—"}<br/>
               Subject: <strong>{preview.subject}</strong>
             </div>
             <div
-              className="bg-white border border-[#E8E5DF] rounded-lg p-4 text-sm leading-relaxed"
+              className="bg-white border border-[#E8E5DF] rounded-lg p-4 text-sm leading-relaxed overflow-x-auto break-words"
+              style={{ wordWrap: "break-word", overflowWrap: "break-word", maxWidth: "100%" }}
               dangerouslySetInnerHTML={{ __html: preview.sample_rendered_body || "<em>(empty body)</em>" }}
             />
           </div>
