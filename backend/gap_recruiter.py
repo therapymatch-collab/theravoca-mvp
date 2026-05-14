@@ -24,7 +24,7 @@ from typing import Any
 from llm_client import ask_claude, ANTHROPIC_API_KEY
 
 from deps import db
-from helpers import _now_iso
+from helpers import _now_iso, extract_outreach_first_name
 
 logger = logging.getLogger("theravoca.gap_recruiter")
 
@@ -320,7 +320,9 @@ def _build_recruit_email(candidate: dict, draft_id: str | None = None) -> tuple[
     from email_service import _wrap, BRAND, _get_app_url
     from email_templates import DEFAULTS, render
 
-    first = (candidate.get("name") or "there").split(" ")[0]
+    # Strict outreach name parser -- avoids "Hi Acme," when the scrape
+    # returned a company name instead of a person. Falls back to "there".
+    first = extract_outreach_first_name(candidate.get("name")) or "there"
     rationale = candidate.get("match_rationale") or "Your specialties align with where we're growing."
     code = (draft_id or uuid.uuid4().hex)[:8].upper()
     signup_url = (

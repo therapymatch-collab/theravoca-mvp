@@ -43,7 +43,7 @@ from typing import Any
 
 from deps import db
 from email_service import _get_app_url, _send, _wrap, BRAND
-from helpers import _now_iso, _safe_summary_for_therapist
+from helpers import _now_iso, _safe_summary_for_therapist, extract_outreach_first_name
 from pt_scraper import scrape_pt_candidates
 from directory_scrapers import scrape_all_backup_sources
 from sms_service import send_therapist_referral_sms
@@ -373,7 +373,11 @@ async def _send_outreach_invite(
     unguessable one-click opt-out URL embedded in every send.
     """
     summary = _safe_summary_for_therapist(request)
-    first = (candidate.get("name") or "there").split(" ")[0]
+    # Use the strict outreach-name parser -- scraped names sometimes
+    # contain company strings ("Acme Therapy LLC"), and "Hi Acme,"
+    # reads broken. Falls back to "there" when the parser can't
+    # confidently extract a person's first name.
+    first = extract_outreach_first_name(candidate.get("name")) or "there"
     rationale = candidate.get("match_rationale") or "Your specialties align with this patient's needs."
     score = candidate.get("estimated_score") or 75
     email = (candidate.get("email") or "").strip()

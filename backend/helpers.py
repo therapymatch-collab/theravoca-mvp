@@ -134,6 +134,122 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# ─── Outreach name parsing ──────────────────────────────────────────────────
+# Cold-outreach scrapers (Psychology Today, Google Maps Places, etc.) return
+# a "name" field that's USUALLY a person ("Dr. Jane Smith, LCSW") but
+# sometimes a business ("Acme Therapy LLC", "Boise Counseling Center").
+# Greeting "Hi Acme," reads broken, so this helper tries hard to detect
+# company names and returns None when it can't be confident the name is
+# a person. Callers should fall back to "Hi there," when None.
+#
+# This is INTENTIONALLY stricter than email_service._first_name (which is
+# used for trusted signup data where the name field is always a person).
+
+_OUTREACH_HONORIFICS = {
+    "dr", "dr.", "doctor", "mr", "mr.", "mister", "ms", "ms.", "miss",
+    "mrs", "mrs.", "prof", "prof.", "professor", "rev", "rev.", "fr", "fr.",
+}
+
+_OUTREACH_CREDENTIALS = {
+    # Common mental-health licensure suffixes -- stripped if they appear
+    # as a trailing "word" after a person's name.
+    "lcsw", "lmft", "lpc", "lcpc", "lpcc", "lmhc", "mft", "msw",
+    "phd", "psyd", "md", "do", "ma", "ms", "edd", "np", "pa", "rn",
+    "mft-a", "acsw", "csw", "lcsw-r", "lcsw-c", "lcsw-bacs",
+    "lp", "lpc-mhsp", "lcdc", "lcdp", "lac", "lpa", "ncc", "ccs",
+    "facog", "facp", "facaai",
+}
+
+# Words that strongly indicate the "name" field is a business, not a person.
+# Conservative on purpose -- when in doubt we'd rather say "Hi there," than
+# "Hi Acme,".
+_OUTREACH_COMPANY_TOKENS = {
+    "therapy", "therapies", "therapeutic", "psychotherapy",
+    "counseling", "counselling", "counselors", "counsellors",
+    "center", "centre", "clinic", "institute", "foundation",
+    "group", "associates", "partners", "services", "solutions",
+    "practice", "practices",
+    "wellness", "health", "behavioral", "psychological",
+    "psychiatric", "mental",
+    "network", "alliance", "collective",
+    # Legal entity suffixes -- almost always indicate a business.
+    "llc", "l.l.c.", "inc", "inc.", "incorporated",
+    "pllc", "p.l.l.c.", "pc", "p.c.", "pa", "p.a.",
+    "llp", "l.l.p.", "corp", "corporation", "co", "co.",
+}
+
+
+def extract_outreach_first_name(raw_name: Optional[str]) -> Optional[str]:
+    """Return a person's first name from a scraped "name" field, or None
+    if the value looks like a business / can't be confidently parsed.
+
+    Examples:
+      "Sarah Smith"               -> "Sarah"
+      "Dr. Sarah Smith"           -> "Sarah"
+      "Sarah Smith, LCSW"         -> "Sarah"
+      "Sarah Smith LCSW"          -> "Sarah"
+      "Dr. Sarah J. Smith, PhD"   -> "Sarah"
+      "Acme Therapy LLC"          -> None
+      "Boise Counseling Center"   -> None
+      "Mental Health Associates"  -> None
+      "Smith Counseling"          -> None  (conservative: company-token)
+      ""                          -> None
+      None                        -> None
+      "Sarah"                     -> "Sarah"
+    """
+    if not raw_name:
+        return None
+    name = raw_name.strip()
+    if not name:
+        return None
+
+    # Strip the credentials clause after the FIRST comma. "Sarah Smith,
+    # LCSW, MFT" -> "Sarah Smith". This handles the most common signup
+    # convention where credentials live after a comma.
+    name = name.split(",")[0].strip()
+    if not name:
+        return None
+
+    # Tokenize. Lowercase copies for matching.
+    raw_tokens = name.split()
+    lower_tokens = [t.lower().rstrip(".,;:") for t in raw_tokens]
+
+    # Strip leading honorifics (one or more). "Dr. Mr. Smith" -> "Smith".
+    while raw_tokens and lower_tokens[0] in _OUTREACH_HONORIFICS:
+        raw_tokens.pop(0)
+        lower_tokens.pop(0)
+    if not raw_tokens:
+        return None
+
+    # Strip trailing credentials. "Sarah Smith LCSW PhD" -> "Sarah Smith".
+    while raw_tokens and lower_tokens[-1] in _OUTREACH_CREDENTIALS:
+        raw_tokens.pop()
+        lower_tokens.pop()
+    if not raw_tokens:
+        return None
+
+    # If ANY remaining token is a company indicator, treat as company.
+    for tok in lower_tokens:
+        if tok in _OUTREACH_COMPANY_TOKENS:
+            return None
+
+    # Take the first remaining token. Strip punctuation that sometimes
+    # rides on initials ("J." -> "J").
+    first = raw_tokens[0].strip(".,;:'\"")
+    if not first:
+        return None
+
+    # Reject single-letter "names" (probably an initial like "J. Smith"
+    # where the J. was meant to be an initial). Conservative: fall back.
+    if len(first) <= 1:
+        return None
+
+    # Title-case for display ("SARAH" -> "Sarah", "sarah" -> "Sarah").
+    # Credentials + company tokens are already filtered above, so
+    # whatever survives is a person's first name.
+    return first[:1].upper() + first[1:].lower() if first.isalpha() else first
+
+
 # -- Background task registry ------------------------------------------------
 # `asyncio.create_task()` only holds a weak reference to the resulting task,
 # so a fire-and-forget task can be garbage-collected mid-execution. We keep a
