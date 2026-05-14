@@ -50,7 +50,12 @@ export default function AdminLogin() {
       // Clear any stale legacy master-password marker before storing the
       // JWT-based session so adminClient picks up the new token.
       clearAdminSession();
-      setAdminTokenSession({ token: res.data.token, email: res.data.email, name: res.data.name });
+      setAdminTokenSession({
+        token: res.data.token,
+        email: res.data.email,
+        name: res.data.name,
+        admin_role: res.data.admin_role,
+      });
       setSession({ token: res.data.token, role: "admin", email: res.data.email });
       navigate("/admin/dashboard");
     } catch (err) {

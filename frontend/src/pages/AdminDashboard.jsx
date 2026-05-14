@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { adminClient } from "@/lib/api";
+import { currentAdminRole } from "@/lib/admin-permissions";
 import useAdminClient, { AdminClientProvider } from "@/lib/useAdminClient";
 import credentialLabel from "@/lib/credentialLabel";
 import { imageToDataUrl } from "@/lib/image";
@@ -1109,6 +1110,7 @@ export default function AdminDashboard() {
               <h1 className="font-serif-display text-4xl text-[#2D4A3E] mt-1">
                 Operations
               </h1>
+              <AdminRoleBadge />
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <button
@@ -3815,6 +3817,32 @@ function SubPill({ sub, active, onClick }) {
     </button>
   );
 }
+
+// Small badge under the "Operations" heading showing the current
+// admin's role (view / edit / admin). Drives confidence that the
+// disabled-button states are correct -- "I see Edit, so I can't
+// touch team management." Master-password sessions are treated as
+// admin (matches the backend's backward-compat path).
+function AdminRoleBadge() {
+  const role = currentAdminRole();
+  if (!role) return null;
+  const cls =
+    role === "admin"
+      ? "bg-[#2D4A3E] text-white"
+      : role === "edit"
+      ? "bg-[#2D4A3E]/12 text-[#2D4A3E]"
+      : "bg-[#F2EFE8] text-[#6D6A65]";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 mt-2 px-2.5 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-semibold ${cls}`}
+      data-testid="admin-role-badge"
+      title={`Your role: ${role}`}
+    >
+      {role}
+    </span>
+  );
+}
+
 
 function Th({ children }) {
   return (
