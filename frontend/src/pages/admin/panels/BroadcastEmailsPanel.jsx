@@ -11,12 +11,13 @@
  * email_service.send_broadcast which uses force=True to bypass the
  * pre-launch safety guard (deliberate -- admin-initiated, audited).
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Loader2, RotateCw, Send, Mail, Eye, Trash2, ArrowLeft, Plus, AlertTriangle,
+  Bold, Italic, Link as LinkIcon, List, Heading2, Heading3, Pilcrow,
 } from "lucide-react";
 import { toast } from "sonner";
-import { sessionClient, getSession } from "@/lib/api";
+import useAdminClient from "@/lib/useAdminClient";
 import { Th } from "./_shared";
 
 const SOURCE_OPTIONS = ["imported_xlsx", "signup", "recruited"];
@@ -25,8 +26,11 @@ const SUBSCRIPTION_STATUS_OPTIONS = [
 ];
 
 export default function BroadcastEmailsPanel({ filter }) {
-  const session = getSession();
-  const client = sessionClient(session?.token);
+  // useAdminClient pulls the right auth (X-Admin-Password header OR
+  // admin Bearer token) from the AdminClientProvider context. Using
+  // sessionClient here would silently 401 -- sessionClient is for
+  // patient/therapist portals.
+  const client = useAdminClient();
   const [view, setView] = useState("list"); // 'list' | 'edit'
   const [editing, setEditing] = useState(null); // campaign object
   const [list, setList] = useState([]);
@@ -535,13 +539,20 @@ function BuilderView({ client, campaign, onBack }) {
               <Eye size={12} /> {livePreviewOpen ? "Hide live preview" : "Show live preview"}
             </button>
           </div>
+          <HtmlEditorToolbar
+            value={draft.body_html}
+            onChange={(v) => set("body_html", v)}
+            disabled={isSent}
+          />
           <div className={livePreviewOpen ? "grid grid-cols-2 gap-3" : ""}>
             <textarea
+              ref={undefined}
+              id="broadcast-body-textarea"
               rows={14}
               value={draft.body_html}
               onChange={(e) => set("body_html", e.target.value)}
               disabled={isSent}
-              className="w-full px-3 py-2 text-sm rounded-xl bg-[#FDFBF7] border border-[#E8E5DF] font-mono text-xs leading-relaxed"
+              className="w-full px-3 py-2 text-sm rounded-b-xl rounded-t-none bg-[#FDFBF7] border border-t-0 border-[#E8E5DF] font-mono text-xs leading-relaxed"
               data-testid="broadcast-body"
             />
             {livePreviewOpen && (
@@ -653,6 +664,104 @@ function BuilderView({ client, campaign, onBack }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function HtmlEditorToolbar({ value, onChange, disabled }) {
+  // Lightweight toolbar that wraps the current textarea selection in
+  // common HTML tags. Plays well with the existing plain textarea --
+  // no rich-editor dependency, no contenteditable shenanigans. Each
+  // button operates on document.activeElement when it's the body
+  // textarea so the user's cursor / selection survives the click.
+  const getTextarea = () =>
+    document.getElementById("broadcast-body-textarea");
+
+  const wrap = (openTag, closeTag, placeholder = "") => {
+    const ta = getTextarea();
+    if (!ta || disabled) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const before = value.slice(0, start);
+    const selected = value.slice(start, end) || placeholder;
+    const after = value.slice(end);
+    const next = before + openTag + selected + closeTag + after;
+    onChange(next);
+    // Restore cursor inside the new tag
+    setTimeout(() => {
+      ta.focus();
+      const cursorAt = start + openTag.length + selected.length;
+      ta.setSelectionRange(cursorAt, cursorAt);
+    }, 0);
+  };
+
+  const insert = (snippet) => {
+    const ta = getTextarea();
+    if (!ta || disabled) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const before = value.slice(0, start);
+    const after = value.slice(end);
+    onChange(before + snippet + after);
+    setTimeout(() => {
+      ta.focus();
+      const cursorAt = start + snippet.length;
+      ta.setSelectionRange(cursorAt, cursorAt);
+    }, 0);
+  };
+
+  const insertLink = () => {
+    if (disabled) return;
+    const url = window.prompt("Link URL (https://...)");
+    if (!url) return;
+    wrap(`<a href="${url}">`, "</a>", "link text");
+  };
+
+  const Btn = ({ onClick, title, children, testid }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="px-2.5 py-1.5 hover:bg-[#FDFBF7] text-[#2B2A29] disabled:opacity-40 flex items-center gap-1 text-xs"
+      data-testid={testid}
+    >
+      {children}
+    </button>
+  );
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-0 bg-white border border-[#E8E5DF] rounded-t-xl divide-x divide-[#E8E5DF]"
+      data-testid="broadcast-body-toolbar"
+    >
+      <Btn onClick={() => wrap("<strong>", "</strong>", "bold")} title="Bold" testid="tb-bold"><Bold size={13} /></Btn>
+      <Btn onClick={() => wrap("<em>", "</em>", "italic")} title="Italic" testid="tb-italic"><Italic size={13} /></Btn>
+      <Btn onClick={() => wrap(`<h2 style="font-family:Georgia,serif;font-size:22px;color:#2D4A3E;margin:24px 0 8px;">`, "</h2>", "Heading")} title="Heading 2" testid="tb-h2"><Heading2 size={13} /></Btn>
+      <Btn onClick={() => wrap(`<h3 style="font-family:Georgia,serif;font-size:18px;color:#2D4A3E;margin:20px 0 6px;">`, "</h3>", "Subheading")} title="Heading 3" testid="tb-h3"><Heading3 size={13} /></Btn>
+      <Btn onClick={() => wrap(`<p style="font-size:15px;line-height:1.7;">`, "</p>", "paragraph")} title="Paragraph" testid="tb-p"><Pilcrow size={13} /></Btn>
+      <Btn onClick={() => insert(`<ul style="font-size:15px;line-height:1.7;padding-left:18px;">\n  <li>item</li>\n  <li>item</li>\n</ul>\n`)} title="List" testid="tb-ul"><List size={13} /></Btn>
+      <Btn onClick={insertLink} title="Link" testid="tb-link"><LinkIcon size={13} /></Btn>
+      <Btn
+        onClick={() => insert(`<a href="https://theravoca-production.onrender.com/therapists/join" style="display:inline-block;background:#2D4A3E;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:999px;font-weight:600;">Button text</a>`)}
+        title="Insert TheraVoca-styled button"
+        testid="tb-btn"
+      >
+        <span className="text-[10px] uppercase tracking-wider font-bold">Btn</span>
+      </Btn>
+      <div className="flex items-center pl-2 pr-1 text-[10px] uppercase tracking-wider text-[#6D6A65] font-semibold ml-auto border-l-0">
+        Merge:
+      </div>
+      {["first_name", "name", "email", "credential_type"].map((f) => (
+        <Btn
+          key={f}
+          onClick={() => insert(`{{${f}}}`)}
+          title={`Insert {{${f}}} merge field`}
+          testid={`tb-merge-${f}`}
+        >
+          <code className="text-[10px]">{`{{${f}}}`}</code>
+        </Btn>
+      ))}
     </div>
   );
 }

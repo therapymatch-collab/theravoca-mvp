@@ -2,13 +2,14 @@ import { useState } from "react";
 import { Loader2, RotateCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Th } from "./_shared";
-import { sessionClient, getSession } from "@/lib/api";
+import useAdminClient from "@/lib/useAdminClient";
 
 export default function OptOutsPanel({ data, loading, onReload, filter }) {
   const rows = data?.opt_outs || [];
   const [removingKey, setRemovingKey] = useState(null);
-  const session = getSession();
-  const client = sessionClient(session?.token);
+  // useAdminClient gives us X-Admin-Password or admin Bearer auth;
+  // sessionClient here would 401 (it's the patient/therapist auth).
+  const client = useAdminClient();
 
   const q = (filter || "").trim().toLowerCase();
   const visible = q
