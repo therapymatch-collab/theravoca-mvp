@@ -480,7 +480,7 @@ export default function TherapistApply() {
               ) : (
                 <div className="flex items-center gap-3 flex-wrap">
                   <button
-                    className="text-sm text-[#6D6A65] hover:text-[#D45D5D] inline-flex items-center gap-1.5 transition"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-full border border-[#E8C4BB] text-[#8B3220] bg-[#FDF1EF] hover:bg-[#FBE6E1] hover:border-[#D45D5D] transition"
                     onClick={() => setDeclineOpen(true)}
                     data-testid="not-interested-btn"
                   >

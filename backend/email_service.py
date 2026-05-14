@@ -262,6 +262,13 @@ async def send_therapist_notification(
     from routes.therapists import generate_signed_url
     app_url = _get_app_url()
     apply_url = generate_signed_url(app_url, request_id, therapist_id, "apply")
+    # decline_url retained in vars_ so admins customizing the template
+    # can still reference {decline_url} if they want to add the decline
+    # CTA back. The default template no longer includes a "Not interested"
+    # button in the email body because the therapist has zero referral
+    # detail at email time -- declining without context is a bad UX.
+    # The decline action lives on the apply page itself where the
+    # therapist has full info.
     decline_url = generate_signed_url(app_url, request_id, therapist_id, "decline")
     portal_url = f"{_get_app_url()}/portal/therapist"
     bulk_cta = (
@@ -285,11 +292,8 @@ async def send_therapist_notification(
     <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">{intro}</p>
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:28px 0;">
       <tr>
-        <td style="padding-right:10px;">
-          <a href="{apply_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">{cta_label}</a>
-        </td>
         <td>
-          <a href="{decline_url}" style="display:inline-block;background:#ffffff;color:{BRAND['muted']};text-decoration:none;padding:13px 22px;border:1px solid {BRAND['border']};border-radius:999px;font-weight:500;">Not interested</a>
+          <a href="{apply_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">{cta_label}</a>
         </td>
       </tr>
     </table>

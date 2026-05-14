@@ -338,8 +338,12 @@ export default function TherapistSignup() {
     if (!trimmed.includes(",")) return false;
     const afterComma = trimmed.split(",").slice(1).join(",").trim().toUpperCase();
     if (!afterComma) return false;
-    // Check if any known credential appears in the text after the comma
-    return KNOWN_CREDENTIALS.some((c) => afterComma.includes(c));
+    // Both sides uppercased so mixed-case entries in KNOWN_CREDENTIALS
+    // ("PhD", "PsyD") match against the upper-cased input. Without the
+    // .toUpperCase() on the credential, "PHD".includes("PhD") is false
+    // and any therapist with PhD / PsyD in their name was blocked at
+    // step 1 of signup.
+    return KNOWN_CREDENTIALS.some((c) => afterComma.includes(c.toUpperCase()));
   };
 
   // Per-step validation — mirrors the required-field asterisks. Each step's
