@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, Play, Trash2, Mail, RotateCw, MessageSquare, Eraser, Sparkles, MailCheck } from "lucide-react";
 import { toast } from "sonner";
+import PermissionGate from "@/components/PermissionGate";
 
 // Test Actions panel -- the "Testing > Test actions" sub-tab from the
 // admin reorg mockup. Cards delegate to handlers passed in from
@@ -363,6 +364,7 @@ export default function TestActionsPanel({
           onClick: onStripFlags,
           disabled: stripRunning,
         }}
+        action="go_live.toggle"
         testid="card-strip-flags"
       />
 
@@ -376,6 +378,7 @@ export default function TestActionsPanel({
           onClick: stripBackfill,
           danger: true,
         }}
+        action="go_live.strip_emails"
         danger
         testid="card-strip-backfill"
       />
@@ -393,13 +396,31 @@ export default function TestActionsPanel({
         title="Send a test SMS"
         description="Send a single SMS to any number through the configured Twilio sender to verify delivery + check Twilio status codes."
         button={{ label: "Send test SMS", icon: <MessageSquare size={14} />, onClick: sendTestSms }}
+        action="test.send_sms"
         testid="card-test-sms"
       />
     </div>
   );
 }
 
-function ActionCard({ kicker, title, description, button, danger, testid }) {
+function ActionCard({ kicker, title, description, button, danger, testid, action }) {
+  // `action` (optional) is a permission-map key. When the current admin
+  // can't do it, the button renders in a disabled stub via PermissionGate.
+  const buttonNode = (
+    <button
+      type="button"
+      onClick={button.onClick}
+      disabled={button.disabled}
+      className={`mt-3 inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition disabled:opacity-60 ${
+        button.danger
+          ? "border border-[#D45D5D] text-[#D45D5D] hover:bg-[#FDF1EF]"
+          : "bg-[#2D4A3E] text-white hover:bg-[#3A5E50]"
+      }`}
+    >
+      {button.icon}
+      {button.label}
+    </button>
+  );
   return (
     <div
       className={`bg-white rounded-xl p-5 border ${danger ? "border-[#F4C7BE]" : "border-[#E8E5DF]"}`}
@@ -412,19 +433,7 @@ function ActionCard({ kicker, title, description, button, danger, testid }) {
         {title}
       </div>
       <p className="text-xs text-[#6D6A65] mt-1.5 leading-relaxed">{description}</p>
-      <button
-        type="button"
-        onClick={button.onClick}
-        disabled={button.disabled}
-        className={`mt-3 inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition disabled:opacity-60 ${
-          button.danger
-            ? "border border-[#D45D5D] text-[#D45D5D] hover:bg-[#FDF1EF]"
-            : "bg-[#2D4A3E] text-white hover:bg-[#3A5E50]"
-        }`}
-      >
-        {button.icon}
-        {button.label}
-      </button>
+      {action ? <PermissionGate action={action}>{buttonNode}</PermissionGate> : buttonNode}
     </div>
   );
 }

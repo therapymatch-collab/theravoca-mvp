@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Trash2 } from "lucide-react";
+import PermissionGate from "@/components/PermissionGate";
 
 // "Pending therapists" tab — list of signups awaiting approval. The
 // PendingSignupRow component still lives in AdminDashboard.jsx (it's
@@ -68,20 +69,22 @@ export default function PendingTherapistsPanel({
               Auto-decline sends each a polite rejection email.
             </div>
           </div>
-          <button
-            type="button"
-            onClick={autoDecline}
-            disabled={running}
-            className="bg-[#D45D5D] hover:bg-[#B84848] text-white text-sm rounded-full px-4 py-2 disabled:opacity-50 inline-flex items-center gap-1.5"
-            data-testid="auto-decline-duplicates-btn"
-          >
-            {running ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <Trash2 size={14} />
-            )}
-            Auto-decline {dupCount}
-          </button>
+          <PermissionGate action="therapist.reject">
+            <button
+              type="button"
+              onClick={autoDecline}
+              disabled={running}
+              className="bg-[#D45D5D] hover:bg-[#B84848] text-white text-sm rounded-full px-4 py-2 disabled:opacity-50 inline-flex items-center gap-1.5"
+              data-testid="auto-decline-duplicates-btn"
+            >
+              {running ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Trash2 size={14} />
+              )}
+              Auto-decline {dupCount}
+            </button>
+          </PermissionGate>
         </div>
       )}
 

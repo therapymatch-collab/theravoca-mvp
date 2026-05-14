@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Send } from "lucide-react";
+import PermissionGate from "@/components/PermissionGate";
 
 export default function ProfileCompletionPanel({ data, client, onReload, filter }) {
   const [busy, setBusy] = useState(false);
@@ -116,15 +117,17 @@ export default function ProfileCompletionPanel({ data, client, onReload, filter 
           >
             Dry run (preview recipients)
           </button>
-          <button
-            type="button"
-            onClick={() => runCampaign({ dry_run: false })}
-            disabled={busy || !data}
-            className="tv-btn-primary !py-2 !px-4 text-sm disabled:opacity-50"
-            data-testid="claim-send-all"
-          >
-            {busy ? "Sending..." : "Send claim emails"}
-          </button>
+          <PermissionGate action="claim_campaign.send">
+            <button
+              type="button"
+              onClick={() => runCampaign({ dry_run: false })}
+              disabled={busy || !data}
+              className="tv-btn-primary !py-2 !px-4 text-sm disabled:opacity-50"
+              data-testid="claim-send-all"
+            >
+              {busy ? "Sending..." : "Send claim emails"}
+            </button>
+          </PermissionGate>
           <label className="text-xs text-[#6D6A65] inline-flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
