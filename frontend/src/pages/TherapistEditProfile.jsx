@@ -196,6 +196,15 @@ export default function TherapistEditProfile() {
     );
   }
 
+  // `miss` = Set of required-field keys currently missing per backend.
+  // `req(key)` returns the props to spread onto a Field so it can show
+  // the asterisk + red-tinged "Required to go live" pill.
+  const miss = missingKeySet(profile.completeness);
+  const req = (key) => ({
+    required: REQUIRED_KEYS.has(key),
+    missing: miss.has(key),
+  });
+
   return (
     <div className="min-h-screen bg-[#FDFBF7]">
       <Header />
@@ -229,15 +238,17 @@ export default function TherapistEditProfile() {
           </div>
         )}
 
+        <GoLiveBanner completeness={profile.completeness} />
+
         {/* 1. About you */}
         <Section title="About you">
-          <Field label="Profile photo">
+          <Field label="Profile photo" {...req("profile_picture")}>
             <PhotoUploader
               value={draft.profile_picture}
               onChange={(v) => set("profile_picture", v)}
             />
           </Field>
-          <Field label="Bio (patients read this)">
+          <Field label="Bio (patients read this)" {...req("bio")}>
             <Textarea
               value={draft.bio}
               onChange={(e) => set("bio", e.target.value)}
@@ -268,7 +279,7 @@ export default function TherapistEditProfile() {
             review.
           </p>
           <div className="grid sm:grid-cols-2 gap-4">
-            <Field label="License number">
+            <Field label="License number" {...req("license_number")}>
               <Input
                 value={draft.license_number || ""}
                 onChange={(e) => set("license_number", e.target.value)}
@@ -276,7 +287,7 @@ export default function TherapistEditProfile() {
                 data-testid="input-license-number"
               />
             </Field>
-            <Field label="License expiration date">
+            <Field label="License expiration date" {...req("license_expires_at")}>
               <Input
                 type="date"
                 value={(draft.license_expires_at || "").slice(0, 10)}
@@ -300,7 +311,7 @@ export default function TherapistEditProfile() {
         {/* 3. Session fees */}
         <Section title="Session fees">
           <div className="grid sm:grid-cols-2 gap-4">
-            <Field label="Cash / out-of-pocket rate (USD)">
+            <Field label="Cash / out-of-pocket rate (USD)" {...req("cash_rate")}>
               <Input
                 type="number"
                 value={draft.cash_rate}
@@ -450,7 +461,7 @@ export default function TherapistEditProfile() {
               testidPrefix="avail"
             />
           </Field>
-          <Field label="Private alert phone (TheraVoca SMS referrals — not public)">
+          <Field label="Private alert phone (TheraVoca SMS referrals — not public)" {...req("phone")}>
             <Input
               value={draft.phone_alert}
               onChange={(e) => set("phone_alert", e.target.value)}
@@ -593,6 +604,74 @@ export default function TherapistEditProfile() {
 // source of truth with the signup form. The legacy arrow-based
 // `DeepMatchRankList` was replaced with the shared `DraggableRankList`.
 
+function GoLiveBanner({ completeness }) {
+  if (!completeness) return null;
+  const live = !!completeness.publishable;
+  const missing = completeness.required_missing || [];
+  if (live) {
+    return (
+      <div
+        className="mt-6 bg-[#F2F7F1] border border-[#D2E2D0] rounded-xl px-4 py-3 flex items-center gap-3"
+        data-testid="go-live-banner-ok"
+      >
+        <CheckCircle2 className="text-[#3F6F4A] shrink-0" size={18} />
+        <div className="text-sm text-[#2D4A3E] flex-1">
+          <strong>Your profile is live.</strong> Patients can match with you.
+          Keep editing &mdash; changes save instantly.
+        </div>
+        <span className="text-[11px] uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#3F6F4A] text-white font-semibold">
+          Live
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div
+      className="mt-6 bg-[#FDF1EF] border border-[#E8C4BB] rounded-xl px-4 py-3 flex items-start gap-3"
+      data-testid="go-live-banner-missing"
+    >
+      <AlertTriangle className="text-[#8B3220] mt-0.5 shrink-0" size={18} />
+      <div className="text-sm text-[#5C2620] flex-1 leading-relaxed">
+        <strong>{missing.length} required field{missing.length === 1 ? "" : "s"} missing</strong>
+        {" "}before your profile can go live. Look for the
+        <span className="text-[#D45D5D] font-bold mx-1">*</span>
+        markers below:
+        <span className="ml-1">
+          {missing.slice(0, 4).map((m, i) => (
+            <span key={m.key}>
+              <strong>{m.label}</strong>
+              {i < Math.min(missing.length, 4) - 1 ? ", " : ""}
+            </span>
+          ))}
+          {missing.length > 4 && ` + ${missing.length - 4} more`}
+        </span>
+        .
+      </div>
+      <span className="text-[11px] uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#8B3220] text-white font-semibold shrink-0">
+        Not live
+      </span>
+    </div>
+  );
+}
+
+// Returns a Set of required-field keys that are currently missing.
+// Drives the per-Field red-asterisk indicator.
+function missingKeySet(completeness) {
+  if (!completeness) return new Set();
+  return new Set((completeness.required_missing || []).map((m) => m.key));
+}
+
+// Mapping of REQUIRED keys (from backend profile_completeness.py) to a
+// list of form-level field labels they correspond to. Lets us pass
+// `required={miss.has(key)}` on each Field below without sprinkling
+// the full backend key list across the JSX.
+const REQUIRED_KEYS = new Set([
+  "name", "email", "phone", "license_number", "license_expires_at",
+  "bio", "profile_picture", "primary_specialties", "age_groups",
+  "client_types", "modality_offering", "cash_rate", "office_or_telehealth",
+]);
+
+
 function Section({ title, children }) {
   return (
     <section className="mt-10 bg-white border border-[#E8E5DF] rounded-2xl p-6">
@@ -602,10 +681,28 @@ function Section({ title, children }) {
   );
 }
 
-function Field({ label, children }) {
+function Field({ label, required = false, missing = false, children }) {
+  // `required` -- this field counts toward go-live readiness
+  // `missing`  -- required AND currently empty/invalid (drives the red dot)
   return (
     <label className="block">
-      <div className="text-sm font-medium text-[#2B2A29] mb-1.5">{label}</div>
+      <div className="text-sm font-medium text-[#2B2A29] mb-1.5 flex items-center gap-1.5 flex-wrap">
+        <span>{label}</span>
+        {required && (
+          <span
+            className={`text-base font-bold ${missing ? "text-[#D45D5D]" : "text-[#9AB6A4]"}`}
+            title={missing ? "Required to go live" : "Required (filled)"}
+            aria-label={missing ? "Required, missing" : "Required"}
+          >
+            *
+          </span>
+        )}
+        {missing && (
+          <span className="text-[10px] uppercase tracking-wider text-[#8B3220] bg-[#FBE8E2] px-1.5 py-0.5 rounded-full font-semibold">
+            Required to go live
+          </span>
+        )}
+      </div>
       {children}
     </label>
   );

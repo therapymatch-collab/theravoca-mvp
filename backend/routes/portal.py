@@ -381,7 +381,10 @@ async def portal_therapist_profile(
     """Return the therapist's own profile for the self-edit page.
 
     Strips fields the therapist shouldn't see/own (e.g., internal scoring
-    caches) but keeps everything they're allowed to edit."""
+    caches) but keeps everything they're allowed to edit. Adds a
+    `completeness` block driven by profile_completeness.evaluate()
+    so the edit form can render required-field indicators (red asterisks
+    + go-live banner) without re-implementing the rules client-side."""
     t = await db.therapists.find_one(
         {"email": {"$regex": f"^{re.escape(session['email'])}$", "$options": "i"}},
         {"_id": 0, "password_hash": 0, "password_set_at": 0,
@@ -389,6 +392,10 @@ async def portal_therapist_profile(
     )
     if not t:
         raise HTTPException(404, "Therapist profile not found")
+    # Inline the completeness check so the edit form can render
+    # required-field indicators. Same evaluator the admin dashboard
+    # + claim-profile email use, so the truth source is shared.
+    t["completeness"] = _evaluate_profile_inline(t)
     return t
 
 
