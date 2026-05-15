@@ -443,11 +443,18 @@ def backfill_therapist(t: dict[str, Any], idx: int) -> dict[str, Any]:
     existing_lp = t.get("license_picture")
     has_lp = isinstance(existing_lp, str) and existing_lp.strip()
     if not has_lp:
-        cred = (
-            set_fields.get("credential_type") or t.get("credential_type") or "License"
-        ).replace(" ", "+")
+        # 1x1 transparent PNG encoded as a data URL. Has to be a `data:`
+        # URL (not an https:// placeholder) because profile_completeness
+        # ._has_license_document strict-rejects placeholder URLs to
+        # prevent backfilled therapists from passing the publishable
+        # check with no real license. A 1x1 PNG passes the format check
+        # and is small enough that admins glancing at the doc viewer
+        # immediately see "this is fake" -- intentional.
+        # Strip-backfill clears this field via the audit's fields_added.
         set_fields["license_picture"] = (
-            f"https://placehold.co/600x800/EEE5DF/2D4A3E/png?text=Sample+{cred}+License+Doc"
+            "data:image/png;base64,"
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg"
+            "YGD4DwABBAEAcCBlCwAAAABJRU5ErkJggg=="
         )
 
     # Notification prefs default true

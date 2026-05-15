@@ -1649,7 +1649,7 @@ async def admin_strip_backfill(_: bool = Depends(require_admin)):
         original_email = (audit.get("original_email") or "").strip()
         fields_added = audit.get("fields_added") or []
         # If we have nothing real to fall back to (the original email was
-        # blank or already a therapymatch+ placeholder), DO NOT strip  -- 
+        # blank or already a therapymatch+ placeholder), DO NOT strip  --
         # we'd leave the doc with no email at all. Flag for manual review.
         is_placeholder = (
             not original_email
@@ -1662,7 +1662,20 @@ async def admin_strip_backfill(_: bool = Depends(require_admin)):
         # Always remove the audit record itself once we restore.
         unset["_backfill_audit"] = ""
         update_doc: dict[str, Any] = {
-            "$set": {"email": original_email, "updated_at": _now_iso()},
+            "$set": {
+                "email": original_email,
+                # Force re-approval gate. Once we strip the fake bio /
+                # specialties / license / etc., the therapist's profile
+                # is bare-bones and they MUST NOT appear in patient
+                # matches until they've logged in, filled in real data,
+                # and an admin has reviewed. Matching pool query in
+                # helpers.py excludes pending_approval=True, so this
+                # is the right gate.
+                "pending_approval": True,
+                "pending_approval_at": _now_iso(),
+                "pending_approval_reason": "post_strip_backfill",
+                "updated_at": _now_iso(),
+            },
             "$unset": unset,
         }
         await db.therapists.update_one({"id": t["id"]}, update_doc)
@@ -1675,7 +1688,9 @@ async def admin_strip_backfill(_: bool = Depends(require_admin)):
         "note": (
             "Therapists whose pre-backfill email was missing or was "
             "already a therapymatch+ placeholder were skipped. Review "
-            "those manually before going live."
+            "those manually before going live. All restored therapists "
+            "were set to pending_approval=True so they don't appear in "
+            "matches until they update their profile and admin approves."
         ),
     }
 

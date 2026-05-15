@@ -204,6 +204,32 @@ async def lifespan(_app: FastAPI):
             {"key": "new_referral_inquiry", _field: _val},
             {"$unset": {_field: ""}},
         )
+    # One-time migration: convert legacy placehold.co license_picture
+    # placeholders to the 1x1 data:image/png URL the new backfill writes.
+    # Necessary because profile_completeness._has_license_document now
+    # rejects https:// placeholder URLs as a real license, which means
+    # every existing backfilled therapist (who has the old placehold.co
+    # URL) currently fails the publishable check. The new data URL
+    # passes the strict check while remaining obviously fake to admin
+    # eyes. Strip-backfill still clears it as part of fields_added.
+    _new_license_data_url = (
+        "data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg"
+        "YGD4DwABBAEAcCBlCwAAAABJRU5ErkJggg=="
+    )
+    _legacy_license_res = await db.therapists.update_many(
+        {
+            "license_picture": {"$regex": r"^https?://placehold\.co/", "$options": "i"},
+            # Belt + suspenders: only touch backfilled therapists.
+            "_backfill_audit": {"$exists": True},
+        },
+        {"$set": {"license_picture": _new_license_data_url}},
+    )
+    if _legacy_license_res.modified_count:
+        logger.info(
+            "Migrated %d backfilled therapist(s) to data: license_picture",
+            _legacy_license_res.modified_count,
+        )
     # Reset the availability-prompt cron to Mondays only. Josh asked
     # 2026-05-14 to drop the Friday cadence -- the code default in
     # deps.py is already Mon (0) but a DB override or Render env var
