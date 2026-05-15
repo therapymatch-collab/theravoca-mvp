@@ -259,27 +259,34 @@ function BuilderView({ client, campaign, onBack }) {
     recipient_ids: draft.mode === "pick" ? (draft.recipient_ids || []) : null,
   });
 
-  const saveDraft = async () => {
+  // saveDraft RETURNS the campaign id (creating-or-updating, idempotent
+  // within a single call). Callers MUST use the returned id rather than
+  // reading the campaignId state, because setCampaignId is async --
+  // reading state right after setCampaignId still sees the old (null)
+  // value, which previously caused a duplicate-create on the very next
+  // line ("getOrCreateId" would fire and create a 2nd campaign).
+  const saveDraft = async ({ silent = false } = {}) => {
     setSaving(true);
     try {
       if (campaignId) {
         await client.put(`/admin/email-campaigns/${campaignId}`, buildPayload());
-        toast.success("Saved");
-      } else {
-        const r = await client.post("/admin/email-campaigns", buildPayload());
-        setCampaignId(r.data.id);
-        toast.success("Draft created");
+        if (!silent) toast.success("Saved");
+        return campaignId;
       }
+      const r = await client.post("/admin/email-campaigns", buildPayload());
+      setCampaignId(r.data.id);
+      if (!silent) toast.success("Draft created");
+      return r.data.id;
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Save failed");
+      return null;
     } finally {
       setSaving(false);
     }
   };
 
   const doPreview = async () => {
-    await saveDraft();
-    const id = campaignId || (await getOrCreateId());
+    const id = await saveDraft({ silent: true });
     if (!id) return;
     try {
       const r = await client.post(`/admin/email-campaigns/${id}/preview`, {});
@@ -289,20 +296,12 @@ function BuilderView({ client, campaign, onBack }) {
     }
   };
 
-  const getOrCreateId = async () => {
-    if (campaignId) return campaignId;
-    const r = await client.post("/admin/email-campaigns", buildPayload());
-    setCampaignId(r.data.id);
-    return r.data.id;
-  };
-
   const sendTest = async () => {
     if (!testTo || !testTo.includes("@")) {
       toast.error("Enter a valid test email address");
       return;
     }
-    await saveDraft();
-    const id = campaignId || (await getOrCreateId());
+    const id = await saveDraft({ silent: true });
     if (!id) return;
     setSending(true);
     try {
@@ -319,8 +318,7 @@ function BuilderView({ client, campaign, onBack }) {
   };
 
   const sendLive = async () => {
-    await saveDraft();
-    const id = campaignId || (await getOrCreateId());
+    const id = await saveDraft({ silent: true });
     if (!id) return;
     const ok = window.confirm(
       `Send this campaign to all resolved recipients?\n\nThis cannot be undone. Recipients already in email_sends will be skipped.`,
