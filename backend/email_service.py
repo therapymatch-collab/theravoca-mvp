@@ -77,13 +77,12 @@ def _inject_email_block_styles(html: str) -> str:
     if not html:
         return html
     import re as _re
-    # Strip empty paragraphs first.
-    html = _re.sub(
-        r"<p(?:\s+[^>]*)?>\s*(?:<br\s*/?>|&nbsp;| )?\s*</p>",
-        "",
-        html,
-        flags=_re.IGNORECASE,
-    )
+    # NOTE: do NOT strip empty <p><br></p> tags. Quill writes those
+    # when the user hits Enter twice -- a deliberate visual gap
+    # between sections. Stripping them would make blank-line spacing
+    # impossible in the editor. The signature-collapse walk below
+    # SKIPS empty paragraphs without breaking, so they don't trip up
+    # signature detection while still rendering as visible spacing.
     # Collapse trailing short <p> tags into a single <p> with <br>
     # separators -- the email-signature pattern. Walk backwards from
     # the end of the body, collecting paragraphs that look like
