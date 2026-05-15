@@ -266,8 +266,9 @@ export default function TherapistEditProfile() {
         <p className="text-[#6D6A65] mt-2 text-pretty max-w-xl">
           Keep your directory listing fresh so patients see what they need to
           choose you. Changes to <strong>fees, availability, office details,
-          and bio</strong> go live instantly. Changes to
-          <strong> specialties or license info</strong> require a quick admin
+          insurance, languages, modalities, and bio</strong> go live instantly.
+          Changes to your <strong>name, credential, gender, years of
+          experience, specialties, or license</strong> require a quick admin
           re-review before they're shown to patients.
         </p>
 
