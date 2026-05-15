@@ -16,6 +16,7 @@ import { Header, Footer } from "@/components/SiteShell";
 import SetPasswordPrompt from "@/components/SetPasswordPrompt";
 import DeleteAccountPanel from "@/components/DeleteAccountPanel";
 import PauseAccountPanel from "@/components/PauseAccountPanel";
+import DataExportPanel from "@/components/DataExportPanel";
 import useSiteCopy from "@/lib/useSiteCopy";
 import { sessionClient, getSession, clearSession } from "@/lib/api";
 
@@ -188,15 +189,18 @@ export default function PatientPortal() {
             </div>
           )}
 
-          {/* Pause / Resume sits above delete -- the reversible
-              option goes first so it's more prominent than the
-              destructive one. */}
+          {/* Account-lifecycle stack: Pause -> Export -> Delete
+              (reversible, read-only, terminal). Mirrors the
+              therapist /security placement. */}
           {requests !== null && session?.email && (
-            <PauseAccountPanel
-              role="patient"
-              pausedAt={pausedAt}
-              onChange={refresh}
-            />
+            <>
+              <PauseAccountPanel
+                role="patient"
+                pausedAt={pausedAt}
+                onChange={refresh}
+              />
+              <DataExportPanel role="patient" />
+            </>
           )}
 
           {/* Danger zone -- account deletion. Mirrors the therapist

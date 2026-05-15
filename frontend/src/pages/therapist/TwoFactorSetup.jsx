@@ -9,6 +9,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { Header, Footer } from "@/components/SiteShell";
 import DeleteAccountPanel from "@/components/DeleteAccountPanel";
 import PauseAccountPanel from "@/components/PauseAccountPanel";
+import DataExportPanel from "@/components/DataExportPanel";
 import { sessionClient, getSession } from "@/lib/api";
 
 /**
@@ -129,14 +130,17 @@ export default function TwoFactorSetup() {
             />
           )}
 
-          {/* Pause/resume sits ABOVE delete in the account-lifecycle
-              stack -- the less destructive option should be the more
-              prominent one. */}
+          {/* Account-lifecycle stack, least to most destructive:
+              Pause (reversible) -> Export (read-only) -> Delete
+              (terminal). Order reflects how users should think
+              about leaving: try pausing first, take your data,
+              then delete only if you're sure. */}
           <PauseAccountPanel
             role="therapist"
             pausedAt={pausedAt}
             onChange={refreshPauseState}
           />
+          <DataExportPanel role="therapist" />
 
           {/* Danger zone -- account deletion. Lives at the bottom of
               the security page so it's discoverable without dominating

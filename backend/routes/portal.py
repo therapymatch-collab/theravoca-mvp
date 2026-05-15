@@ -9,7 +9,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import bcrypt
+import json
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response
 
 from deps import (
     db, logger, MAGIC_CODE_MAX_PER_HOUR, MAGIC_CODE_TTL_MINUTES,
@@ -1345,6 +1347,161 @@ async def patient_resume(
         user_agent=request.headers.get("user-agent", ""),
     )
     return {"resumed": True}
+
+
+# ─── Self-serve data export ──────────────────────────────────────────────────
+#
+# Both roles can download a JSON snapshot of their account data:
+# profile + activity history + audit-relevant breadcrumbs. Sensitive
+# auth artifacts (password_hash, totp_secret, totp_recovery_hashes,
+# magic codes) are stripped before the export hits the wire.
+#
+# Returns application/json with Content-Disposition: attachment so
+# the browser triggers a download. The download link itself is
+# session-authenticated -- only the account owner can pull their
+# own data.
+
+_THERAPIST_EXPORT_STRIP = {
+    "_id", "password_hash", "password_set_at", "totp_secret",
+    "totp_recovery_hashes", "t5_embedding", "t6b_embedding",
+    "license_document",  # base64 blob -- huge, and patient never
+                         # uploaded it; the therapist already has
+                         # the original.
+}
+_PATIENT_ACCOUNT_STRIP = {
+    "_id", "password_hash", "password_set_at", "totp_secret",
+    "totp_recovery_hashes",
+}
+_REQUEST_STRIP = {"_id", "verification_token"}
+_APPLICATION_STRIP = {"_id"}
+_FEEDBACK_STRIP = {"_id"}
+_LOGIN_EVENT_STRIP = {"_id"}
+
+
+def _strip_keys(doc: dict[str, Any], keys: set[str]) -> dict[str, Any]:
+    return {k: v for k, v in (doc or {}).items() if k not in keys}
+
+
+def _export_filename(role: str, email: str) -> str:
+    safe_email = re.sub(r"[^a-zA-Z0-9._-]+", "_", email)[:64] or "account"
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return f"theravoca-{role}-{safe_email}-{today}.json"
+
+
+@router.get("/portal/therapist/export-data")
+async def therapist_export_data(
+    request: Request,
+    session: dict[str, Any] = Depends(require_session(("therapist",))),
+):
+    """Download a JSON snapshot of the therapist's account: profile,
+    referrals (applications + declines), feedback ABOUT them, and
+    sign-in history. Auth artifacts and internal scoring caches are
+    stripped."""
+    email = session["email"]
+    therapist = await db.therapists.find_one(
+        {"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}},
+    )
+    if not therapist:
+        raise HTTPException(404, "Therapist not found")
+    tid = therapist["id"]
+
+    apps = await db.applications.find(
+        {"therapist_id": tid}, {"_id": 0},
+    ).to_list(2000)
+    declines = await db.declines.find(
+        {"therapist_id": tid}, {"_id": 0},
+    ).to_list(2000)
+    fb = await db.feedback.find(
+        {"therapist_id": tid}, {"_id": 0},
+    ).to_list(2000)
+    logins = await db.login_events.find(
+        {"role": "therapist", "email": email.lower()},
+        {"_id": 0},
+    ).sort("at", -1).to_list(500)
+
+    payload = {
+        "exported_at": _now_iso(),
+        "exported_for": email,
+        "role": "therapist",
+        "profile": _strip_keys(therapist, _THERAPIST_EXPORT_STRIP),
+        "applications": [_strip_keys(a, _APPLICATION_STRIP) for a in apps],
+        "declines": declines,
+        "feedback_about_me": [_strip_keys(f, _FEEDBACK_STRIP) for f in fb],
+        "login_history": [_strip_keys(le, _LOGIN_EVENT_STRIP) for le in logins],
+    }
+    audit.emit(
+        actor_type="therapist", actor_id=tid,
+        action="self_export_data", resource="therapist",
+        resource_id=tid,
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    return Response(
+        content=json.dumps(payload, indent=2, default=str),
+        media_type="application/json",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{_export_filename("therapist", email)}"'
+            ),
+        },
+    )
+
+
+@router.get("/portal/patient/export-data")
+async def patient_export_data(
+    request: Request,
+    session: dict[str, Any] = Depends(require_session(("patient",))),
+):
+    """Download a JSON snapshot of the patient's account: account
+    profile, every match request they've submitted, the therapist
+    applications/replies on those requests, feedback the patient
+    submitted, and sign-in history. Auth artifacts stripped."""
+    email = session["email"]
+    email_lower = email.lower()
+    account = await db.patient_accounts.find_one({"email": email_lower})
+    requests_docs = await db.requests.find(
+        {"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}},
+        {"_id": 0, "verification_token": 0},
+    ).to_list(500)
+    request_ids = [r["id"] for r in requests_docs if r.get("id")]
+    apps = []
+    if request_ids:
+        apps = await db.applications.find(
+            {"request_id": {"$in": request_ids}}, {"_id": 0},
+        ).to_list(2000)
+    fb = await db.feedback.find(
+        {"patient_email": email_lower}, {"_id": 0},
+    ).to_list(2000)
+    logins = await db.login_events.find(
+        {"role": "patient", "email": email_lower}, {"_id": 0},
+    ).sort("at", -1).to_list(500)
+
+    payload = {
+        "exported_at": _now_iso(),
+        "exported_for": email,
+        "role": "patient",
+        "account": _strip_keys(account or {}, _PATIENT_ACCOUNT_STRIP),
+        "requests": [_strip_keys(r, _REQUEST_STRIP) for r in requests_docs],
+        "therapist_replies": [_strip_keys(a, _APPLICATION_STRIP) for a in apps],
+        "feedback_submitted": [_strip_keys(f, _FEEDBACK_STRIP) for f in fb],
+        "login_history": [_strip_keys(le, _LOGIN_EVENT_STRIP) for le in logins],
+    }
+    audit.emit(
+        actor_type="patient",
+        actor_id=audit._hash_patient_email(email_lower),
+        action="self_export_data", resource="patient",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    return Response(
+        content=json.dumps(payload, indent=2, default=str),
+        media_type="application/json",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{_export_filename("patient", email)}"'
+            ),
+        },
+    )
 
 
 @router.post("/portal/patient/delete-account")
