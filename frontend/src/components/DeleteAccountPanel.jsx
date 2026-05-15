@@ -25,8 +25,8 @@ export default function DeleteAccountPanel({ sessionEmail, role }) {
   // diverges on that one phrase only.
   const isTherapist = role === "therapist";
   const bodyCopy = isTherapist
-    ? "Permanently removes your profile, contact details, license document, and login. Cancels any active TheraVoca subscription at end-of-period (no refund mid-cycle, no surprise renewals). We retain anonymized aggregate analytics + records we're legally required to keep."
-    : "Permanently removes your account, your match requests, and your login. We retain anonymized aggregate analytics + records we're legally required to keep.";
+    ? "Permanently removes your profile, contact details, license document, and login. Cancels any active TheraVoca subscription at end-of-period (no refund mid-cycle, no surprise renewals)."
+    : "Permanently removes your account, your match requests, and your login.";
 
   const onDelete = async () => {
     if (!canDelete) return;
