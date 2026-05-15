@@ -1,6 +1,7 @@
 import { Camera } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Group, Field, Req, PillRow } from "@/pages/therapist/TherapistSignupUI";
 import { formatUsPhone } from "@/lib/phone";
 import { imageToDataUrl } from "@/lib/image";
@@ -158,6 +159,52 @@ export default function Step1Basics({
             className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
             data-testid="signup-phone-alert"
           />
+          {/* Inline SMS opt-in + CTIA disclosure (Telnyx requires the
+              full disclosure visible AT the point where the user enters
+              their phone number, not just on a separate SMS Terms page).
+              Default OFF -- the therapist must explicitly check to
+              receive texts. The same checkbox + helper also appears on
+              step 9 so the user can change their mind before submit. */}
+          {(data.phone_alert?.trim() || data.phone?.trim()) && (
+            <label
+              className="mt-2 flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5 cursor-pointer"
+              data-testid="signup-phone-sms-optin"
+            >
+              <Checkbox
+                checked={!!data.notify_sms}
+                onCheckedChange={(v) => set("notify_sms", !!v)}
+                className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E] mt-0.5"
+              />
+              <span className="text-xs text-[#2B2A29] leading-snug">
+                <strong>Text me at this number</strong> when a new patient
+                referral matches my profile.
+                <span className="block text-[11px] text-[#6D6A65] mt-1 leading-snug">
+                  Recurring SMS for account/referral notifications. Msg
+                  frequency varies (typically 1-3 messages/month). Message
+                  &amp; data rates may apply. Reply <strong>STOP</strong>{" "}
+                  to opt out, <strong>HELP</strong> for help. See our{" "}
+                  <a
+                    href="/sms-terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#2D4A3E] underline"
+                  >
+                    SMS Terms
+                  </a>{" "}
+                  and{" "}
+                  <a
+                    href="/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#2D4A3E] underline"
+                  >
+                    Privacy Notice
+                  </a>
+                  . Consent is not a condition of using TheraVoca.
+                </span>
+              </span>
+            </label>
+          )}
         </Field>
         <Field
           label={<>Office phone (public) <Req /></>}
