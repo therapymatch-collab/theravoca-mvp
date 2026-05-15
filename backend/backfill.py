@@ -436,26 +436,125 @@ def backfill_therapist(t: dict[str, Any], idx: int) -> dict[str, Any]:
             set_fields["languages_spoken"] = []
 
     # License document upload (base64 image / PDF in production). For
-    # backfill we drop in a placehold.co URL that obviously labels itself
-    # as a placeholder — admins glancing at the doc viewer immediately
-    # see "this is fake". Strip-backfill removes the field entirely so the
-    # therapist must upload the real one before going live.
+    # backfill we drop in a 1x1 transparent PNG so the form-completeness
+    # check passes during testing while the actual bytes are obviously
+    # synthetic. Both `license_picture` (legacy schema) and
+    # `license_document` (newer dedicated-upload schema) get the same
+    # stub so EITHER code path treats the row as "license on file".
+    # Strip-backfill clears both fields via the audit's fields_added.
+    _PLACEHOLDER_PNG_B64 = (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg"
+        "YGD4DwABBAEAcCBlCwAAAABJRU5ErkJggg=="
+    )
+    _PLACEHOLDER_DATA_URL = "data:image/png;base64," + _PLACEHOLDER_PNG_B64
     existing_lp = t.get("license_picture")
     has_lp = isinstance(existing_lp, str) and existing_lp.strip()
     if not has_lp:
-        # 1x1 transparent PNG encoded as a data URL. Has to be a `data:`
-        # URL (not an https:// placeholder) because profile_completeness
-        # ._has_license_document strict-rejects placeholder URLs to
-        # prevent backfilled therapists from passing the publishable
-        # check with no real license. A 1x1 PNG passes the format check
-        # and is small enough that admins glancing at the doc viewer
-        # immediately see "this is fake" -- intentional.
-        # Strip-backfill clears this field via the audit's fields_added.
-        set_fields["license_picture"] = (
-            "data:image/png;base64,"
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg"
-            "YGD4DwABBAEAcCBlCwAAAABJRU5ErkJggg=="
+        # `data:` URL (not an https:// placeholder) because
+        # profile_completeness._has_license_document strict-rejects
+        # placeholder URLs to prevent backfilled therapists from passing
+        # the publishable check with no real license.
+        set_fields["license_picture"] = _PLACEHOLDER_DATA_URL
+    if not (t.get("license_document") or {}).get("data_base64"):
+        # The therapist portal's LicenseDocUploader widget reads from
+        # this field directly (not license_picture). Without a stub here
+        # backfilled rows showed an alarming "No license document on
+        # file yet" red alert in the portal even though they passed the
+        # publishable check. The legacy_field fallback in the GET
+        # endpoint handled DISPLAY but writing real data here is cleaner
+        # -- the upload widget shows "License (backfill placeholder)"
+        # instead of red, and admin tools that grep license_document.* in
+        # the future just work. Strip-backfill clears this field too.
+        from datetime import datetime, timezone
+        set_fields["license_document"] = {
+            "filename": "License (backfill placeholder)",
+            "content_type": "image/png",
+            "size_bytes": 70,  # actual byte length of the 1x1 PNG
+            "data_base64": _PLACEHOLDER_DATA_URL,
+            "uploaded_at": datetime.now(timezone.utc).isoformat(),
+            "is_backfill_placeholder": True,
+        }
+
+    # Deep-match T-fields (T4/T5/T6/T6b). These are ENHANCING (not
+    # REQUIRED) so they don't block publishability, but the therapist
+    # portal's deep-match completion meter + the matcher's deep-match
+    # axis both treat empty fields as "incomplete" -- backfilled
+    # therapists were always at ~70% completion with the deep-match
+    # banner up. Stub them with realistic-looking responses so the meter
+    # hits 100%, marked with `_deep_match_backfilled=True` so the
+    # portal can prompt the therapist to replace them. Strip-backfill
+    # clears all of these via the audit's fields_added.
+    deep_match_added = []
+    if not (t.get("t4_hard_truth") or "").strip():
+        set_fields["t4_hard_truth"] = random.choice([
+            "warm",
+            "warm_with_pause",
+            "direct",
+            "context_first",
+        ])
+        deep_match_added.append("t4_hard_truth")
+    if len((t.get("t5_lived_experience") or "").strip()) < 30:
+        set_fields["t5_lived_experience"] = (
+            "I've sat across from clients walking through grief, identity "
+            "shifts, and the slow rebuild after burnout. The work that "
+            "moves me most is helping someone hear themselves clearly."
         )
+        deep_match_added.append("t5_lived_experience")
+    if not (t.get("t6_session_expectations") or []):
+        set_fields["t6_session_expectations"] = random.sample(
+            [
+                "skills_and_homework",
+                "structured_processing",
+                "open_exploration",
+                "somatic_check_in",
+            ],
+            k=2,
+        )
+        deep_match_added.append("t6_session_expectations")
+    if len((t.get("t6_early_sessions_description") or "").strip()) < 30:
+        set_fields["t6_early_sessions_description"] = (
+            "First few sessions are spent mapping what brought you in, "
+            "what's worked and what hasn't, and quietly checking fit. "
+            "We agree on a direction together before any active work begins."
+        )
+        deep_match_added.append("t6_early_sessions_description")
+    if deep_match_added:
+        # Mark with both flags so existing code that checks the legacy
+        # `_deep_match_backfilled` boolean still works, while the more
+        # granular `_deep_match_backfilled_fields` enables a per-field
+        # nudge in the portal ("you haven't customized T5 yet").
+        set_fields["_deep_match_backfilled"] = True
+        existing_dm = t.get("_deep_match_backfilled_fields") or []
+        set_fields["_deep_match_backfilled_fields"] = sorted(
+            set(existing_dm) | set(deep_match_added)
+        )
+
+    # Account password (password_hash). Backfilled therapists had no
+    # password set, so the portal kept prompting "Set a password" on
+    # every login -- noisy and misleading during admin testing. Stub a
+    # bcrypt hash of a random unguessable string so `has_password`
+    # returns true and the prompt vanishes; the therapist still can't
+    # login with a password (no one knows the cleartext) and must use
+    # the magic-link flow until they reset on first claim. Strip-backfill
+    # clears `password_hash` via the audit so a real claim flow can set
+    # the user's actual password.
+    if not (t.get("password_hash") or "").strip():
+        try:
+            import bcrypt
+            import secrets
+            random_secret = secrets.token_urlsafe(32).encode("utf-8")
+            set_fields["password_hash"] = bcrypt.hashpw(
+                random_secret, bcrypt.gensalt(rounds=10),
+            ).decode("utf-8")
+            from datetime import datetime, timezone
+            set_fields["password_set_at"] = (
+                datetime.now(timezone.utc).isoformat()
+            )
+        except Exception:
+            # If bcrypt isn't importable for any reason, don't crash the
+            # backfill -- just skip the password stub. The portal will
+            # prompt for password setup on first login as before.
+            pass
 
     # Notification prefs default true
     if "notify_email" not in t:

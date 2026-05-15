@@ -986,13 +986,17 @@ async def therapist_get_my_license_doc(
         raise HTTPException(404, "Therapist not found")
     doc = t.get("license_document") or {}
     if doc and doc.get("data_base64"):
+        # Backfill writes a license_document with is_backfill_placeholder=True
+        # so the widget can flag it as synthetic instead of treating it like
+        # a real upload. Real therapist uploads never set that flag.
+        is_backfill_doc = bool(doc.get("is_backfill_placeholder"))
         return {
             "present": True,
             "filename": doc.get("filename"),
             "content_type": doc.get("content_type"),
             "size_bytes": doc.get("size_bytes"),
             "uploaded_at": doc.get("uploaded_at"),
-            "source": "uploaded",
+            "source": "backfill_placeholder" if is_backfill_doc else "uploaded",
         }
     # Legacy fallback: backfilled (and pre-2026 signup) therapists
     # store the license image on `license_picture` as a `data:` URL,
