@@ -114,7 +114,22 @@ export function P3Step({ data, set, t }) {
             "intake.deep.p3.consent.label",
             "I'd like to share a short note for the matching engine (optional)",
           )}
-          <span className="block text-[11px] text-[#6D6A65] mt-0.5">
+          {/* Show the actual question UNDER the consent label so the
+              patient can read it before deciding whether to opt in.
+              Previously the question only appeared AFTER they checked
+              the box, so they had to commit before knowing what they'd
+              be writing about. */}
+          <span className="block text-[12px] text-[#2B2A29] italic mt-1 leading-snug">
+            {t(
+              "intake.deep.p3.consent.preview_label",
+              "The question:",
+            )}{" "}
+            {t(
+              "intake.deep.p3.label",
+              "What should your therapist already get about you without you having to explain it?",
+            )}
+          </span>
+          <span className="block text-[11px] text-[#6D6A65] mt-1">
             {t(
               "intake.deep.p3.consent.helper",
               "250 character max. Please do not include names, addresses, phone numbers, or other identifying info.",

@@ -274,10 +274,18 @@ export function IssuesStep({ data, set, toggleArr }) {
           label="How much is each concern affecting daily life?"
           hint="1 = mild, occasional · 5 = severe, daily interference"
         >
+          {/* On mobile, the original `flex items-center` row (200px
+              label + 5 buttons) overflowed viewport on iPhone-class
+              widths, pushing the 4 and 5 buttons off-screen. Stack
+              label above the buttons on small screens; restore the
+              side-by-side layout from sm: up. */}
           <div className="space-y-4">
             {data.presenting_issues.map((issueKey) => (
-              <div key={issueKey} className="flex items-center gap-3">
-                <span className="text-sm text-[#2B2A29] w-[200px] shrink-0 leading-snug">
+              <div
+                key={issueKey}
+                className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3"
+              >
+                <span className="text-sm text-[#2B2A29] sm:w-[200px] sm:shrink-0 leading-snug">
                   {ISSUE_LABELS[issueKey] || issueKey}
                 </span>
                 <div className="flex gap-1.5">

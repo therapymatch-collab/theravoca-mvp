@@ -461,34 +461,33 @@ export default function TherapistPortal() {
               <p className="text-xs uppercase tracking-[0.2em] text-[#C87965]">
                 Therapist portal
               </p>
-              <h1 className="font-serif-display text-3xl sm:text-4xl text-[#2D4A3E] mt-1.5 leading-tight">
-                {therapist?.name?.split(",")[0] || "Your"} referrals
+              {/* Header reads as a clean credential line + email --
+                  e.g. "Whitney Hebbert, LMFT" / "whitney@example.com".
+                  The old "{first} referrals" + experience + modalities
+                  block was noisy and duplicated info shown lower on
+                  the page. Build the credential-suffixed name from
+                  scratch (don't re-show "LMFT" if the stored name
+                  already includes it). */}
+              <h1
+                className="font-serif-display text-3xl sm:text-4xl text-[#2D4A3E] mt-1.5 leading-tight"
+                data-testid="therapist-portal-header-name"
+              >
+                {(() => {
+                  if (!therapist?.name) return "Your portal";
+                  const cred = (therapist.credential_type || "").toUpperCase();
+                  const nameUpper = therapist.name.toUpperCase();
+                  // If the stored name already ends with the credential
+                  // suffix (e.g. "Whitney Hebbert, LMFT"), trust it.
+                  // Otherwise append the credential.
+                  if (cred && !nameUpper.includes(cred)) {
+                    return `${therapist.name}, ${credentialLabel(therapist.credential_type) ? therapist.credential_type.toUpperCase() : therapist.credential_type}`;
+                  }
+                  return therapist.name;
+                })()}
               </h1>
-              {therapist && (
+              {therapist?.email && (
                 <p className="text-xs text-[#6D6A65] mt-1.5 break-words">
-                  {therapist.credential_type && (
-                    <>
-                      <span className="text-[#2B2A29] font-medium">
-                        {credentialLabel(therapist.credential_type)}
-                      </span>
-                      {(therapist.years_experience != null ||
-                        (therapist.modalities || []).length > 0) && " · "}
-                    </>
-                  )}
-                  {therapist.years_experience != null && (
-                    <>
-                      {therapist.years_experience} year
-                      {therapist.years_experience === 1 ? "" : "s"} experience
-                      {(therapist.modalities || []).length > 0 && " • "}
-                    </>
-                  )}
-                  {(therapist.modalities || []).slice(0, 3).join(" · ")}
-                </p>
-              )}
-              {therapist && (
-                <p className="text-xs text-[#6D6A65] mt-1">
-                  Signed in as{" "}
-                  <span className="text-[#2D4A3E] font-medium">{therapist.email}</span>
+                  {therapist.email}
                 </p>
               )}
             </div>
