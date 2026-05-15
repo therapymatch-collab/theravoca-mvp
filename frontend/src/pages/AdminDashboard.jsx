@@ -4130,6 +4130,62 @@ function ProviderStatus({ t }) {
   );
 }
 
+// "Will this therapist actually surface in patient match results today?"
+// Computed server-side (admin.py admin_list_therapists) so the badge
+// reflects the SAME invariants the matcher honours (helpers.py:602
+// candidate filter + license validity + profile publishability).
+//
+// Hover the "blocked" badge to see exactly which gates are failing --
+// invaluable when a therapist who looks active hasn't been getting
+// referrals.
+function MatchReadyBadge({ t }) {
+  // Backwards-compat: rows fetched before the backend started emitting
+  // match_ready won't have it -- render nothing rather than guessing
+  // wrong (a green check on a stale row would be worse than silence).
+  if (typeof t?.match_ready !== "boolean") return null;
+  if (t.match_ready) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-[10px] font-medium rounded-full px-2 py-0.5 w-fit bg-[#E8F1EC] text-[#2D4A3E] border border-[#C9DCD0]"
+        title="Passes is_active + approved + billable subscription + valid license + complete profile. Will surface in patient match results."
+        data-testid={`match-ready-yes-${t.id}`}
+      >
+        <span className="font-bold">✓</span> in matches
+      </span>
+    );
+  }
+  const blockers = t.match_ready_blockers || [];
+  // Translate the server-side blocker codes into one short human phrase
+  // each. Keeps the tooltip readable without bloating the row.
+  const labelFor = (b) => {
+    if (b === "archived") return "archived";
+    if (b === "pending_approval") return "pending admin approval";
+    if (b.startsWith("subscription:")) return `subscription: ${b.split(":")[1]}`;
+    if (b.startsWith("license:")) return `license: ${b.split(":")[1].replace(/_/g, " ")}`;
+    if (b.startsWith("profile_incomplete:")) {
+      const n = b.split(":")[1];
+      const missing = (t.profile_required_missing || [])
+        .slice(0, 3)
+        .map((m) => m.label)
+        .join(", ");
+      return `profile incomplete (${n} missing${missing ? `: ${missing}` : ""})`;
+    }
+    return b;
+  };
+  const tooltip =
+    "NOT showing in patient matches. Failing:\n  • " +
+    blockers.map(labelFor).join("\n  • ");
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[10px] font-medium rounded-full px-2 py-0.5 w-fit bg-[#FBF2E8] text-[#B8742A] border border-[#F0DEC8]"
+      title={tooltip}
+      data-testid={`match-ready-no-${t.id}`}
+    >
+      <span className="font-bold">!</span> blocked ({blockers.length})
+    </span>
+  );
+}
+
 function LicenseBadge({ t }) {
   const s = t?.license_status || {};
   const verifyUrl = t?.license_verify_url;
@@ -4250,6 +4306,7 @@ const PROVIDER_COLUMNS = [
             wrapped in `w-fit` via flex so the badges don't stretch. */}
         <div className="flex flex-col items-start gap-1">
           <ProviderStatus t={t} />
+          <MatchReadyBadge t={t} />
           <SubBadge t={t} />
           {t.pending_reapproval && (
             <button

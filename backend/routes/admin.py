@@ -941,12 +941,42 @@ async def admin_list_therapists(
     # Attach lightweight license-status metadata so admin UI can render the
     # "Verify" badge without doing its own date math (keeps frontend lean
     # and lets us swap in live DOPL API calls here without touching React).
+    from profile_completeness import evaluate as _eval_profile
+    _SUB_NOT_BILLABLE = {"past_due", "canceled", "unpaid", "incomplete"}
     for t in rows:
         t["license_status"] = compute_license_status(
             license_expires_at=t.get("license_expires_at"),
             license_number=t.get("license_number"),
         )
         t["license_verify_url"] = dopl_verification_url(t.get("license_number"))
+
+        # Compute match_ready -- the single source of truth for "would
+        # this therapist actually surface in patient match results?"
+        # Mirrors the helpers.py:602 candidate filter (is_active +
+        # pending_approval + subscription_status) plus license validity
+        # and profile publishability. Used by the admin directory's
+        # status pills + multi-state filter so an admin can spot
+        # "active" therapists who are silently invisible to matching.
+        blockers: list[str] = []
+        if t.get("is_active") is False:
+            blockers.append("archived")
+        if t.get("pending_approval") is True:
+            blockers.append("pending_approval")
+        sub = t.get("subscription_status") or "incomplete"
+        if sub in _SUB_NOT_BILLABLE:
+            blockers.append(f"subscription:{sub}")
+        if (t.get("license_status") or {}).get("severity") == "error":
+            blockers.append(
+                f"license:{(t.get('license_status') or {}).get('status', 'unknown')}"
+            )
+        prof = _eval_profile(t)
+        t["profile_score"] = prof["score"]
+        t["profile_publishable"] = prof["publishable"]
+        t["profile_required_missing"] = prof["required_missing"]
+        if not prof["publishable"]:
+            blockers.append(f"profile_incomplete:{len(prof['required_missing'])}")
+        t["match_ready"] = len(blockers) == 0
+        t["match_ready_blockers"] = blockers
 
     # For pending therapists, attach "value tags" telling the admin which
     # patient-demand gaps this applicant would fill  --  and flag duplicates
