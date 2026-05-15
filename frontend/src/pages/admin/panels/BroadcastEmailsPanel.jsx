@@ -602,8 +602,15 @@ function BuilderView({ client, campaign, onBack }) {
                 fontSize: "15px",
                 lineHeight: 1.7,
                 color: "#2B2A29",
-                wordWrap: "break-word",
+                // overflow-wrap:anywhere broke real words mid-character
+                // (Josh saw "ti\nmes" because that style breaks at any
+                // grapheme when a long token would overflow). Use
+                // normal word-break so wrapping only happens at
+                // whitespace, and rely on overflow-wrap:break-word to
+                // handle the rare unbreakable string (URL, email).
+                wordBreak: "normal",
                 overflowWrap: "break-word",
+                hyphens: "none",
               }}
               dangerouslySetInnerHTML={{ __html: preview.sample_rendered_body || "<em>(empty body)</em>" }}
             />
@@ -716,33 +723,10 @@ function RichBodyEditor({ value, onChange, disabled }) {
       data-testid="broadcast-rich-body"
       className={`broadcast-rich-body ${disabled ? "opacity-60 pointer-events-none" : ""}`}
     >
-      {/* Inject CSS to make the Quill editor's paragraph layout match
-          what the server-rendered email actually shows. Without this,
-          Quill defaults to zero <p> margins (paragraphs glued
-          together) and an invisible <p><br></p> for "Enter twice" --
-          so the editor looks dense while the preview/email is
-          spacious, and the admin keeps tweaking based on the wrong
-          mental model. These rules mirror the server's
-          _inject_email_block_styles + spacer-div behaviour:
-            - 14px paragraph bottom margin (matches email)
-            - empty <p><br></p> renders as a visible 14px-tall blank
-              line (matches the spacer div the server emits) */}
-      <style>{`
-        .broadcast-rich-body .ql-editor p {
-          margin: 0 0 14px 0;
-          line-height: 1.7;
-        }
-        .broadcast-rich-body .ql-editor p:has(> br:only-child) {
-          height: 14px;
-          margin-bottom: 14px;
-        }
-        .broadcast-rich-body .ql-editor h2 {
-          margin: 24px 0 8px 0;
-        }
-        .broadcast-rich-body .ql-editor h3 {
-          margin: 20px 0 6px 0;
-        }
-      `}</style>
+      {/* Editor uses Quill snow defaults (tight single-line spacing).
+          The preview pane below shows the actual email layout with
+          paragraph margins -- editor stays compact for fast typing,
+          preview shows what will land in the inbox. */}
       <ReactQuill
         ref={quillRef}
         theme="snow"

@@ -203,18 +203,19 @@ def _wrap(title: str, inner_html: str, unsubscribe_url: Optional[str] = None) ->
             f'<a href="{unsubscribe_url}" style="color:{BRAND["primary"]};text-decoration:underline;">'
             f'Unsubscribe with one click</a>.'
         )
-    # Letter-style toggle: empty/None title drops both the brand-logo
-    # header bar AND the H1, so a broadcast can read like a personal
-    # letter that opens straight on "Hi Anna,". Transactional emails
-    # always pass a real heading and keep the branded chrome.
-    is_letter = not (title or "").strip()
-    header_block = "" if is_letter else (
+    # Brand header bar (TheraVoca logo) is ALWAYS rendered -- we want
+    # consistent branding on every email including broadcasts.
+    # The H1 title block is skipped when title is empty so a broadcast
+    # opens straight on its greeting (no duplicate "TheraVoca" reading
+    # as the email subject). Transactional emails pass a real heading
+    # and keep the H1.
+    header_block = (
         f"""        <tr><td style="padding:28px 32px;border-bottom:1px solid {BRAND['border']};">
           <span style="font-family:Georgia,serif;font-size:22px;color:{BRAND['primary']};letter-spacing:-0.5px;">TheraVoca</span>
         </td></tr>
 """
     )
-    title_block = "" if is_letter else (
+    title_block = "" if not (title or "").strip() else (
         f'<h1 style="margin:0 0 16px;font-family:Georgia,serif;font-size:26px;color:{BRAND["primary"]};line-height:1.2;">{title}</h1>'
     )
     return f"""
