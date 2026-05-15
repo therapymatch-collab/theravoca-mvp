@@ -175,52 +175,53 @@ export default function Step1Basics({
           />
         </Field>
         {/* Inline SMS opt-in + CTIA disclosure on its OWN row spanning
-            both grid columns -- gives the disclosure paragraph the full
-            form width to wrap into instead of pinching it down to one
-            half-column and stretching the page tall. Telnyx still sees
-            it directly under the phone field on screenshot. Visible
-            only after a phone number is typed so the form stays clean
-            for therapists who skip the optional contact phone. */}
-        {(data.phone_alert?.trim() || data.phone?.trim()) && (
-          <label
-            className="sm:col-span-2 flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5 cursor-pointer"
-            data-testid="signup-phone-sms-optin"
-          >
-            <Checkbox
-              checked={!!data.notify_sms}
-              onCheckedChange={(v) => set("notify_sms", !!v)}
-              className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E] mt-0.5"
-            />
-            <span className="text-xs text-[#2B2A29] leading-snug">
-              <strong>Text me at this number</strong> when a new patient
-              referral matches my profile.
-              <span className="block text-[11px] text-[#6D6A65] mt-1 leading-snug">
-                Recurring SMS for account/referral notifications. Msg
-                frequency varies (typically 1-3 messages/month). Message
-                &amp; data rates may apply. Reply <strong>STOP</strong>{" "}
-                to opt out, <strong>HELP</strong> for help. See our{" "}
-                <a
-                  href="/sms-terms"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#2D4A3E] underline"
-                >
-                  SMS Terms
-                </a>{" "}
-                and{" "}
-                <a
-                  href="/privacy"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#2D4A3E] underline"
-                >
-                  Privacy Notice
-                </a>
-                . Consent is not a condition of using TheraVoca.
-              </span>
+            both grid columns. ALWAYS rendered (was previously
+            conditional on a phone being typed -- Telnyx review-1
+            rejected because a reviewer screenshotting an empty form
+            never saw the disclosure). Stays visible at all times so
+            Telnyx + CTIA compliance reviewers see the full disclosure
+            at the point of opt-in regardless of form state. */}
+        <label
+          className="sm:col-span-2 flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5 cursor-pointer"
+          data-testid="signup-phone-sms-optin"
+        >
+          <Checkbox
+            checked={!!data.notify_sms}
+            onCheckedChange={(v) => set("notify_sms", !!v)}
+            className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E] mt-0.5"
+          />
+          <span className="text-xs text-[#2B2A29] leading-snug">
+            <strong>Text me at this number</strong> when a new patient
+            referral matches my profile.
+            <span className="block text-[11px] text-[#6D6A65] mt-1 leading-snug">
+              By checking this box, you consent to receive recurring
+              SMS from TheraVoca for account &amp; referral
+              notifications at the number above. Message frequency
+              varies (typically 1-3 messages/month). Message &amp;
+              data rates may apply. Reply <strong>STOP</strong> to
+              unsubscribe, reply <strong>HELP</strong> for help. See
+              our{" "}
+              <a
+                href="/sms-terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#2D4A3E] underline"
+              >
+                SMS Terms
+              </a>{" "}
+              and{" "}
+              <a
+                href="/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#2D4A3E] underline"
+              >
+                Privacy Notice
+              </a>
+              . Consent is not a condition of using TheraVoca.
             </span>
-          </label>
-        )}
+          </span>
+        </label>
       </div>
 
       <Field label={<>Gender <Req /></>} hint="Used only when patients have a stated preference.">
