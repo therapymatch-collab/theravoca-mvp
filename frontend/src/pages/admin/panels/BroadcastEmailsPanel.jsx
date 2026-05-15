@@ -13,7 +13,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Loader2, RotateCw, Send, Mail, Eye, ArrowLeft, Plus, AlertTriangle,
+  Loader2, RotateCw, Send, Mail, Eye, ArrowLeft, Plus, AlertTriangle, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import ReactQuill from "react-quill-new";
@@ -46,6 +46,24 @@ export default function BroadcastEmailsPanel({ filter }) {
       toast.error(e?.response?.data?.detail || "Couldn't load campaigns");
     } finally {
       setLoadingList(false);
+    }
+  };
+
+  // Delete a draft (or scheduled) campaign. Sent campaigns are blocked
+  // server-side with a 409 -- they're audit trail and need to live
+  // forever. We confirm via window.confirm because there's no toast
+  // pattern in this panel and a raw click would be too easy to misfire.
+  const deleteCampaign = async (c) => {
+    const subjectLine = c.subject?.trim() || "(no subject)";
+    if (!window.confirm(
+      `Delete draft "${subjectLine}"?\n\nThis cannot be undone. Sent campaigns are kept regardless.`
+    )) return;
+    try {
+      await client.delete(`/admin/email-campaigns/${c.id}`);
+      setList((prev) => prev.filter((x) => x.id !== c.id));
+      toast.success("Draft deleted");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Delete failed");
     }
   };
 
@@ -157,6 +175,16 @@ export default function BroadcastEmailsPanel({ filter }) {
                   >
                     {c.status === "sent" ? "View" : "Edit"}
                   </button>
+                  {c.status !== "sent" && (
+                    <button
+                      onClick={() => deleteCampaign(c)}
+                      className="inline-flex items-center gap-1 text-xs text-[#8B3220] hover:text-[#C8412B] hover:underline"
+                      title="Delete this draft. Sent campaigns are kept for audit and can't be deleted."
+                      data-testid={`broadcast-delete-${c.id}`}
+                    >
+                      <Trash2 size={12} /> Delete
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
