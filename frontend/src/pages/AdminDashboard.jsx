@@ -83,6 +83,7 @@ import OutcomesPanel from "@/pages/admin/panels/OutcomesPanel";
 import MatchingPipelinePanel from "@/pages/admin/panels/MatchingPipelinePanel";
 import BulkProfileAuditPanel from "@/pages/admin/panels/BulkProfileAuditPanel";
 import AuditLogPanel from "@/pages/admin/panels/AuditLogPanel";
+import AccountLifecyclePanel from "@/pages/admin/panels/AccountLifecyclePanel";
 import WaitlistPanel from "@/pages/admin/panels/WaitlistPanel";
 import ProviderPreviewCard from "@/pages/admin/panels/ProviderPreviewCard";
 import SimulatorPanel from "@/pages/admin/panels/SimulatorPanel";
@@ -1841,6 +1842,8 @@ export default function AdminDashboard() {
               {tab === "matching" && <MatchingPipelinePanel client={client} />}
 
               {tab === "audit_log" && <AuditLogPanel client={client} />}
+
+              {tab === "account_lifecycle" && <AccountLifecyclePanel />}
 
               {tab === "scrape_sources" && <ScrapeSourcesPanel client={client} />}
 
@@ -3677,6 +3680,7 @@ function AdminTabsBar({
         { id: "referral_sources", label: "Referral sources", onClick: onLoadReferralSources },
         { id: "waitlist", label: "Waitlist" },
         { id: "audit_log", label: "Audit log" },
+        { id: "account_lifecycle", label: "Account lifecycle" },
         // Not in approved mockup; kept here so functionality is reachable.
         { id: "scrape_sources", label: "Scrape sources" },
       ],
