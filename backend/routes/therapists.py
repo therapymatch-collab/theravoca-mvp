@@ -979,17 +979,49 @@ async def therapist_get_my_license_doc(
 ):
     email = session.get("email")
     t = await db.therapists.find_one(
-        {"email": email}, {"_id": 0, "license_document": 1},
+        {"email": email},
+        {"_id": 0, "license_document": 1, "license_picture": 1, "_backfill_audit": 1},
     )
     if not t:
         raise HTTPException(404, "Therapist not found")
     doc = t.get("license_document") or {}
-    if not doc:
-        return {"present": False}
-    return {
-        "present": True,
-        "filename": doc.get("filename"),
-        "content_type": doc.get("content_type"),
-        "size_bytes": doc.get("size_bytes"),
-        "uploaded_at": doc.get("uploaded_at"),
-    }
+    if doc and doc.get("data_base64"):
+        return {
+            "present": True,
+            "filename": doc.get("filename"),
+            "content_type": doc.get("content_type"),
+            "size_bytes": doc.get("size_bytes"),
+            "uploaded_at": doc.get("uploaded_at"),
+            "source": "uploaded",
+        }
+    # Legacy fallback: backfilled (and pre-2026 signup) therapists
+    # store the license image on `license_picture` as a `data:` URL,
+    # not in the newer `license_document` blob. Treat that as a
+    # present-but-legacy record so the widget shows "on file" instead
+    # of the alarming "No license document on file yet" -- matches
+    # what _has_license_document in profile_completeness already
+    # accepts as proof for the publishable check.
+    lp = t.get("license_picture") or ""
+    if isinstance(lp, str) and lp.startswith("data:"):
+        # Best-effort metadata extraction from the data URL header.
+        ctype = "image/png"
+        try:
+            ctype = lp.split(";", 1)[0].split(":", 1)[1]
+        except Exception:
+            pass
+        # Approximate size from base64 length (4 chars -> 3 bytes).
+        b64_len = len(lp.split(",", 1)[-1]) if "," in lp else 0
+        size_bytes = int(b64_len * 3 / 4)
+        is_backfill = bool(
+            (t.get("_backfill_audit") or {}).get("fields_added")
+            and "license_picture" in (t["_backfill_audit"]["fields_added"])
+        )
+        return {
+            "present": True,
+            "filename": "License (legacy upload)" if not is_backfill else "License (backfill placeholder)",
+            "content_type": ctype,
+            "size_bytes": size_bytes,
+            "uploaded_at": None,
+            "source": "backfill_placeholder" if is_backfill else "legacy_field",
+        }
+    return {"present": False}

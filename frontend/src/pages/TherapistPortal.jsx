@@ -488,28 +488,20 @@ export default function TherapistPortal() {
               )}
             </div>
             <div className="flex items-center gap-3 flex-wrap justify-end">
-              {/* Compact subscription pill — replaces the old full-width
-                  status bar. Only shown when sub is healthy (trialing /
-                  active); the dunning banner still appears further down
-                  when payment is required. */}
-              {sub && (sub.subscription_status === "trialing" || sub.subscription_status === "active") && (
-                <button
-                  type="button"
-                  onClick={sub.stripe_customer_id ? openCustomerPortal : undefined}
-                  disabled={!sub.stripe_customer_id}
-                  className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-[#F2F7F1] border border-[#D2E2D0] text-[#3F6F4A] hover:bg-[#E6EFE3] transition disabled:cursor-default"
-                  data-testid="subscription-status-pill"
-                  title={
-                    sub.subscription_status === "trialing" && sub.trial_ends_at
-                      ? `Free trial ends ${new Date(sub.trial_ends_at).toLocaleDateString()}`
-                      : sub.current_period_end
-                      ? `Next charge ${new Date(sub.current_period_end).toLocaleDateString()}`
-                      : "Manage subscription"
-                  }
-                >
-                  <CheckCircle2 size={12} strokeWidth={2.2} />
-                  {sub.subscription_status === "trialing" ? "Trial active" : "Subscription active"}
-                </button>
+              {/* Profile-status pill -- always rendered, state aware.
+                  Mirrors the backend `match_ready` logic so the chip
+                  here agrees with what the admin directory shows.
+                  Replaces the old "Trial active"-only pill that
+                  silently hid when the trial wasn't started, leaving
+                  a therapist with no quick way to see "am I actually
+                  visible to patients right now?" */}
+              {therapist && (
+                <ProfileStatusChip
+                  therapist={therapist}
+                  completeness={completeness}
+                  sub={sub}
+                  onManage={sub?.stripe_customer_id ? openCustomerPortal : undefined}
+                />
               )}
               <Link
                 to="/portal/therapist/edit"
@@ -1621,6 +1613,111 @@ function KpiStrip({ analytics, referrals, sub }) {
         value={trialDaysLeft != null ? trialDaysLeft : "—"}
       />
     </div>
+  );
+}
+
+// Always-visible profile-status pill on the therapist dashboard.
+// Mirrors the backend `match_ready` logic: a therapist surfaces in
+// patient match results only when is_active + approved + publishable
+// + sub is in [trialing, active]. Anything else gets a state-aware
+// label so the therapist always knows whether they're live, and if
+// not, why not.
+function ProfileStatusChip({ therapist, completeness, sub, onManage }) {
+  const subStatus = sub?.subscription_status || null;
+  const reqMissing = (completeness?.required_missing || []).length;
+
+  let state;
+  if (therapist?.is_active === false) state = "inactive";
+  else if (therapist?.pending_approval) state = "pending";
+  else if (completeness && !completeness.publishable) state = "incomplete";
+  else if (!sub || subStatus === "incomplete") state = "trial_not_started";
+  else if (["past_due", "canceled", "unpaid"].includes(subStatus)) state = "payment_issue";
+  else if (subStatus === "trialing") state = "trialing";
+  else if (subStatus === "active") state = "active";
+  else state = "live";
+
+  // Trial days left -- only used in the trialing label.
+  const trialDays = (() => {
+    if (state !== "trialing" || !sub?.trial_ends_at) return null;
+    const ms = new Date(sub.trial_ends_at).getTime() - Date.now();
+    if (Number.isNaN(ms) || ms <= 0) return 0;
+    return Math.ceil(ms / (1000 * 60 * 60 * 24));
+  })();
+
+  const config = {
+    inactive: {
+      label: "Profile inactive",
+      sub: "Archived -- contact support to reactivate",
+      cls: "bg-[#F1EFE8] border-[#D8D5CD] text-[#6D6A65]",
+      icon: <ShieldOff size={12} strokeWidth={2.2} />,
+    },
+    pending: {
+      label: "Pending approval",
+      sub: "Admin reviews within 1 business day",
+      cls: "bg-[#FBF2E8] border-[#F0DEC8] text-[#B8742A]",
+      icon: <Clock size={12} strokeWidth={2.2} />,
+    },
+    incomplete: {
+      label: "Profile incomplete",
+      sub: `${reqMissing} required field${reqMissing === 1 ? "" : "s"} missing`,
+      cls: "bg-[#FDF1EF] border-[#E8C4BB] text-[#8B3220]",
+      icon: <AlertTriangle size={12} strokeWidth={2.2} />,
+    },
+    trial_not_started: {
+      label: "Trial not started",
+      sub: "Add a payment method to go live",
+      cls: "bg-[#FDF1EF] border-[#E8C4BB] text-[#8B3220]",
+      icon: <CreditCard size={12} strokeWidth={2.2} />,
+    },
+    payment_issue: {
+      label: "Payment issue",
+      sub: "Update billing to resume referrals",
+      cls: "bg-[#FDF1EF] border-[#E8C4BB] text-[#8B3220]",
+      icon: <AlertTriangle size={12} strokeWidth={2.2} />,
+    },
+    trialing: {
+      label: "Profile live",
+      sub: trialDays != null
+        ? `Trial -- ${trialDays} day${trialDays === 1 ? "" : "s"} left`
+        : "Trial active",
+      cls: "bg-[#F2F7F1] border-[#D2E2D0] text-[#3F6F4A]",
+      icon: <CheckCircle2 size={12} strokeWidth={2.2} />,
+    },
+    active: {
+      label: "Profile live",
+      sub: sub?.current_period_end
+        ? `Next charge ${new Date(sub.current_period_end).toLocaleDateString()}`
+        : "Subscription active",
+      cls: "bg-[#F2F7F1] border-[#D2E2D0] text-[#3F6F4A]",
+      icon: <CheckCircle2 size={12} strokeWidth={2.2} />,
+    },
+    live: {
+      label: "Profile live",
+      sub: "Visible to matching patients",
+      cls: "bg-[#F2F7F1] border-[#D2E2D0] text-[#3F6F4A]",
+      icon: <CheckCircle2 size={12} strokeWidth={2.2} />,
+    },
+  };
+  const c = config[state];
+  const clickable = state === "trialing" || state === "active";
+  const Tag = clickable && onManage ? "button" : "div";
+  return (
+    <Tag
+      type={clickable ? "button" : undefined}
+      onClick={clickable ? onManage : undefined}
+      disabled={clickable && !onManage}
+      title={c.sub}
+      data-testid={`profile-status-chip-${state}`}
+      className={`inline-flex flex-col items-start gap-0 px-3 py-1.5 rounded-xl border transition disabled:cursor-default text-left ${c.cls} ${clickable ? "hover:opacity-90" : ""}`}
+    >
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium leading-tight">
+        {c.icon}
+        {c.label}
+      </span>
+      <span className="text-[10px] opacity-80 leading-tight mt-0.5">
+        {c.sub}
+      </span>
+    </Tag>
   );
 }
 

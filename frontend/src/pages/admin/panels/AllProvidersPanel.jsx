@@ -15,31 +15,36 @@ const STATE_FILTERS = [
   {
     key: "match_ready",
     label: "Match-ready",
-    title: "Therapists who would surface in patient matches RIGHT NOW (passes is_active + approved + billable subscription + valid license + complete profile).",
+    blurb: "Surfacing in patient matches now",
+    title: "Passes every gate: is_active + approved + billable subscription (trialing/active) + valid license + complete profile. These are the therapists who would actually be returned by the matcher right now.",
     test: (t) => t.match_ready === true,
   },
   {
     key: "active",
     label: "Active (any)",
-    title: "is_active != false. Includes pending-approval, missing-license, etc -- broader than match-ready.",
+    blurb: "is_active flag on, even if blocked",
+    title: "is_active != false. A broader bucket than Match-ready -- includes therapists who are technically active but failing other gates (no license, no payment, etc).",
     test: (t) => t.is_active !== false,
   },
   {
     key: "pending",
     label: "Pending approval",
-    title: "Awaiting admin review.",
+    blurb: "Awaiting first-time admin review",
+    title: "New signups + backfilled rows that haven't been admin-approved yet. They don't appear in matches until you approve them.",
     test: (t) => t.pending_approval === true,
   },
   {
     key: "reapproval",
     label: "Needs re-review",
-    title: "Therapist edited a sensitive field after approval; admin must re-approve before the change goes live.",
+    blurb: "Edited license/specialty post-approval",
+    title: "Therapist edited a sensitive field (license, specialties, name, credential, gender) after their initial approval. The change is staged but won't go live to patients until you re-approve.",
     test: (t) => !!t.pending_reapproval,
   },
   {
     key: "incomplete",
     label: "Active but blocked",
-    title: "Active and approved, but failing one or more match-ready gates (license expired, no payment method, missing required profile fields, etc). These won't surface in matches even though their status pill says 'active'.",
+    blurb: "Look active, invisible to matching",
+    title: "Active (is_active=true) and approved, but failing one or more match-ready gates -- license expired, no payment method, missing required profile fields, etc. The surprise bucket: these therapists' status pill says 'active' but they don't appear in matches.",
     test: (t) =>
       t.is_active !== false &&
       t.pending_approval !== true &&
@@ -48,13 +53,15 @@ const STATE_FILTERS = [
   {
     key: "archived",
     label: "Archived",
-    title: "is_active = false (rejected or admin-archived).",
+    blurb: "Rejected or admin-archived",
+    title: "is_active = false. Either admin-archived or never approved out of pending. Excluded from matching, recruitment, and the daily Active view.",
     test: (t) => t.is_active === false,
   },
   {
     key: "all",
     label: "All",
-    title: "Every therapist, no filter.",
+    blurb: "Every row, no filter",
+    title: "Show every therapist regardless of state.",
     test: () => true,
   },
 ];
@@ -131,9 +138,10 @@ export default function AllProvidersPanel({
   return (
     <div className="mt-6 bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden">
       {/* Multi-state filter row -- segmented control style. Each chip
-          shows its live count so an admin can spot anomalies at a glance
-          (e.g. "Active but blocked: 12" means a dozen therapists look
-          active but won't surface in matches). */}
+          shows its live count + a one-line description below so the
+          admin doesn't have to hover/tooltip-hunt to know what's in
+          each bucket. The "Active but blocked" chip turns amber when
+          non-zero -- that's the bucket that surprises admins. */}
       <div
         className="px-4 pt-4 flex items-center gap-2 flex-wrap"
         data-testid="provider-state-filter"
@@ -141,8 +149,6 @@ export default function AllProvidersPanel({
         {STATE_FILTERS.map((f) => {
           const selected = f.key === stateFilter;
           const count = stateCounts[f.key] ?? 0;
-          // Visual emphasis for the "Active but blocked" chip when it's
-          // non-zero -- that's the bucket that surprises admins.
           const isAlertChip = f.key === "incomplete" && count > 0;
           return (
             <button
@@ -151,7 +157,7 @@ export default function AllProvidersPanel({
               onClick={() => setStateFilterPersist(f.key)}
               title={f.title}
               data-testid={`state-filter-${f.key}`}
-              className={`text-xs px-3 py-1 rounded-full border transition ${
+              className={`text-left px-3 py-1.5 rounded-xl border transition leading-tight ${
                 selected
                   ? "bg-[#2D4A3E] border-[#2D4A3E] text-white"
                   : isAlertChip
@@ -159,14 +165,23 @@ export default function AllProvidersPanel({
                   : "bg-white border-[#E8E5DF] text-[#6D6A65] hover:border-[#2D4A3E]"
               }`}
             >
-              {f.label}
-              <span
-                className={`ml-1.5 text-[10px] ${
-                  selected ? "opacity-90" : "opacity-70"
+              <div className="text-xs font-medium flex items-center gap-1.5">
+                <span>{f.label}</span>
+                <span
+                  className={`text-[10px] ${
+                    selected ? "opacity-90" : "opacity-70"
+                  }`}
+                >
+                  ({count})
+                </span>
+              </div>
+              <div
+                className={`text-[10px] mt-0.5 ${
+                  selected ? "text-white/80" : "text-[#A4A29E]"
                 }`}
               >
-                ({count})
-              </span>
+                {f.blurb}
+              </div>
             </button>
           );
         })}
