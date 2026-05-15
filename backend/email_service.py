@@ -77,12 +77,24 @@ def _inject_email_block_styles(html: str) -> str:
     if not html:
         return html
     import re as _re
-    # NOTE: do NOT strip empty <p><br></p> tags. Quill writes those
-    # when the user hits Enter twice -- a deliberate visual gap
-    # between sections. Stripping them would make blank-line spacing
-    # impossible in the editor. The signature-collapse walk below
-    # SKIPS empty paragraphs without breaking, so they don't trip up
-    # signature detection while still rendering as visible spacing.
+    # Convert empty paragraphs (Quill's "Enter twice" gap marker --
+    # `<p><br></p>`, `<p></p>`, `<p>&nbsp;</p>`, NBSP variants) into a
+    # guaranteed-visible spacer div. Bare `<p><br></p>` collapses to
+    # zero height in many email clients (and even some browsers) because
+    # the `<br>` inside an empty paragraph doesn't reliably take up
+    # vertical space the way it does between text. An explicit
+    # `<div style="height:14px;...">` always renders.
+    #
+    # We do this BEFORE the signature-collapse walk so the walk sees
+    # only real text paragraphs -- the spacer divs don't match its
+    # `<p[^>]*>([^<]*)</p>` pattern, so they're invisible to it but
+    # still mark the visual gap the author intended.
+    html = _re.sub(
+        r"<p(?:\s+[^>]*)?>\s*(?:<br\s*/?>|&nbsp;| |\s)*\s*</p>",
+        '<div style="line-height:14px;height:14px;font-size:14px;">&nbsp;</div>',
+        html,
+        flags=_re.IGNORECASE,
+    )
     # Collapse trailing short <p> tags into a single <p> with <br>
     # separators -- the email-signature pattern. Walk backwards from
     # the end of the body, collecting paragraphs that look like
