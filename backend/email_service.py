@@ -91,7 +91,7 @@ def _inject_email_block_styles(html: str) -> str:
     # still mark the visual gap the author intended.
     html = _re.sub(
         r"<p(?:\s+[^>]*)?>\s*(?:<br\s*/?>|&nbsp;| |\s)*\s*</p>",
-        '<div style="line-height:14px;height:14px;font-size:14px;">&nbsp;</div>',
+        '<div style="line-height:24px;height:24px;font-size:14px;">&nbsp;</div>',
         html,
         flags=_re.IGNORECASE,
     )
@@ -116,12 +116,27 @@ def _inject_email_block_styles(html: str) -> str:
     # separators inside one fresh <p> -- isn't affected. Sig collapse
     # only walks paragraphs matching `<p[^>]*>([^<]*)</p>` (text-only),
     # so paragraphs containing <br> don't qualify in the first place.
+    # Aggressive strip: ALL mid-paragraph <br> tags (the lower-case-only
+    # heuristic earlier left too many behind when the paste-in source
+    # wrapped on a capital letter or punctuation -- "ti<br>mes" might
+    # match but "September<br>1st" wouldn't, leaving narrow lines).
+    # Trade-off: any author-intended <br> in body text gets eaten too,
+    # which is rare for prose broadcasts.
+    #
+    # Safe to run before signature collapse because the merged signature
+    # gets its OWN <br> separators added INSIDE one fresh <p> by the
+    # collapse pass below. Pre-collapse paragraphs containing <br> are
+    # body text by definition (sig collapse only matches text-only
+    # paragraphs `<p[^>]*>([^<]*)</p>`).
     html = _re.sub(
-        r"<br\s*/?>\s*([a-z])",
-        r" \1",
+        r"<br\s*/?>\s*",
+        " ",
         html,
         flags=_re.IGNORECASE,
     )
+    # Collapse runs of whitespace introduced by the strip back to one
+    # space so the paragraph reads cleanly.
+    html = _re.sub(r"  +", " ", html)
 
     # Collapse trailing short <p> tags into a single <p> with <br>
     # separators -- the email-signature pattern. Walk backwards from

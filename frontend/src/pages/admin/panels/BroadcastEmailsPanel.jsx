@@ -585,34 +585,28 @@ function BuilderView({ client, campaign, onBack }) {
               To: {preview.sample_recipient?.email || "—"}<br/>
               Subject: <strong>{preview.subject}</strong>
             </div>
-            {/* Render the preview body in an email-shaped column (600px
-                cap, white bg, generous padding, font-size: 15px,
-                line-height: 1.7) -- mirrors the actual <td> the
-                _wrap() shell wraps the body in on send. Without these
-                contraints the preview was stretching across the full
-                admin-panel width with smaller text, so the gaps and
-                wraps an admin saw didn't match the eventual delivered
-                email at all. */}
-            <div
-              className="bg-white border border-[#E8E5DF] rounded-lg mx-auto"
+            {/* Render the FULL email (brand bar + body + footer) in an
+                iframe so the email's own table-based layout, fonts,
+                and width can render in isolation -- exactly what
+                Gmail/Outlook will show. The earlier
+                dangerouslySetInnerHTML approach inherited the admin
+                panel's CSS (smaller font, tighter line-height, overflow
+                rules that broke real words mid-character at the
+                column edge). Iframe sandboxes the layout so what you
+                see is what gets sent. */}
+            <iframe
+              title="Email preview"
+              srcDoc={preview.sample_rendered_body || "<em>(empty body)</em>"}
+              sandbox=""
               style={{
-                maxWidth: "600px",
-                padding: "32px",
-                fontFamily: "-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif",
-                fontSize: "15px",
-                lineHeight: 1.7,
-                color: "#2B2A29",
-                // overflow-wrap:anywhere broke real words mid-character
-                // (Josh saw "ti\nmes" because that style breaks at any
-                // grapheme when a long token would overflow). Use
-                // normal word-break so wrapping only happens at
-                // whitespace, and rely on overflow-wrap:break-word to
-                // handle the rare unbreakable string (URL, email).
-                wordBreak: "normal",
-                overflowWrap: "break-word",
-                hyphens: "none",
+                width: "100%",
+                minHeight: "640px",
+                border: "1px solid #E8E5DF",
+                borderRadius: "8px",
+                background: "#ffffff",
+                display: "block",
               }}
-              dangerouslySetInnerHTML={{ __html: preview.sample_rendered_body || "<em>(empty body)</em>" }}
+              data-testid="broadcast-preview-iframe"
             />
           </div>
         )}
