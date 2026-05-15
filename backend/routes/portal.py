@@ -747,6 +747,12 @@ async def portal_therapist_referrals(
             # render.
             "subscription_status": therapist.get("subscription_status"),
             "trial_ends_at": therapist.get("trial_ends_at"),
+            # Canonical "do they have a real Stripe trial?" indicator.
+            # Backfill sets subscription_status="trialing" but leaves
+            # stripe_subscription_id as None, so the bare status field
+            # can't be trusted. The dashboard chip + edit-page banner
+            # both check this presence to decide if a trial is active.
+            "stripe_subscription_id": therapist.get("stripe_subscription_id"),
         },
         "referrals": out,
     }

@@ -101,11 +101,15 @@ function PortalActionChips({ therapist, sub, onStartCheckout }) {
   }
 
   // Add payment method -- urgent / red. Two subcases:
-  //   1. No Stripe subscription at all -> "Start free trial"
+  //   1. No real Stripe subscription -> "Start free trial"
   //   2. Existing subscription in a bad state -> "Update billing"
+  // Source of truth: therapist.stripe_subscription_id presence (NOT
+  // the bare subscription_status field, which backfill mis-sets to
+  // "trialing" without a real Stripe sub behind it).
   if (therapist) {
-    const subStatus = sub?.subscription_status;
-    if (!sub) {
+    const subStatus = sub?.subscription_status || therapist?.subscription_status;
+    const hasRealStripeSub = !!therapist?.stripe_subscription_id;
+    if (!hasRealStripeSub) {
       chips.push({
         key: "billing",
         kind: "urgent",
@@ -139,7 +143,9 @@ function PortalActionChips({ therapist, sub, onStartCheckout }) {
   }
 
   // Set password -- todo / amber. Only shown for magic-code-only users
-  // who never set a fallback password.
+  // who never set a fallback password. Routes to the dedicated
+  // /account/setup-password page; the older /portal/therapist/security
+  // route is 2FA-only and was the wrong destination.
   if (therapist && !therapist.has_password) {
     chips.push({
       key: "password",
@@ -147,7 +153,7 @@ function PortalActionChips({ therapist, sub, onStartCheckout }) {
       label: "Set password",
       sub: "Optional fallback for magic-code accounts",
       title: "Optional -- adds a password fallback for magic-code-only accounts",
-      to: "/portal/therapist/security",
+      to: "/account/setup-password",
     });
   }
 
@@ -1651,23 +1657,29 @@ function KpiStrip({ analytics, referrals, sub }) {
 // label so the therapist always knows whether they're live, and if
 // not, why not.
 function ProfileStatusChip({ therapist, completeness, sub, onManage }) {
-  const subStatus = sub?.subscription_status || null;
+  // Canonical "real Stripe trial active?" check is stripe_subscription_id
+  // presence -- the bare subscription_status field is set to "trialing"
+  // by backfill even when no real Stripe sub exists, so trusting it leads
+  // to contradictory "Profile live" / "Trial not started" between pages.
+  const hasRealStripeSub = !!therapist?.stripe_subscription_id;
+  const subStatus = sub?.subscription_status || therapist?.subscription_status || null;
   const reqMissing = (completeness?.required_missing || []).length;
 
   let state;
   if (therapist?.is_active === false) state = "inactive";
   else if (therapist?.pending_approval) state = "pending";
   else if (completeness && !completeness.publishable) state = "incomplete";
-  else if (!sub || subStatus === "incomplete") state = "trial_not_started";
+  else if (!hasRealStripeSub) state = "trial_not_started";
   else if (["past_due", "canceled", "unpaid"].includes(subStatus)) state = "payment_issue";
   else if (subStatus === "trialing") state = "trialing";
   else if (subStatus === "active") state = "active";
   else state = "live";
 
   // Trial days left -- only used in the trialing label.
+  const trialEndsAt = sub?.trial_ends_at || therapist?.trial_ends_at;
   const trialDays = (() => {
-    if (state !== "trialing" || !sub?.trial_ends_at) return null;
-    const ms = new Date(sub.trial_ends_at).getTime() - Date.now();
+    if (state !== "trialing" || !trialEndsAt) return null;
+    const ms = new Date(trialEndsAt).getTime() - Date.now();
     if (Number.isNaN(ms) || ms <= 0) return 0;
     return Math.ceil(ms / (1000 * 60 * 60 * 24));
   })();

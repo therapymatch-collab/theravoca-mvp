@@ -92,78 +92,72 @@ export function P3Step({ data, set, t }) {
   return (
     <div className="space-y-5">
       <DeepMatchBanner stepIndex={3} t={t} />
-      {/* Explicit consent gate (HIPAA scope-out, 2026-05-13). Even
-          though the patient already opted into deep matching one step
-          back, the free-text field gets its own affirmative toggle so
-          consent is unambiguous and per-field. Unchecking wipes any
-          draft text from form state. */}
-      <label
-        className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer hover:border-[#2D4A3E] transition"
-        data-testid="p3-consent-row"
+      {/* Question FIRST, like the other deep-match steps (P1/P2).
+          The consent toggle sits BELOW the question so the patient
+          reads what would be asked before deciding to share. */}
+      <Group
+        label={t(
+          "intake.deep.p3.label",
+          "What should your therapist already get about you without you having to explain it?",
+        )}
+        hint={t(
+          "intake.deep.p3.hint",
+          "Optional. Sharing a short note (20-250 characters) helps the matching engine score for lived-experience fit. Please do not include names, addresses, phone numbers, or other identifying info.",
+        )}
       >
-        <Checkbox
-          checked={data.share_resonance_context}
-          onCheckedChange={(v) => {
-            set("share_resonance_context", !!v);
-            if (!v) set("p3_resonance", "");
-          }}
-          data-testid="p3-consent"
-        />
-        <span className="text-sm leading-snug text-[#2D4A3E]">
-          {t(
-            "intake.deep.p3.consent.label",
-            "I'd like to share a short note for the matching engine (optional)",
-          )}
-          {/* Show the actual question UNDER the consent label so the
-              patient can read it before deciding whether to opt in.
-              Previously the question only appeared AFTER they checked
-              the box, so they had to commit before knowing what they'd
-              be writing about. */}
-          <span className="block text-[12px] text-[#2B2A29] italic mt-1 leading-snug">
-            {t(
-              "intake.deep.p3.consent.preview_label",
-              "The question:",
-            )}{" "}
-            {t(
-              "intake.deep.p3.label",
-              "What should your therapist already get about you without you having to explain it?",
-            )}
-          </span>
-          <span className="block text-[11px] text-[#6D6A65] mt-1">
-            {t(
-              "intake.deep.p3.consent.helper",
-              "250 character max. Please do not include names, addresses, phone numbers, or other identifying info.",
-            )}
-          </span>
-        </span>
-      </label>
-      {data.share_resonance_context && (
-        <Field
-          label={t(
-            "intake.deep.p3.label",
-            "What should your therapist already get about you without you having to explain it?",
-          )}
+        {/* Explicit consent gate (HIPAA scope-out, 2026-05-13). Even
+            though the patient already opted into deep matching one step
+            back, the free-text field gets its own affirmative toggle so
+            consent is unambiguous and per-field. Unchecking wipes any
+            draft text from form state. */}
+        <label
+          className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer hover:border-[#2D4A3E] transition"
+          data-testid="p3-consent-row"
         >
-          <Textarea
-            rows={4}
-            maxLength={250}
-            minLength={20}
-            value={data.p3_resonance}
-            onChange={(e) => set("p3_resonance", e.target.value)}
-            placeholder={t(
-              "intake.deep.p3.placeholder",
-              "Try one of these starters:\n• My background or culture…\n• My work or life situation…\n• What didn't work with a past therapist…",
-            )}
-            className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-            data-testid="p3-input"
+          <Checkbox
+            checked={data.share_resonance_context}
+            onCheckedChange={(v) => {
+              set("share_resonance_context", !!v);
+              if (!v) set("p3_resonance", "");
+            }}
+            data-testid="p3-consent"
           />
-          <p className="text-[11px] text-[#6D6A65] mt-2 leading-snug">
-            {(data.p3_resonance || "").length}/250 characters · 20+
-            characters helps the matching engine score for
-            lived-experience fit.
-          </p>
-        </Field>
-      )}
+          <span className="text-sm leading-snug text-[#2D4A3E]">
+            {t(
+              "intake.deep.p3.consent.label",
+              "Yes, I'd like to share a short note",
+            )}
+            <span className="block text-[11px] text-[#6D6A65] mt-0.5 font-normal">
+              {t(
+                "intake.deep.p3.consent.helper_short",
+                "Skip this if you'd rather not -- it's optional.",
+              )}
+            </span>
+          </span>
+        </label>
+        {data.share_resonance_context && (
+          <div className="mt-3">
+            <Textarea
+              rows={4}
+              maxLength={250}
+              minLength={20}
+              value={data.p3_resonance}
+              onChange={(e) => set("p3_resonance", e.target.value)}
+              placeholder={t(
+                "intake.deep.p3.placeholder",
+                "Try one of these starters:\n• My background or culture…\n• My work or life situation…\n• What didn't work with a past therapist…",
+              )}
+              className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+              data-testid="p3-input"
+            />
+            <p className="text-[11px] text-[#6D6A65] mt-2 leading-snug">
+              {(data.p3_resonance || "").length}/250 characters · 20+
+              characters helps the matching engine score for
+              lived-experience fit.
+            </p>
+          </div>
+        )}
+      </Group>
     </div>
   );
 }

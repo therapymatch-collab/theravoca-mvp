@@ -688,10 +688,17 @@ function GoLiveBanner({ profile }) {
     const n = (completeness.required_missing || []).length;
     blockers.push(`${n} required field${n === 1 ? "" : "s"} missing`);
   }
-  if (!subStatus || subStatus === "incomplete")
+  // Key check: real Stripe trial requires `stripe_subscription_id` to be
+  // populated. The bare `subscription_status` field is loose -- backfill
+  // sets it to "trialing" even when there's no real Stripe sub, which
+  // made this banner cheerfully say "live" while the dashboard correctly
+  // showed "Trial not started." Use stripe_subscription_id as the actual
+  // source of truth.
+  if (!profile.stripe_subscription_id) {
     blockers.push("Trial not started -- add a payment method");
-  else if (["past_due", "canceled", "unpaid"].includes(subStatus))
+  } else if (["past_due", "canceled", "unpaid"].includes(subStatus)) {
     blockers.push(`Subscription: ${subStatus.replace(/_/g, " ")}`);
+  }
 
   const missing = completeness.required_missing || [];
   const live = blockers.length === 0;

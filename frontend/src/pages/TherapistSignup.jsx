@@ -117,7 +117,10 @@ export default function TherapistSignup() {
     profile_picture: null,
     credential_type: "",
     notify_email: true,
-    notify_sms: true,
+    // SMS opt-in defaults OFF -- therapist must explicitly check the
+    // "Also text me" box on step 9 to receive texts. CTIA-compliant
+    // disclosure is shown next to the checkbox.
+    notify_sms: false,
     // ── Deep-match (v2 spec, Iter-89) ──────────────────────────
     // Required at signup so the matching engine has a complete picture
     // of clinical style. T4 picks 1 of 5.
@@ -1182,11 +1185,46 @@ export default function TherapistSignup() {
                     />
                     <span className="text-sm text-[#2B2A29]">Email me each new referral</span>
                   </label>
-                  {/* SMS opt-in hidden 2026-05-14 -- TheraVoca currently
-                      reserves SMS for cold-recruit outreach to therapists
-                      we can't reach by email. Signed-up therapists get
-                      email notifications only. Restore this block + the
-                      `notify_sms` default below to bring it back. */}
+                  {/* SMS opt-in restored 2026-05-15: since we collect the
+                      mobile number earlier in signup, offer SMS alerts as
+                      an opt-in here. Defaults OFF -- therapist must
+                      explicitly check to receive texts. Standard CTIA
+                      disclosure language under the checkbox per Telnyx
+                      toll-free verification requirements. */}
+                  <label className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer mt-2">
+                    <Checkbox
+                      checked={!!data.notify_sms}
+                      onCheckedChange={(v) => set("notify_sms", !!v)}
+                      data-testid="signup-notify-sms"
+                      className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E] mt-0.5"
+                    />
+                    <span className="text-sm text-[#2B2A29] leading-relaxed">
+                      Also text me at the number above
+                      <span className="block text-[11px] text-[#6D6A65] mt-1 leading-snug">
+                        Msg frequency varies (typically 1-3/month). Msg
+                        &amp; data rates may apply. Reply STOP to opt out,
+                        HELP for help. See our{" "}
+                        <a
+                          href="/sms-terms"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[#2D4A3E] underline"
+                        >
+                          SMS Terms
+                        </a>{" "}
+                        and{" "}
+                        <a
+                          href="/privacy"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[#2D4A3E] underline"
+                        >
+                          Privacy Notice
+                        </a>
+                        .
+                      </span>
+                    </span>
+                  </label>
                 </Group>
                 <Group title="Agreement">
                   <label className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer">
