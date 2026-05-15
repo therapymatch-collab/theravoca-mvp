@@ -8,6 +8,7 @@ import {
 import { QRCodeSVG } from "qrcode.react";
 import { Header, Footer } from "@/components/SiteShell";
 import DeleteAccountPanel from "@/components/DeleteAccountPanel";
+import PauseAccountPanel from "@/components/PauseAccountPanel";
 import { sessionClient, getSession } from "@/lib/api";
 
 /**
@@ -30,6 +31,10 @@ export default function TwoFactorSetup() {
   const session = getSession();
   const [status, setStatus] = useState(null);
   const [view, setView] = useState("off");
+  // Pause/resume state lives on the therapist profile doc; fetched
+  // alongside the 2fa status so the Pause panel renders the right
+  // CTA without a second loading flash.
+  const [pausedAt, setPausedAt] = useState(null);
   // Recovery codes are shown once after a successful enroll. Local to
   // this page; cleared on Finish so we never re-render them.
   const [recoveryCodes, setRecoveryCodes] = useState([]);
@@ -40,6 +45,7 @@ export default function TwoFactorSetup() {
       return;
     }
     refreshStatus();
+    refreshPauseState();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -51,6 +57,15 @@ export default function TwoFactorSetup() {
     } catch {
       setStatus({ enabled: false });
       setView("off");
+    }
+  };
+
+  const refreshPauseState = async () => {
+    try {
+      const res = await sessionClient().get("/portal/therapist/profile");
+      setPausedAt(res.data?.paused_at || null);
+    } catch {
+      setPausedAt(null);
     }
   };
 
@@ -113,6 +128,15 @@ export default function TwoFactorSetup() {
               }}
             />
           )}
+
+          {/* Pause/resume sits ABOVE delete in the account-lifecycle
+              stack -- the less destructive option should be the more
+              prominent one. */}
+          <PauseAccountPanel
+            role="therapist"
+            pausedAt={pausedAt}
+            onChange={refreshPauseState}
+          />
 
           {/* Danger zone -- account deletion. Lives at the bottom of
               the security page so it's discoverable without dominating

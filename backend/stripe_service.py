@@ -192,6 +192,41 @@ def cancel_subscription(
         return None
 
 
+def uncancel_subscription(subscription_id: str) -> Optional[dict[str, Any]]:
+    """Un-cancel a subscription that was set to `cancel_at_period_end=True`
+    by cancel_subscription(). Used by the self-serve resume endpoint
+    so a therapist who paused (and thereby scheduled cancellation at
+    period end) can resume billing before the period actually ends.
+
+    Returns the updated subscription projection on success, or None
+    if the subscription is already fully canceled (caller should
+    redirect the user back through Stripe checkout) or if Stripe
+    isn't configured.
+
+    Best-effort -- failure returns None and the caller decides
+    whether to surface the checkout-required state to the user."""
+    if not _configure():
+        return None
+    try:
+        s = stripe.Subscription.retrieve(subscription_id)
+        if getattr(s, "status", None) == "canceled":
+            # Fully canceled -- no Stripe-side resurrection. Caller
+            # should walk the user back through checkout.
+            return None
+        s = stripe.Subscription.modify(
+            subscription_id, cancel_at_period_end=False,
+        )
+        return {
+            "id": s.id,
+            "status": getattr(s, "status", None),
+            "cancel_at_period_end": getattr(s, "cancel_at_period_end", None),
+            "current_period_end": getattr(s, "current_period_end", None),
+        }
+    except stripe.error.StripeError as e:
+        logger.warning("Stripe subscription uncancel failed: %s", e)
+        return None
+
+
 # ─── Customer Portal (self-service subscription management) ────────────────
 
 def create_billing_portal_session(

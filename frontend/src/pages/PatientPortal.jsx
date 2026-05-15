@@ -15,6 +15,7 @@ import {
 import { Header, Footer } from "@/components/SiteShell";
 import SetPasswordPrompt from "@/components/SetPasswordPrompt";
 import DeleteAccountPanel from "@/components/DeleteAccountPanel";
+import PauseAccountPanel from "@/components/PauseAccountPanel";
 import useSiteCopy from "@/lib/useSiteCopy";
 import { sessionClient, getSession, clearSession } from "@/lib/api";
 
@@ -42,23 +43,23 @@ export default function PatientPortal() {
   );
   const [requests, setRequests] = useState(null);
   const [hasPassword, setHasPassword] = useState(false);
+  const [pausedAt, setPausedAt] = useState(null);
 
-  useEffect(() => {
-    if (!session || session.role !== "patient") {
-      navigate("/sign-in?role=patient", { replace: true });
-      return;
-    }
+  const refresh = () => {
     sessionClient()
       .get("/portal/patient/requests")
       .then((res) => {
-        // Backend returns `{requests, has_password, email}` — fall back to
-        // the older array shape just in case (during a rolling deploy).
+        // Backend returns `{requests, has_password, email, paused_at}`
+        // -- fall back to the older array shape just in case
+        // (during a rolling deploy).
         if (Array.isArray(res.data)) {
           setRequests(res.data);
           setHasPassword(false);
+          setPausedAt(null);
         } else {
           setRequests(res.data?.requests || []);
           setHasPassword(!!res.data?.has_password);
+          setPausedAt(res.data?.paused_at || null);
         }
       })
       .catch((e) => {
@@ -67,6 +68,15 @@ export default function PatientPortal() {
           navigate("/sign-in?role=patient", { replace: true });
         }
       });
+  };
+
+  useEffect(() => {
+    if (!session || session.role !== "patient") {
+      navigate("/sign-in?role=patient", { replace: true });
+      return;
+    }
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, navigate]);
 
   const signOut = () => {
@@ -176,6 +186,17 @@ export default function PatientPortal() {
                 </Link>
               ))}
             </div>
+          )}
+
+          {/* Pause / Resume sits above delete -- the reversible
+              option goes first so it's more prominent than the
+              destructive one. */}
+          {requests !== null && session?.email && (
+            <PauseAccountPanel
+              role="patient"
+              pausedAt={pausedAt}
+              onChange={refresh}
+            />
           )}
 
           {/* Danger zone -- account deletion. Mirrors the therapist

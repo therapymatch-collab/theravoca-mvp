@@ -586,6 +586,14 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None, 
     req = await db.requests.find_one({"id": request_id}, {"_id": 0})
     if not req:
         raise HTTPException(404, "Request not found")
+    # Skip paused / deleted requests so the self-serve patient pause
+    # actually stops matching from running. Already-matched therapists
+    # keep their referral (we don't un-send notifications on pause);
+    # the pause only prevents NEW matches from being calculated.
+    if req.get("paused_at"):
+        return {"skipped": "paused", "request_id": request_id}
+    if req.get("deleted_at"):
+        return {"skipped": "deleted", "request_id": request_id}
     # Read global matching defaults from app_config. Per-request body
     # overrides take priority; then global config; then env/hardcoded.
     # No in-memory cache yet (Bug 43 logged for 60s cache).
@@ -602,6 +610,16 @@ async def _trigger_matching(request_id: str, threshold: Optional[float] = None, 
             "is_active": {"$ne": False},
             "pending_approval": {"$ne": True},
             "subscription_status": {"$nin": ["past_due", "canceled", "unpaid", "incomplete"]},
+            # paused_at is set by the self-serve /portal/therapist/pause
+            # endpoint. Mongo's `{field: None}` matches docs where the
+            # field is null OR missing, so therapists who have never
+            # paused (no field) and therapists who resumed (field
+            # $unset) both pass.
+            "paused_at": None,
+            # deleted_at is set by /portal/therapist/delete-account.
+            # The doc lives 24h for reversibility but matching must
+            # exclude it immediately.
+            "deleted_at": None,
         }, {"_id": 0},
     )
     therapists = await therapists_cursor.to_list(2000)

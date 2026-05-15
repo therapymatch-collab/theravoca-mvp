@@ -531,10 +531,20 @@ async def portal_patient_requests(
     # Surface password-account flag so the portal can prompt the patient to
     # set a password if they're still on magic-code-only.
     user = await _find_user_doc(session["email"], "patient")
+    # paused_at lives on patient_accounts; surface it so the portal
+    # knows whether to render the Pause or Resume CTA. Fetched
+    # separately from `user` because _find_user_doc returns the auth
+    # row only, not the patient_accounts profile row.
+    pa = await db.patient_accounts.find_one(
+        {"email": session["email"].lower()},
+        {"_id": 0, "paused_at": 1, "deleted_at": 1},
+    )
     return {
         "requests": out,
         "has_password": bool(user and user.get("password_hash")),
         "email": session["email"],
+        "paused_at": (pa or {}).get("paused_at"),
+        "deleted_at": (pa or {}).get("deleted_at"),
     }
 
 
@@ -1119,6 +1129,222 @@ async def therapist_delete_account(
         user_agent=request.headers.get("user-agent", ""),
     )
     return {"deleted": True}
+
+
+# ─── Self-serve pause / resume ───────────────────────────────────────────────
+#
+# Pause = stop new patient matches + cancel Stripe sub at period end
+# (therapist) or stop matching active requests (patient). Profile,
+# license, request history, and feedback-driven reliability scores
+# are all preserved -- so algo learning isn't lost. Fully reversible
+# any time via /resume; no 24h window like deletion.
+#
+# Matching filters in helpers.py:_trigger_matching (request-level
+# check) and helpers.py:send_matches (therapist-level filter on
+# `paused_at: None`) enforce the pause. See admin lifecycle docs for
+# the full description of impact on matching + algo learning.
+
+@router.post("/portal/therapist/pause")
+async def therapist_pause(
+    request: Request,
+    session: dict[str, Any] = Depends(require_session(("therapist",))),
+):
+    """Self-serve pause. Sets paused_at on the therapist doc + cancels
+    the Stripe subscription at period end (so no further billing).
+    Therapist retains portal access through the existing period and
+    can resume at any time."""
+    therapist = await db.therapists.find_one(
+        {"email": {"$regex": f"^{re.escape(session['email'])}$", "$options": "i"}},
+        {"_id": 0},
+    )
+    if not therapist:
+        raise HTTPException(404, "Therapist not found")
+    if therapist.get("deleted_at"):
+        raise HTTPException(400, "Account is deleted -- can't pause.")
+    if therapist.get("paused_at"):
+        # Idempotent return; UI may have stale state.
+        return {"paused": True, "paused_at": therapist["paused_at"]}
+
+    # Best-effort Stripe cancel at period end. Failure shouldn't block
+    # the pause flag itself -- we'd rather have the therapist out of
+    # matching than have the pause silently no-op.
+    try:
+        if therapist.get("stripe_subscription_id"):
+            from stripe_service import cancel_subscription
+            cancel_subscription(therapist["stripe_subscription_id"])
+    except Exception as e:  # noqa: BLE001
+        audit.emit(
+            actor_type="therapist", actor_id=therapist["id"],
+            action="self_pause_stripe_cancel_failed",
+            resource="therapist", resource_id=therapist["id"],
+            detail=str(e)[:200],
+        )
+
+    now = _now_iso()
+    await db.therapists.update_one(
+        {"id": therapist["id"]},
+        {"$set": {
+            "paused_at": now,
+            "paused_reason": "self_serve",
+            "updated_at": now,
+        }},
+    )
+    audit.emit(
+        actor_type="therapist", actor_id=therapist["id"],
+        action="self_pause_account", resource="therapist",
+        resource_id=therapist["id"],
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    return {"paused": True, "paused_at": now}
+
+
+@router.post("/portal/therapist/resume")
+async def therapist_resume(
+    request: Request,
+    session: dict[str, Any] = Depends(require_session(("therapist",))),
+):
+    """Resume a paused therapist account. Tries to un-cancel the
+    Stripe subscription (if it's still in cancel_at_period_end
+    state). If the sub has already fully canceled, returns
+    requires_checkout=True so the UI can route the therapist back
+    through Stripe checkout to start a new subscription."""
+    therapist = await db.therapists.find_one(
+        {"email": {"$regex": f"^{re.escape(session['email'])}$", "$options": "i"}},
+        {"_id": 0},
+    )
+    if not therapist:
+        raise HTTPException(404, "Therapist not found")
+    if therapist.get("deleted_at"):
+        raise HTTPException(400, "Account is deleted -- can't resume.")
+    if not therapist.get("paused_at"):
+        # Already active -- idempotent.
+        return {"resumed": True, "requires_checkout": False}
+
+    requires_checkout = False
+    try:
+        if therapist.get("stripe_subscription_id"):
+            from stripe_service import uncancel_subscription
+            result = uncancel_subscription(therapist["stripe_subscription_id"])
+            if result is None:
+                # Sub fully canceled -- need fresh checkout.
+                requires_checkout = True
+    except Exception as e:  # noqa: BLE001
+        audit.emit(
+            actor_type="therapist", actor_id=therapist["id"],
+            action="self_resume_stripe_uncancel_failed",
+            resource="therapist", resource_id=therapist["id"],
+            detail=str(e)[:200],
+        )
+        requires_checkout = True
+
+    now = _now_iso()
+    await db.therapists.update_one(
+        {"id": therapist["id"]},
+        {"$set": {"updated_at": now},
+         "$unset": {"paused_at": "", "paused_reason": ""}},
+    )
+    audit.emit(
+        actor_type="therapist", actor_id=therapist["id"],
+        action="self_resume_account", resource="therapist",
+        resource_id=therapist["id"],
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    return {"resumed": True, "requires_checkout": requires_checkout}
+
+
+@router.post("/portal/patient/pause")
+async def patient_pause(
+    request: Request,
+    session: dict[str, Any] = Depends(require_session(("patient",))),
+):
+    """Self-serve patient pause. Marks the patient_accounts row +
+    every active request as paused so new matches stop. Existing
+    referrals already sent to therapists are not retracted."""
+    email_norm = session["email"].lower()
+    account = await db.patient_accounts.find_one(
+        {"email": email_norm}, {"_id": 0},
+    )
+    if account and account.get("deleted_at"):
+        raise HTTPException(400, "Account is deleted -- can't pause.")
+    if account and account.get("paused_at"):
+        return {"paused": True, "paused_at": account["paused_at"]}
+
+    now = _now_iso()
+    await db.patient_accounts.update_one(
+        {"email": email_norm},
+        {"$set": {
+            "paused_at": now,
+            "paused_reason": "self_serve",
+            "updated_at": now,
+        }},
+        upsert=False,
+    )
+    # Mark every active (non-deleted, non-paused) request paused too,
+    # so the matching pipeline skips them. Resume restores them.
+    await db.requests.update_many(
+        {
+            "email": {"$regex": f"^{re.escape(email_norm)}$", "$options": "i"},
+            "deleted_at": None,
+            "paused_at": None,
+        },
+        {"$set": {
+            "paused_at": now,
+            "paused_reason": "patient_self_pause",
+            "updated_at": now,
+        }},
+    )
+    audit.emit(
+        actor_type="patient",
+        actor_id=audit._hash_patient_email(email_norm),
+        action="self_pause_account", resource="patient",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    return {"paused": True, "paused_at": now}
+
+
+@router.post("/portal/patient/resume")
+async def patient_resume(
+    request: Request,
+    session: dict[str, Any] = Depends(require_session(("patient",))),
+):
+    """Resume a paused patient account. Un-pauses the account row +
+    every request that was paused by the same self-serve action
+    (paused_reason='patient_self_pause'). Requests paused by other
+    actors -- e.g. admin freeze -- are left alone."""
+    email_norm = session["email"].lower()
+    account = await db.patient_accounts.find_one(
+        {"email": email_norm}, {"_id": 0},
+    )
+    if account and account.get("deleted_at"):
+        raise HTTPException(400, "Account is deleted -- can't resume.")
+    if not account or not account.get("paused_at"):
+        return {"resumed": True}
+
+    now = _now_iso()
+    await db.patient_accounts.update_one(
+        {"email": email_norm},
+        {"$set": {"updated_at": now},
+         "$unset": {"paused_at": "", "paused_reason": ""}},
+    )
+    await db.requests.update_many(
+        {
+            "email": {"$regex": f"^{re.escape(email_norm)}$", "$options": "i"},
+            "paused_reason": "patient_self_pause",
+        },
+        {"$set": {"updated_at": now},
+         "$unset": {"paused_at": "", "paused_reason": ""}},
+    )
+    audit.emit(
+        actor_type="patient",
+        actor_id=audit._hash_patient_email(email_norm),
+        action="self_resume_account", resource="patient",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    return {"resumed": True}
 
 
 @router.post("/portal/patient/delete-account")
