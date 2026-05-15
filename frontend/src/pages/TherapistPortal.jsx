@@ -1698,18 +1698,10 @@ function ProfileStatusChip({ therapist, completeness, sub, onManage }) {
       icon: <CheckCircle2 size={12} strokeWidth={2.2} />,
     },
   };
-  const c = config[state];
-  const clickable = state === "trialing" || state === "active";
-  const Tag = clickable && onManage ? "button" : "div";
-  return (
-    <Tag
-      type={clickable ? "button" : undefined}
-      onClick={clickable ? onManage : undefined}
-      disabled={clickable && !onManage}
-      title={c.sub}
-      data-testid={`profile-status-chip-${state}`}
-      className={`inline-flex flex-col items-start gap-0 px-3 py-1.5 rounded-xl border transition disabled:cursor-default text-left ${c.cls} ${clickable ? "hover:opacity-90" : ""}`}
-    >
+  const c = config[state] || config.live;
+  const clickable = (state === "trialing" || state === "active") && typeof onManage === "function";
+  const innerContent = (
+    <>
       <span className="inline-flex items-center gap-1.5 text-xs font-medium leading-tight">
         {c.icon}
         {c.label}
@@ -1717,7 +1709,33 @@ function ProfileStatusChip({ therapist, completeness, sub, onManage }) {
       <span className="text-[10px] opacity-80 leading-tight mt-0.5">
         {c.sub}
       </span>
-    </Tag>
+    </>
+  );
+  // Render as <button> only when there's a real handler; otherwise
+  // <div> -- avoids passing `disabled`/`type` props onto a <div>,
+  // which earlier broke the page render when the chip was rendered
+  // for a no-customer-id trialing therapist.
+  if (clickable) {
+    return (
+      <button
+        type="button"
+        onClick={onManage}
+        title={c.sub}
+        data-testid={`profile-status-chip-${state}`}
+        className={`inline-flex flex-col items-start px-3 py-1.5 rounded-xl border transition text-left hover:opacity-90 ${c.cls}`}
+      >
+        {innerContent}
+      </button>
+    );
+  }
+  return (
+    <div
+      title={c.sub}
+      data-testid={`profile-status-chip-${state}`}
+      className={`inline-flex flex-col items-start px-3 py-1.5 rounded-xl border text-left ${c.cls}`}
+    >
+      {innerContent}
+    </div>
   );
 }
 
