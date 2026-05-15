@@ -18,7 +18,7 @@ from deps import (
     db, logger, ADMIN_PASSWORD, DEFAULT_THRESHOLD,
     LOGIN_MAX_FAILURES, _check_lockout, _client_ip,
     _login_attempts, _record_failure, _reset_failures, require_admin,
-    require_role, ADMIN_ROLES,
+    require_role, ADMIN_ROLES, _admin_pw_fingerprint,
 )
 from email_service import send_therapist_approved, send_therapist_rejected
 from email_templates import DEFAULTS as EMAIL_TEMPLATE_DEFAULTS, list_templates, upsert_template
@@ -44,6 +44,11 @@ async def admin_login(payload: dict, request: Request):
         _record_failure(ip)
         rec = _login_attempts.get(ip, {})
         attempts_left = max(0, LOGIN_MAX_FAILURES - rec.get("failures", 0))
+        logger.warning(
+            "admin/login rejected: ip=%s submitted_len=%d submitted_fp=%s configured_len=%d configured_fp=%s",
+            ip, len(submitted), _admin_pw_fingerprint(submitted),
+            len(ADMIN_PASSWORD), _admin_pw_fingerprint(ADMIN_PASSWORD),
+        )
         raise HTTPException(
             status_code=401,
             detail=f"Invalid password. {attempts_left} attempt(s) left before lockout.",

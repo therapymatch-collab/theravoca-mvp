@@ -130,6 +130,25 @@ if _ENV == "production" and len(_jwt_secret_raw) < 32:
 JWT_SECRET = _jwt_secret_raw
 JWT_ALGO = "HS256"
 
+
+# Diagnostic fingerprint for admin password attempts. HMAC-keyed by
+# JWT_SECRET so log entries can't be brute-forced offline without also
+# leaking the JWT secret. Used only for visual log comparison
+# (configured vs submitted) when troubleshooting env-var mismatches.
+def _admin_pw_fingerprint(pw: str) -> str:
+    import hashlib
+    return _hmac.new(
+        JWT_SECRET.encode("utf-8"),
+        (pw or "").encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()[:12]
+
+
+logger.info(
+    "ADMIN_PASSWORD configured: len=%d fp=%s",
+    len(ADMIN_PASSWORD), _admin_pw_fingerprint(ADMIN_PASSWORD),
+)
+
 # -- Email service: RESEND_API_KEY + PUBLIC_APP_URL are required in
 # production. Without them, patient intake is silently broken (emails
 # never send, links have no domain).
@@ -376,4 +395,5 @@ __all__ = [
     "ADMIN_ROLES",
     "_create_session_token",
     "_decode_session_from_authorization",
+    "_admin_pw_fingerprint",
 ]
