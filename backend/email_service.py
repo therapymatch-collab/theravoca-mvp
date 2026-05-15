@@ -95,6 +95,34 @@ def _inject_email_block_styles(html: str) -> str:
         html,
         flags=_re.IGNORECASE,
     )
+
+    # Strip mid-paragraph <br> tags that look like hard-wrap artifacts.
+    # When an author pastes prose copied from another tool (a draft
+    # email, Notes app, anywhere with a fixed-width pane), the line
+    # breaks come along as <br> tags. The body then renders with
+    # narrow ~60-char lines and a big empty gutter on the right because
+    # the email client honours the explicit breaks instead of
+    # re-flowing the text to fit its own width.
+    #
+    # Heuristic: a <br> followed (after optional whitespace) by a
+    # lowercase letter is almost always a wrap artifact -- intentional
+    # line breaks in prose start a new sentence (capital letter) or a
+    # new logical line (signature, list item). Replace those with a
+    # single space so the paragraph re-flows. Capital-letter and
+    # punctuation cases are preserved.
+    #
+    # Runs BEFORE signature collapse so the merged signature -- which
+    # is built from short text-only paragraphs and gets its OWN <br>
+    # separators inside one fresh <p> -- isn't affected. Sig collapse
+    # only walks paragraphs matching `<p[^>]*>([^<]*)</p>` (text-only),
+    # so paragraphs containing <br> don't qualify in the first place.
+    html = _re.sub(
+        r"<br\s*/?>\s*([a-z])",
+        r" \1",
+        html,
+        flags=_re.IGNORECASE,
+    )
+
     # Collapse trailing short <p> tags into a single <p> with <br>
     # separators -- the email-signature pattern. Walk backwards from
     # the end of the body, collecting paragraphs that look like
@@ -175,17 +203,28 @@ def _wrap(title: str, inner_html: str, unsubscribe_url: Optional[str] = None) ->
             f'<a href="{unsubscribe_url}" style="color:{BRAND["primary"]};text-decoration:underline;">'
             f'Unsubscribe with one click</a>.'
         )
+    # Letter-style toggle: empty/None title drops both the brand-logo
+    # header bar AND the H1, so a broadcast can read like a personal
+    # letter that opens straight on "Hi Anna,". Transactional emails
+    # always pass a real heading and keep the branded chrome.
+    is_letter = not (title or "").strip()
+    header_block = "" if is_letter else (
+        f"""        <tr><td style="padding:28px 32px;border-bottom:1px solid {BRAND['border']};">
+          <span style="font-family:Georgia,serif;font-size:22px;color:{BRAND['primary']};letter-spacing:-0.5px;">TheraVoca</span>
+        </td></tr>
+"""
+    )
+    title_block = "" if is_letter else (
+        f'<h1 style="margin:0 0 16px;font-family:Georgia,serif;font-size:26px;color:{BRAND["primary"]};line-height:1.2;">{title}</h1>'
+    )
     return f"""
 <!DOCTYPE html>
 <html><body style="margin:0;padding:0;background:{BRAND['bg']};font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;color:{BRAND['text']};">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:{BRAND['bg']};padding:32px 16px;">
     <tr><td align="center">
       <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;width:100%;background:#ffffff;border:1px solid {BRAND['border']};border-radius:16px;overflow:hidden;">
-        <tr><td style="padding:28px 32px;border-bottom:1px solid {BRAND['border']};">
-          <span style="font-family:Georgia,serif;font-size:22px;color:{BRAND['primary']};letter-spacing:-0.5px;">TheraVoca</span>
-        </td></tr>
-        <tr><td style="padding:32px;font-size:15px;line-height:1.7;color:{BRAND['text']};">
-          <h1 style="margin:0 0 16px;font-family:Georgia,serif;font-size:26px;color:{BRAND['primary']};line-height:1.2;">{title}</h1>
+{header_block}        <tr><td style="padding:32px;font-size:15px;line-height:1.7;color:{BRAND['text']};">
+          {title_block}
           {inner_html}
         </td></tr>
         <tr><td style="padding:20px 32px;background:{BRAND['bg']};color:{BRAND['muted']};font-size:12px;line-height:1.6;border-top:1px solid {BRAND['border']};">
@@ -331,7 +370,7 @@ async def send_broadcast(
     subject: str,
     body_html: str,
     *,
-    heading: str = "TheraVoca",
+    heading: str = "",
     unsubscribe_url: Optional[str] = None,
     campaign_id: str = "broadcast",
     force: bool = True,
@@ -340,6 +379,11 @@ async def send_broadcast(
     already-substituted body for THIS recipient (variable substitution
     happens upstream in the campaign-send loop). This helper just adds
     the standard wrap + dispatches via _send.
+
+    `heading` defaults to empty so broadcasts render letter-style (no
+    brand-logo header bar, no H1) -- the body opens straight on its
+    greeting line. Pass an explicit string to restore the branded
+    transactional layout.
 
     campaign_id flows through to email_sends via template_key so the
     Outbound admin tab can group + count per-campaign metrics.
