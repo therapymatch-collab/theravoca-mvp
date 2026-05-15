@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import SetPasswordPrompt from "@/components/SetPasswordPrompt";
+import DeleteAccountPanel from "@/components/DeleteAccountPanel";
 import useSiteCopy from "@/lib/useSiteCopy";
 import { sessionClient, getSession, clearSession } from "@/lib/api";
 
@@ -175,6 +176,14 @@ export default function PatientPortal() {
                 </Link>
               ))}
             </div>
+          )}
+
+          {/* Danger zone -- account deletion. Mirrors the therapist
+              security page placement: bottom of the page so it's
+              discoverable without dominating. Only render once the
+              session has loaded (requests !== null). */}
+          {requests !== null && session?.email && (
+            <DeleteAccountPanel sessionEmail={session.email} role="patient" />
           )}
         </div>
       </main>
