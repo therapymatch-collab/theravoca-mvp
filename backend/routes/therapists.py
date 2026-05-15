@@ -337,7 +337,13 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
 
 
 @router.post("/therapists/{therapist_id}/subscribe-checkout")
-async def therapist_subscribe_checkout(therapist_id: str):
+async def therapist_subscribe_checkout(therapist_id: str, payload: dict | None = None):
+    """Create a Stripe Checkout session for the therapist's payment-method
+    setup. Optional body param `return_url` controls where Stripe sends
+    the user on success / cancel; defaults to the signup form for new
+    signups. The portal passes its own URL so signed-up therapists who
+    add a payment method don't get sent back to the signup form.
+    """
     t = await db.therapists.find_one(
         {"id": therapist_id},
         {"_id": 0, "id": 1, "email": 1, "name": 1, "subscription_status": 1},
@@ -345,8 +351,17 @@ async def therapist_subscribe_checkout(therapist_id: str):
     if not t:
         raise HTTPException(404)
     base = os.environ.get("PUBLIC_APP_URL", "")
-    success_url = f"{base}/therapists/join?subscribed={therapist_id}&session_id={{CHECKOUT_SESSION_ID}}"
-    cancel_url = f"{base}/therapists/join?canceled={therapist_id}"
+    return_url = ((payload or {}).get("return_url") or "").strip()
+    # Whitelist: only allow same-origin paths to prevent open-redirect.
+    if return_url and not return_url.startswith(base):
+        return_url = ""
+    return_base = return_url or f"{base}/therapists/join"
+    sep = "&" if "?" in return_base else "?"
+    success_url = (
+        f"{return_base}{sep}subscribed={therapist_id}"
+        f"&session_id={{CHECKOUT_SESSION_ID}}"
+    )
+    cancel_url = f"{return_base}{sep}canceled={therapist_id}"
     try:
         result = await stripe_service.create_setup_checkout(
             therapist_id=t["id"],

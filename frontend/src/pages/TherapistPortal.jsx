@@ -353,6 +353,38 @@ export default function TherapistPortal() {
       .get("/portal/therapist/2fa/status")
       .then((r) => setTwoFaEnabled(!!r.data?.enabled))
       .catch(() => setTwoFaEnabled(false));
+    // Stripe-checkout return handler. When the portal is loaded with
+    // ?subscribed=<id>&session_id=<id> after a successful Stripe
+    // setup, call sync-payment-method to record the new card on the
+    // therapist doc, then strip the query params so a refresh doesn't
+    // re-fire the sync. Mirrors what TherapistSignup does for the
+    // signup-flow checkout return.
+    const params = new URLSearchParams(window.location.search);
+    const subscribedId = params.get("subscribed");
+    const sessionId = params.get("session_id");
+    const canceled = params.get("canceled");
+    if (subscribedId && sessionId) {
+      api
+        .post(`/therapists/${subscribedId}/sync-payment-method`, {
+          session_id: sessionId,
+        })
+        .then(() => {
+          toast.success("Payment method saved -- you're all set.");
+          loadAll();
+        })
+        .catch((e) =>
+          toast.error(
+            e?.response?.data?.detail || "Couldn't sync payment method",
+          ),
+        )
+        .finally(() => {
+          // Clean up the URL so refresh doesn't re-fire.
+          window.history.replaceState({}, "", "/portal/therapist");
+        });
+    } else if (canceled) {
+      toast("Checkout canceled -- you can add a payment method anytime.");
+      window.history.replaceState({}, "", "/portal/therapist");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -360,7 +392,13 @@ export default function TherapistPortal() {
     const tid = data?.therapist?.id;
     if (!tid) return;
     try {
-      const res = await api.post(`/therapists/${tid}/subscribe-checkout`, {});
+      // Tell the backend to send Stripe's return-arrow + cancel back to
+      // the portal (not the signup form). The portal-side return handler
+      // below detects ?subscribed=... and calls sync-payment-method.
+      const return_url = `${window.location.origin}/portal/therapist`;
+      const res = await api.post(`/therapists/${tid}/subscribe-checkout`, {
+        return_url,
+      });
       if (res.data?.url) {
         window.location.href = res.data.url;
       }
