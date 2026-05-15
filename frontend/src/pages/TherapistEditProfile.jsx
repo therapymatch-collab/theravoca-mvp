@@ -96,6 +96,18 @@ export default function TherapistEditProfile() {
         setProfile(r.data);
         setDraft({
           bio: r.data.bio || "",
+          // License fields + profile picture were absent from this
+          // initializer, so the form rendered them as empty strings via
+          // `draft.license_number || ""` even when the DB had values.
+          // Backfilled therapists were the most visible victim --
+          // backfill writes valid license_number / license_expires_at /
+          // license_picture, but the form showed all three blank,
+          // leading admins to think the profile was missing license info
+          // when it was just a render gap. Seed them here so the form
+          // reflects the truth.
+          license_number: r.data.license_number || "",
+          license_expires_at: r.data.license_expires_at || "",
+          profile_picture: r.data.profile_picture || "",
           cash_rate: r.data.cash_rate ?? 150,
           sliding_scale: !!r.data.sliding_scale,
           free_consult: !!r.data.free_consult,
