@@ -58,7 +58,7 @@ BRAND = {
 }
 
 
-def _inject_email_block_styles(html: str) -> str:
+def _inject_email_block_styles(html: str, *, wysiwyg: bool = False) -> str:
     """Email clients (Gmail, Outlook) aggressively strip default <p>
     margins, so even well-formed HTML renders as one wall-of-text
     block. Inject explicit inline styles on bare opening tags for the
@@ -89,12 +89,16 @@ def _inject_email_block_styles(html: str) -> str:
     # only real text paragraphs -- the spacer divs don't match its
     # `<p[^>]*>([^<]*)</p>` pattern, so they're invisible to it but
     # still mark the visual gap the author intended.
-    html = _re.sub(
-        r"<p(?:\s+[^>]*)?>\s*(?:<br\s*/?>|&nbsp;| |\s)*\s*</p>",
-        '<div style="line-height:24px;height:24px;font-size:14px;">&nbsp;</div>',
-        html,
-        flags=_re.IGNORECASE,
-    )
+    # WYSIWYG mode (broadcasts): keep bare <p><br></p> so editor +
+    # preview + Gmail all show the same one-line gap. Without this skip
+    # the spacer div added MORE space than the editor, breaking match.
+    if not wysiwyg:
+        html = _re.sub(
+            r"<p(?:\s+[^>]*)?>\s*(?:<br\s*/?>|&nbsp;| |\s)*\s*</p>",
+            '<div style="line-height:24px;height:24px;font-size:14px;">&nbsp;</div>',
+            html,
+            flags=_re.IGNORECASE,
+        )
 
     # Strip mid-paragraph <br> tags that look like hard-wrap artifacts.
     # When an author pastes prose copied from another tool (a draft
@@ -128,8 +132,13 @@ def _inject_email_block_styles(html: str) -> str:
     # collapse pass below. Pre-collapse paragraphs containing <br> are
     # body text by definition (sig collapse only matches text-only
     # paragraphs `<p[^>]*>([^<]*)</p>`).
+    # Only strip <br> that's followed by actual text content (a letter
+    # or digit, possibly after whitespace). This preserves `<p><br></p>`
+    # (br followed by `</p>` -- not a letter/digit) which Quill emits
+    # for blank lines and we WANT to keep in wysiwyg mode so a typed
+    # blank line still shows up in the rendered email.
     html = _re.sub(
-        r"<br\s*/?>\s*",
+        r"<br\s*/?>(?=\s*[A-Za-z0-9])",
         " ",
         html,
         flags=_re.IGNORECASE,
@@ -179,27 +188,34 @@ def _inject_email_block_styles(html: str) -> str:
         merged = "<p>" + "<br>".join(sig_lines) + "</p>"
         slice_start = p_matches[sig_start].start()
         slice_end = p_matches[-1].end()
-        # Auto-spacer: ALWAYS prepend a 24px spacer div before the
-        # merged signature so there's a visible blank line between
-        # body and "Best,". The author shouldn't have to remember to
-        # hit Enter twice -- the email convention is that body and
-        # signature are visually separated. Skip if the chunk
-        # immediately preceding sig_start is already a spacer div
-        # (the user did type the blank line, no need to double up).
-        preceding_chunk = html[max(0, slice_start - 100):slice_start]
-        already_has_spacer = "line-height:24px;height:24px" in preceding_chunk
-        spacer = (
-            ""
-            if already_has_spacer
-            else '<div style="line-height:24px;height:24px;font-size:14px;">&nbsp;</div>'
-        )
-        html = html[:slice_start] + spacer + merged + html[slice_end:]
+        # Auto-spacer before signature: only in non-wysiwyg mode.
+        # In wysiwyg the user controls all spacing -- if they want a
+        # gap before "Best," they type a blank line themselves.
+        if wysiwyg:
+            html = html[:slice_start] + merged + html[slice_end:]
+        else:
+            # Skip the auto-prepend if the chunk immediately preceding
+            # sig_start is already a spacer div (the user did type the
+            # blank line, no need to double up).
+            preceding_chunk = html[max(0, slice_start - 100):slice_start]
+            already_has_spacer = "line-height:24px;height:24px" in preceding_chunk
+            spacer = (
+                ""
+                if already_has_spacer
+                else '<div style="line-height:24px;height:24px;font-size:14px;">&nbsp;</div>'
+            )
+            html = html[:slice_start] + spacer + merged + html[slice_end:]
 
     # Body paragraph margin restored to 14px after the trailing-short-
     # paragraph collapse handles signatures. Body paragraphs get
     # natural separation; the merged signature renders as one tight
     # block with <br> line breaks (no per-line gap).
-    rules: dict[str, str] = {
+    # In wysiwyg mode, drop the `<p>` margin rule so paragraphs
+    # render with browser-default (or Gmail's stripped-default) spacing,
+    # matching the editor's tight Quill layout. Headings and lists
+    # still get their structural margins -- those don't appear in the
+    # editor differently because Quill renders them block-level too.
+    rules: dict[str, str] = {} if wysiwyg else {
         "p": "margin:0 0 14px 0;",
         "h2": "font-family:Georgia,serif;font-size:20px;color:#2D4A3E;margin:24px 0 8px;line-height:1.3;",
         "h3": "font-family:Georgia,serif;font-size:16px;color:#2D4A3E;margin:20px 0 6px;line-height:1.3;",
@@ -216,12 +232,25 @@ def _inject_email_block_styles(html: str) -> str:
     return html
 
 
-def _wrap(title: str, inner_html: str, unsubscribe_url: Optional[str] = None) -> str:
+def _wrap(
+    title: str,
+    inner_html: str,
+    unsubscribe_url: Optional[str] = None,
+    *,
+    wysiwyg: bool = False,
+) -> str:
     # Inject block-level margins on every <p>, <h2>, <h3>, <ul>, etc. in
     # the body. Without this, Quill-produced HTML (bare <p> tags) renders
     # as a wall of text in Gmail / Outlook because they strip browser
     # default <p> margins.
-    inner_html = _inject_email_block_styles(inner_html)
+    #
+    # `wysiwyg=True` (broadcasts) skips paragraph-margin injection,
+    # spacer-div replacement, and auto-spacer-before-signature so the
+    # rendered email exactly mirrors what the author typed in the
+    # Quill editor. Transactional emails (verification, license
+    # renewal, magic codes) keep wysiwyg=False so system-generated
+    # HTML still gets readable paragraph spacing.
+    inner_html = _inject_email_block_styles(inner_html, wysiwyg=wysiwyg)
     # CAN-SPAM: any recurring/promotional email gets a one-click unsubscribe
     # link in the footer. Transactional emails (verification, results) pass
     # unsubscribe_url=None to omit the link.
@@ -421,7 +450,7 @@ async def send_broadcast(
     return await _send(
         to,
         subject,
-        _wrap(heading, body_html, unsubscribe_url=unsubscribe_url),
+        _wrap(heading, body_html, unsubscribe_url=unsubscribe_url, wysiwyg=True),
         template_key=f"campaign:{campaign_id}",
         force=force,
     )

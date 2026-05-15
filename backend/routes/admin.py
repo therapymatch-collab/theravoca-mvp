@@ -2783,13 +2783,13 @@ async def admin_campaign_preview(cid: str) -> dict[str, Any]:
     if rows:
         sample = rows[0]
         rendered = _render_campaign_body(doc.get("body_html") or "", sample)
-        # Run only the body-styling injection (paragraph margins,
-        # spacer divs, signature collapse, signature-gap auto-spacer).
-        # The frontend renders the brand bar / footer chrome around
-        # this fragment in React so the preview fits the panel width
-        # cleanly without an iframe -- no horizontal scrollbar fight,
-        # no sandboxing issues, no width-vs-height sizing dance.
-        rendered = _inject_email_block_styles(rendered)
+        # wysiwyg=True so the preview pane shows EXACTLY what the
+        # editor shows (no injected paragraph margins, no spacer-div
+        # replacements for empty <p><br></p>, no auto-spacer before
+        # the signature). Matches what `send_broadcast` does on the
+        # actual send so editor === preview === Gmail. Signature
+        # collapse + <br> reflow still run.
+        rendered = _inject_email_block_styles(rendered, wysiwyg=True)
     else:
         sample, rendered = None, ""
     return {

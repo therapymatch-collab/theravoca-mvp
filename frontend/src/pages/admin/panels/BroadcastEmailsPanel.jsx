@@ -619,10 +619,24 @@ function BuilderView({ client, campaign, onBack }) {
                 </span>
               </div>
               {/* Body content -- the `dangerouslySetInnerHTML` payload
-                  already has paragraph margins, spacer divs, and the
-                  collapsed signature baked in by the backend. We just
-                  need to give it the email's font/size/leading. */}
+                  is rendered in WYSIWYG mode (no injected paragraph
+                  margins, no spacer divs, bare <p><br></p> preserved)
+                  by the backend so it matches the Quill editor exactly.
+                  Force <p> margin to 0 here too so the preview pane's
+                  browser default doesn't add any margin and override
+                  the WYSIWYG match.
+
+                  Inline `<style>` scoped via parent class so we don't
+                  affect transactional email previews elsewhere. */}
+              <style>{`
+                .tv-broadcast-preview-body p { margin: 0; }
+                .tv-broadcast-preview-body p:empty,
+                .tv-broadcast-preview-body p:has(> br:only-child) {
+                  min-height: 1em;
+                }
+              `}</style>
               <div
+                className="tv-broadcast-preview-body"
                 style={{
                   padding: "24px",
                   fontFamily:
