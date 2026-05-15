@@ -585,29 +585,83 @@ function BuilderView({ client, campaign, onBack }) {
               To: {preview.sample_recipient?.email || "—"}<br/>
               Subject: <strong>{preview.subject}</strong>
             </div>
-            {/* Render the FULL email (brand bar + body + footer) in an
-                iframe so the email's own table-based layout, fonts,
-                and width can render in isolation -- exactly what
-                Gmail/Outlook will show. The earlier
-                dangerouslySetInnerHTML approach inherited the admin
-                panel's CSS (smaller font, tighter line-height, overflow
-                rules that broke real words mid-character at the
-                column edge). Iframe sandboxes the layout so what you
-                see is what gets sent. */}
-            <iframe
-              title="Email preview"
-              srcDoc={preview.sample_rendered_body || "<em>(empty body)</em>"}
-              sandbox=""
-              style={{
-                width: "100%",
-                minHeight: "640px",
-                border: "1px solid #E8E5DF",
-                borderRadius: "8px",
-                background: "#ffffff",
-                display: "block",
-              }}
-              data-testid="broadcast-preview-iframe"
-            />
+            {/* Email-shaped preview: brand bar + body + footer rendered
+                directly in React so the panel width is respected (no
+                iframe horizontal-scroll fight, no sandbox issues, no
+                height auto-sizing dance). Body uses the same 15px font
+                / 1.7 line-height / overflow-wrap rules the inbox sees;
+                width-capped at 100% of the panel column so long pasted
+                URLs wrap at word boundaries instead of producing a
+                horizontal scrollbar. */}
+            <div
+              className="bg-white border border-[#E8E5DF] rounded-lg overflow-hidden mx-auto"
+              style={{ maxWidth: "640px" }}
+              data-testid="broadcast-preview-shell"
+            >
+              {/* Brand bar (mirrors backend _wrap()'s header row) */}
+              <div
+                style={{
+                  padding: "20px 24px",
+                  borderBottom: "1px solid #E8E5DF",
+                  background: "#ffffff",
+                }}
+                data-testid="broadcast-preview-brand"
+              >
+                <span
+                  style={{
+                    fontFamily: "Georgia, serif",
+                    fontSize: "20px",
+                    color: "#2D4A3E",
+                    letterSpacing: "-0.5px",
+                  }}
+                >
+                  TheraVoca
+                </span>
+              </div>
+              {/* Body content -- the `dangerouslySetInnerHTML` payload
+                  already has paragraph margins, spacer divs, and the
+                  collapsed signature baked in by the backend. We just
+                  need to give it the email's font/size/leading. */}
+              <div
+                style={{
+                  padding: "24px",
+                  fontFamily:
+                    "-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif",
+                  fontSize: "15px",
+                  lineHeight: 1.7,
+                  color: "#2B2A29",
+                  wordBreak: "normal",
+                  overflowWrap: "break-word",
+                  hyphens: "none",
+                }}
+                data-testid="broadcast-preview-body"
+                dangerouslySetInnerHTML={{
+                  __html:
+                    preview.sample_rendered_body || "<em>(empty body)</em>",
+                }}
+              />
+              {/* Footer (mirrors backend _wrap()'s footer row) */}
+              <div
+                style={{
+                  padding: "16px 24px",
+                  borderTop: "1px solid #E8E5DF",
+                  background: "#FDFBF7",
+                  fontSize: "12px",
+                  lineHeight: 1.6,
+                  color: "#6D6A65",
+                }}
+                data-testid="broadcast-preview-footer"
+              >
+                You received this email from TheraVoca. Questions? Reach us
+                at support@theravoca.com.
+                {!draft.transactional && (
+                  <>
+                    <br />
+                    Don't want these emails? Unsubscribe with one click.
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

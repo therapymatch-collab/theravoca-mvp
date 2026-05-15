@@ -179,7 +179,21 @@ def _inject_email_block_styles(html: str) -> str:
         merged = "<p>" + "<br>".join(sig_lines) + "</p>"
         slice_start = p_matches[sig_start].start()
         slice_end = p_matches[-1].end()
-        html = html[:slice_start] + merged + html[slice_end:]
+        # Auto-spacer: ALWAYS prepend a 24px spacer div before the
+        # merged signature so there's a visible blank line between
+        # body and "Best,". The author shouldn't have to remember to
+        # hit Enter twice -- the email convention is that body and
+        # signature are visually separated. Skip if the chunk
+        # immediately preceding sig_start is already a spacer div
+        # (the user did type the blank line, no need to double up).
+        preceding_chunk = html[max(0, slice_start - 100):slice_start]
+        already_has_spacer = "line-height:24px;height:24px" in preceding_chunk
+        spacer = (
+            ""
+            if already_has_spacer
+            else '<div style="line-height:24px;height:24px;font-size:14px;">&nbsp;</div>'
+        )
+        html = html[:slice_start] + spacer + merged + html[slice_end:]
 
     # Body paragraph margin restored to 14px after the trailing-short-
     # paragraph collapse handles signatures. Body paragraphs get

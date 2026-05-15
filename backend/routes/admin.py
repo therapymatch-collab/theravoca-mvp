@@ -2779,23 +2779,17 @@ async def admin_campaign_preview(cid: str) -> dict[str, Any]:
         recipient_ids=doc.get("recipient_ids") or None,
         use_real_email=doc.get("use_real_email", True),
     )
-    from email_service import _wrap
+    from email_service import _inject_email_block_styles
     if rows:
         sample = rows[0]
-        rendered_inner = _render_campaign_body(doc.get("body_html") or "", sample)
-        # Return the FULL _wrap()'d email (brand bar + body + footer)
-        # rather than just the inner body fragment -- so the admin
-        # preview shows EXACTLY what Gmail will render, including the
-        # TheraVoca logo header. Frontend renders this in an iframe so
-        # the email's table-based layout doesn't fight with the admin
-        # panel's CSS. Heading defaults to "" (letter-style; brand bar
-        # only) when the campaign doesn't override -- mirrors what
-        # send_broadcast does on actual send.
-        rendered = _wrap(
-            doc.get("heading") or "",
-            rendered_inner,
-            unsubscribe_url=None,
-        )
+        rendered = _render_campaign_body(doc.get("body_html") or "", sample)
+        # Run only the body-styling injection (paragraph margins,
+        # spacer divs, signature collapse, signature-gap auto-spacer).
+        # The frontend renders the brand bar / footer chrome around
+        # this fragment in React so the preview fits the panel width
+        # cleanly without an iframe -- no horizontal scrollbar fight,
+        # no sandboxing issues, no width-vs-height sizing dance.
+        rendered = _inject_email_block_styles(rendered)
     else:
         sample, rendered = None, ""
     return {
