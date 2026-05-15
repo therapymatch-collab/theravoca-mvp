@@ -445,6 +445,11 @@ export default function TherapistPortal() {
 
   const therapist = data?.therapist;
   const isPending = therapist?.pending_approval;
+  // Same `completeness` shape PortalActionChips reads at line 81, but
+  // we also need it up here so the ProfileStatusChip in the header row
+  // can render -- without this the chip threw `completeness is not
+  // defined` and the ErrorBoundary swallowed the whole dashboard.
+  const completeness = therapist?.completeness;
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
