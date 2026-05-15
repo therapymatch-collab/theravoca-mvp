@@ -585,9 +585,26 @@ function BuilderView({ client, campaign, onBack }) {
               To: {preview.sample_recipient?.email || "—"}<br/>
               Subject: <strong>{preview.subject}</strong>
             </div>
+            {/* Render the preview body in an email-shaped column (600px
+                cap, white bg, generous padding, font-size: 15px,
+                line-height: 1.7) -- mirrors the actual <td> the
+                _wrap() shell wraps the body in on send. Without these
+                contraints the preview was stretching across the full
+                admin-panel width with smaller text, so the gaps and
+                wraps an admin saw didn't match the eventual delivered
+                email at all. */}
             <div
-              className="bg-white border border-[#E8E5DF] rounded-lg p-4 text-sm leading-relaxed overflow-x-auto break-words"
-              style={{ wordWrap: "break-word", overflowWrap: "break-word", maxWidth: "100%" }}
+              className="bg-white border border-[#E8E5DF] rounded-lg mx-auto"
+              style={{
+                maxWidth: "600px",
+                padding: "32px",
+                fontFamily: "-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif",
+                fontSize: "15px",
+                lineHeight: 1.7,
+                color: "#2B2A29",
+                wordWrap: "break-word",
+                overflowWrap: "break-word",
+              }}
               dangerouslySetInnerHTML={{ __html: preview.sample_rendered_body || "<em>(empty body)</em>" }}
             />
           </div>
@@ -697,8 +714,35 @@ function RichBodyEditor({ value, onChange, disabled }) {
   return (
     <div
       data-testid="broadcast-rich-body"
-      className={disabled ? "opacity-60 pointer-events-none" : ""}
+      className={`broadcast-rich-body ${disabled ? "opacity-60 pointer-events-none" : ""}`}
     >
+      {/* Inject CSS to make the Quill editor's paragraph layout match
+          what the server-rendered email actually shows. Without this,
+          Quill defaults to zero <p> margins (paragraphs glued
+          together) and an invisible <p><br></p> for "Enter twice" --
+          so the editor looks dense while the preview/email is
+          spacious, and the admin keeps tweaking based on the wrong
+          mental model. These rules mirror the server's
+          _inject_email_block_styles + spacer-div behaviour:
+            - 14px paragraph bottom margin (matches email)
+            - empty <p><br></p> renders as a visible 14px-tall blank
+              line (matches the spacer div the server emits) */}
+      <style>{`
+        .broadcast-rich-body .ql-editor p {
+          margin: 0 0 14px 0;
+          line-height: 1.7;
+        }
+        .broadcast-rich-body .ql-editor p:has(> br:only-child) {
+          height: 14px;
+          margin-bottom: 14px;
+        }
+        .broadcast-rich-body .ql-editor h2 {
+          margin: 24px 0 8px 0;
+        }
+        .broadcast-rich-body .ql-editor h3 {
+          margin: 20px 0 6px 0;
+        }
+      `}</style>
       <ReactQuill
         ref={quillRef}
         theme="snow"
