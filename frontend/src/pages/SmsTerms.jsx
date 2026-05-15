@@ -186,6 +186,10 @@ export default function SmsTerms() {
                 Questions about the TheraVoca SMS program? Email us at{" "}
                 <a href="mailto:support@theravoca.com" className="text-[#2D4A3E] underline">
                   support@theravoca.com
+                </a>{" "}
+                or call us at{" "}
+                <a href="tel:+16465358346" className="text-[#2D4A3E] underline">
+                  (646) 535-8346
                 </a>
                 .
               </p>
