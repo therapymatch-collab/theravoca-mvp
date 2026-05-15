@@ -730,6 +730,23 @@ async def portal_therapist_referrals(
             "updated_at": therapist.get("updated_at"),
             "has_password": bool(therapist.get("password_hash")),
             "completeness": _evaluate_profile_inline(therapist),
+            # Deep-match T fields. The dashboard chip's
+            # _deepMatchMissingLabels() reads these directly off
+            # `data.therapist` -- without them in the response shape
+            # the chip always counted all 4 as missing even when the
+            # therapist had filled them in. (Bug Josh spotted: chip
+            # said "4 LEFT" while the edit page showed the answers
+            # populated.)
+            "t4_hard_truth": therapist.get("t4_hard_truth"),
+            "t5_lived_experience": therapist.get("t5_lived_experience"),
+            "t6_session_expectations": therapist.get("t6_session_expectations") or [],
+            "t6_early_sessions_description": therapist.get("t6_early_sessions_description"),
+            # Subscription state surfaced here too so the dashboard
+            # ProfileStatusChip + chip CTAs can render the right
+            # state without a separate fetch round-trip on every
+            # render.
+            "subscription_status": therapist.get("subscription_status"),
+            "trial_ends_at": therapist.get("trial_ends_at"),
         },
         "referrals": out,
     }

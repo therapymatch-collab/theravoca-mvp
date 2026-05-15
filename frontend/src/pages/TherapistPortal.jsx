@@ -89,6 +89,9 @@ function PortalActionChips({ therapist, sub, onStartCheckout }) {
       key: "profile",
       kind: "urgent",
       label: "Profile incomplete",
+      sub: missing.length
+        ? `${missing.length} required field${missing.length === 1 ? "" : "s"} missing`
+        : null,
       badge: missing.length ? `${missing.length} missing` : null,
       title: labels
         ? `Missing: ${labels}${missing.length > 6 ? ", ..." : ""}`
@@ -107,7 +110,9 @@ function PortalActionChips({ therapist, sub, onStartCheckout }) {
         key: "billing",
         kind: "urgent",
         label: "Start free trial",
-        title: "Add a payment method to start your 30-day free trial",
+        sub: "Add credit card -- not charged for 30 days",
+        title:
+          "Add a payment method to start your 30-day free trial. We won't charge your card until the trial ends.",
         onClick: onStartCheckout,
       });
     } else if (["incomplete", "past_due", "canceled", "unpaid"].includes(subStatus)) {
@@ -115,6 +120,12 @@ function PortalActionChips({ therapist, sub, onStartCheckout }) {
         key: "billing",
         kind: "urgent",
         label: "Update billing",
+        sub:
+          subStatus === "past_due"
+            ? "Last payment failed"
+            : subStatus === "canceled"
+            ? "Subscription canceled"
+            : `Status: ${subStatus.replace(/_/g, " ")}`,
         badge: subStatus.replace(/_/g, " "),
         title:
           subStatus === "past_due"
@@ -134,6 +145,7 @@ function PortalActionChips({ therapist, sub, onStartCheckout }) {
       key: "password",
       kind: "todo",
       label: "Set password",
+      sub: "Optional fallback for magic-code accounts",
       title: "Optional -- adds a password fallback for magic-code-only accounts",
       to: "/portal/therapist/security",
     });
@@ -151,6 +163,7 @@ function PortalActionChips({ therapist, sub, onStartCheckout }) {
       key: "deepmatch",
       kind: "todo",
       label: "Deep-match questions",
+      sub: `${deepMissing.length} left -- unlocks deep-match scoring`,
       badge: `${deepMissing.length} left`,
       title: `5 quick questions unlock deep-match scoring. Missing: ${deepMissing.join(", ")}.`,
       to: "/portal/therapist/edit#deep-match",
@@ -178,22 +191,33 @@ function PortalActionChips({ therapist, sub, onStartCheckout }) {
       {chips.map((c) => {
         const inner = (
           <>
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                c.kind === "urgent" ? "bg-[#8B3220]" : "bg-[#C8A23E]"
-              }`}
-            />
-            {c.label}
-            {c.badge && (
+            <div className="flex items-center gap-2">
               <span
-                className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full font-semibold ${badgeClass(c.kind)}`}
-              >
-                {c.badge}
+                className={`w-1.5 h-1.5 rounded-full ${
+                  c.kind === "urgent" ? "bg-[#8B3220]" : "bg-[#C8A23E]"
+                }`}
+              />
+              <span>{c.label}</span>
+              {c.badge && (
+                <span
+                  className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full font-semibold ${badgeClass(c.kind)}`}
+                >
+                  {c.badge}
+                </span>
+              )}
+            </div>
+            {c.sub && (
+              <span className="block text-[10px] opacity-80 leading-tight mt-0.5 font-normal">
+                {c.sub}
               </span>
             )}
           </>
         );
-        const className = `inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium transition ${kindClass(c.kind)}`;
+        // Two-line chips need a slightly different shape than the
+        // single-line pill: rounded-xl (not -full), inner items
+        // start-aligned. Keeps the chip readable when the sub line
+        // wraps on narrow widths.
+        const className = `inline-flex flex-col items-start px-3 py-1.5 rounded-xl border text-xs font-medium transition text-left ${kindClass(c.kind)}`;
         const testid = `portal-chip-${c.key}`;
         if (c.onClick) {
           return (

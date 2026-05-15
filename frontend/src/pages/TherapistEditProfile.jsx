@@ -212,6 +212,26 @@ export default function TherapistEditProfile() {
     }
   };
 
+  // Hash-scroll handler. When the dashboard chips link to
+  // /portal/therapist/edit#deep-match, React Router doesn't auto-scroll
+  // to the anchor on client-side navigation. We wait for the profile
+  // load to finish (sections only mount once `profile` is truthy) then
+  // scroll to the targeted element. The element already has
+  // `scroll-mt-24` so the sticky header doesn't cover the heading.
+  useEffect(() => {
+    if (!profile) return;
+    const hash = (typeof window !== "undefined" && window.location.hash) || "";
+    if (!hash) return;
+    const id = hash.replace(/^#/, "");
+    if (!id) return;
+    // requestAnimationFrame to let layout settle after profile load.
+    const r = requestAnimationFrame(() => {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => cancelAnimationFrame(r);
+  }, [profile]);
+
   if (!profile) {
     return (
       <div className="min-h-screen bg-[#FDFBF7] flex items-center justify-center">
@@ -262,7 +282,7 @@ export default function TherapistEditProfile() {
           </div>
         )}
 
-        <GoLiveBanner completeness={profile.completeness} />
+        <GoLiveBanner profile={profile} />
 
         {/* 1. About you */}
         <Section title="About you">
@@ -650,10 +670,31 @@ export default function TherapistEditProfile() {
 // source of truth with the signup form. The legacy arrow-based
 // `DeepMatchRankList` was replaced with the shared `DraggableRankList`.
 
-function GoLiveBanner({ completeness }) {
+function GoLiveBanner({ profile }) {
+  if (!profile) return null;
+  const completeness = profile.completeness;
   if (!completeness) return null;
-  const live = !!completeness.publishable;
+  // Mirror the same match_ready logic the dashboard ProfileStatusChip
+  // uses. The old banner only checked `publishable` so it cheerfully
+  // said "Your profile is live" while the therapist's trial wasn't
+  // started and the dashboard correctly said "Trial not started" --
+  // two pages, two contradictory truths. Build a single blockers list:
+  // anything in here means the profile is NOT actually live.
+  const subStatus = profile.subscription_status || null;
+  const blockers = [];
+  if (profile.is_active === false) blockers.push("Profile archived");
+  if (profile.pending_approval) blockers.push("Awaiting admin approval");
+  if (!completeness.publishable) {
+    const n = (completeness.required_missing || []).length;
+    blockers.push(`${n} required field${n === 1 ? "" : "s"} missing`);
+  }
+  if (!subStatus || subStatus === "incomplete")
+    blockers.push("Trial not started -- add a payment method");
+  else if (["past_due", "canceled", "unpaid"].includes(subStatus))
+    blockers.push(`Subscription: ${subStatus.replace(/_/g, " ")}`);
+
   const missing = completeness.required_missing || [];
+  const live = blockers.length === 0;
   if (live) {
     return (
       <div
@@ -671,29 +712,58 @@ function GoLiveBanner({ completeness }) {
       </div>
     );
   }
+  // Profile incomplete -- show the same fields-missing breakdown as
+  // before. This branch is reached only when completeness.publishable
+  // is false; other blockers (sub, archived, pending) fall through to
+  // the non-live banner BELOW this if-block.
+  if (!completeness.publishable) {
+    return (
+      <div
+        className="mt-6 bg-[#FDF1EF] border border-[#E8C4BB] rounded-xl px-4 py-3 flex items-start gap-3"
+        data-testid="go-live-banner-missing"
+      >
+        <AlertTriangle className="text-[#8B3220] mt-0.5 shrink-0" size={18} />
+        <div className="text-sm text-[#5C2620] flex-1 leading-relaxed">
+          <strong>{missing.length} required field{missing.length === 1 ? "" : "s"} missing</strong>
+          {" "}before your profile can go live. Look for the
+          <span className="text-[#D45D5D] font-bold mx-1">*</span>
+          markers below:
+          <span className="ml-1">
+            {missing.slice(0, 4).map((m, i) => (
+              <span key={m.key}>
+                <strong>{m.label}</strong>
+                {i < Math.min(missing.length, 4) - 1 ? ", " : ""}
+              </span>
+            ))}
+            {missing.length > 4 && ` + ${missing.length - 4} more`}
+          </span>
+          .
+        </div>
+        <span className="text-[11px] uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#8B3220] text-white font-semibold shrink-0">
+          Not live
+        </span>
+      </div>
+    );
+  }
+  // Profile is publishable but some OTHER gate is failing (sub, archived,
+  // pending approval). Show the blocker list so the therapist knows why
+  // they aren't live yet -- matches the dashboard chip language.
   return (
     <div
-      className="mt-6 bg-[#FDF1EF] border border-[#E8C4BB] rounded-xl px-4 py-3 flex items-start gap-3"
-      data-testid="go-live-banner-missing"
+      className="mt-6 bg-[#FBF2E8] border border-[#F0DEC8] rounded-xl px-4 py-3 flex items-start gap-3"
+      data-testid="go-live-banner-blocked"
     >
-      <AlertTriangle className="text-[#8B3220] mt-0.5 shrink-0" size={18} />
-      <div className="text-sm text-[#5C2620] flex-1 leading-relaxed">
-        <strong>{missing.length} required field{missing.length === 1 ? "" : "s"} missing</strong>
-        {" "}before your profile can go live. Look for the
-        <span className="text-[#D45D5D] font-bold mx-1">*</span>
-        markers below:
-        <span className="ml-1">
-          {missing.slice(0, 4).map((m, i) => (
-            <span key={m.key}>
-              <strong>{m.label}</strong>
-              {i < Math.min(missing.length, 4) - 1 ? ", " : ""}
-            </span>
+      <AlertTriangle className="text-[#B8742A] mt-0.5 shrink-0" size={18} />
+      <div className="text-sm text-[#6D4F1F] flex-1 leading-relaxed">
+        <strong>Your profile isn't live yet.</strong> Blocking your
+        match-readiness:
+        <ul className="ml-4 mt-1 list-disc">
+          {blockers.map((b) => (
+            <li key={b}>{b}</li>
           ))}
-          {missing.length > 4 && ` + ${missing.length - 4} more`}
-        </span>
-        .
+        </ul>
       </div>
-      <span className="text-[11px] uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#8B3220] text-white font-semibold shrink-0">
+      <span className="text-[11px] uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#B8742A] text-white font-semibold shrink-0">
         Not live
       </span>
     </div>
