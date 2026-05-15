@@ -19,6 +19,7 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import AccountSetupPassword from "@/pages/AccountSetupPassword";
 import TermsOfUse from "@/pages/TermsOfUse";
 import PrivacyNotice from "@/pages/PrivacyNotice";
+import SmsTerms from "@/pages/SmsTerms";
 import BlogList from "@/pages/BlogList";
 import BlogPost from "@/pages/BlogPost";
 import FeedbackForm from "@/pages/FeedbackForm";
@@ -84,6 +85,7 @@ function App() {
             <Route path="/account/setup-password" element={<AccountSetupPassword />} />
             <Route path="/terms" element={<TermsOfUse />} />
             <Route path="/privacy" element={<PrivacyNotice />} />
+            <Route path="/sms-terms" element={<SmsTerms />} />
             <Route path="/blog" element={<BlogList />} />
             <Route path="/blog/:slug" element={<BlogPost />} />
             <Route path="/preview/promise" element={<PromisePreview />} />

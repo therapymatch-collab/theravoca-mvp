@@ -361,6 +361,9 @@ export function Footer() {
             <Link to="/privacy" className="hover:text-[#2D4A3E] underline" data-testid="footer-privacy">
               Privacy Notice
             </Link>
+            <Link to="/sms-terms" className="hover:text-[#2D4A3E] underline" data-testid="footer-sms-terms">
+              SMS Terms
+            </Link>
             <Link to="/blog" className="hover:text-[#2D4A3E] underline" data-testid="footer-blog">
               Blog
             </Link>
