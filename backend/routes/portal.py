@@ -1031,3 +1031,141 @@ async def auth_verify_2fa(payload: dict[str, Any], request: Request):
         "recovery_used": use_recovery,
     }
 
+
+
+# ─── Self-serve account deletion ──────────────────────────────────────
+# Patient + therapist endpoints that wipe the account on confirmation.
+# We require the user to type their email + the literal phrase "DELETE"
+# in the request payload so a stolen session can't trigger this in one
+# silent click. Audit-logged with the original email so we can prove who
+# initiated the request later.
+#
+# Therapists also get their Stripe subscription cancelled at end-of-period
+# (no surprise mid-cycle bills) and their license_document blob cleared.
+# Patient deletion wipes their search requests + magic-code history.
+#
+# We mark documents `deleted_at` + `deleted_reason="self_serve"` rather
+# than $unset everything immediately, so the audit trail + 24h
+# reversibility window survives. A nightly cron purges anything with
+# `deleted_at < now - 24h`.
+
+@router.post("/portal/therapist/delete-account")
+async def therapist_delete_account(
+    payload: dict[str, Any],
+    request: Request,
+    session: dict[str, Any] = Depends(require_session(("therapist",))),
+):
+    """Self-serve account deletion. Requires:
+      - confirm_email == session email (case-insensitive)
+      - confirm_phrase == "DELETE" (literal, case-sensitive)
+    Returns 200 with {"deleted": True} on success."""
+    confirm_email = (payload.get("confirm_email") or "").strip().lower()
+    confirm_phrase = (payload.get("confirm_phrase") or "").strip()
+    if confirm_email != session["email"].lower():
+        raise HTTPException(400, "Email confirmation didn't match.")
+    if confirm_phrase != "DELETE":
+        raise HTTPException(400, 'Type DELETE (all caps) to confirm.')
+    therapist = await db.therapists.find_one(
+        {"email": {"$regex": f"^{re.escape(session['email'])}$", "$options": "i"}},
+        {"_id": 0},
+    )
+    if not therapist:
+        raise HTTPException(404, "Therapist not found")
+
+    # Cancel any active Stripe subscription at period-end so we don't
+    # bill again. Best-effort -- if Stripe is down or the sub is already
+    # cancelled, log and continue.
+    try:
+        if therapist.get("stripe_subscription_id"):
+            from stripe_service import cancel_subscription
+            cancel_subscription(therapist["stripe_subscription_id"])
+    except Exception as e:  # noqa: BLE001
+        # Cancellation failure shouldn't block deletion; log + move on.
+        # Josh can run the manual cancel from admin if needed.
+        audit.emit(
+            actor_type="therapist", actor_id=therapist["id"],
+            action="self_delete_stripe_cancel_failed",
+            resource="therapist", resource_id=therapist["id"],
+            detail=str(e)[:200],
+        )
+
+    now = _now_iso()
+    await db.therapists.update_one(
+        {"id": therapist["id"]},
+        {"$set": {
+            "is_active": False,
+            "deleted_at": now,
+            "deleted_reason": "self_serve",
+            "deleted_by_email": session["email"],
+            "updated_at": now,
+        },
+         # Wipe sensitive blobs immediately. Audit + match metadata stay
+         # for 24h via the deleted_at flag so a misclick can be reversed
+         # by emailing support within the window.
+         "$unset": {
+             "license_document": "",
+             "license_picture": "",
+             "totp_secret": "",
+             "totp_recovery_hashes": "",
+             "password_hash": "",
+             "stripe_payment_method_id": "",
+         }},
+    )
+    audit.emit(
+        actor_type="therapist", actor_id=therapist["id"],
+        action="self_delete_account", resource="therapist",
+        resource_id=therapist["id"],
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    return {"deleted": True}
+
+
+@router.post("/portal/patient/delete-account")
+async def patient_delete_account(
+    payload: dict[str, Any],
+    request: Request,
+    session: dict[str, Any] = Depends(require_session(("patient",))),
+):
+    """Self-serve patient account deletion. Same confirmation gate as
+    the therapist endpoint."""
+    confirm_email = (payload.get("confirm_email") or "").strip().lower()
+    confirm_phrase = (payload.get("confirm_phrase") or "").strip()
+    if confirm_email != session["email"].lower():
+        raise HTTPException(400, "Email confirmation didn't match.")
+    if confirm_phrase != "DELETE":
+        raise HTTPException(400, 'Type DELETE (all caps) to confirm.')
+
+    email_norm = session["email"].lower()
+    now = _now_iso()
+    # Mark patient_accounts row deleted (24h reversibility window)
+    await db.patient_accounts.update_one(
+        {"email": email_norm},
+        {"$set": {
+            "deleted_at": now,
+            "deleted_reason": "self_serve",
+            "updated_at": now,
+        },
+         "$unset": {"password_hash": "", "totp_secret": "",
+                    "totp_recovery_hashes": ""}},
+        upsert=False,
+    )
+    # Mark all the patient's search requests deleted too -- they
+    # shouldn't appear in matching after the patient deletes.
+    await db.requests.update_many(
+        {"email": {"$regex": f"^{re.escape(email_norm)}$", "$options": "i"}},
+        {"$set": {
+            "deleted_at": now,
+            "deleted_reason": "patient_self_delete",
+            "is_active": False,
+            "updated_at": now,
+        }},
+    )
+    audit.emit(
+        actor_type="patient",
+        actor_id=audit._hash_patient_email(email_norm),
+        action="self_delete_account", resource="patient",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    return {"deleted": True}

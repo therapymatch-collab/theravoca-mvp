@@ -198,7 +198,10 @@ export function PillCol({ items, selected, onSelect, testid }) {
   );
 }
 
-// Vertical radio list used for T4 (pick 1 of 5).
+// Vertical radio list used for T4 (pick 1 of 5). Clicking the
+// currently-selected item clears the selection so therapists who
+// changed their mind aren't trapped (no way to "uncheck" a radio
+// without picking another option).
 export function RadioCol({ items, value, onChange, testid }) {
   return (
     <div className="flex flex-col gap-2">
@@ -208,7 +211,7 @@ export function RadioCol({ items, value, onChange, testid }) {
           <button
             type="button"
             key={it.v}
-            onClick={() => onChange(it.v)}
+            onClick={() => onChange(active ? "" : it.v)}
             data-testid={`${testid}-${it.v}`}
             className={`text-sm text-left px-4 py-2.5 rounded-xl border transition ${
               active

@@ -157,6 +157,41 @@ def retrieve_subscription(subscription_id: str) -> Optional[dict[str, Any]]:
         return None
 
 
+def cancel_subscription(
+    subscription_id: str,
+    *,
+    at_period_end: bool = True,
+) -> Optional[dict[str, Any]]:
+    """Cancel a Stripe Subscription. Defaults to `cancel_at_period_end`
+    so the therapist isn't refunded mid-cycle and the active access
+    they paid for stays until the end of the period. Pass
+    at_period_end=False to cancel immediately (admin override).
+
+    Used by the self-serve account-deletion endpoint
+    (/portal/therapist/delete-account) so deleting an account also
+    stops the subscription cleanly. Returns the updated subscription
+    projection or None on failure (best-effort -- account deletion
+    proceeds either way)."""
+    if not _configure():
+        return None
+    try:
+        if at_period_end:
+            s = stripe.Subscription.modify(
+                subscription_id, cancel_at_period_end=True,
+            )
+        else:
+            s = stripe.Subscription.delete(subscription_id)
+        return {
+            "id": s.id,
+            "status": getattr(s, "status", None),
+            "cancel_at_period_end": getattr(s, "cancel_at_period_end", None),
+            "current_period_end": getattr(s, "current_period_end", None),
+        }
+    except stripe.error.StripeError as e:
+        logger.warning("Stripe subscription cancel failed: %s", e)
+        return None
+
+
 # ─── Customer Portal (self-service subscription management) ────────────────
 
 def create_billing_portal_session(

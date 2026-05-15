@@ -554,14 +554,19 @@ export default function TherapistEditProfile() {
 
         {/* Deep-match style fit (v2 spec). The #deep-match anchor is
             the back-fill banner's deep-link target so therapists land
-            here directly. */}
+            here directly. Neutral cream chrome (matching the warm-cream
+            Group palette from signup) -- the previous pink/red chrome
+            looked alarm-required-and-incomplete, but deep-match
+            questions are ENHANCING (not REQUIRED) per
+            profile_completeness.py. We reserve the alarm pink for
+            sections that are actually required and not done. */}
         <section
           id="deep-match"
-          className="mt-10 bg-[#FBE9E5] border-2 border-[#F4C7BE] rounded-2xl p-6 scroll-mt-24"
+          className="mt-10 bg-[#FDF7EC] border border-[#E8DCC1] rounded-2xl p-6 scroll-mt-24"
           data-testid="deep-match-section"
         >
-          <p className="text-xs uppercase tracking-[0.2em] text-[#C8412B] font-semibold mb-1">
-            ✦ Style fit · how you actually work
+          <p className="text-xs uppercase tracking-[0.2em] text-[#C87965] font-semibold mb-1">
+            ✦ Style fit · how you actually work (optional)
           </p>
           <h2 className="font-serif-display text-2xl text-[#2D4A3E]">
             Deep-match questions
@@ -572,7 +577,7 @@ export default function TherapistEditProfile() {
             our #1 matching signal — make sure it reflects how you actually work.
           </p>
           <p
-            className="mt-2 text-xs text-[#2D4A3E] bg-white/70 border border-[#F4C7BE] rounded-md px-2.5 py-1.5 inline-block"
+            className="mt-2 text-xs text-[#2D4A3E] bg-white/70 border border-[#E8DCC1] rounded-md px-2.5 py-1.5 inline-block"
             data-testid="edit-deep-privacy"
           >
             <strong>Private to the matching engine.</strong> Patients

@@ -237,11 +237,59 @@ export default function PrivacyNotice() {
                 You can unsubscribe from TheraVoca marketing emails by clicking the unsubscribe link in a marketing email or contacting us at{" "}
                 <a href="mailto:privacy@theravoca.com" className="text-[#2D4A3E] underline">privacy@theravoca.com</a>.
               </p>
-              <p className="font-medium mt-4">b. Data Deletion</p>
+              <p className="font-medium mt-4">b. Data Deletion / Account Cancellation</p>
               <p>
-                You can request deletion of your data by emailing us at{" "}
-                <a href="mailto:privacy@theravoca.com" className="text-[#2D4A3E] underline">privacy@theravoca.com</a>.
-                {" "}Unless we have an important legal or business need to keep it, we will delete it.
+                You can delete your TheraVoca account and the personal information
+                associated with it at any time:
+              </p>
+              <ul className="list-disc pl-5 mt-2 space-y-1">
+                <li>
+                  <strong>Self-serve (fastest):</strong> sign in and click{" "}
+                  <em>Delete my account</em> in your portal's Security
+                  &amp; Account section.
+                </li>
+                <li>
+                  <strong>By email:</strong>{" "}
+                  <a href="mailto:privacy@theravoca.com" className="text-[#2D4A3E] underline">
+                    privacy@theravoca.com
+                  </a>{" "}
+                  with the subject line "Delete my account" — we'll
+                  confirm and complete within 7 business days.
+                </li>
+                <li>
+                  <strong>By phone:</strong>{" "}
+                  <a href="tel:+16465358346" className="text-[#2D4A3E] underline">
+                    (646) 535-8346
+                  </a>
+                  .
+                </li>
+              </ul>
+              <p className="mt-3">
+                <strong>What happens when you delete:</strong> within 24 hours
+                we permanently remove your profile, contact details, search
+                requests, message history, and account login from our active
+                systems. Anonymized aggregate analytics (e.g. "X patients
+                matched in May") are retained but cannot be tied back to
+                you. Limited records we are required by law to keep
+                (financial records, fraud-prevention logs, audit-trail
+                evidence) are retained for the legally required period and
+                then deleted.
+              </p>
+              <p className="mt-3">
+                <strong>Pause vs. delete:</strong> if you'd rather pause
+                your account (stop receiving referrals temporarily without
+                losing your profile), email us at{" "}
+                <a href="mailto:support@theravoca.com" className="text-[#2D4A3E] underline">
+                  support@theravoca.com
+                </a>{" "}
+                — pausing is reversible; deletion is not.
+              </p>
+              <p className="mt-3">
+                <strong>Therapists:</strong> deleting your account also
+                cancels any active TheraVoca subscription. We will not
+                bill you again after the cancellation date. Refunds for
+                the unused portion of a current billing period are
+                available on request.
               </p>
               <p className="font-medium mt-4">c. Additional State Rights</p>
               <p>
