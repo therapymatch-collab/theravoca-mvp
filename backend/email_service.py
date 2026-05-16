@@ -898,10 +898,18 @@ def _text_to_paragraph_html(text: str, *, p_style: str) -> str:
     three paragraphs renders as one wall of text in the preview AND
     in the actual sent email.
 
+    Gotcha: `render()` in email_templates.py runs BEFORE this helper
+    in most call sites and already converts every `\\n` to `<br/>\\n`.
+    So by the time we see the text, paragraph breaks look like
+    `<br/>\\n<br/>\\n` (or any number of consecutive `<br/>` tags),
+    not bare `\\n\\n`. We split on BOTH forms.
+
     This helper:
+      - normalises any 2+ consecutive `<br/>`s (post-render) back to
+        `\\n\\n` so we can split on a single pattern
       - splits on blank lines (`\\n\\s*\\n+`) -> separate <p>s
-      - inside a paragraph, replaces single `\\n` with `<br>` so
-        explicit single-line breaks survive
+      - inside a paragraph, replaces remaining single `\\n` or `<br/>`
+        with `<br>` so explicit single-line breaks survive
       - applies the supplied inline style to every <p>
 
     Empty input returns "" so callers can keep their `if intro` gates.
@@ -909,10 +917,22 @@ def _text_to_paragraph_html(text: str, *, p_style: str) -> str:
     if not text or not str(text).strip():
         return ""
     import re as _re
-    paras = _re.split(r"\n\s*\n+", str(text).strip())
+    s = str(text).strip()
+    # If render() already happened, undo its `\n -> <br/>\n` swap by
+    # normalising 2+ consecutive `<br/>` (optionally surrounded by
+    # whitespace) back to a blank-line separator we can split on.
+    s = _re.sub(
+        r"(?:<br\s*/?>\s*){2,}",
+        "\n\n",
+        s,
+        flags=_re.IGNORECASE,
+    )
+    paras = _re.split(r"\n\s*\n+", s)
     out_parts = []
     for p in paras:
-        # Soft single-line breaks inside a paragraph -> <br>
+        # Soft single-line breaks inside a paragraph -> <br>. Catches
+        # both raw `\n` (textarea soft break) and a SINGLE leftover
+        # `<br/>` from a half-render situation.
         inner = p.strip().replace("\n", "<br>")
         out_parts.append(f'<p style="{p_style}">{inner}</p>')
     return "".join(out_parts)
