@@ -1,10 +1,18 @@
-"""Twilio SMS service for TheraVoca therapist notifications.
+"""SMS service for TheraVoca therapist notifications.
 
 Pattern mirrors email_service.py:
-  - Single `send_therapist_referral_sms(to, body)` async helper
+  - Single `send_sms(to, body)` async helper
   - Reads creds + kill-switch + dev override from env on every call (hot reload)
   - Normalizes US phone numbers to E.164 format before sending
-  - Wraps Twilio SDK in `asyncio.to_thread` so the FastAPI event loop never blocks
+  - Provider is auto-selected:
+      TELNYX_ENABLED=true  -> Telnyx HTTP API (preferred, post-cutover)
+      TWILIO_ENABLED=true  -> Twilio SDK     (legacy fallback)
+      both false           -> kill-switch, skip
+  - Twilio call goes through `asyncio.to_thread` (sync SDK); Telnyx is
+    native httpx async so it doesn't need a thread.
+  - `TWILIO_DEV_OVERRIDE_TO` (or the alias `SMS_DEV_OVERRIDE_TO`) and
+    `SMS_LIVE_MODE` apply to BOTH providers -- the safety guards are
+    provider-agnostic.
 """
 from __future__ import annotations
 
@@ -15,6 +23,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+import httpx
 from dotenv import load_dotenv
 from twilio.rest import Client
 
@@ -23,8 +32,30 @@ load_dotenv(Path(__file__).parent / ".env")
 logger = logging.getLogger(__name__)
 
 
-def _enabled() -> bool:
+def _twilio_enabled() -> bool:
     return os.environ.get("TWILIO_ENABLED", "false").strip().lower() == "true"
+
+
+def _telnyx_enabled() -> bool:
+    return os.environ.get("TELNYX_ENABLED", "false").strip().lower() == "true"
+
+
+def _provider() -> str | None:
+    """Returns the active SMS provider name, or None if both are off.
+
+    Telnyx wins if both flags are on -- once we flip the cutover env var
+    we want Telnyx to take traffic immediately, not silently keep using
+    Twilio because the old flag was still set."""
+    if _telnyx_enabled():
+        return "telnyx"
+    if _twilio_enabled():
+        return "twilio"
+    return None
+
+
+def _enabled() -> bool:
+    """Backwards-compat alias -- 'any provider enabled?'."""
+    return _provider() is not None
 
 
 def _client() -> Client | None:
@@ -36,12 +67,19 @@ def _client() -> Client | None:
 
 
 def _from_number() -> str:
-    return (os.environ.get("TWILIO_FROM_NUMBER", "")
+    # Used by both providers. Telnyx-specific env wins when set so we
+    # can keep different sender numbers per provider during cutover.
+    return (os.environ.get("TELNYX_FROM_NUMBER", "")
+            or os.environ.get("TWILIO_FROM_NUMBER", "")
             or os.environ.get("TWILIO_PHONE_NUMBER", "")).strip()
 
 
 def _override_to() -> str:
-    return os.environ.get("TWILIO_DEV_OVERRIDE_TO", "").strip()
+    # Either name works -- TWILIO_DEV_OVERRIDE_TO is the historical name
+    # and we keep it for backwards-compat; SMS_DEV_OVERRIDE_TO is the
+    # provider-agnostic name we prefer going forward.
+    return (os.environ.get("SMS_DEV_OVERRIDE_TO", "")
+            or os.environ.get("TWILIO_DEV_OVERRIDE_TO", "")).strip()
 
 
 def normalize_us_phone(raw: str) -> str | None:
@@ -72,63 +110,152 @@ async def _log_sms_send(
     sent_ok: bool,
     blocked: bool = False,
     block_reason: str | None = None,
+    provider: str | None = None,
 ) -> None:
     """Insert one row into `sms_sends` for every SMS attempt -- mirrors the
     `email_sends` audit table. Lets ops answer "what got SMS'd to real
-    therapists" without relying on the Twilio console. Failures here are
-    swallowed so a logging hiccup never blocks the actual send.
+    therapists" without relying on the Twilio/Telnyx console. Failures
+    here are swallowed so a logging hiccup never blocks the actual send.
+
+    Field shape: `twilio_sid` holds whatever opaque message id the
+    provider returned (Twilio SM... or Telnyx UUID). When the provider
+    is telnyx we ALSO populate `telnyx_id` so the Telnyx webhook
+    matcher in routes/webhooks.py can update this row on
+    `message.finalized`. `provider` records which path was taken so
+    the admin dashboard can group by sender.
     """
     try:
         from deps import db as _db
         from datetime import datetime, timezone
-        await _db.sms_sends.insert_one({
+        doc: dict[str, Any] = {
             "sent_at": datetime.now(timezone.utc).isoformat(),
             "intended_to": intended_to,
             "actual_to": actual_to,
             "body_preview": (body or "")[:160],
-            "twilio_sid": sid,
-            "twilio_status": status,
+            "twilio_sid": sid,        # legacy field, kept for the admin UI
+            "twilio_status": status,  # legacy field, kept for the admin UI
             "sent_ok": bool(sent_ok),
             "blocked": bool(blocked),
             "block_reason": block_reason,
-        })
+            "provider": provider or _provider() or "none",
+        }
+        if provider == "telnyx" and sid:
+            doc["telnyx_id"] = sid  # the webhook will $set telnyx_status here
+        await _db.sms_sends.insert_one(doc)
     except Exception as e:
         logger.warning("sms_sends log failed: %s", e)
 
 
+async def _send_via_twilio(
+    *, intended_to: str, actual_to: str, actual_body: str, from_: str,
+) -> dict[str, Any] | None:
+    """Twilio send path. Returns {sid,to,intended_to,status} on success,
+    None on failure. Caller handles audit logging."""
+    client = _client()
+    if client is None:
+        return None
+
+    def _send_sync() -> Any:
+        return client.messages.create(to=actual_to, from_=from_, body=actual_body)
+
+    msg = await asyncio.to_thread(_send_sync)
+    logger.info("Sent SMS via Twilio sid=%s status=%s", msg.sid, msg.status)
+    return {"sid": msg.sid, "to": actual_to, "intended_to": intended_to,
+            "status": msg.status, "provider": "twilio"}
+
+
+async def _send_via_telnyx(
+    *, intended_to: str, actual_to: str, actual_body: str, from_: str,
+) -> dict[str, Any] | None:
+    """Telnyx send path (HTTP API, no SDK).
+
+    POST https://api.telnyx.com/v2/messages with Bearer auth. The
+    `messaging_profile_id` is required for 10DLC/short-code routing in
+    the US -- the bare from-number alone isn't enough for high-volume
+    outbound. Returns the same dict shape as the Twilio path so callers
+    don't care which provider sent the message.
+    """
+    api_key = os.environ.get("TELNYX_API_KEY", "").strip()
+    profile_id = os.environ.get("TELNYX_MESSAGING_PROFILE_ID", "").strip()
+    if not api_key:
+        return None
+    payload: dict[str, Any] = {
+        "from": from_,
+        "to": actual_to,
+        "text": actual_body,
+    }
+    if profile_id:
+        payload["messaging_profile_id"] = profile_id
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        resp = await client.post(
+            "https://api.telnyx.com/v2/messages",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+        )
+    # Telnyx returns 200 with {"data": {...}} on accept. 4xx/5xx -> raise
+    # for the outer try/except in send_sms to convert into a failure
+    # audit row.
+    resp.raise_for_status()
+    data = (resp.json() or {}).get("data") or {}
+    msg_id = data.get("id") or ""
+    # `to[*].status` is "queued" on initial accept. Real delivery status
+    # arrives later via the message.finalized webhook.
+    to_entries = data.get("to") or []
+    to_status = (to_entries[0].get("status") if to_entries else "") or "queued"
+    logger.info("Sent SMS via Telnyx id=%s status=%s", msg_id, to_status)
+    return {"sid": msg_id, "to": actual_to, "intended_to": intended_to,
+            "status": to_status, "provider": "telnyx"}
+
+
 async def send_sms(to: str, body: str, *, force: bool = False) -> dict[str, Any] | None:
-    """Send an SMS. Returns Twilio message dict on success, None on skip/failure.
+    """Send an SMS. Returns {sid,to,intended_to,status,provider} on
+    success, None on skip/failure.
+
+    Provider auto-selection (highest precedence wins):
+      1. TELNYX_ENABLED=true -> Telnyx HTTP API
+      2. TWILIO_ENABLED=true -> Twilio SDK
+      3. neither set         -> kill switch, skip entirely.
 
     Safety order (every send goes through ALL of these):
-      1. TWILIO_ENABLED!=true       -> kill switch, skip entirely.
-      2. Pre-launch safety guard    -> if TWILIO_DEV_OVERRIDE_TO is unset
+      1. provider kill switch       -> skip if both providers off.
+      2. Pre-launch safety guard    -> if no DEV_OVERRIDE_TO is set
          AND SMS_LIVE_MODE!=true, refuse to send to any real number.
-         Mirrors EMAIL_OVERRIDE_TO + EMAIL_LIVE_MODE -- "fail closed" so
-         a misconfigured staging env can never page real therapists.
-      3. TWILIO_DEV_OVERRIDE_TO     -> reroutes the message to the
+         Mirrors EMAIL_OVERRIDE_TO + EMAIL_LIVE_MODE -- "fail closed"
+         so a misconfigured staging env can never page real therapists.
+      3. DEV_OVERRIDE_TO            -> reroutes the message to the
          verified test number, prefixed with [was: <intended>].
-      4. Twilio creds + from-number -> required, else skip.
+      4. Provider creds + from-number -> required, else skip.
 
     If force=True, bypasses #1 and #2 (for the admin test-SMS endpoint
     where the admin explicitly chose to fire a live send).
     """
-    if not force and not _enabled():
-        logger.info("SMS disabled (TWILIO_ENABLED!=true), skipping send")
+    active_provider = _provider()
+    if not force and active_provider is None:
+        logger.info("SMS disabled (no provider enabled), skipping send")
         await _log_sms_send(
             intended_to=to, actual_to=to, body=body,
             sid=None, status=None, sent_ok=False,
-            blocked=True, block_reason="twilio_disabled",
+            blocked=True, block_reason="provider_disabled",
+            provider="none",
         )
         return None
+    # When force=True for a test send, still need to know which provider
+    # to talk to. Default to telnyx if its API key is set, else twilio.
+    if active_provider is None:
+        active_provider = "telnyx" if os.environ.get("TELNYX_API_KEY", "").strip() else "twilio"
 
-    client = _client()
     from_ = _from_number()
-    if client is None or not from_:
-        logger.warning("Twilio not fully configured, skipping SMS send")
+    if not from_:
+        logger.warning("%s from-number not configured, skipping SMS send", active_provider)
         await _log_sms_send(
             intended_to=to, actual_to=to, body=body,
             sid=None, status=None, sent_ok=False,
             blocked=True, block_reason="not_configured",
+            provider=active_provider,
         )
         return None
 
@@ -139,29 +266,31 @@ async def send_sms(to: str, body: str, *, force: bool = False) -> dict[str, Any]
             intended_to=to, actual_to=to, body=body,
             sid=None, status=None, sent_ok=False,
             blocked=True, block_reason="invalid_phone_format",
+            provider=active_provider,
         )
         return None
 
     override = normalize_us_phone(_override_to())
     # Pre-launch safety guard. Same three-state pattern as email:
-    #   1. TWILIO_DEV_OVERRIDE_TO set -> redirect (safe testing).
-    #   2. SMS_LIVE_MODE=true         -> allow real recipient (go-live).
-    #   3. neither                    -> BLOCK any real send.
-    # Without this guard, flipping TWILIO_ENABLED=true on a staging env
-    # whose DEV_OVERRIDE_TO got unset would silently SMS every real
-    # therapist phone in the imported_xlsx directory. Fail closed.
+    #   1. SMS_DEV_OVERRIDE_TO set -> redirect (safe testing).
+    #   2. SMS_LIVE_MODE=true      -> allow real recipient (go-live).
+    #   3. neither                 -> BLOCK any real send.
+    # Without this guard, flipping a provider on for staging without
+    # an override would silently SMS every real therapist phone in the
+    # imported_xlsx directory. Fail closed.
     live_mode = os.environ.get("SMS_LIVE_MODE", "").strip().lower() == "true"
     if not force and not override and not live_mode:
         logger.warning(
             "PRELAUNCH BLOCK: refusing to SMS %s (real number). "
-            "Set TWILIO_DEV_OVERRIDE_TO to redirect to a test phone, or "
-            "SMS_LIVE_MODE=true to go live.",
+            "Set SMS_DEV_OVERRIDE_TO (or legacy TWILIO_DEV_OVERRIDE_TO) "
+            "to redirect to a test phone, or SMS_LIVE_MODE=true to go live.",
             intended_to,
         )
         await _log_sms_send(
             intended_to=intended_to, actual_to=intended_to, body=body,
             sid=None, status=None, sent_ok=False,
             blocked=True, block_reason="prelaunch_safety_guard",
+            provider=active_provider,
         )
         return None
 
@@ -170,43 +299,63 @@ async def send_sms(to: str, body: str, *, force: bool = False) -> dict[str, Any]
     if override and override != intended_to:
         actual_body = f"[was: {intended_to}]\n{body}"
 
-    # Dry-run mode: short-circuit BEFORE the Twilio call so we exercise
+    # Dry-run mode: short-circuit BEFORE the provider call so we exercise
     # the whole code path (cron triggers, normalization, audit log) but
-    # never spend a Twilio credit or page anyone. Use this when you want
-    # to verify "would the right therapists have been SMS'd?" without
+    # never spend a credit or page anyone. Use this when you want to
+    # verify "would the right therapists have been SMS'd?" without
     # hammering your own cell. Marks the audit row with a recognisable
     # status so it's easy to filter out of real-traffic dashboards.
     dry_run = os.environ.get("SMS_DRY_RUN", "").strip().lower() == "true"
     if dry_run:
         logger.info(
-            "SMS_DRY_RUN: would have sent to %s (intended=%s) body=%s",
-            actual_to, intended_to, actual_body[:80],
+            "SMS_DRY_RUN: would have sent via %s to %s (intended=%s) body=%s",
+            active_provider, actual_to, intended_to, actual_body[:80],
         )
         await _log_sms_send(
             intended_to=intended_to, actual_to=actual_to, body=actual_body,
             sid="dry-run", status="dry_run", sent_ok=True,
+            provider=active_provider,
         )
         return {"sid": "dry-run", "to": actual_to,
-                "intended_to": intended_to, "status": "dry_run"}
-
-    def _send_sync() -> Any:
-        return client.messages.create(to=actual_to, from_=from_, body=actual_body)
+                "intended_to": intended_to, "status": "dry_run",
+                "provider": active_provider}
 
     try:
-        msg = await asyncio.to_thread(_send_sync)
-        logger.info("Sent SMS sid=%s status=%s", msg.sid, msg.status)
+        if active_provider == "telnyx":
+            result = await _send_via_telnyx(
+                intended_to=intended_to, actual_to=actual_to,
+                actual_body=actual_body, from_=from_,
+            )
+        else:
+            result = await _send_via_twilio(
+                intended_to=intended_to, actual_to=actual_to,
+                actual_body=actual_body, from_=from_,
+            )
+        if result is None:
+            # Provider creds incomplete -- the per-provider helper
+            # returns None when its API key / SDK client is missing.
+            await _log_sms_send(
+                intended_to=intended_to, actual_to=actual_to, body=actual_body,
+                sid=None, status=None, sent_ok=False,
+                blocked=True, block_reason=f"{active_provider}_not_configured",
+                provider=active_provider,
+            )
+            return None
         await _log_sms_send(
             intended_to=intended_to, actual_to=actual_to, body=actual_body,
-            sid=msg.sid, status=msg.status, sent_ok=True,
+            sid=result.get("sid"), status=result.get("status"), sent_ok=True,
+            provider=active_provider,
         )
-        return {"sid": msg.sid, "to": actual_to, "intended_to": intended_to,
-                "status": msg.status}
+        return result
     except Exception as e:
-        logger.exception("Failed to send SMS: %s", e)
+        logger.exception("Failed to send SMS via %s: %s", active_provider, e)
+        # httpx errors include the response body in str(e); truncate
+        # to keep the audit row readable.
         await _log_sms_send(
             intended_to=intended_to, actual_to=actual_to, body=actual_body,
             sid=None, status=None, sent_ok=False,
-            blocked=True, block_reason=f"twilio_exception:{str(e)[:120]}",
+            blocked=True, block_reason=f"{active_provider}_exception:{str(e)[:120]}",
+            provider=active_provider,
         )
         return None
 

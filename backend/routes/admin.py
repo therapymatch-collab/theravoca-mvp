@@ -7871,9 +7871,9 @@ async def twilio_test(payload: dict | None = None) -> dict[str, Any]:
 # the Telnyx env vars and Telnyx Public API. Doesn't actually send SMS
 # (zero-cost auth check). Used by the admin SMS-status panel to show
 # whether Telnyx is configured and reachable. The legacy
-# /admin/twilio-test stays alive for now since sms_service.py still
-# routes outbound through Twilio -- once that migrates, the Twilio
-# diagnostic can be removed.
+# /admin/twilio-test stays alive for backwards-compat now that
+# sms_service.py auto-picks Telnyx-or-Twilio based on which provider
+# is enabled (TELNYX_ENABLED wins over TWILIO_ENABLED).
 
 @router.post("/admin/telnyx-test", dependencies=[Depends(require_admin)])
 async def telnyx_test(payload: dict | None = None) -> dict[str, Any]:
