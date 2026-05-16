@@ -352,10 +352,11 @@ async def telnyx_webhook(request: Request) -> dict[str, Any]:
         if error_code:
             update["telnyx_error_code"] = error_code
             update["telnyx_error_message"] = error_message
-        # Match against sms_sends by Telnyx message ID. When we cut
-        # over the outbound path from Twilio to Telnyx we'll start
-        # populating sms_sends.telnyx_id at send time; until then the
-        # lookup misses and we just log.
+        # Match against sms_sends by Telnyx message ID. The outbound
+        # path (sms_service._send_via_telnyx, ae510b3) populates
+        # sms_sends.telnyx_id at send time when provider=telnyx, so
+        # this $set lands on the right row. Pre-cutover rows (Twilio
+        # only) have no telnyx_id and the lookup correctly misses.
         if msg_id:
             res = await db.sms_sends.update_one(
                 {"telnyx_id": msg_id},
