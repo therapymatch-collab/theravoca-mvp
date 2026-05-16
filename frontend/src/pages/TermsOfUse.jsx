@@ -319,9 +319,7 @@ export default function TermsOfUse() {
               </h2>
               <p>
                 If you wish to contact us or have any questions or concerns related to these Terms or your use of the Services, please email us at{" "}
-                <a href="mailto:legal@theravoca.com" className="text-[#2D4A3E] underline">legal@theravoca.com</a>{" "}
-                or call us at{" "}
-                <a href="tel:+16465358346" className="text-[#2D4A3E] underline">(646) 535-8346</a>.
+                <a href="mailto:legal@theravoca.com" className="text-[#2D4A3E] underline">legal@theravoca.com</a>.
               </p>
             </section>
 

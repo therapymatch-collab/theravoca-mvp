@@ -240,27 +240,15 @@ export default function PrivacyNotice() {
               <p className="font-medium mt-4">b. Data Deletion / Account Cancellation</p>
               <p>
                 You can delete your TheraVoca account and the personal information
-                associated with it at any time. We handle these requests by email
-                or phone so a real person can confirm what you're asking for and
-                answer any questions before processing:
+                associated with it at any time. Email{" "}
+                <a href="mailto:support@theravoca.com" className="text-[#2D4A3E] underline">
+                  support@theravoca.com
+                </a>{" "}
+                with the subject line "Delete my account" — most requests
+                confirmed within one business day. We handle these by email so
+                a real person can confirm what you're asking for and answer any
+                questions before processing.
               </p>
-              <ul className="list-disc pl-5 mt-2 space-y-1">
-                <li>
-                  <strong>By email:</strong>{" "}
-                  <a href="mailto:support@theravoca.com" className="text-[#2D4A3E] underline">
-                    support@theravoca.com
-                  </a>{" "}
-                  with the subject line "Delete my account" — most
-                  requests confirmed within one business day.
-                </li>
-                <li>
-                  <strong>By phone:</strong>{" "}
-                  <a href="tel:+16465358346" className="text-[#2D4A3E] underline">
-                    (646) 535-8346
-                  </a>
-                  .
-                </li>
-              </ul>
               <p className="mt-3">
                 <strong>What happens when you delete:</strong> within 24 hours
                 of confirmation we permanently remove your profile, contact
@@ -332,9 +320,7 @@ export default function PrivacyNotice() {
               </h2>
               <p>
                 If you have any questions or comments regarding our Privacy Notice and practices, or to submit a request or complaint, please email our privacy team at{" "}
-                <a href="mailto:privacy@theravoca.com" className="text-[#2D4A3E] underline">privacy@theravoca.com</a>{" "}
-                or call us at{" "}
-                <a href="tel:+16465358346" className="text-[#2D4A3E] underline">(646) 535-8346</a>.
+                <a href="mailto:privacy@theravoca.com" className="text-[#2D4A3E] underline">privacy@theravoca.com</a>.
               </p>
             </section>
 

@@ -118,14 +118,11 @@ export default function TwoFactorSetup() {
             />
           )}
 
-          {/* Account-lifecycle controls (Pause / Export / Delete) are
-              intentionally hidden behind support email at launch --
-              fewer accidental clicks, more chance for a human to ask
-              "why?" and route to Pause when Delete was knee-jerk. The
-              backend endpoints + UI components still exist for admin
-              use. The short FAQ below tells the user how to reach us.
-              See AccountLifecycleNote component. */}
-          <AccountLifecycleNote role="therapist" />
+          {/* Account lifecycle (pause / download / delete) is
+              intentionally NOT exposed in the portal at all per Josh
+              -- only mentioned in the public FAQ. Backend endpoints
+              + admin per-user actions still exist; therapists go
+              through support@ when they want those things. */}
         </div>
       </main>
       <Footer />
@@ -574,90 +571,6 @@ function formatDate(iso) {
   }
 }
 
-// Short FAQ-style note replacing the Pause / Export / Delete panels.
-// We keep the underlying backend endpoints + UI components live for
-// admin reuse, but route end-users through support@ so a human can
-// understand context (often Delete is regret-y; a Pause solves it).
-// Kept generic so the same component works for `role="patient"`.
-function AccountLifecycleNote({ role }) {
-  const subjectFor = (action) =>
-    encodeURIComponent(
-      `${role === "therapist" ? "Therapist" : "Patient"} account: ${action}`,
-    );
-  const isTherapist = role === "therapist";
-  return (
-    <section
-      className="mt-8 bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-6"
-      data-testid="account-lifecycle-note"
-    >
-      <h2 className="font-serif-display text-xl text-[#2D4A3E]">
-        Pausing, downloading, or deleting your account
-      </h2>
-      <p className="text-sm text-[#2B2A29] mt-2 leading-relaxed">
-        We handle these by email so a real person can confirm what you're
-        asking for, answer questions, and help you avoid changes you
-        didn't mean. Most requests are processed within one business
-        day; account deletion is permanent after a 24-hour reversal
-        window.
-      </p>
-      <ul className="mt-4 space-y-3 text-sm">
-        {isTherapist && (
-          <li className="flex flex-col gap-1">
-            <a
-              href={`mailto:support@theravoca.com?subject=${subjectFor("Pause referrals")}`}
-              className="text-[#2D4A3E] underline font-medium"
-              data-testid="lifecycle-pause-mailto"
-            >
-              Pause new referrals →
-            </a>
-            <span className="text-xs text-[#6D6A65] leading-relaxed">
-              Stops new patient matches from reaching you. Your profile
-              stays visible. Reversible — email us again to resume. Open
-              referrals already in your inbox keep going (you can decline
-              them individually).
-            </span>
-          </li>
-        )}
-        <li className="flex flex-col gap-1">
-          <a
-            href={`mailto:support@theravoca.com?subject=${subjectFor("Download my account data (Excel)")}`}
-            className="text-[#2D4A3E] underline font-medium"
-            data-testid="lifecycle-download-mailto"
-          >
-            Download a copy of my data (Excel) →
-          </a>
-          <span className="text-xs text-[#6D6A65] leading-relaxed">
-            We'll send you an Excel workbook with everything we have on
-            your account — {isTherapist
-              ? "profile, referrals, declines, feedback about you, sign-in history"
-              : "match requests, therapist replies, feedback you submitted, sign-in history"}.
-            Auth secrets are stripped.
-          </span>
-        </li>
-        <li className="flex flex-col gap-1">
-          <a
-            href={`mailto:support@theravoca.com?subject=${subjectFor("Delete my account")}`}
-            className="text-[#8B3220] underline font-medium"
-            data-testid="lifecycle-delete-mailto"
-          >
-            Delete my account →
-          </a>
-          <span className="text-xs text-[#6D6A65] leading-relaxed">
-            Permanently removes your profile, contact details
-            {isTherapist ? ", license document," : ","} and login.
-            {isTherapist && " Cancels any active TheraVoca subscription at end-of-period — no surprise renewals."}{" "}
-            Reversible within 24 hours of confirmation; permanent after that.
-          </span>
-        </li>
-      </ul>
-      <p className="text-xs text-[#A4A29E] mt-4 italic leading-relaxed">
-        Or call us at{" "}
-        <a href="tel:+16465358346" className="text-[#2D4A3E] underline">
-          (646) 535-8346
-        </a>{" "}
-        — same options, faster turnaround.
-      </p>
-    </section>
-  );
-}
+// AccountLifecycleNote was here -- removed 2026-05-16 per Josh:
+// account lifecycle is FAQ-only, not exposed in the portal at all.
 
