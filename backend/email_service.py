@@ -416,11 +416,22 @@ async def _send(
     # override env var ever gets unset by accident, we fail closed.
     live_mode = os.environ.get("EMAIL_LIVE_MODE", "").strip().lower() == "true"
     if not force and not override and not live_mode and not _is_safe_test_address(to):
+        # SECURITY (2026-05-16 audit, MEDIUM #9): don't log the full
+        # recipient email -- Render's stdout flows to log retention
+        # with broader access than the DB. Log the audit-style HMAC
+        # hash instead so ops can still grep / correlate. Full
+        # address still lands in db.email_sends via _log_send below
+        # (which is the authoritative audit source anyway).
+        try:
+            from audit import _hash_patient_email as _h
+            to_id = _h(to)
+        except Exception:
+            to_id = "<hash-unavailable>"
         logger.warning(
             "PRELAUNCH BLOCK: refusing to send to %s (real address). "
             "Set EMAIL_OVERRIDE_TO to redirect to a test inbox, or "
             "EMAIL_LIVE_MODE=true to go live.",
-            to,
+            f"hash:{to_id}",
         )
         await _log_send(
             to=to, actual_to=to, subject=subject, template_key=template_key,

@@ -128,7 +128,7 @@ async def _set_password_on_doc(email: str, role: str, password_hash: str) -> boo
 
 
 @router.post("/auth/request-code")
-async def auth_request_code(payload: MagicCodeRequest):
+async def auth_request_code(payload: MagicCodeRequest, request: Request):
     if payload.role not in ("patient", "therapist"):
         raise HTTPException(400, "Invalid role")
     email = payload.email.lower()
@@ -144,6 +144,22 @@ async def auth_request_code(payload: MagicCodeRequest):
         })
         if recent >= MAGIC_CODE_MAX_PER_HOUR:
             raise HTTPException(429, "Too many code requests. Try again in an hour.")
+        # SECURITY (2026-05-16 audit, MEDIUM #7): per-IP rate limit.
+        # The per-(email, hour) cap above doesn't stop an attacker
+        # rotating EMAILS from a single IP -- they could trigger
+        # thousands of magic-code emails to arbitrary recipients,
+        # damaging Resend deliverability reputation and spamming real
+        # inboxes (patient role skips the existence check entirely,
+        # so any address goes). Cap per-IP magic-code requests at 20
+        # per hour across all roles + emails.
+        ip = _client_ip(request)
+        if ip:
+            ip_recent = await db.magic_codes.count_documents({
+                "ip": ip,
+                "created_at": {"$gte": one_hour_ago},
+            })
+            if ip_recent >= 20:
+                raise HTTPException(429, "Too many code requests from your network. Try again in an hour.")
 
     if payload.role == "therapist":
         therapist = await db.therapists.find_one(
@@ -157,6 +173,11 @@ async def auth_request_code(payload: MagicCodeRequest):
             return {"ok": True}
 
     code = f"{secrets.randbelow(900000) + 100000:06d}"
+    # Persist the requester IP so the per-IP rate limiter above can
+    # count prior requests from the same source. Best-effort -- if we
+    # can't resolve an IP (proxy stripped headers) we just store None
+    # and the per-IP cap is a no-op for that request.
+    requester_ip = _client_ip(request)
     await db.magic_codes.insert_one({
         "id": str(uuid.uuid4()),
         "email": email,
@@ -165,6 +186,7 @@ async def auth_request_code(payload: MagicCodeRequest):
         "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=MAGIC_CODE_TTL_MINUTES)).isoformat(),
         "used": False,
         "created_at": _now_iso(),
+        "ip": requester_ip,
     })
     _spawn_bg(
         send_magic_code(email, code, payload.role),

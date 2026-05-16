@@ -103,7 +103,15 @@ async def check_and_record_login(
             "ts": now_iso,
         })
     except Exception as e:
-        logger.warning("login_events insert failed for %s: %s", email_norm, e)
+        # SECURITY (2026-05-16 audit, MEDIUM #9): don't log full email
+        # to Render stdout. Use the audit-style hash so ops can still
+        # correlate without exposing PII in log retention.
+        try:
+            from audit import _hash_patient_email as _h
+            email_id = _h(email_norm)
+        except Exception:
+            email_id = "<hash-unavailable>"
+        logger.warning("login_events insert failed for hash:%s: %s", email_id, e)
 
     alert_fired = False
     if is_new_ip and not is_first_login:
