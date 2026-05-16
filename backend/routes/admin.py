@@ -4494,7 +4494,7 @@ async def admin_get_referral_source_options() -> dict[str, Any]:
     return {"options": _reorder_referral_options(options)}
 
 
-@router.put("/admin/referral-source-options", dependencies=[Depends(require_role("view"))])
+@router.put("/admin/referral-source-options", dependencies=[Depends(require_role("edit"))])
 async def admin_set_referral_source_options(payload: dict) -> dict[str, Any]:
     options = payload.get("options")
     if (
@@ -4549,7 +4549,7 @@ async def admin_get_deep_match_weights() -> dict[str, Any]:
     }
 
 
-@router.put("/admin/deep-match-weights", dependencies=[Depends(require_role("view"))])
+@router.put("/admin/deep-match-weights", dependencies=[Depends(require_role("admin"))])
 async def admin_set_deep_match_weights(payload: dict) -> dict[str, Any]:
     """Validate + persist deep-match weights. Each weight must be in
     [0.05, 0.6]  --  same guardrail bounds as the v2 spec's auto-tuning
@@ -4599,7 +4599,7 @@ async def admin_get_matching_defaults() -> dict[str, Any]:
     }
 
 
-@router.put("/admin/matching-defaults", dependencies=[Depends(require_role("view"))])
+@router.put("/admin/matching-defaults", dependencies=[Depends(require_role("admin"))])
 async def admin_set_matching_defaults(payload: dict) -> dict[str, Any]:
     """Persist global matching defaults. Takes effect on next match run."""
     threshold = float(payload.get("threshold", 80))
@@ -4799,7 +4799,7 @@ async def admin_get_availability_prompt() -> dict[str, Any]:
     }
 
 
-@router.put("/admin/availability-prompt", dependencies=[Depends(require_role("view"))])
+@router.put("/admin/availability-prompt", dependencies=[Depends(require_role("edit"))])
 async def admin_set_availability_prompt(payload: dict) -> dict[str, Any]:
     raw_days = payload.get("days")
     if not isinstance(raw_days, list) or not raw_days:
@@ -5200,7 +5200,7 @@ async def admin_get_scrape_sources() -> dict[str, Any]:
     return {"sources": sources}
 
 
-@router.put("/admin/scrape-sources", dependencies=[Depends(require_role("view"))])
+@router.put("/admin/scrape-sources", dependencies=[Depends(require_role("edit"))])
 async def admin_set_scrape_sources(payload: dict) -> dict[str, Any]:
     raw = payload.get("sources")
     if not isinstance(raw, list):
@@ -5596,7 +5596,7 @@ async def admin_list_sms_templates() -> dict[str, Any]:
     return {"templates": templates}
 
 
-@router.put("/admin/sms-templates", dependencies=[Depends(require_role("view"))])
+@router.put("/admin/sms-templates", dependencies=[Depends(require_role("edit"))])
 async def admin_update_sms_template(payload: dict) -> dict[str, Any]:
     """Update an SMS template. Body: {key, value}. Set value="" to reset to default."""
     key = (payload.get("key") or "").strip()
@@ -5646,7 +5646,7 @@ async def admin_get_research_enrichment() -> dict[str, Any]:
     }
 
 
-@router.put("/admin/research-enrichment", dependencies=[Depends(require_role("view"))])
+@router.put("/admin/research-enrichment", dependencies=[Depends(require_role("edit"))])
 async def admin_set_research_enrichment(payload: dict) -> dict[str, Any]:
     from research_enrichment import set_enabled
     enabled = bool(payload.get("enabled"))
@@ -5941,7 +5941,7 @@ async def admin_get_turnstile_settings() -> dict[str, Any]:
     }
 
 
-@router.put("/admin/turnstile-settings", dependencies=[Depends(require_role("view"))])
+@router.put("/admin/turnstile-settings", dependencies=[Depends(require_role("admin"))])
 async def admin_set_turnstile_settings(payload: dict) -> dict[str, Any]:
     """Flip the runtime disable toggle. `{disabled: true, reason?: str}`.
     When disabled, BOTH backend verification and the frontend widget
@@ -6132,7 +6132,7 @@ async def admin_get_master_testing_mode() -> dict[str, Any]:
     return await testing_mode.status()
 
 
-@router.put("/admin/master-testing-mode", dependencies=[Depends(require_role("view"))])
+@router.put("/admin/master-testing-mode", dependencies=[Depends(require_role("admin"))])
 async def admin_set_master_testing_mode(payload: dict) -> dict[str, Any]:
     """Flip the master testing-mode toggle. Payload:
         {"enabled": true, "hours": 1, "reason": "playwright e2e"}
@@ -7431,7 +7431,7 @@ async def admin_get_feedback_testing() -> dict[str, Any]:
     doc = await db.app_config.find_one({"key": "feedback_testing"}, {"_id": 0})
     return {"enabled": bool((doc or {}).get("enabled", False))}
 
-@router.put("/admin/feedback-testing", dependencies=[Depends(require_role("view"))])
+@router.put("/admin/feedback-testing", dependencies=[Depends(require_role("admin"))])
 async def admin_set_feedback_testing(payload: dict) -> dict[str, Any]:
     enabled = bool(payload.get("enabled", False))
     await db.app_config.update_one(
@@ -7721,7 +7721,7 @@ async def get_scraper_job(job_id: str):
     return job
 
 
-@router.post("/admin/places-test", dependencies=[Depends(require_role("view"))])
+@router.post("/admin/places-test", dependencies=[Depends(require_role("edit"))])
 async def places_test(payload: dict | None = None):
     """Diagnostic ping of Google Places API (New).
 
@@ -8119,7 +8119,7 @@ async def list_scraper_jobs():
 
 # ── Provider directory import (real data over backfill placeholders) ──────
 
-@router.post("/admin/run-provider-import", dependencies=[Depends(require_role("view"))])
+@router.post("/admin/run-provider-import", dependencies=[Depends(require_role("edit"))])
 async def run_provider_import(payload: dict):
     """Run the provider directory xlsx import inline.
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import hmac as _hmac
 import re
 import secrets
 import uuid
@@ -389,6 +390,12 @@ async def create_request(payload: RequestCreate, request: Request):
         "patient_geo": patient_geo,
         "verification_token": token,
         "view_token": secrets.token_urlsafe(24),
+        # 2026-05-16 audit (HIGH): cap the lifetime of the unsigned-in
+        # results-link auth path. After this date the link only works
+        # via session sign-in (magic code). 60d is plenty for the email
+        # bounce-back flow; longer than that, a leaked URL becomes a
+        # standing PHI grant.
+        "view_token_expires_at": (datetime.now(timezone.utc) + timedelta(days=60)).isoformat(),
         "verified": False,
         "status": "pending_verification",
         "threshold": _threshold,
@@ -691,8 +698,21 @@ async def public_request_results(
     granted = False
     _auth_method = "view_token"
     expected_token = req.get("view_token")
-    if t and expected_token and t == expected_token:
-        granted = True
+    # SECURITY (2026-05-16 audit, HIGH #6): timing-safe compare +
+    # expiry check. Plain `==` leaks length/prefix-match timing; no
+    # expiry meant the URL was a perpetual PHI grant. The
+    # view_token_expires_at field is set at request creation (60d
+    # window); after expiry only the session path grants access.
+    if t and expected_token and _hmac.compare_digest(str(t), str(expected_token)):
+        exp_iso = req.get("view_token_expires_at")
+        view_expired = False
+        if exp_iso:
+            try:
+                view_expired = datetime.fromisoformat(exp_iso) < datetime.now(timezone.utc)
+            except Exception:
+                view_expired = False
+        if not view_expired:
+            granted = True
     if not granted:
         # Session-based auth: the patient must be signed in with the email
         # that owns this request (verified via 6-digit magic code).
@@ -828,8 +848,21 @@ async def patient_request_receipt(
 
     granted = False
     expected_token = req.get("view_token")
-    if t and expected_token and t == expected_token:
-        granted = True
+    # SECURITY (2026-05-16 audit, HIGH #6): timing-safe compare +
+    # expiry check. Plain `==` leaks length/prefix-match timing; no
+    # expiry meant the URL was a perpetual PHI grant. The
+    # view_token_expires_at field is set at request creation (60d
+    # window); after expiry only the session path grants access.
+    if t and expected_token and _hmac.compare_digest(str(t), str(expected_token)):
+        exp_iso = req.get("view_token_expires_at")
+        view_expired = False
+        if exp_iso:
+            try:
+                view_expired = datetime.fromisoformat(exp_iso) < datetime.now(timezone.utc)
+            except Exception:
+                view_expired = False
+        if not view_expired:
+            granted = True
     if not granted:
         sess = _decode_session_from_authorization(authorization)
         if (

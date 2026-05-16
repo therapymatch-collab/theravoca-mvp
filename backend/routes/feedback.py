@@ -125,19 +125,63 @@ def generate_feedback_token(entity_id: str, entity_type: str = "patient") -> str
     return f"{sig}.{expires_unix}"
 
 
-def _verify_feedback_token(
+async def _verify_feedback_token(
     entity_id: str,
     token: Optional[str],
     entity_type: str = "patient",
     authorization: Optional[str] = None,
 ) -> None:
     """Verify a feedback token OR a valid session Bearer JWT.
-    Raises 401 on failure."""
-    # Allow session-authenticated users (logged into portal)
+    Raises 401/403 on failure.
+
+    SECURITY (2026-05-16 audit, CRITICAL feedback IDOR): when accepting
+    a session-authenticated request, this function MUST verify that
+    the session's email owns the entity referenced in the URL.
+    Previously any valid JWT was accepted, so a signed-in therapist
+    could POST /feedback/patient/{any_request_id}/3w to manipulate
+    NPS, trigger fake crisis alerts, or tank competitor stats.
+    Resolution:
+      - entity_type=patient: the session.email must match
+        requests.email for the given request_id
+      - entity_type=therapist: the session.email must match
+        therapists.email for the given therapist_id (or be admin)
+    Admin sessions still pass without ownership check (they're our
+    own ops).
+    """
+    # Allow session-authenticated users (logged into portal) ONLY when
+    # they actually own the entity in question.
     if not token and authorization:
         session = _decode_session_from_authorization(authorization)
         if session:
-            return  # Valid session — allow through
+            sess_email = (session.get("email") or "").strip().lower()
+            sess_role = session.get("role")
+            # Admin sessions bypass ownership (own-system ops).
+            if sess_role == "admin":
+                return
+            if not sess_email:
+                raise HTTPException(401, "Session has no email; cannot verify ownership.")
+            if entity_type == "patient":
+                req = await db.requests.find_one(
+                    {"id": entity_id},
+                    {"_id": 0, "email": 1},
+                )
+                if not req:
+                    raise HTTPException(404, "Request not found.")
+                if (req.get("email") or "").strip().lower() != sess_email:
+                    raise HTTPException(403, "Session does not own this request.")
+                return
+            if entity_type == "therapist":
+                t = await db.therapists.find_one(
+                    {"id": entity_id},
+                    {"_id": 0, "email": 1},
+                )
+                if not t:
+                    raise HTTPException(404, "Therapist not found.")
+                if (t.get("email") or "").strip().lower() != sess_email:
+                    raise HTTPException(403, "Session does not own this therapist.")
+                return
+            # Unknown entity_type -> fail closed.
+            raise HTTPException(401, "Unknown entity type for session auth.")
     if not token:
         raise HTTPException(401, "Missing feedback token — use the link from your email.")
     parts = token.split(".", 1)
@@ -260,6 +304,10 @@ class WidgetFeedback(BaseModel):
     email: Optional[EmailStr] = None
     source_url: Optional[str] = ""
     role: Optional[str] = ""
+    # 2026-05-16 security: floating widget is a public unauth
+    # endpoint. Frontend should attach a Cloudflare Turnstile token;
+    # backend verifies + fails-soft if Turnstile isn't configured.
+    turnstile_token: Optional[str] = None
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -272,7 +320,7 @@ async def submit_patient_48h(
     token: Optional[str] = Query(None), authorization: Optional[str] = Header(None),
 ):
     """48h soft touch -- process feedback only, no reliability updates."""
-    _verify_feedback_token(request_id, token, "patient", authorization)
+    await _verify_feedback_token(request_id, token, "patient", authorization)
     req = await db.requests.find_one({"id": request_id}, _REQUEST_SNAPSHOT_PROJECTION)
     if not req:
         raise HTTPException(404, "Request not found")
@@ -312,7 +360,7 @@ async def submit_patient_3w(
     token: Optional[str] = Query(None), authorization: Optional[str] = Header(None),
 ):
     """3-week selection + first impressions."""
-    _verify_feedback_token(request_id, token, "patient", authorization)
+    await _verify_feedback_token(request_id, token, "patient", authorization)
     req = await db.requests.find_one({"id": request_id}, _REQUEST_SNAPSHOT_PROJECTION)
     if not req:
         raise HTTPException(404, "Request not found")
@@ -385,7 +433,7 @@ async def submit_patient_9w(
     token: Optional[str] = Query(None), authorization: Optional[str] = Header(None),
 ):
     """9-week retention + Match Strength questions."""
-    _verify_feedback_token(request_id, token, "patient", authorization)
+    await _verify_feedback_token(request_id, token, "patient", authorization)
     req = await db.requests.find_one({"id": request_id}, _REQUEST_SNAPSHOT_PROJECTION)
     if not req:
         raise HTTPException(404, "Request not found")
@@ -440,7 +488,7 @@ async def submit_patient_15w(
     token: Optional[str] = Query(None), authorization: Optional[str] = Header(None),
 ):
     """15-week outcome survey."""
-    _verify_feedback_token(request_id, token, "patient", authorization)
+    await _verify_feedback_token(request_id, token, "patient", authorization)
     req = await db.requests.find_one({"id": request_id}, _REQUEST_SNAPSHOT_PROJECTION)
     if not req:
         raise HTTPException(404, "Request not found")
@@ -637,7 +685,7 @@ async def get_therapist_survey(
     revisits a survey link they already submitted. Returns 200 with body
     `null` when no doc exists -- frontend distinguishes 'not submitted yet'
     (200 + null) from 'auth failed' (401)."""
-    _verify_feedback_token(therapist_id, token, "therapist", authorization)
+    await _verify_feedback_token(therapist_id, token, "therapist", authorization)
     doc = await db.therapist_surveys.find_one(
         {"therapist_id": therapist_id, "survey_number": survey_number},
         {"_id": 0},
@@ -663,7 +711,7 @@ async def submit_therapist_survey(
     doc so the admin dashboard can see who has and hasn't responded. The
     paired `last_therapist_survey_sent_at` is set by the daily cron when it
     fires the survey email (C3, separate commit)."""
-    _verify_feedback_token(therapist_id, token, "therapist", authorization)
+    await _verify_feedback_token(therapist_id, token, "therapist", authorization)
     t = await db.therapists.find_one(
         {"id": therapist_id}, {"_id": 0, "id": 1, "email": 1, "name": 1},
     )
@@ -706,7 +754,7 @@ async def submit_patient_feedback_legacy(
     token: Optional[str] = Query(None), authorization: Optional[str] = Header(None),
 ):
     """Backward-compatible: old email links hit this. Store as-is."""
-    _verify_feedback_token(request_id, token, "patient", authorization)
+    await _verify_feedback_token(request_id, token, "patient", authorization)
     milestone = (payload or {}).get("milestone", "48h")
     req = await db.requests.find_one({"id": request_id}, {"_id": 0, "email": 1})
     if not req:
@@ -729,7 +777,7 @@ async def submit_therapist_feedback_legacy(
     token: Optional[str] = Query(None), authorization: Optional[str] = Header(None),
 ):
     """Backward-compatible: old therapist feedback links."""
-    _verify_feedback_token(therapist_id, token, "therapist", authorization)
+    await _verify_feedback_token(therapist_id, token, "therapist", authorization)
     t = await db.therapists.find_one(
         {"id": therapist_id}, {"_id": 0, "email": 1, "name": 1}
     )
@@ -753,7 +801,7 @@ async def submit_therapist_exception_legacy(
     token: Optional[str] = Query(None), authorization: Optional[str] = Header(None),
 ):
     """Backward-compatible: old exception-based feedback."""
-    _verify_feedback_token(therapist_id, token, "therapist", authorization)
+    await _verify_feedback_token(therapist_id, token, "therapist", authorization)
     t = await db.therapists.find_one(
         {"id": therapist_id}, {"_id": 0, "email": 1, "name": 1}
     )
@@ -796,7 +844,7 @@ async def get_patient_matches(
         empty, return an empty matches array (frontend hides Q1b).
       - Unspecified milestone: notified pool (legacy fallback).
     """
-    _verify_feedback_token(request_id, token, "patient", authorization)
+    await _verify_feedback_token(request_id, token, "patient", authorization)
     req = await db.requests.find_one(
         {"id": request_id},
         {"_id": 0, "notified_therapist_ids": 1},
@@ -925,7 +973,7 @@ async def get_patient_submission(
     non-milestone path segment (matches, etc.) with a 422 even if order
     were swapped.
     """
-    _verify_feedback_token(request_id, token, "patient", authorization)
+    await _verify_feedback_token(request_id, token, "patient", authorization)
     doc = await db.feedback.find_one(
         {"request_id": request_id, "milestone": milestone},
         {"_id": 0},
@@ -938,7 +986,39 @@ async def get_patient_submission(
 # ═══════════════════════════════════════════════════════════════════════
 
 @router.post("/feedback/widget")
-async def submit_widget_feedback(payload: WidgetFeedback):
+async def submit_widget_feedback(payload: WidgetFeedback, request: Request):
+    """Floating feedback widget submission. Public endpoint.
+
+    SECURITY (2026-05-16 audit, HIGH #4):
+      1. Turnstile gate — previously absent. Public unauth endpoint
+         was wide-open to bulk abuse / Resend deliverability harm.
+      2. HTML/href injection in the admin relay email — `message`
+         and `source_url` were interpolated into HTML/href context
+         without escaping. Anyone could send the admin (FEEDBACK_INBOX)
+         emails containing arbitrary HTML or malicious href payloads
+         (drive-by phishing on admin click). All user-controlled
+         strings now go through html.escape; the source_url is
+         additionally constrained to http(s):// before being placed
+         in an href.
+    """
+    # Turnstile gate (fail-soft when Turnstile not configured).
+    try:
+        from turnstile_service import verify_token as _verify_turnstile
+        client_ip = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip() or None
+        ok, ts_err = await _verify_turnstile(
+            getattr(payload, "turnstile_token", None), ip=client_ip,
+        )
+        if not ok:
+            raise HTTPException(400, ts_err or "Security check failed.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Turnstile import / runtime failure -> log + allow (don't
+        # break feedback when the bot-defense layer flaps). Aligns
+        # with the rest of the codebase's fail-soft Turnstile policy.
+        logger.warning("Turnstile not enforced on feedback widget: %s", e)
+
+    import html as _html
     doc = {
         "id": str(uuid.uuid4()),
         "kind": "widget",
@@ -953,20 +1033,36 @@ async def submit_widget_feedback(payload: WidgetFeedback):
 
     try:
         from email_service import _wrap, BRAND
-        who = doc["name"] or "Anonymous"
-        contact_line = f"<p>{who}" + (f" · {doc['email']}" if doc["email"] else "") + "</p>"
-        role_line = f"<p style='color:{BRAND['muted']};font-size:13px;'>Role: {doc['role']}</p>"
+        who_safe = _html.escape(doc["name"] or "Anonymous")
+        email_safe = _html.escape(doc["email"] or "")
+        role_safe = _html.escape(str(doc["role"] or "anonymous"))
+        msg_safe = _html.escape(doc["message"] or "")
+        # source_url: only allow http(s); reject everything else
+        # (javascript:, data:, etc.) before placing in an href.
+        raw_url = doc["source_url"] or ""
+        url_safe = ""
+        if raw_url.startswith("http://") or raw_url.startswith("https://"):
+            url_safe = _html.escape(raw_url, quote=True)
+        contact_line = (
+            f"<p>{who_safe}"
+            + (f" · {email_safe}" if email_safe else "")
+            + "</p>"
+        )
+        role_line = (
+            f"<p style='color:{BRAND['muted']};font-size:13px;'>"
+            f"Role: {role_safe}</p>"
+        )
         src_line = (
             f"<p style='color:{BRAND['muted']};font-size:12px;'>From: "
-            f"<a href='{doc['source_url']}'>{doc['source_url']}</a></p>"
-            if doc["source_url"]
+            f"<a href=\"{url_safe}\">{url_safe}</a></p>"
+            if url_safe
             else ""
         )
         body_html = (
             f"{contact_line}{role_line}"
             f"<div style='background:{BRAND['bg']};padding:16px 20px;border-radius:10px;"
             f"border:1px solid {BRAND['border']};margin:14px 0;font-size:15px;line-height:1.6;'>"
-            f"{doc['message'].replace(chr(10), '<br>')}</div>{src_line}"
+            f"{msg_safe.replace(chr(10), '<br>')}</div>{src_line}"
         )
         await _send(
             FEEDBACK_INBOX,
