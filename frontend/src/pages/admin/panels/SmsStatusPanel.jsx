@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 //   most-recent /admin/test-sms poll, and lets the admin store their A2P
 //   brand_id + campaign_id in app_config for quick reference.
 //
-// Why this matters: Twilio's API will return "queued" even when US carriers
+// Why this matters: Telnyx's API will return "queued" even when US carriers
 // are about to drop the message at the carrier hop (error 30034). A2P 10DLC
 // registration is a one-time TCR process; until done, ALL SMS to US numbers
 // from a 10-digit number is silently blocked. This panel makes that visible.
@@ -29,7 +29,7 @@ const VERDICT_META = {
     border: "#F4C7BE",
     icon: MessageSquareWarning,
     title: "Blocked — A2P 10DLC registration required",
-    body: "US carriers reject SMS from unregistered 10-digit numbers (Twilio error 30034). Register your brand + campaign at twilio.com/console/sms/a2p-messaging. Approval typically takes 1–3 business days.",
+    body: "US carriers reject SMS from unregistered 10-digit numbers (carrier error 30034). Register your brand + campaign at portal.telnyx.com/#/messaging/profiles. Approval typically takes 1–3 business days.",
   },
   blocked: {
     color: "#B0382A",
@@ -39,12 +39,12 @@ const VERDICT_META = {
     title: "Blocked",
     body: "Last test SMS was undelivered or failed. Check the error code below.",
   },
-  twilio_disabled: {
+  telnyx_disabled: {
     color: "#A37700",
     bg: "#FBF1D6",
     border: "#E9D78A",
     icon: MessageSquareWarning,
-    title: "Twilio integration disabled",
+    title: "Telnyx integration disabled",
     body: "TWILIO_ENABLED is set to false in the backend env. Re-enable it before SMS will dispatch.",
   },
   missing_credentials: {
@@ -52,7 +52,7 @@ const VERDICT_META = {
     bg: "#FBF1D6",
     border: "#E9D78A",
     icon: MessageSquareWarning,
-    title: "Missing Twilio credentials",
+    title: "Missing Telnyx credentials",
     body: "TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN is missing in backend .env.",
   },
   untested: {
@@ -175,7 +175,7 @@ export default function SmsStatusPanel({ client }) {
         toast.success("SMS delivered ✓");
       } else if (r.data?.error_code) {
         toast.error(
-          `Twilio err ${r.data.error_code}: ${r.data.troubleshooting_hint || r.data.error_message}`,
+          `SMS err ${r.data.error_code}: ${r.data.troubleshooting_hint || r.data.error_message}`,
           { duration: 12000 },
         );
       } else {
@@ -265,20 +265,20 @@ export default function SmsStatusPanel({ client }) {
       <div className="bg-white border border-[#E8E5DF] rounded-2xl p-6 space-y-4">
         <div>
           <h3 className="font-serif-display text-2xl text-[#2D4A3E]">
-            A2P 10DLC registration tracker
+            Toll-free / A2P 10DLC registration tracker
           </h3>
           <p className="text-sm text-[#6D6A65] mt-2 max-w-2xl leading-relaxed">
-            Store your TCR brand_id + campaign_id here for the team's reference.
-            Registration happens on Twilio's console (link below) — this panel
-            only tracks where you are in the process.
+            Store your verification IDs here for the team's reference.
+            Registration happens in the Telnyx portal (link below) — this
+            panel only tracks where you are in the process.
           </p>
           <a
-            href="https://console.twilio.com/us1/develop/sms/regulatory-compliance/a2p-10dlc"
+            href="https://portal.telnyx.com/#/messaging/profiles"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 mt-2 text-sm text-[#2D4A3E] hover:underline"
           >
-            <ExternalLink size={12} /> Open Twilio A2P 10DLC console
+            <ExternalLink size={12} /> Open Telnyx Messaging Profiles
           </a>
         </div>
 

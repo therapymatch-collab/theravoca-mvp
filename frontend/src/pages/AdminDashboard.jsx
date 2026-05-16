@@ -648,7 +648,7 @@ export default function AdminDashboard() {
         toast.success(`SMS delivered ✓ — sid ${res.data.sid?.slice(0, 12)}…`);
       } else if (res.data?.error_code) {
         toast.error(
-          `SMS ${res.data.final_status || "failed"} (Twilio err ${res.data.error_code}): ${res.data.troubleshooting_hint || res.data.error_message || ""}`,
+          `SMS ${res.data.final_status || "failed"} (carrier err ${res.data.error_code}): ${res.data.troubleshooting_hint || res.data.error_message || ""}`,
           { duration: 12000 },
         );
       } else if (res.data?.ok) {
@@ -3070,7 +3070,7 @@ export default function AdminDashboard() {
                               ) : inv.channel === "sms" && inv.sms_sent ? (
                                 <span
                                   className="inline-flex items-center gap-1 text-[11px] text-[#2D4A3E]"
-                                  title="Sent via Twilio SMS (PT scrape — no public email)"
+                                  title="Sent via Telnyx SMS (PT scrape — no public email)"
                                 >
                                   <CheckCircle2 size={11} /> SMS sent
                                 </span>
@@ -3629,7 +3629,7 @@ function OutreachProgressNote() {
     "Falling back to TherapyDen + GoodTherapy scrapers if needed...",
     "Enriching each candidate with real email + phone from their website...",
     "De-duplicating against existing therapists + prior outreach...",
-    "Composing personalised invite emails (Resend) + SMS fallbacks (Twilio)...",
+    "Composing personalised invite emails (Resend) + SMS fallbacks (Telnyx)...",
     "Almost done -- awaiting final send confirmations...",
   ];
   const [stageIdx, setStageIdx] = useState(0);

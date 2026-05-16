@@ -134,7 +134,7 @@ export default function RecruitingPanel({ client }) {
             <strong>If the website doesn't have a visible email</strong>
             {" "}(many therapist sites use contact forms only), SMS fallback
             kicks in. If Google Places returned a real phone, the invite goes
-            out via Twilio SMS with a shorter body and the same opt-out URL.
+            out via Telnyx SMS with a shorter body and the same opt-out URL.
           </div>
 
           <div className="text-[10px] uppercase tracking-wider text-[#6D6A65] font-semibold pt-1">Step 4</div>
@@ -212,7 +212,7 @@ export default function RecruitingPanel({ client }) {
         <FunnelStep
           n="1"
           title="Invite sent"
-          body="Personalized email (per-track template, both editable in Content -> Email templates) with a sanitized brief and a signup link pre-stamped with a recruit_code. SMS fallback via Twilio if no real email was found but phone is real."
+          body="Personalized email (per-track template, both editable in Content -> Email templates) with a sanitized brief and a signup link pre-stamped with a recruit_code. SMS fallback via Telnyx if no real email was found but phone is real."
         />
         <FunnelStep
           n="2"

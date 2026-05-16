@@ -7866,6 +7866,140 @@ async def twilio_test(payload: dict | None = None) -> dict[str, Any]:
     return result
 
 
+# ─── Telnyx SMS diagnostic ────────────────────────────────────────────
+# Mirror of the legacy /admin/twilio-test endpoint above but targets
+# the Telnyx env vars and Telnyx Public API. Doesn't actually send SMS
+# (zero-cost auth check). Used by the admin SMS-status panel to show
+# whether Telnyx is configured and reachable. The legacy
+# /admin/twilio-test stays alive for now since sms_service.py still
+# routes outbound through Twilio -- once that migrates, the Twilio
+# diagnostic can be removed.
+
+@router.post("/admin/telnyx-test", dependencies=[Depends(require_admin)])
+async def telnyx_test(payload: dict | None = None) -> dict[str, Any]:
+    """Diagnostic for Telnyx SMS configuration. Does NOT send a real SMS.
+
+    Checks every required env var, pings Telnyx's whoami endpoint to
+    confirm the API key works (zero cost), and returns a plain-English
+    diagnosis of what's wrong if anything.
+
+    Required env vars:
+      - TELNYX_API_KEY              (the V2 API key from your Telnyx dashboard)
+      - TELNYX_PUBLIC_KEY           (Ed25519 webhook-verify public key)
+      - TELNYX_FROM_NUMBER          (your toll-free or A2P 10DLC number, E.164)
+      - TELNYX_MESSAGING_PROFILE_ID (the messaging profile the number is in)
+      - TELNYX_ENABLED              (true/false kill switch)
+
+    Optional:
+      - TELNYX_DEV_OVERRIDE_TO  (pre-launch redirect target so test sends
+                                  go to a known number, mirroring the
+                                  TWILIO_DEV_OVERRIDE_TO pattern)
+    """
+    import os as _os
+    payload = payload or {}
+    api_key = _os.environ.get("TELNYX_API_KEY", "").strip()
+    pub_key = _os.environ.get("TELNYX_PUBLIC_KEY", "").strip()
+    from_number = _os.environ.get("TELNYX_FROM_NUMBER", "").strip()
+    profile_id = _os.environ.get("TELNYX_MESSAGING_PROFILE_ID", "").strip()
+    enabled_raw = _os.environ.get("TELNYX_ENABLED", "false").strip().lower()
+    enabled = enabled_raw == "true"
+    override_to = _os.environ.get("TELNYX_DEV_OVERRIDE_TO", "").strip()
+
+    result: dict[str, Any] = {
+        "env": {
+            "TELNYX_ENABLED": enabled_raw or "(unset)",
+            "TELNYX_API_KEY": bool(api_key),
+            "TELNYX_API_KEY_starts_with": api_key[:7] + "..." if api_key else "(unset)",
+            "TELNYX_PUBLIC_KEY": bool(pub_key),
+            "TELNYX_PUBLIC_KEY_length": len(pub_key) if pub_key else 0,
+            "TELNYX_FROM_NUMBER": from_number or "(unset)",
+            "TELNYX_MESSAGING_PROFILE_ID": (profile_id[:8] + "..." if profile_id else "(unset)"),
+            "TELNYX_DEV_OVERRIDE_TO": override_to or "(none -- prod mode)",
+        },
+        "enabled": enabled,
+        "api_check": None,
+        "diagnosis": None,
+    }
+
+    missing = []
+    if not api_key:
+        missing.append("TELNYX_API_KEY")
+    if not from_number:
+        missing.append("TELNYX_FROM_NUMBER")
+    if not profile_id:
+        missing.append("TELNYX_MESSAGING_PROFILE_ID")
+    if missing:
+        result["diagnosis"] = (
+            f"Missing required env var(s): {', '.join(missing)}. "
+            "Add them in Render -> Environment for the service, then "
+            "redeploy. SMS outreach will silently no-op until all "
+            "three are set."
+        )
+        return result
+    if not enabled:
+        result["diagnosis"] = (
+            "All env vars present but TELNYX_ENABLED is not 'true'. "
+            "Set TELNYX_ENABLED=true (case-sensitive) in Render env to "
+            "flip Telnyx SMS on. Until then, every send_sms() call "
+            "short-circuits."
+        )
+
+    # Live API check: hit /v2/messaging_profiles/{id} to confirm the API
+    # key works AND the profile id is real. Zero-cost (no message sent).
+    try:
+        import httpx as _httpx
+        async with _httpx.AsyncClient(timeout=8.0) as cli:
+            r = await cli.get(
+                f"https://api.telnyx.com/v2/messaging_profiles/{profile_id}",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+        if r.status_code == 200:
+            data = (r.json() or {}).get("data") or {}
+            result["api_check"] = {
+                "ok": True,
+                "profile_name": data.get("name"),
+                "webhook_url": data.get("webhook_url"),
+                "enabled": data.get("enabled"),
+            }
+            if enabled and not result["diagnosis"]:
+                result["diagnosis"] = (
+                    f"Telnyx is fully configured and live. SMS outreach "
+                    f"will send from {from_number} via messaging profile "
+                    f"\"{data.get('name', profile_id)}\"."
+                )
+        elif r.status_code in (401, 403):
+            result["api_check"] = {"ok": False, "status": r.status_code,
+                                    "error": "auth_failed"}
+            result["diagnosis"] = (
+                f"Telnyx rejected the API key ({r.status_code}). The key "
+                "is wrong, expired, or doesn't have access to this "
+                "messaging profile. Generate a fresh V2 key in the "
+                "Telnyx dashboard and update TELNYX_API_KEY in Render."
+            )
+        elif r.status_code == 404:
+            result["api_check"] = {"ok": False, "status": 404,
+                                    "error": "profile_not_found"}
+            result["diagnosis"] = (
+                f"Telnyx couldn't find messaging profile id "
+                f"{profile_id[:8]}.... Confirm TELNYX_MESSAGING_PROFILE_ID "
+                "matches a real profile in your Telnyx dashboard."
+            )
+        else:
+            result["api_check"] = {"ok": False, "status": r.status_code,
+                                    "error": r.text[:200]}
+            result["diagnosis"] = (
+                f"Telnyx returned an unexpected status {r.status_code}: "
+                f"{r.text[:120]}"
+            )
+    except Exception as e:
+        result["api_check"] = {"ok": False, "error": str(e)[:200]}
+        result["diagnosis"] = (
+            f"Couldn't reach Telnyx API: {e}. Check Render egress and "
+            "verify TELNYX_API_KEY is a V2 key (starts with KEY...)."
+        )
+    return result
+
+
 @router.get("/admin/scraper-jobs", dependencies=[Depends(require_admin)])
 async def list_scraper_jobs():
     """List recent scraper jobs."""

@@ -28,8 +28,8 @@ export default function ScraperTestPanel({ client }) {
   const [error, setError] = useState("");
   const [placesTest, setPlacesTest] = useState(null);
   const [placesLoading, setPlacesLoading] = useState(false);
-  const [twilioTest, setTwilioTest] = useState(null);
-  const [twilioLoading, setTwilioLoading] = useState(false);
+  const [telnyxTest, setTelnyxTest] = useState(null);
+  const [telnyxLoading, setTelnyxLoading] = useState(false);
   const pollTimerRef = useRef(null);
 
   const runPlacesTest = async () => {
@@ -48,22 +48,22 @@ export default function ScraperTestPanel({ client }) {
     }
   };
 
-  const runTwilioTest = async () => {
-    setTwilioLoading(true);
-    setTwilioTest(null);
+  const runTelnyxTest = async () => {
+    setTelnyxLoading(true);
+    setTelnyxTest(null);
     try {
-      const r = await client.post("/admin/twilio-test", {});
-      setTwilioTest(r.data);
+      const r = await client.post("/admin/telnyx-test", {});
+      setTelnyxTest(r.data);
     } catch (e) {
-      setTwilioTest({
+      setTelnyxTest({
         diagnosis: e?.response?.data?.detail || e.message || "Diagnostic call failed",
       });
     } finally {
-      setTwilioLoading(false);
+      setTelnyxLoading(false);
     }
   };
 
-  const twilioOk = twilioTest?.api_check?.ok && twilioTest?.enabled;
+  const telnyxOk = telnyxTest?.api_check?.ok && telnyxTest?.enabled;
 
   useEffect(() => () => {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current);
@@ -195,7 +195,7 @@ export default function ScraperTestPanel({ client }) {
         </p>
       </div>
 
-      {/* Step 0: Diagnostics -- Places + Twilio side by side */}
+      {/* Step 0: Diagnostics -- Places + Telnyx side by side */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {/* Places API diagnostic */}
         <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg p-4 space-y-3">
@@ -260,7 +260,7 @@ export default function ScraperTestPanel({ client }) {
           )}
         </div>
 
-        {/* Twilio diagnostic */}
+        {/* Telnyx diagnostic */}
         <div className="bg-[#FDFBF7] border border-[#E8E5DF] rounded-lg p-4 space-y-3">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
@@ -268,7 +268,7 @@ export default function ScraperTestPanel({ client }) {
                 Step 0b -- SMS pipeline
               </div>
               <div className="font-semibold text-[#2D4A3E] mt-0.5">
-                Twilio SMS config
+                Telnyx SMS config
               </div>
               <p className="text-xs text-[#6D6A65] mt-1 leading-relaxed">
                 Powers SMS outreach (fallback when therapist's website
@@ -276,50 +276,50 @@ export default function ScraperTestPanel({ client }) {
               </p>
             </div>
             <button
-              onClick={runTwilioTest}
-              disabled={twilioLoading}
+              onClick={runTelnyxTest}
+              disabled={telnyxLoading}
               className="px-3 py-2 bg-[#2D4A3E] text-white rounded-lg text-sm font-medium hover:bg-[#3A5E50] disabled:opacity-50 flex items-center gap-2"
             >
-              {twilioLoading ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-              {twilioLoading ? "Testing..." : "Test Twilio"}
+              {telnyxLoading ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+              {telnyxLoading ? "Testing..." : "Test Telnyx"}
             </button>
           </div>
 
-          {twilioTest && (
+          {telnyxTest && (
             <div className="border border-[#E8E5DF] rounded-lg bg-white p-3 space-y-2">
               <div className="flex items-center gap-2 text-sm">
-                {twilioOk ? (
+                {telnyxOk ? (
                   <span className="inline-flex items-center gap-1 text-[#2D4A3E] font-semibold">
-                    <CheckCircle2 size={16} className="text-[#4A6B5D]" /> Twilio ready to send
+                    <CheckCircle2 size={16} className="text-[#4A6B5D]" /> Telnyx ready to send
                   </span>
-                ) : twilioTest?.api_check?.ok ? (
+                ) : telnyxTest?.api_check?.ok ? (
                   <span className="inline-flex items-center gap-1 text-[#8B5A1F] font-semibold">
                     <XCircle size={16} className="text-[#C8923A]" /> Creds OK, but disabled
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 text-[#8B3220] font-semibold">
-                    <XCircle size={16} className="text-[#D45D5D]" /> Twilio not configured
+                    <XCircle size={16} className="text-[#D45D5D]" /> Telnyx not configured
                   </span>
                 )}
               </div>
-              {twilioTest?.env && (
+              {telnyxTest?.env && (
                 <div className="text-xs text-[#2B2A29] bg-[#FDFBF7] rounded p-2 space-y-0.5">
-                  <div><strong>Enabled:</strong> {twilioTest.env.TWILIO_ENABLED}</div>
-                  <div><strong>SID:</strong> {twilioTest.env.TWILIO_ACCOUNT_SID ? twilioTest.env.TWILIO_ACCOUNT_SID_starts_with : "(unset)"}</div>
-                  <div><strong>Auth token:</strong> {twilioTest.env.TWILIO_AUTH_TOKEN ? `${twilioTest.env.TWILIO_AUTH_TOKEN_length} chars set` : "(unset)"}</div>
-                  <div><strong>From number:</strong> {twilioTest.env.TWILIO_FROM_NUMBER}</div>
-                  <div><strong>Override-to:</strong> {twilioTest.env.TWILIO_DEV_OVERRIDE_TO}</div>
-                  {twilioTest.api_check?.account_friendly_name && (
+                  <div><strong>Enabled:</strong> {telnyxTest.env.TELNYX_ENABLED}</div>
+                  <div><strong>API key:</strong> {telnyxTest.env.TELNYX_API_KEY ? telnyxTest.env.TELNYX_API_KEY_starts_with : "(unset)"}</div>
+                  <div><strong>Public key:</strong> {telnyxTest.env.TELNYX_PUBLIC_KEY ? `${telnyxTest.env.TELNYX_PUBLIC_KEY_length} chars set` : "(unset)"}</div>
+                  <div><strong>From number:</strong> {telnyxTest.env.TELNYX_FROM_NUMBER}</div>
+                  <div><strong>Override-to:</strong> {telnyxTest.env.TELNYX_DEV_OVERRIDE_TO}</div>
+                  {telnyxTest.api_check?.account_friendly_name && (
                     <div className="pt-1 border-t border-[#E8E5DF]">
-                      <strong>Account:</strong> {twilioTest.api_check.account_friendly_name}
-                      {" "}({twilioTest.api_check.account_type} -- {twilioTest.api_check.account_status})
+                      <strong>Profile:</strong> {telnyxTest.api_check.profile_name}
+                      {" "}({telnyxTest.api_check.enabled} -- {telnyxTest.api_check.webhook_url})
                     </div>
                   )}
                 </div>
               )}
-              {twilioTest.diagnosis && (
+              {telnyxTest.diagnosis && (
                 <div className="text-xs text-[#2B2A29] leading-relaxed whitespace-pre-line bg-[#FBEFE9] border border-[#F4C7BE] rounded p-2">
-                  {twilioTest.diagnosis}
+                  {telnyxTest.diagnosis}
                 </div>
               )}
             </div>

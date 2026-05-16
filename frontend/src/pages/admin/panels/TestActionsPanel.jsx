@@ -394,7 +394,7 @@ export default function TestActionsPanel({
       <ActionCard
         kicker="SMS check"
         title="Send a test SMS"
-        description="Send a single SMS to any number through the configured Twilio sender to verify delivery + check Twilio status codes."
+        description="Send a single SMS to any number through the configured Telnyx sender to verify delivery + check Telnyx status codes."
         button={{ label: "Send test SMS", icon: <MessageSquare size={14} />, onClick: sendTestSms }}
         action="test.send_sms"
         testid="card-test-sms"
