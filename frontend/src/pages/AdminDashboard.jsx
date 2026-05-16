@@ -48,6 +48,7 @@ import { STATUS_UNAUTHORIZED } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import AdminLifecycleActionsPanel from "@/components/AdminLifecycleActionsPanel";
 import OptOutsPanel from "@/pages/admin/panels/OptOutsPanel";
 import BroadcastEmailsPanel from "@/pages/admin/panels/BroadcastEmailsPanel";
 import ProfileCompletionPanel from "@/pages/admin/panels/ProfileCompletionPanel";
@@ -2091,6 +2092,19 @@ export default function AdminDashboard() {
                   onApprove={() => approveReapproval(editTherapist.id)}
                 />
               )}
+              {/* Admin per-user lifecycle actions: pause / resume,
+                  download Excel, delete account. Wired to
+                  /admin/therapists/{id}/* endpoints (2026-05-16).
+                  Use when a therapist emails support@ asking to
+                  pause/download/delete -- no user-side UI for
+                  these anymore (see AccountLifecycleNote on the
+                  therapist /security page). */}
+              <AdminLifecycleActionsPanel
+                client={client}
+                role="therapist"
+                target={editTherapist}
+                onChanged={refresh}
+              />
               <FieldRow label="Profile photo">
                 <div className="flex items-center gap-4">
                   <div className="w-20 h-20 rounded-full bg-[#FDFBF7] border border-[#E8E5DF] overflow-hidden flex items-center justify-center">

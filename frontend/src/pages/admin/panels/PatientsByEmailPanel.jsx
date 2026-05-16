@@ -1,8 +1,14 @@
-import { CheckCircle2 } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, Download, AlertTriangle, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import useAdminClient from "@/lib/useAdminClient";
 
 // "Patients by email" — every unique email that has filed at least one
 // request, with submission counts and account-conversion status.
+// Each row exposes admin lifecycle actions (download xlsx, delete)
+// for when a patient emails support@ asking for those things.
 export default function PatientsByEmailPanel({ data, filter, onReload }) {
+  const adminClient = useAdminClient();
   const rows = data?.patients || [];
   const q = (filter || "").trim().toLowerCase();
   const visible = q
@@ -68,6 +74,7 @@ export default function PatientsByEmailPanel({ data, filter, onReload }) {
                 <th className="text-left px-4 py-3">Last request</th>
                 <th className="text-left px-4 py-3">Latest source</th>
                 <th className="text-center px-4 py-3">Account</th>
+                <th className="text-right px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -118,6 +125,14 @@ export default function PatientsByEmailPanel({ data, filter, onReload }) {
                         </span>
                       )}
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      <PatientRowActions
+                        client={adminClient}
+                        email={r.email}
+                        deleted={!!r.deleted_at}
+                        onChanged={onReload}
+                      />
+                    </td>
                   </tr>
                 );
               })}
@@ -125,6 +140,112 @@ export default function PatientsByEmailPanel({ data, filter, onReload }) {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+// Compact per-row actions for patient lifecycle (admin-side).
+// Patients don't get pause UI per Josh -- patients can just stop
+// using us. Download (xlsx) + Delete are the two real cases.
+function PatientRowActions({ client, email, deleted, onChanged }) {
+  const [busy, setBusy] = useState(null); // "export" | "delete"
+  const userKey = encodeURIComponent(email || "");
+
+  const onDownload = async () => {
+    if (busy) return;
+    setBusy("export");
+    try {
+      const res = await client.get(`/admin/patients/${userKey}/export-data`, {
+        responseType: "blob",
+      });
+      const cd =
+        res.headers?.["content-disposition"] ||
+        res.headers?.["Content-Disposition"] ||
+        "";
+      const m = /filename="?([^"]+)"?/i.exec(cd);
+      const filename =
+        (m && m[1]) ||
+        `theravoca-patient-${userKey}-${new Date()
+          .toISOString()
+          .slice(0, 10)}.xlsx`;
+      const blob = new Blob([res.data], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("Download started.");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Download failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onDelete = async () => {
+    if (busy) return;
+    if (
+      !window.confirm(
+        `Permanently delete account for ${email}? Patient account, login, and all match requests marked deleted. 24-hour reversal window via support email; permanent after that.`,
+      )
+    )
+      return;
+    setBusy("delete");
+    try {
+      await client.post(`/admin/patients/${userKey}/delete-account`, {});
+      toast.success("Patient account deleted.");
+      onChanged?.();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Delete failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (deleted) {
+    return (
+      <span className="inline-flex text-[11px] px-2 py-0.5 rounded-full bg-[#FDF1EF] border border-[#E8C4BB] text-[#8B3220]">
+        Deleted
+      </span>
+    );
+  }
+  return (
+    <div className="inline-flex items-center gap-1 justify-end">
+      <button
+        type="button"
+        onClick={onDownload}
+        disabled={busy !== null}
+        title="Download Excel of this patient's data"
+        className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-[#E8E5DF] text-[#2D4A3E] hover:bg-[#FDFBF7] disabled:opacity-50"
+        data-testid={`patient-row-export-${email}`}
+      >
+        {busy === "export" ? (
+          <Loader2 size={10} className="animate-spin" />
+        ) : (
+          <Download size={10} />
+        )}
+        Excel
+      </button>
+      <button
+        type="button"
+        onClick={onDelete}
+        disabled={busy !== null}
+        title="Permanently delete this patient's account"
+        className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-[#E8C4BB] text-[#8B3220] hover:bg-[#FDF1EF] disabled:opacity-50"
+        data-testid={`patient-row-delete-${email}`}
+      >
+        {busy === "delete" ? (
+          <Loader2 size={10} className="animate-spin" />
+        ) : (
+          <AlertTriangle size={10} />
+        )}
+        Delete
+      </button>
     </div>
   );
 }
