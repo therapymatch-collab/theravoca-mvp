@@ -14,9 +14,9 @@ import {
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import SetPasswordPrompt from "@/components/SetPasswordPrompt";
-import DeleteAccountPanel from "@/components/DeleteAccountPanel";
-import PauseAccountPanel from "@/components/PauseAccountPanel";
-import DataExportPanel from "@/components/DataExportPanel";
+// Pause / Delete / Export panels intentionally not imported -- handled
+// via support email (see PatientLifecycleNote at bottom of this file).
+// Components kept in /components/ for admin reuse.
 import useSiteCopy from "@/lib/useSiteCopy";
 import { sessionClient, getSession, clearSession } from "@/lib/api";
 
@@ -44,7 +44,6 @@ export default function PatientPortal() {
   );
   const [requests, setRequests] = useState(null);
   const [hasPassword, setHasPassword] = useState(false);
-  const [pausedAt, setPausedAt] = useState(null);
 
   const refresh = () => {
     sessionClient()
@@ -52,15 +51,14 @@ export default function PatientPortal() {
       .then((res) => {
         // Backend returns `{requests, has_password, email, paused_at}`
         // -- fall back to the older array shape just in case
-        // (during a rolling deploy).
+        // (during a rolling deploy). paused_at is read by admin tools
+        // separately so we don't track it here anymore.
         if (Array.isArray(res.data)) {
           setRequests(res.data);
           setHasPassword(false);
-          setPausedAt(null);
         } else {
           setRequests(res.data?.requests || []);
           setHasPassword(!!res.data?.has_password);
-          setPausedAt(res.data?.paused_at || null);
         }
       })
       .catch((e) => {
@@ -189,26 +187,15 @@ export default function PatientPortal() {
             </div>
           )}
 
-          {/* Account-lifecycle stack: Pause -> Export -> Delete
-              (reversible, read-only, terminal). Mirrors the
-              therapist /security placement. */}
+          {/* Pause / Export / Delete are intentionally support-email-
+              mediated for patients (and therapists -- mirror behavior).
+              Patients who want to leave can just stop using us; the
+              two cases that DO need a contact path (download my data,
+              delete my data so you don't have it anymore) are listed
+              in the short FAQ-style panel below. The actual backend
+              endpoints + UI components stay alive for admin reuse. */}
           {requests !== null && session?.email && (
-            <>
-              <PauseAccountPanel
-                role="patient"
-                pausedAt={pausedAt}
-                onChange={refresh}
-              />
-              <DataExportPanel role="patient" />
-            </>
-          )}
-
-          {/* Danger zone -- account deletion. Mirrors the therapist
-              security page placement: bottom of the page so it's
-              discoverable without dominating. Only render once the
-              session has loaded (requests !== null). */}
-          {requests !== null && session?.email && (
-            <DeleteAccountPanel sessionEmail={session.email} role="patient" />
+            <PatientLifecycleNote />
           )}
         </div>
       </main>
@@ -362,4 +349,69 @@ function shortDate(iso) {
   } catch {
     return "—";
   }
+}
+
+// Short FAQ-style note for patient portal -- account lifecycle
+// (download my data, delete my data) handled via support email so a
+// human can confirm. Pause is omitted for patients per Josh: if
+// they want to "pause" they can just stop using the service. The
+// download + delete options exist because patients reasonably want
+// to (a) see what we have on them, (b) make sure we don't keep it
+// once they're done.
+function PatientLifecycleNote() {
+  const subjectFor = (action) =>
+    encodeURIComponent(`Patient account: ${action}`);
+  return (
+    <section
+      className="mt-8 bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-6"
+      data-testid="patient-lifecycle-note"
+    >
+      <h2 className="font-serif-display text-xl text-[#2D4A3E]">
+        Your data
+      </h2>
+      <p className="text-sm text-[#2B2A29] mt-2 leading-relaxed">
+        We handle these by email so a real person can confirm what
+        you're asking for. Most requests are processed within one
+        business day.
+      </p>
+      <ul className="mt-4 space-y-3 text-sm">
+        <li className="flex flex-col gap-1">
+          <a
+            href={`mailto:support@theravoca.com?subject=${subjectFor("Download my data (Excel)")}`}
+            className="text-[#2D4A3E] underline font-medium"
+            data-testid="lifecycle-download-mailto"
+          >
+            Download a copy of my data (Excel) →
+          </a>
+          <span className="text-xs text-[#6D6A65] leading-relaxed">
+            We'll send you an Excel workbook with everything we have
+            on your account — match requests, therapist replies,
+            feedback you submitted, sign-in history. So you can see
+            exactly what you've shared with us.
+          </span>
+        </li>
+        <li className="flex flex-col gap-1">
+          <a
+            href={`mailto:support@theravoca.com?subject=${subjectFor("Delete my account")}`}
+            className="text-[#8B3220] underline font-medium"
+            data-testid="lifecycle-delete-mailto"
+          >
+            Delete my account →
+          </a>
+          <span className="text-xs text-[#6D6A65] leading-relaxed">
+            Permanently removes your account, contact details, search
+            requests, and login. Reversible within 24 hours of
+            confirmation; permanent after that.
+          </span>
+        </li>
+      </ul>
+      <p className="text-xs text-[#A4A29E] mt-4 italic leading-relaxed">
+        Or call us at{" "}
+        <a href="tel:+16465358346" className="text-[#2D4A3E] underline">
+          (646) 535-8346
+        </a>{" "}
+        — same options, faster turnaround.
+      </p>
+    </section>
+  );
 }

@@ -1311,6 +1311,308 @@ async def admin_auto_decline_duplicates(
     }
 
 
+# ─── Admin-impersonated account lifecycle (pause / resume / delete /
+#     export). Mirrors the self-serve POST /portal/{role}/* endpoints
+#     but skips the email-confirm gate (admin auth is the gate) and
+#     accepts an `as_admin_email` audit trail in the body so the
+#     audit log captures who triggered each action. ──────────────────
+
+async def _admin_pause_therapist_impl(therapist_id: str, reason: str | None) -> dict:
+    """Set paused_at on the therapist doc + on every active referral
+    request they're notified on, so the matcher candidate filter
+    (helpers.py:602) drops them and _trigger_matching skips already-
+    paused requests. Idempotent."""
+    t = await db.therapists.find_one(
+        {"id": therapist_id}, {"_id": 0, "password_hash": 0, "password_set_at": 0},
+    )
+    if not t:
+        raise HTTPException(404, "Therapist not found")
+    if t.get("paused_at"):
+        return {"id": therapist_id, "paused": True, "paused_at": t["paused_at"]}
+    now = _now_iso()
+    await db.therapists.update_one(
+        {"id": therapist_id},
+        {"$set": {
+            "paused_at": now,
+            "paused_reason": reason or "admin_paused",
+            "paused_by": "admin",
+            "updated_at": now,
+        }},
+    )
+    return {"id": therapist_id, "paused": True, "paused_at": now}
+
+
+async def _admin_resume_therapist_impl(therapist_id: str) -> dict:
+    t = await db.therapists.find_one(
+        {"id": therapist_id}, {"_id": 0, "password_hash": 0, "password_set_at": 0},
+    )
+    if not t:
+        raise HTTPException(404, "Therapist not found")
+    if not t.get("paused_at"):
+        return {"id": therapist_id, "paused": False}
+    await db.therapists.update_one(
+        {"id": therapist_id},
+        {"$set": {"updated_at": _now_iso()},
+         "$unset": {"paused_at": "", "paused_reason": "", "paused_by": ""}},
+    )
+    return {"id": therapist_id, "paused": False}
+
+
+@router.post("/admin/therapists/{therapist_id}/pause")
+async def admin_pause_therapist(
+    therapist_id: str,
+    payload: Optional[dict] = None,
+    _: bool = Depends(require_role("edit")),
+):
+    """Admin pauses a therapist's referrals. They stay in the directory
+    but new patient matches won't include them. Reversible via the
+    /resume endpoint. Body (optional): {"reason": "free text"}."""
+    return await _admin_pause_therapist_impl(
+        therapist_id, (payload or {}).get("reason"),
+    )
+
+
+@router.post("/admin/therapists/{therapist_id}/resume")
+async def admin_resume_therapist(
+    therapist_id: str, _: bool = Depends(require_role("edit")),
+):
+    """Reverse an admin pause."""
+    return await _admin_resume_therapist_impl(therapist_id)
+
+
+@router.post("/admin/therapists/{therapist_id}/delete-account")
+async def admin_delete_therapist_account(
+    therapist_id: str,
+    request: Request,
+    _: bool = Depends(require_admin),
+):
+    """Admin-triggered version of the self-serve delete flow. Same
+    behaviour as POST /portal/therapist/delete-account: marks
+    deleted_at, wipes sensitive blobs, cancels Stripe sub at
+    period-end, but skips the email/phrase confirmation gate
+    (admin auth replaces it). Audit-logged with the admin actor."""
+    therapist = await db.therapists.find_one(
+        {"id": therapist_id}, {"_id": 0},
+    )
+    if not therapist:
+        raise HTTPException(404, "Therapist not found")
+    try:
+        if therapist.get("stripe_subscription_id"):
+            from stripe_service import cancel_subscription
+            cancel_subscription(therapist["stripe_subscription_id"])
+    except Exception as e:  # noqa: BLE001
+        audit.emit(
+            actor_type="admin", actor_id="admin",
+            action="admin_delete_stripe_cancel_failed",
+            resource="therapist", resource_id=therapist_id,
+            detail=str(e)[:200],
+        )
+    now = _now_iso()
+    await db.therapists.update_one(
+        {"id": therapist_id},
+        {"$set": {
+            "is_active": False,
+            "deleted_at": now,
+            "deleted_reason": "admin_initiated",
+            "deleted_by": "admin",
+            "updated_at": now,
+        },
+         "$unset": {
+             "license_document": "",
+             "license_picture": "",
+             "totp_secret": "",
+             "totp_recovery_hashes": "",
+             "password_hash": "",
+             "stripe_payment_method_id": "",
+         }},
+    )
+    audit.emit(
+        actor_type="admin", actor_id="admin",
+        action="admin_delete_account", resource="therapist",
+        resource_id=therapist_id,
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    return {"deleted": True, "id": therapist_id}
+
+
+@router.get("/admin/therapists/{therapist_id}/export-data")
+async def admin_export_therapist_data(
+    therapist_id: str,
+    request: Request,
+    _: bool = Depends(require_role("view")),
+):
+    """Admin-triggered xlsx export for a specific therapist. Same
+    workbook shape as the self-serve /portal/therapist/export-data
+    endpoint, just keyed by therapist_id instead of session email."""
+    from routes.portal import (
+        _build_excel_workbook, _strip_keys, _XLSX_MEDIA_TYPE,
+        _export_filename, _THERAPIST_EXPORT_STRIP, _APPLICATION_STRIP,
+        _FEEDBACK_STRIP, _LOGIN_EVENT_STRIP,
+    )
+    therapist = await db.therapists.find_one({"id": therapist_id}, {"_id": 0})
+    if not therapist:
+        raise HTTPException(404, "Therapist not found")
+    email = therapist.get("email") or therapist_id
+    apps = await db.applications.find(
+        {"therapist_id": therapist_id}, {"_id": 0},
+    ).to_list(2000)
+    declines = await db.declines.find(
+        {"therapist_id": therapist_id}, {"_id": 0},
+    ).to_list(2000)
+    fb = await db.feedback.find(
+        {"therapist_id": therapist_id}, {"_id": 0},
+    ).to_list(2000)
+    logins = await db.login_events.find(
+        {"role": "therapist", "email": (email or "").lower()}, {"_id": 0},
+    ).sort("at", -1).to_list(500)
+    sheets = [
+        ("Summary", [{
+            "exported_at": _now_iso(),
+            "exported_for": email,
+            "role": "therapist",
+            "exported_by": "admin",
+        }]),
+        ("Profile", [_strip_keys(therapist, _THERAPIST_EXPORT_STRIP)]),
+        ("Applications", [_strip_keys(a, _APPLICATION_STRIP) for a in apps]),
+        ("Declines", declines),
+        ("Feedback About Them", [_strip_keys(f, _FEEDBACK_STRIP) for f in fb]),
+        ("Login History", [_strip_keys(le, _LOGIN_EVENT_STRIP) for le in logins]),
+    ]
+    content = _build_excel_workbook(sheets)
+    audit.emit(
+        actor_type="admin", actor_id="admin",
+        action="admin_export_therapist_data", resource="therapist",
+        resource_id=therapist_id,
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    return Response(
+        content=content,
+        media_type=_XLSX_MEDIA_TYPE,
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{_export_filename("therapist", email)}"'
+            ),
+        },
+    )
+
+
+# ─── Patient lifecycle (admin) ────────────────────────────────────────
+
+async def _find_patient_by_lookup(lookup: str) -> Optional[dict]:
+    """Resolve a patient by email (case-insensitive). Patients don't
+    have stable IDs in our DB the way therapists do -- accounts are
+    keyed by email."""
+    return await db.patient_accounts.find_one(
+        {"email": (lookup or "").strip().lower()}, {"_id": 0},
+    )
+
+
+@router.post("/admin/patients/{email}/delete-account")
+async def admin_delete_patient_account(
+    email: str,
+    request: Request,
+    _: bool = Depends(require_admin),
+):
+    """Admin-triggered patient account deletion. URL-encode the email
+    in the path. Mirrors POST /portal/patient/delete-account behavior
+    minus the user's email/phrase confirmation."""
+    email_norm = email.strip().lower()
+    now = _now_iso()
+    res = await db.patient_accounts.update_one(
+        {"email": email_norm},
+        {"$set": {
+            "deleted_at": now,
+            "deleted_reason": "admin_initiated",
+            "deleted_by": "admin",
+            "updated_at": now,
+        },
+         "$unset": {"password_hash": "", "totp_secret": "",
+                    "totp_recovery_hashes": ""}},
+        upsert=False,
+    )
+    await db.requests.update_many(
+        {"email": {"$regex": f"^{re.escape(email_norm)}$", "$options": "i"}},
+        {"$set": {
+            "deleted_at": now,
+            "deleted_reason": "admin_patient_delete",
+            "is_active": False,
+            "updated_at": now,
+        }},
+    )
+    audit.emit(
+        actor_type="admin", actor_id="admin",
+        action="admin_delete_patient_account", resource="patient",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    return {"deleted": True, "email": email_norm,
+            "patient_account_matched": res.matched_count}
+
+
+@router.get("/admin/patients/{email}/export-data")
+async def admin_export_patient_data(
+    email: str,
+    request: Request,
+    _: bool = Depends(require_role("view")),
+):
+    """Admin-triggered xlsx export for a specific patient. URL-encode
+    the email."""
+    from routes.portal import (
+        _build_excel_workbook, _strip_keys, _XLSX_MEDIA_TYPE,
+        _export_filename, _APPLICATION_STRIP, _FEEDBACK_STRIP,
+        _PATIENT_ACCOUNT_STRIP, _REQUEST_STRIP, _LOGIN_EVENT_STRIP,
+    )
+    email_norm = email.strip().lower()
+    account = await db.patient_accounts.find_one({"email": email_norm})
+    requests_docs = await db.requests.find(
+        {"email": {"$regex": f"^{re.escape(email_norm)}$", "$options": "i"}},
+        {"_id": 0, "verification_token": 0},
+    ).to_list(500)
+    request_ids = [r["id"] for r in requests_docs if r.get("id")]
+    apps: list[dict] = []
+    if request_ids:
+        apps = await db.applications.find(
+            {"request_id": {"$in": request_ids}}, {"_id": 0},
+        ).to_list(2000)
+    fb = await db.feedback.find(
+        {"patient_email": email_norm}, {"_id": 0},
+    ).to_list(2000)
+    logins = await db.login_events.find(
+        {"role": "patient", "email": email_norm}, {"_id": 0},
+    ).sort("at", -1).to_list(500)
+    sheets = [
+        ("Summary", [{
+            "exported_at": _now_iso(),
+            "exported_for": email_norm,
+            "role": "patient",
+            "exported_by": "admin",
+        }]),
+        ("Account", [_strip_keys(account or {}, _PATIENT_ACCOUNT_STRIP)]),
+        ("Match Requests", [_strip_keys(r, _REQUEST_STRIP) for r in requests_docs]),
+        ("Therapist Replies", [_strip_keys(a, _APPLICATION_STRIP) for a in apps]),
+        ("Feedback Submitted", [_strip_keys(f, _FEEDBACK_STRIP) for f in fb]),
+        ("Login History", [_strip_keys(le, _LOGIN_EVENT_STRIP) for le in logins]),
+    ]
+    content = _build_excel_workbook(sheets)
+    audit.emit(
+        actor_type="admin", actor_id="admin",
+        action="admin_export_patient_data", resource="patient",
+        ip=request.headers.get("x-forwarded-for", ""),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    return Response(
+        content=content,
+        media_type=_XLSX_MEDIA_TYPE,
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{_export_filename("patient", email_norm)}"'
+            ),
+        },
+    )
+
+
 @router.post("/admin/therapists/{therapist_id}/clear-reapproval")
 async def admin_clear_reapproval(
     therapist_id: str, _: bool = Depends(require_role("edit")),
