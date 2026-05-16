@@ -28,6 +28,15 @@ export default function AdminLifecycleActionsPanel({
   onChanged,
 }) {
   const [busy, setBusy] = useState(null); // "pause" | "resume" | "delete" | "export"
+  // SECURITY (2026-05-16 audit, HIGH #11): typed-confirm flow before
+  // a real account delete. The prior single window.confirm allowed a
+  // misclick to permanently wipe a live therapist/patient (24h
+  // reversal only saves you if you notice in time). Now a modal
+  // requires the admin to type the user's email/name exactly before
+  // the destructive button enables. Matches the SettingsPanel
+  // wipe-test-data pattern.
+  const [confirming, setConfirming] = useState(false);
+  const [confirmTyped, setConfirmTyped] = useState("");
 
   if (!target) return null;
 
@@ -112,22 +121,21 @@ export default function AdminLifecycleActionsPanel({
     }
   };
 
+  // Phrase the admin must type to enable the destructive button. Use
+  // the user's actual email when available (more specific than name).
+  const confirmPhrase = (target.email || target.name || labelName || "").trim();
+  const confirmReady =
+    confirmPhrase
+    && confirmTyped.trim().toLowerCase() === confirmPhrase.toLowerCase();
+
   const onDelete = async () => {
-    if (busy) return;
-    if (
-      !window.confirm(
-        `Permanently delete account for ${labelName}? Profile, login, sensitive blobs wiped immediately.${
-          isTherapist
-            ? " Active Stripe subscription cancelled at period-end."
-            : " All match requests marked deleted."
-        } 24-hour reversal window via support email; permanent after that.`,
-      )
-    )
-      return;
+    if (busy || !confirmReady) return;
     setBusy("delete");
     try {
       await client.post(`${basePath}/delete-account`, {});
       toast.success("Account deleted.");
+      setConfirming(false);
+      setConfirmTyped("");
       onChanged?.();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Delete failed");
@@ -210,20 +218,82 @@ export default function AdminLifecycleActionsPanel({
         {!isDeleted && (
           <button
             type="button"
-            onClick={onDelete}
+            onClick={() => {
+              setConfirming(true);
+              setConfirmTyped("");
+            }}
             disabled={busy !== null}
             className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-full border border-[#8B3220] text-[#8B3220] hover:bg-[#FDF1EF] transition disabled:opacity-50"
             data-testid="admin-lifecycle-delete"
           >
-            {busy === "delete" ? (
-              <Loader2 size={12} className="animate-spin" />
-            ) : (
-              <AlertTriangle size={12} />
-            )}
+            <AlertTriangle size={12} />
             Delete account
           </button>
         )}
       </div>
+      {/* Typed-confirm modal -- admin must type the email/name
+          exactly before the destructive button enables. */}
+      {confirming && !isDeleted && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => e.target === e.currentTarget && !busy && setConfirming(false)}
+        >
+          <div className="bg-white rounded-2xl border border-[#E8C4BB] w-full max-w-md p-5 shadow-xl">
+            <div className="flex items-start gap-3 text-[#8B3220]">
+              <AlertTriangle size={20} className="mt-0.5 shrink-0" />
+              <div>
+                <h3 className="font-serif-display text-xl">
+                  Delete this account
+                </h3>
+                <p className="text-sm text-[#2B2A29] mt-1 leading-relaxed">
+                  This will wipe profile, login, and sensitive blobs immediately.{" "}
+                  {isTherapist
+                    ? "Active Stripe subscription is cancelled at period-end."
+                    : "All match requests are marked deleted."}{" "}
+                  Reversible for 24 hours by emailing support; permanent after that.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4">
+              <label className="block text-xs uppercase tracking-wider text-[#6D6A65] mb-1">
+                Type <code className="bg-[#FBE9E5] px-1.5 py-0.5 rounded text-[#8B3220]">{confirmPhrase}</code> to confirm
+              </label>
+              <input
+                type="text"
+                value={confirmTyped}
+                onChange={(e) => setConfirmTyped(e.target.value)}
+                autoFocus
+                className="w-full text-sm border border-[#E8E5DF] rounded-md px-3 py-2 focus:outline-none focus:border-[#8B3220]"
+                placeholder={confirmPhrase}
+                data-testid="admin-lifecycle-delete-confirm-input"
+              />
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirming(false);
+                  setConfirmTyped("");
+                }}
+                disabled={busy === "delete"}
+                className="text-sm px-3 py-1.5 rounded-full border border-[#E8E5DF] text-[#6D6A65] hover:bg-[#FDFBF7] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={!confirmReady || busy === "delete"}
+                className="text-sm inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-[#8B3220] text-white hover:bg-[#6e2818] disabled:opacity-40 disabled:cursor-not-allowed"
+                data-testid="admin-lifecycle-delete-confirm-btn"
+              >
+                {busy === "delete" && <Loader2 size={12} className="animate-spin" />}
+                Permanently delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

@@ -348,10 +348,26 @@ function BuilderView({ client, campaign, onBack }) {
   const sendLive = async () => {
     const id = await saveDraft({ silent: true });
     if (!id) return;
-    const ok = window.confirm(
-      `Send this campaign to all resolved recipients?\n\nThis cannot be undone. Recipients already in email_sends will be skipped.`,
+    // SECURITY (2026-05-16 audit, MEDIUM): show the recipient count in
+    // the confirm AND require typing it back. The prior single
+    // confirm could send to hundreds of therapists with one OK click
+    // if a filter was misconfigured -- not recoverable. Now the count
+    // is in the prompt, and the admin must type it exactly.
+    const count = preview?.recipient_count;
+    if (count == null) {
+      toast.error("Hit Preview first so you can see the recipient count before sending live.");
+      return;
+    }
+    const typed = window.prompt(
+      `Send this campaign to ${count} recipient${count === 1 ? "" : "s"}?\n\n`
+      + `This cannot be undone. Recipients already in email_sends will be skipped.\n\n`
+      + `Type the recipient count (${count}) to confirm:`,
     );
-    if (!ok) return;
+    if (typed == null) return; // canceled
+    if (typed.trim() !== String(count)) {
+      toast.error(`Cancelled -- you typed "${typed.trim()}", expected "${count}".`);
+      return;
+    }
     setSending(true);
     try {
       const r = await client.post(`/admin/email-campaigns/${id}/send`, {});

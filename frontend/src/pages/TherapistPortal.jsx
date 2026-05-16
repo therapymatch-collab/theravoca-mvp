@@ -333,10 +333,20 @@ export default function TherapistPortal() {
   };
 
   const loadAll = () => {
+    // SECURITY/UX (2026-05-16 audit, HIGH #18): don't swallow load
+    // errors silently. A network/500 on /analytics or /subscription
+    // used to look identical to "no data" -- the therapist would see
+    // blank panels and conclude their account was broken. Now we
+    // console.error the actual cause so we have a forensic trail
+    // and (for subscription) toast the user once so they know to
+    // refresh.
     sessionClient()
       .get("/portal/therapist/analytics")
       .then((r) => setAnalytics(r.data))
-      .catch(() => {});
+      .catch((e) => {
+        // eslint-disable-next-line no-console
+        console.error("[TherapistPortal] analytics load failed:", e);
+      });
     return sessionClient()
       .get("/portal/therapist/referrals")
       .then((res) => {
@@ -350,7 +360,10 @@ export default function TherapistPortal() {
           api
             .get(`/therapists/${tid}/subscription`)
             .then((s) => setSub(s.data))
-            .catch(() => {});
+            .catch((e) => {
+              // eslint-disable-next-line no-console
+              console.error("[TherapistPortal] subscription load failed:", e);
+            });
         }
         // Auto-open availability dialog if backend says it's pending
         const params = new URLSearchParams(window.location.search);
@@ -382,7 +395,14 @@ export default function TherapistPortal() {
     sessionClient()
       .get("/portal/therapist/2fa/status")
       .then((r) => setTwoFaEnabled(!!r.data?.enabled))
-      .catch(() => setTwoFaEnabled(false));
+      .catch((e) => {
+        // Don't flip the chip to OFF on a transient load failure --
+        // that misleads the therapist into thinking their 2FA was
+        // disabled (when it really just couldn't be read). Keep the
+        // current value (null = unknown) and log the cause.
+        // eslint-disable-next-line no-console
+        console.error("[TherapistPortal] 2FA status load failed:", e);
+      });
     // Stripe-checkout return handler. When the portal is loaded with
     // ?subscribed=<id>&session_id=<id> after a successful Stripe
     // setup, call sync-payment-method to record the new card on the

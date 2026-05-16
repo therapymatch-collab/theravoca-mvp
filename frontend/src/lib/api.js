@@ -1,7 +1,25 @@
 import axios from "axios";
 
+// SECURITY/CORRECTNESS (2026-05-16 audit, HIGH #12): fail loudly when
+// REACT_APP_BACKEND_URL isn't baked into the build. CRA inlines
+// process.env.REACT_APP_* at build time; if the env var is missing
+// then BACKEND_URL becomes the literal string "undefined" and every
+// axios call below silently 404s against `undefined/api/...`. To the
+// user the app looks totally broken with no signal. We now:
+//   1. Console-error the missing var so it surfaces in browser DevTools.
+//   2. Fall back to the relative `/api` baseURL, which works when the
+//      frontend is served from the same origin as the API (the common
+//      single-service Render deploy) and at least gives the user a
+//      working app instead of silent failure.
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-export const API = `${BACKEND_URL}/api`;
+if (!BACKEND_URL) {
+  // eslint-disable-next-line no-console
+  console.error(
+    "[TheraVoca] REACT_APP_BACKEND_URL is not set at build time. Falling back to /api (same-origin). "
+    + "If the frontend is served from a different origin than the API, set this env var in the build.",
+  );
+}
+export const API = BACKEND_URL ? `${BACKEND_URL}/api` : "/api";
 
 /**
  * Flatten a FastAPI 422 validation-error detail array into a single
