@@ -68,51 +68,6 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "footer_note": "Once approved, you'll start receiving anonymous referral notifications matched to your specialties — no logins required to view referrals from your inbox. Just real patients who need your help.",
         "available_vars": "first_name",
     },
-    "therapist_welcome": {
-        "title": "Therapist welcome (founder letter)",
-        "description": "Sent immediately on therapist signup, alongside the under-review receipt. Personal letter from Joshua introducing TheraVoca, the benefits of joining, and what's coming next. Edit the body in the admin email-templates panel; signature stays consistent.",
-        "subject": "Welcome to TheraVoca — a quick note from me",
-        # Heading intentionally empty so the email renders letter-style
-        # (no big H1, just opens on the greeting -- matches the broadcast
-        # apology email Josh authored 2026-05-15).
-        "heading": "",
-        "greeting": "Hi {first_name},",
-        "intro": (
-            "I'm Joshua Rosenthal, founder of TheraVoca. I built this because I "
-            "watched too many colleagues drown in mismatched leads from generic "
-            "directories — long contact lists, low conversion, lots of noise. "
-            "TheraVoca is built differently. I wanted to write you directly and "
-            "say thanks for joining.\n\n"
-            "Here's what makes us different and what to expect:\n\n"
-            "<strong>Anonymous, scored referrals.</strong> Every match you "
-            "receive is at least 71% fit on specialty, modality, and the "
-            "patient's intake — not a contact list to scroll through hoping to "
-            "be picked.\n\n"
-            "<strong>You're in control of identity.</strong> You see anonymized "
-            "intake first; the patient only sees your name, email, and phone "
-            "after you accept the referral.\n\n"
-            "<strong>30-day free trial, then $45/month.</strong> No contracts, "
-            "no per-referral fees. Cancel anytime by emailing support.\n\n"
-            "<strong>Real-person support.</strong> Reply to any TheraVoca email "
-            "or write support@theravoca.com — a human responds within one "
-            "business day.\n\n"
-            "<strong>What's next:</strong> your profile is in our manual-review "
-            "queue. Most clear within 1–2 business days. The moment we approve "
-            "you, you'll get a sign-in link by email and referrals start "
-            "landing in your inbox automatically. Nothing to check, nothing to "
-            "log into daily.\n\n"
-            "If you want to edit anything in your profile before approval, "
-            "just reply to this email and I or my team will handle it for you.\n\n"
-            "Thanks again for trusting us. I'll see you on the inside."
-        ),
-        "cta_label": "",
-        "footer_note": (
-            "Best,<br/>"
-            "Joshua Rosenthal, PsyD<br/>"
-            "Founder, TheraVoca"
-        ),
-        "available_vars": "first_name",
-    },
     "therapist_approved": {
         "title": "Therapist approved",
         "description": "Sent when admin approves a pending therapist signup.",

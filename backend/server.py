@@ -230,16 +230,21 @@ async def lifespan(_app: FastAPI):
             "Migrated %d backfilled therapist(s) to data: license_picture",
             _legacy_license_res.modified_count,
         )
-    # ── FAQ canonical entries (idempotent) ─────────────────────────────
+    # ── FAQ canonical entries (idempotent, honours admin deletions) ────
     # The public /faqs endpoint reads from db.faqs; admin-edited entries
     # win over any in-code defaults. To guarantee a few canonical Q/A
     # pairs land regardless of admin state, we upsert them here on every
     # boot. If an entry exists with the same audience+question, we
-    # update its answer to the canonical string; if it's missing, we
-    # insert at the next position. Admin can still REWORD or REORDER
-    # these afterwards via the FAQ admin panel -- the key is the exact
-    # question string, so any tweak to the question text creates a new
-    # row instead of overwriting.
+    # update its answer to the canonical string; if it's missing AND
+    # the admin hasn't tombstoned it, we insert at the next position.
+    # Admin can still REWORD or REORDER these afterwards via the FAQ
+    # admin panel -- the key is the exact question string, so any tweak
+    # to the question text creates a new row instead of overwriting.
+    #
+    # Tombstones live in db.faqs_deleted_canonicals -- populated by the
+    # admin delete endpoint in routes/faqs.py. Without that check the
+    # startup migration silently re-inserted any canonical FAQ the
+    # admin had just deleted (the bug Josh reported 2026-05-16).
     from datetime import datetime as _dt, timezone as _tz
     import uuid as _uuid
     _CANONICAL_FAQS = [
@@ -312,21 +317,34 @@ async def lifespan(_app: FastAPI):
                     {"id": existing["id"]},
                     {"$set": {"answer": _faq["answer"], "updated_at": _faq_now}},
                 )
-        else:
-            last = await db.faqs.find(
-                {"audience": _faq["audience"]}, {"_id": 0, "position": 1},
-            ).sort("position", -1).limit(1).to_list(1)
-            next_pos = (last[0]["position"] + 1) if last else 0
-            await db.faqs.insert_one({
-                "id": str(_uuid.uuid4()),
-                "audience": _faq["audience"],
-                "question": _faq["question"],
-                "answer": _faq["answer"],
-                "position": next_pos,
-                "published": True,
-                "created_at": _faq_now,
-                "updated_at": _faq_now,
-            })
+            continue
+        # Missing -- but did the admin explicitly delete this canonical?
+        tombstoned = await db.faqs_deleted_canonicals.find_one(
+            {"audience": _faq["audience"], "question": _faq["question"]},
+            {"_id": 0, "deleted_at": 1},
+        )
+        if tombstoned:
+            logger.info(
+                "FAQ canonical seeder: skipping re-insert of %s/%r "
+                "(admin tombstoned %s)",
+                _faq["audience"], _faq["question"][:60],
+                tombstoned.get("deleted_at"),
+            )
+            continue
+        last = await db.faqs.find(
+            {"audience": _faq["audience"]}, {"_id": 0, "position": 1},
+        ).sort("position", -1).limit(1).to_list(1)
+        next_pos = (last[0]["position"] + 1) if last else 0
+        await db.faqs.insert_one({
+            "id": str(_uuid.uuid4()),
+            "audience": _faq["audience"],
+            "question": _faq["question"],
+            "answer": _faq["answer"],
+            "position": next_pos,
+            "published": True,
+            "created_at": _faq_now,
+            "updated_at": _faq_now,
+        })
 
     # Reset the availability-prompt cron to Mondays only. Josh asked
     # 2026-05-14 to drop the Friday cadence -- the code default in

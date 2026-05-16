@@ -135,7 +135,30 @@ async def admin_update_faq(faq_id: str, payload: FaqUpdate) -> dict[str, Any]:
 
 @router.delete("/admin/faqs/{faq_id}", dependencies=[Depends(require_admin)])
 async def admin_delete_faq(faq_id: str) -> dict[str, Any]:
+    """Delete a FAQ, AND record a tombstone so the startup
+    canonical-FAQ migration in server.py won't re-insert it on the
+    next deploy. Without the tombstone, Josh's deletion of a
+    canonical FAQ would silently re-appear after every Render
+    restart -- exactly the bug he reported 2026-05-16.
+    """
+    # Capture the audience+question BEFORE deleting so we can
+    # tombstone the exact pair the canonical seeder keys off.
+    doc = await db.faqs.find_one(
+        {"id": faq_id}, {"_id": 0, "audience": 1, "question": 1},
+    )
     res = await db.faqs.delete_one({"id": faq_id})
+    if doc and doc.get("audience") and doc.get("question"):
+        from datetime import datetime as _dt, timezone as _tz
+        await db.faqs_deleted_canonicals.update_one(
+            {"audience": doc["audience"], "question": doc["question"]},
+            {"$set": {
+                "audience": doc["audience"],
+                "question": doc["question"],
+                "deleted_at": _dt.now(_tz.utc).isoformat(),
+                "deleted_faq_id": faq_id,
+            }},
+            upsert=True,
+        )
     return {"deleted": res.deleted_count}
 
 

@@ -732,30 +732,6 @@ async def send_therapist_signup_received(to: str, name: str) -> None:
     await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner), template_key="therapist_signup_received")
 
 
-async def send_therapist_welcome(to: str, name: str) -> None:
-    """Founder welcome letter, fired immediately on therapist signup
-    alongside the under-review receipt. Letter-style (no brand-bar
-    H1, opens straight on greeting) -- the wysiwyg=True flag passes
-    an empty heading through to _wrap which skips the H1 row."""
-    tpl = await get_template(_db(), "therapist_welcome")
-    first_name = _first_name(name)
-    vars_ = {"first_name": first_name}
-    greeting = render(tpl.get("greeting", ""), **vars_)
-    intro = render(tpl.get("intro", "") or "", **vars_)
-    footer_note = render(tpl.get("footer_note", "") or "", **vars_)
-    inner = f"""
-    {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
-    {_text_to_paragraph_html(intro, p_style=f"font-size:15px;line-height:1.7;color:{BRAND['text']};")}
-    <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">{footer_note}</p>
-    """
-    await _send(
-        to,
-        render(tpl.get("subject", "Welcome to TheraVoca"), **vars_),
-        _wrap(tpl.get("heading", ""), inner, wysiwyg=True),
-        template_key="therapist_welcome",
-    )
-
-
 async def send_intake_receipt(to: str, request_id: str, summary_rows: list[tuple[str, str]]) -> None:
     """Send the patient a confirmation that we received their request.
 
@@ -995,7 +971,6 @@ _PREVIEW_VARS: dict[str, dict[str, Any]] = {
     "patient_results":           {"count": 5, "results_url": "https://theravoca.com/results/sample"},
     "patient_results_empty":     {},
     "therapist_signup_received": {"first_name": "Alex"},
-    "therapist_welcome":         {"first_name": "Alex"},
     "therapist_approved":        {"first_name": "Alex"},
     "therapist_rejected":        {"first_name": "Alex"},
     "patient_followup_48h":      {"request_id": "sample-id"},
@@ -1046,9 +1021,9 @@ async def render_template_preview(
     inner, subject, heading = _build_cta_email_html(base, cta_url, vars_)
     # Pass heading through as-is (incl. ""). _wrap skips the H1 block
     # entirely when heading is empty, which is what letter-style
-    # templates like therapist_welcome want -- they open straight on
-    # the greeting. The old `heading or "Preview"` fallback was
-    # injecting the literal word "Preview" as an H1 above the body
+    # templates / broadcasts want -- they open straight on the
+    # greeting. The old `heading or "Preview"` fallback was injecting
+    # the literal word "Preview" as an H1 above the body
     # whenever an admin previewed a letter-style template.
     return {"subject": subject, "html": _wrap(heading or "", inner)}
 

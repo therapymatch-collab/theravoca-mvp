@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 
 from deps import db, logger, require_admin, require_session, _create_session_token, JWT_SECRET, _decode_session_from_authorization
 import stripe_service
-from email_service import send_therapist_signup_received, send_therapist_welcome
+from email_service import send_therapist_signup_received
 from embeddings import embed_texts
 from geocoding import geocode_offices
 import audit
@@ -303,17 +303,10 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
         send_therapist_signup_received(payload.email, payload.name),
         name=f"signup_email_{tid[:8]}",
     )
-    # Founder welcome letter (separate from the under-review receipt
-    # above). Fires alongside the receipt so a new therapist gets BOTH:
-    # (1) the dry "we got your profile, under review" status email and
-    # (2) the personal letter from Joshua introducing TheraVoca + the
-    # benefits of joining + what's coming. Defined as its own template
-    # so the welcome copy can be edited independently in the admin
-    # email-templates panel.
-    _spawn_bg(
-        send_therapist_welcome(payload.email, payload.name),
-        name=f"welcome_email_{tid[:8]}",
-    )
+    # (The separate "founder welcome letter" template was removed
+    # 2026-05-16 per Josh -- therapist_approved already covers the
+    # same goal once the manual review finishes. The single signup
+    # receipt above is now the only signup-time email.)
     # Pre-compute T2/T5 embeddings in the background so Contextual
     # Resonance scoring works on first match without a per-request
     # round-trip. Failures degrade gracefully — see embeddings.py.
