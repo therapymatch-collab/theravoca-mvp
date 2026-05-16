@@ -146,21 +146,48 @@ async def _run_daily_billing_charges() -> dict[str, int]:
     now = datetime.now(timezone.utc)
 
     testing_mode = await _get_testing_mode()
+    # SECURITY/CORRECTNESS (2026-05-16 audit):
+    #   - paused_at: exclude self-serve-paused therapists (their Stripe
+    #     sub is cancel_at_period_end; charging them via our manual
+    #     PaymentIntent path would bill a card the user thought they
+    #     stopped).
+    #   - deleted_at: exclude soft-deleted accounts (24h reversal
+    #     window; matcher already excludes them, billing must too).
+    #   - cancel_at_period_end: exclude therapists who cancelled in the
+    #     Stripe Customer Portal -- Stripe itself won't bill them past
+    #     current_period_end, so neither should we.
+    #   - stripe_payment_method_id required: skip rows where the PM
+    #     wasn't persisted (tab closed mid-checkout etc.) -- the prior
+    #     code passed payment_method=None to Stripe, which fell back
+    #     unpredictably to the customer's default PM.
     cur = db.therapists.find(
         {
             "subscription_status": {"$in": ["trialing", "active"]},
             "stripe_customer_id": {"$ne": None},
+            "stripe_payment_method_id": {"$ne": None},
             "current_period_end": {"$ne": None, "$lte": now.isoformat()},
+            "paused_at": None,
+            "deleted_at": None,
+            "cancel_at_period_end": {"$ne": True},
         },
         {"_id": 0, "id": 1, "stripe_customer_id": 1, "stripe_payment_method_id": 1,
-         "subscription_status": 1, "name": 1, "email": 1},
+         "subscription_status": 1, "name": 1, "email": 1, "current_period_end": 1},
     )
     charged = 0
     failed = 0
     async for t in cur:
+        # SECURITY/CORRECTNESS (2026-05-16): pass an idempotency_key so
+        # a process crash between successful charge and the Mongo
+        # update below doesn't cause the next cron run (or a
+        # rolling-deploy second replica) to re-charge. Key is
+        # therapist_id + current period end so a different period is a
+        # different key. Stripe deduplicates against the same key for
+        # 24h.
+        idem_key = f"monthly:{t['id']}:{t.get('current_period_end') or 'no-period'}"
         res = stripe_service.charge_monthly_fee(
             customer_id=t["stripe_customer_id"],
             payment_method_id=t.get("stripe_payment_method_id"),
+            idempotency_key=idem_key,
         )
         if res.get("error"):
             await db.therapists.update_one(

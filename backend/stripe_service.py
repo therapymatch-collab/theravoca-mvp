@@ -104,23 +104,41 @@ def charge_monthly_fee(
     amount_cents: int = 4500,
     currency: str = "usd",
     description: str = "TheraVoca therapist subscription — monthly",
+    idempotency_key: Optional[str] = None,
 ) -> dict[str, Any]:
     """Charge $45 via PaymentIntent. Returns Stripe response (or {error}).
 
     Used by the admin "charge now" endpoint and the daily cron on day 31+.
+
+    SECURITY/CORRECTNESS: `idempotency_key` is REQUIRED in production
+    callers (cron + admin) -- without it, a process crash between the
+    successful PaymentIntent.create and the subsequent Mongo write
+    causes the next cron tick to re-charge. Stripe deduplicates retries
+    against the same key for 24h. Callers should pass
+    `f"{therapist_id}:{period_end_iso}"` so two attempts in the same
+    period collapse to one charge. Optional here only for backward-
+    compat with old call sites; pass it.
     """
     if not _configure():
         return {"error": "STRIPE_API_KEY not configured"}
     try:
-        intent = stripe.PaymentIntent.create(
-            amount=amount_cents,
-            currency=currency,
-            customer=customer_id,
-            payment_method=payment_method_id,
-            confirm=True,
-            off_session=True,
-            description=description,
-        )
+        # idempotency_key goes in the request_options dict, NOT the
+        # PaymentIntent body -- it's a header Stripe inspects.
+        kwargs: dict[str, Any] = {
+            "amount": amount_cents,
+            "currency": currency,
+            "customer": customer_id,
+            "payment_method": payment_method_id,
+            "confirm": True,
+            "off_session": True,
+            "description": description,
+        }
+        if idempotency_key:
+            intent = stripe.PaymentIntent.create(
+                **kwargs, idempotency_key=idempotency_key,
+            )
+        else:
+            intent = stripe.PaymentIntent.create(**kwargs)
         return {
             "id": intent.id,
             "status": intent.status,

@@ -14,7 +14,19 @@ router = APIRouter()
 
 @router.post("/stripe/webhook")
 async def stripe_webhook(request: Request):
-    """Stripe webhook handler. Updates therapist.subscription_status on lifecycle events."""
+    """Stripe webhook handler. Updates therapist.subscription_status on lifecycle events.
+
+    SECURITY/CORRECTNESS (2026-05-16): event-id deduplication.
+    Stripe retries the same event.id for up to 3 days on any non-2xx
+    response. Without deduplication, payment_intent.succeeded retries
+    would re-stamp last_payment_at and flip subscription_status,
+    charge.refunded retries would insert duplicate `refunds` rows
+    (inflating the admin dashboard's refund totals), and
+    charge.dispute.created retries would create duplicate dispute
+    rows. We insert the event_id into db.stripe_events at the top of
+    the handler; on the second arrival the unique-key insert fails and
+    we short-circuit with `{"received": True, "duplicate": True}`.
+    """
     payload = await request.body()
     sig = request.headers.get("stripe-signature", "")
     try:
@@ -24,13 +36,36 @@ async def stripe_webhook(request: Request):
         raise HTTPException(400, "invalid signature")
     etype = event.get("type") if isinstance(event, dict) else event.type
     if isinstance(event, dict):
+        event_id = event.get("id")
         obj = (event.get("data") or {}).get("object") or {}
     else:
+        event_id = getattr(event, "id", None)
         # Stripe Event object — coerce its data.object to a plain dict
         try:
             obj = dict(event.data.object)
         except (AttributeError, TypeError):
             obj = {}
+
+    # Event-id dedupe. The _id is the Stripe event id so the unique
+    # constraint is implicit. DuplicateKeyError -> we've already
+    # processed this event; short-circuit. Failures other than
+    # DuplicateKey (e.g. Mongo unavailable) fall through and process
+    # the event normally -- losing dedupe is preferable to dropping
+    # the event entirely on a transient DB blip.
+    if event_id:
+        try:
+            from pymongo.errors import DuplicateKeyError
+            await db.stripe_events.insert_one({
+                "_id": event_id,
+                "type": etype,
+                "received_at": _now_iso(),
+            })
+        except DuplicateKeyError:
+            logger.info("Stripe webhook duplicate event_id=%s type=%s -- skipping", event_id, etype)
+            return {"received": True, "duplicate": True, "type": etype}
+        except Exception as e:
+            logger.warning("Stripe webhook dedupe insert failed (proceeding): %s", e)
+
     tid: Optional[str] = None
 
     async def _set(fields: dict[str, Any]):
@@ -70,11 +105,37 @@ async def stripe_webhook(request: Request):
         meta = obj.get("metadata") or {}
         tid = meta.get("theravoca_therapist_id") or await _tid_for_customer(obj.get("customer"))
         if tid:
+            # Capture cancel_at_period_end too so the billing cron can
+            # exclude therapists whose Stripe sub is set to expire at
+            # current_period_end (Stripe itself stops billing them; our
+            # manual PaymentIntent path must too). 2026-05-16 audit.
             await _set({
                 "stripe_subscription_id": sub_id,
                 "subscription_status": obj.get("status") or "canceled",
                 "trial_ends_at": _ts_to_iso(obj.get("trial_end")),
                 "current_period_end": _ts_to_iso(obj.get("current_period_end")),
+                "cancel_at_period_end": bool(obj.get("cancel_at_period_end")),
+            })
+    elif etype == "setup_intent.succeeded":
+        # Webhook fallback for stripe_payment_method_id persistence.
+        # The primary path is /therapists/{id}/sync-payment-method
+        # which writes the PM id when the user lands on the Stripe
+        # success URL. If the user closes their tab BEFORE that
+        # redirect, sync never runs and the cron later tries to
+        # charge with payment_method=None. This handler covers that
+        # edge case: Stripe fires setup_intent.succeeded server-side
+        # regardless of the user closing their tab.
+        pm = obj.get("payment_method")
+        cust = obj.get("customer")
+        tid = (
+            (obj.get("metadata") or {}).get("theravoca_therapist_id")
+            or await _tid_for_customer(cust)
+        )
+        if tid and pm:
+            await _set({
+                "stripe_customer_id": cust,
+                "stripe_setup_intent_id": obj.get("id"),
+                "stripe_payment_method_id": pm,
             })
     elif etype == "invoice.payment_failed":
         tid = await _tid_for_customer(obj.get("customer"))
