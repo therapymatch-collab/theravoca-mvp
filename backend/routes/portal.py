@@ -1385,7 +1385,68 @@ def _strip_keys(doc: dict[str, Any], keys: set[str]) -> dict[str, Any]:
 def _export_filename(role: str, email: str) -> str:
     safe_email = re.sub(r"[^a-zA-Z0-9._-]+", "_", email)[:64] or "account"
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    return f"theravoca-{role}-{safe_email}-{today}.json"
+    return f"theravoca-{role}-{safe_email}-{today}.xlsx"
+
+
+def _flatten_for_excel(value: Any) -> str:
+    """Convert nested dicts/lists/dates into a single cell-friendly
+    string. Excel can't represent nested structures natively, so we
+    serialize them as compact JSON for the user to read."""
+    if value is None:
+        return ""
+    if isinstance(value, (str, int, float, bool)):
+        return value if not isinstance(value, bool) else ("Yes" if value else "No")
+    if isinstance(value, (list, dict)):
+        try:
+            return json.dumps(value, default=str, ensure_ascii=False)
+        except (TypeError, ValueError):
+            return str(value)
+    return str(value)
+
+
+def _build_excel_workbook(sheets: list[tuple[str, list[dict]]]) -> bytes:
+    """Build a multi-sheet xlsx workbook from a list of (sheet_name, rows)
+    tuples. Each rows list is a list of dicts; the union of keys becomes
+    the column headers. Returns the raw .xlsx bytes."""
+    from openpyxl import Workbook
+    from openpyxl.utils import get_column_letter
+    from io import BytesIO
+
+    wb = Workbook()
+    # Remove the auto-created default sheet so we control all sheet names.
+    if wb.worksheets:
+        wb.remove(wb.active)
+
+    for sheet_name, rows in sheets:
+        # Excel sheet names cap at 31 chars and can't contain []:*?/\
+        clean_name = re.sub(r"[\[\]:*?/\\]", "_", sheet_name)[:31] or "Sheet"
+        ws = wb.create_sheet(clean_name)
+        if not rows:
+            ws.append(["(no records)"])
+            continue
+        # Column headers = union of all keys across rows, sorted for
+        # stable output.
+        all_keys = sorted({k for row in rows for k in (row or {}).keys()})
+        ws.append(all_keys)
+        for row in rows:
+            ws.append([_flatten_for_excel((row or {}).get(k)) for k in all_keys])
+        # Best-effort column widths: cap at 60 chars so long JSON blobs
+        # don't make the sheet unreadable. Excel auto-wraps within the
+        # cell when the user widens it manually.
+        for idx, key in enumerate(all_keys, start=1):
+            max_len = max(
+                [len(str(key))] + [len(str((r or {}).get(key) or "")) for r in rows[:50]]
+            )
+            ws.column_dimensions[get_column_letter(idx)].width = min(max(12, max_len + 2), 60)
+
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+_XLSX_MEDIA_TYPE = (
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
 
 
 @router.get("/portal/therapist/export-data")
@@ -1419,16 +1480,23 @@ async def therapist_export_data(
         {"_id": 0},
     ).sort("at", -1).to_list(500)
 
-    payload = {
-        "exported_at": _now_iso(),
-        "exported_for": email,
-        "role": "therapist",
-        "profile": _strip_keys(therapist, _THERAPIST_EXPORT_STRIP),
-        "applications": [_strip_keys(a, _APPLICATION_STRIP) for a in apps],
-        "declines": declines,
-        "feedback_about_me": [_strip_keys(f, _FEEDBACK_STRIP) for f in fb],
-        "login_history": [_strip_keys(le, _LOGIN_EVENT_STRIP) for le in logins],
-    }
+    # Build an Excel workbook with one sheet per data class so the user
+    # can scan their data in Numbers/Excel/Sheets without parsing JSON.
+    # Each sheet's columns are the union of keys; nested values
+    # (lists/dicts/dates) are JSON-serialized into a single cell.
+    sheets = [
+        ("Summary", [{
+            "exported_at": _now_iso(),
+            "exported_for": email,
+            "role": "therapist",
+        }]),
+        ("Profile", [_strip_keys(therapist, _THERAPIST_EXPORT_STRIP)]),
+        ("Applications", [_strip_keys(a, _APPLICATION_STRIP) for a in apps]),
+        ("Declines", declines),
+        ("Feedback About Me", [_strip_keys(f, _FEEDBACK_STRIP) for f in fb]),
+        ("Login History", [_strip_keys(le, _LOGIN_EVENT_STRIP) for le in logins]),
+    ]
+    content = _build_excel_workbook(sheets)
     audit.emit(
         actor_type="therapist", actor_id=tid,
         action="self_export_data", resource="therapist",
@@ -1437,8 +1505,8 @@ async def therapist_export_data(
         user_agent=request.headers.get("user-agent", ""),
     )
     return Response(
-        content=json.dumps(payload, indent=2, default=str),
-        media_type="application/json",
+        content=content,
+        media_type=_XLSX_MEDIA_TYPE,
         headers={
             "Content-Disposition": (
                 f'attachment; filename="{_export_filename("therapist", email)}"'
@@ -1476,16 +1544,19 @@ async def patient_export_data(
         {"role": "patient", "email": email_lower}, {"_id": 0},
     ).sort("at", -1).to_list(500)
 
-    payload = {
-        "exported_at": _now_iso(),
-        "exported_for": email,
-        "role": "patient",
-        "account": _strip_keys(account or {}, _PATIENT_ACCOUNT_STRIP),
-        "requests": [_strip_keys(r, _REQUEST_STRIP) for r in requests_docs],
-        "therapist_replies": [_strip_keys(a, _APPLICATION_STRIP) for a in apps],
-        "feedback_submitted": [_strip_keys(f, _FEEDBACK_STRIP) for f in fb],
-        "login_history": [_strip_keys(le, _LOGIN_EVENT_STRIP) for le in logins],
-    }
+    sheets = [
+        ("Summary", [{
+            "exported_at": _now_iso(),
+            "exported_for": email,
+            "role": "patient",
+        }]),
+        ("Account", [_strip_keys(account or {}, _PATIENT_ACCOUNT_STRIP)]),
+        ("Match Requests", [_strip_keys(r, _REQUEST_STRIP) for r in requests_docs]),
+        ("Therapist Replies", [_strip_keys(a, _APPLICATION_STRIP) for a in apps]),
+        ("Feedback I Submitted", [_strip_keys(f, _FEEDBACK_STRIP) for f in fb]),
+        ("Login History", [_strip_keys(le, _LOGIN_EVENT_STRIP) for le in logins]),
+    ]
+    content = _build_excel_workbook(sheets)
     audit.emit(
         actor_type="patient",
         actor_id=audit._hash_patient_email(email_lower),
@@ -1494,8 +1565,8 @@ async def patient_export_data(
         user_agent=request.headers.get("user-agent", ""),
     )
     return Response(
-        content=json.dumps(payload, indent=2, default=str),
-        media_type="application/json",
+        content=content,
+        media_type=_XLSX_MEDIA_TYPE,
         headers={
             "Content-Disposition": (
                 f'attachment; filename="{_export_filename("patient", email)}"'

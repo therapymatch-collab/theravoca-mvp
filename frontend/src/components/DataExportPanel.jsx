@@ -4,17 +4,19 @@ import { Download, Loader2 } from "lucide-react";
 import { sessionClient } from "@/lib/api";
 
 // Self-serve data-export panel, shared by therapist + patient
-// portals. Fetches GET /portal/<role>/export-data which returns a
-// JSON file as a download (server sets Content-Disposition). We
-// pull it as a Blob and trigger an anchor click so the browser
-// saves it locally; the response is too sensitive to dump in a
-// new tab.
+// portals. Fetches GET /portal/<role>/export-data which returns an
+// Excel (.xlsx) workbook as a download (server sets
+// Content-Disposition). One sheet per data class so a non-technical
+// user can open it in Numbers/Excel/Google Sheets and read it
+// directly. We pull as a Blob and trigger an anchor click so the
+// browser saves it locally; the response is too sensitive to dump
+// in a new tab.
 //
-// What's in the file:
-//   - Therapist: profile, applications, declines, feedback ABOUT
-//     them, login history.
-//   - Patient: account, all match requests, therapist replies on
-//     those requests, feedback they submitted, login history.
+// Sheets in the file:
+//   - Therapist: Summary, Profile, Applications, Declines,
+//     Feedback About Me, Login History.
+//   - Patient: Summary, Account, Match Requests, Therapist Replies,
+//     Feedback I Submitted, Login History.
 // Auth artifacts (password hash, TOTP secret, magic codes,
 // internal embeddings) are stripped server-side before the
 // download is generated.
@@ -40,9 +42,11 @@ export default function DataExportPanel({ role }) {
       const match = /filename="?([^"]+)"?/i.exec(cd);
       const filename =
         (match && match[1]) ||
-        `theravoca-${role}-${new Date().toISOString().slice(0, 10)}.json`;
+        `theravoca-${role}-${new Date().toISOString().slice(0, 10)}.xlsx`;
 
-      const blob = new Blob([res.data], { type: "application/json" });
+      const blob = new Blob([res.data], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -60,8 +64,8 @@ export default function DataExportPanel({ role }) {
   };
 
   const bodyCopy = role === "therapist"
-    ? "Download a JSON snapshot of your account: profile, every patient referral you've received, declines, feedback about you, and sign-in history. Auth secrets are stripped. Useful before pausing or deleting."
-    : "Download a JSON snapshot of your account: every match request you've submitted, the therapists who replied, any feedback you've submitted, and sign-in history. Auth secrets are stripped. Useful before pausing or deleting.";
+    ? "Download an Excel snapshot of your account: profile, every patient referral you've received, declines, feedback about you, and sign-in history. One sheet per category — opens in Excel, Numbers, or Google Sheets. Auth secrets are stripped. Useful before pausing or deleting."
+    : "Download an Excel snapshot of your account: every match request you've submitted, the therapists who replied, any feedback you've submitted, and sign-in history. One sheet per category — opens in Excel, Numbers, or Google Sheets. Auth secrets are stripped. Useful before pausing or deleting.";
 
   return (
     <section
@@ -88,7 +92,7 @@ export default function DataExportPanel({ role }) {
           ) : (
             <Download size={14} />
           )}
-          Download account data (JSON)
+          Download account data (Excel)
         </button>
       </div>
     </section>
