@@ -1751,9 +1751,13 @@ async def admin_delete_therapist(therapist_id: str) -> dict[str, Any]:
 
 @router.post("/admin/test-sms")
 async def admin_test_sms(payload: dict, _: bool = Depends(require_admin)):
-    to = (payload or {}).get("to") or os.environ.get("TWILIO_DEV_OVERRIDE_TO", "")
+    to = (
+        (payload or {}).get("to")
+        or os.environ.get("SMS_DEV_OVERRIDE_TO", "")
+        or os.environ.get("TWILIO_DEV_OVERRIDE_TO", "")
+    )
     if not to:
-        raise HTTPException(400, "No recipient and no TWILIO_DEV_OVERRIDE_TO env set")
+        raise HTTPException(400, "No recipient and no SMS_DEV_OVERRIDE_TO (or legacy TWILIO_DEV_OVERRIDE_TO) env set")
 
     # Support template preview: if "template" is set, render that template
     # with sample data so the admin can see exactly what patients/therapists get.
@@ -1771,21 +1775,26 @@ async def admin_test_sms(payload: dict, _: bool = Depends(require_admin)):
         except (KeyError, IndexError):
             body = template  # show raw template if formatting fails
     else:
-        body = (payload or {}).get("body") or "TheraVoca: SMS smoke test  --  your Twilio integration is wired up."
+        body = (payload or {}).get("body") or "TheraVoca: SMS smoke test  --  your SMS integration is wired up."
 
-    # force=True bypasses TWILIO_ENABLED check  --  admin explicitly chose to test
+    # force=True bypasses the provider-enabled kill switch -- admin
+    # explicitly chose to test, so the prelaunch safety guard is also
+    # bypassed.
     result = await send_sms(to, body, force=True)
     if not result:
-        return {"ok": False, "detail": "SMS send returned no result (check TWILIO_ENABLED + creds + logs)"}
+        return {"ok": False, "detail": "SMS send returned no result (check TELNYX_ENABLED / TWILIO_ENABLED + creds + logs)"}
 
-    # Twilio's API returns "queued" immediately but the message can still
-    # fail at the carrier (A2P 10DLC, blocked numbers, invalid format).
-    # Poll the message status briefly so the admin sees the real outcome.
     sid = result.get("sid")
+    provider = result.get("provider")
     final_status = result.get("status")
     error_code = None
     error_message = None
-    if sid:
+    # Only Twilio supports synchronous-ish status polling via SDK.
+    # Telnyx finalizes asynchronously through the /api/webhooks/telnyx
+    # endpoint that $set's telnyx_status on the sms_sends row -- the
+    # status panel will reflect it once the webhook lands. Returning the
+    # initial "queued" here is honest.
+    if provider == "twilio" and sid:
         try:
             from twilio.rest import Client as _TwilioClient
             tw = _TwilioClient(
@@ -1806,7 +1815,9 @@ async def admin_test_sms(payload: dict, _: bool = Depends(require_admin)):
             # Pollers are best-effort; don't fail the test endpoint on this.
             logger.warning("SMS poll error: %s", exc)
 
-    # Map common Twilio error codes to human-readable troubleshooting hints.
+    # Map common error codes to human-readable troubleshooting hints.
+    # Codes 21xxx/30xxx are Twilio; codes 4xxxx/8xxxx/10xxx are Telnyx
+    # (see https://developers.telnyx.com/api/errors). They don't collide.
     hint = None
     if error_code in (30034, 30032):
         hint = (
@@ -1821,6 +1832,14 @@ async def admin_test_sms(payload: dict, _: bool = Depends(require_admin)):
         hint = "Permission to send SMS to this country has not been enabled."
     elif error_code == 21211:
         hint = "Invalid 'To' phone number format. Use E.164 (+12035551234)."
+    elif error_code == 10010:
+        hint = "Telnyx: messaging_profile_id not found. Check TELNYX_MESSAGING_PROFILE_ID."
+    elif error_code == 10015:
+        hint = "Telnyx: from-number not provisioned on this messaging profile."
+    elif error_code in (40005, 40010):
+        hint = "Telnyx: 10DLC campaign not registered or not approved yet."
+    elif error_code == 85003:
+        hint = "Telnyx: recipient region not enabled on this messaging profile."
 
     response = {
         "ok": final_status not in ("undelivered", "failed"),
