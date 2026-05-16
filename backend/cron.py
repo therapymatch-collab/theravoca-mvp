@@ -596,6 +596,91 @@ async def _run_auto_recruit_weekly() -> dict[str, Any]:
         return {"error": str(e)}
 
 
+async def _run_decline_pattern_flags() -> dict[str, Any]:
+    """Scan the last 30 days of declines for per-therapist + per-reason
+    patterns. If a therapist has 3+ declines for the same reason in
+    the window, write/upsert a row in `db.therapist_decline_flags`
+    with status="open" so admin sees them in the review queue.
+    Re-running is idempotent: existing open flags get their counts
+    refreshed; flags whose counts dropped back below threshold are
+    auto-closed.
+
+    Threshold + window are intentionally simple v1 -- once we have
+    real decline volume we can move to a per-reason threshold (e.g.
+    "specialty_mismatch x3 = flag" but "schedule_mismatch x5 = flag"
+    since schedule conflicts are noisier signal).
+    """
+    THRESHOLD = 3  # 3 of same reason in window = pattern
+    WINDOW_DAYS = 30
+    try:
+        from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+        cutoff = (_dt.now(_tz.utc) - _td(days=WINDOW_DAYS)).isoformat()
+        # Aggregate (therapist_id, reason) -> count + last_decline_at.
+        pipeline = [
+            {"$match": {"declined_at": {"$gte": cutoff}}},
+            {"$unwind": "$reason_codes"},
+            {"$group": {
+                "_id": {"therapist_id": "$therapist_id", "reason": "$reason_codes"},
+                "count": {"$sum": 1},
+                "last_decline_at": {"$max": "$declined_at"},
+                "therapist_email": {"$last": "$therapist_email"},
+            }},
+        ]
+        cur = db.declines.aggregate(pipeline)
+        agg = await cur.to_list(5000)
+        # Existing open flags so we know which ones to close-out.
+        existing = {}
+        async for f in db.therapist_decline_flags.find({"status": "open"}, {"_id": 0}):
+            existing[(f.get("therapist_id"), f.get("reason"))] = f
+        flagged = 0
+        refreshed = 0
+        closed = 0
+        seen_keys: set[tuple] = set()
+        now_iso = _now_iso()
+        for row in agg:
+            key = (row["_id"]["therapist_id"], row["_id"]["reason"])
+            count = row.get("count", 0)
+            if count < THRESHOLD:
+                continue
+            seen_keys.add(key)
+            update = {
+                "therapist_id": key[0],
+                "reason": key[1],
+                "count_30d": count,
+                "last_decline_at": row.get("last_decline_at"),
+                "therapist_email": row.get("therapist_email"),
+                "status": "open",
+                "updated_at": now_iso,
+            }
+            if key in existing:
+                await db.therapist_decline_flags.update_one(
+                    {"therapist_id": key[0], "reason": key[1]},
+                    {"$set": update},
+                )
+                refreshed += 1
+            else:
+                update["created_at"] = now_iso
+                await db.therapist_decline_flags.insert_one(update)
+                flagged += 1
+        # Auto-close flags whose count dropped below threshold.
+        for key, f in existing.items():
+            if key not in seen_keys:
+                await db.therapist_decline_flags.update_one(
+                    {"therapist_id": key[0], "reason": key[1]},
+                    {"$set": {"status": "auto_closed",
+                              "auto_closed_at": now_iso}},
+                )
+                closed += 1
+        return {
+            "threshold": THRESHOLD, "window_days": WINDOW_DAYS,
+            "new_flags": flagged, "refreshed": refreshed,
+            "auto_closed": closed,
+        }
+    except Exception as e:
+        logger.warning("Decline-pattern flag run failed: %s", e)
+        return {"error": str(e)}
+
+
 async def _run_cron_health_alert() -> dict[str, Any]:
     """Look for stuck / failed / stale cron jobs and email admin.
 
@@ -723,6 +808,11 @@ async def _daily_loop() -> None:
                     auto_rec = None
                     if local.weekday() == 0:  # Monday
                         auto_rec = await _run_auto_recruit_weekly()
+                    # Decline-pattern flagging. Runs daily, scans last 30
+                    # days of declines per therapist+reason, flags
+                    # patterns (3+ same reason in window) to the
+                    # therapist_decline_flags queue for admin review.
+                    decline_flags = await _run_decline_pattern_flags()
                     # Health alert sweep (BACKLOG #25). Runs AFTER everything
                     # else so today's stuck-job pattern is included. Deduped
                     # to one email per 24h.
@@ -739,6 +829,7 @@ async def _daily_loop() -> None:
                             "v2_surveys": v2_surveys,
                             "v2_reminders": v2_reminders,
                             "auto_recruit_weekly": auto_rec,
+                            "decline_pattern_flags": decline_flags,
                             "cron_health_alert": health,
                         }},
                     )

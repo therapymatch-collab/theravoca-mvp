@@ -3133,6 +3133,14 @@ export default function AdminDashboard() {
                   </div>
                 )}
               </div>
+
+              {/* "Not Interested" -- providers who actively declined this
+                  request, with their reason codes + impact on their
+                  matching profile. Only renders when the request has at
+                  least one decline. */}
+              {(detail.declines || []).length > 0 && (
+                <NotInterestedSection declines={detail.declines || []} />
+              )}
             </div>
           )}
         </DialogContent>
@@ -3155,6 +3163,147 @@ function SectionHeader({ color, label }) {
         {label}
       </span>
       <div className="flex-1 h-px" style={{ backgroundColor: `${color}33` }} />
+    </div>
+  );
+}
+
+// Human-readable labels for the decline reason_codes the therapist
+// portal sends. Mirrors DECLINE_REASONS in TherapistApply.jsx -- if
+// you add a new reason there, add it here too.
+const DECLINE_REASON_LABELS = {
+  caseload_full: "Caseload currently full",
+  specialty_mismatch: "Outside their specialty area",
+  schedule_mismatch: "Schedule mismatch",
+  payment_mismatch: "Payment / fee mismatch",
+  location_mismatch: "Location or modality mismatch",
+  difficult_fit: "Reviewed details — not a good clinical fit",
+  declined_via_email: "Declined via email link",
+  other: "Other",
+};
+
+function NotInterestedSection({ declines }) {
+  return (
+    <div
+      className="mt-6 bg-[#FBF5F2] border border-[#EBD5CB] rounded-xl p-4"
+      data-testid="not-interested-section"
+    >
+      <div className="flex items-baseline justify-between gap-3 mb-2">
+        <h4 className="font-semibold text-[#A8553F]">
+          Not interested ({declines.length})
+        </h4>
+        <p className="text-xs text-[#6D6A65]">
+          Providers who actively declined this request, with the reason
+          they gave and how it affects their matching profile.
+        </p>
+      </div>
+      <div className="space-y-2 max-h-[420px] overflow-y-auto">
+        {declines.map((d) => {
+          const t = d.therapist || {};
+          const reasons = (d.reason_codes || []).map(
+            (c) => DECLINE_REASON_LABELS[c] || c,
+          );
+          const impact = d.impact || {};
+          const responseRatePct =
+            impact.response_rate != null
+              ? Math.round(impact.response_rate * 100)
+              : null;
+          const sameReasonAlert = (impact.same_reason_count_30d || 0) >= 3;
+          return (
+            <div
+              key={d.decline_id || `${d.therapist?.id || "?"}-${d.declined_at || ""}`}
+              className="border border-[#EBD5CB] rounded-xl p-4 bg-white"
+              data-testid={`decline-row-${d.therapist?.id || "unknown"}`}
+            >
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-[#2B2A29]">
+                    {t.name || "(deleted therapist)"}
+                    {t.credential_type && (
+                      <span className="text-xs text-[#6D6A65] font-normal ml-2">
+                        {t.credential_type}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-[#6D6A65] truncate">
+                    {t.email || "—"}
+                    {d.declined_at && (
+                      <span> · declined {new Date(d.declined_at).toLocaleString()}</span>
+                    )}
+                  </div>
+                  {reasons.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {reasons.map((r, i) => (
+                        <span
+                          key={i}
+                          className="inline-flex items-center text-[11px] px-2 py-0.5 rounded-full bg-[#FBE9E5] border border-[#F4C7BE] text-[#A8553F]"
+                        >
+                          {r}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {d.notes && (
+                    <p className="text-xs text-[#2B2A29] mt-2 italic leading-relaxed">
+                      "{d.notes}"
+                    </p>
+                  )}
+                </div>
+                {d.match_score != null && (
+                  <span
+                    className="font-mono text-xs bg-[#6D6A65] text-white px-2 py-0.5 rounded shrink-0"
+                    title="The match score they were notified at"
+                  >
+                    {Math.round(d.match_score)}%
+                  </span>
+                )}
+              </div>
+              {/* Impact strip: how this decline affects the therapist's
+                  matching profile. The decline reason itself doesn't
+                  feed _score_reliability today (only response_rate +
+                  retention + selection). The badge flags 3+ of the
+                  same reason in 30 days as a pattern admin should
+                  look at. */}
+              <div className="mt-3 pt-3 border-t border-[#F4E4DD] flex flex-wrap gap-2 text-[11px]">
+                <span className="text-[#6D6A65]">
+                  <strong className="text-[#2B2A29]">Impact on algo:</strong>{" "}
+                </span>
+                {responseRatePct != null ? (
+                  <span
+                    className="text-[#6D6A65]"
+                    title="The decline DOES count as a response (vs ghosting which lowers this). Reliability uses response_rate, not the decline reason."
+                  >
+                    response rate: <strong>{responseRatePct}%</strong>
+                  </span>
+                ) : (
+                  <span className="text-[#6D6A65]">
+                    response rate: not yet measured
+                  </span>
+                )}
+                {d.therapist_load_at_decline != null && (
+                  <span className="text-[#6D6A65]">
+                    · active referrals when declined:{" "}
+                    <strong>{d.therapist_load_at_decline}</strong>
+                  </span>
+                )}
+                {sameReasonAlert && (
+                  <span
+                    className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#FBF2E8] border border-[#F0DEC8] text-[#B8742A] font-medium"
+                    title="Cron flags 3+ of the same reason in 30 days for admin review (see Operations -> Decline flags)."
+                  >
+                    ⚠ Pattern: {impact.same_reason_count_30d} same-reason
+                    declines in 30d
+                  </span>
+                )}
+                <span className="text-[#A4A29E] italic">
+                  — reason codes are stored but don't directly lower the
+                  therapist's score; the cron flags patterns for admin
+                  review.
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -515,12 +515,83 @@ async def admin_request_detail(request_id: str, request: Request, _: bool = Depe
     _target = int((_mcfg or {}).get("max_invites") or 30)
     if len(notified_ids) < _target:
         match_gap = await _explain_match_gap(req, len(notified_ids), _target)
+    # "Not Interested" -- enrich each decline with therapist info,
+    # human-readable reason labels, the therapist's current reliability
+    # score (so admin can see if this decline affected them), and a
+    # 30d decline count for the same reason (early signal of pattern).
+    decl_docs = await db.declines.find(
+        {"request_id": request_id}, {"_id": 0},
+    ).sort("declined_at", -1).to_list(100)
+    declines_enriched: list[dict] = []
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    cutoff_30d = (_dt.now(_tz.utc) - _td(days=30)).isoformat()
+    for d in decl_docs:
+        tid = d.get("therapist_id")
+        t = await db.therapists.find_one(
+            {"id": tid},
+            {"_id": 0, "id": 1, "name": 1, "email": 1, "credential_type": 1,
+             "primary_specialties": 1, "modalities": 1,
+             "office_locations": 1, "cash_rate": 1,
+             "insurance_accepted": 1, "telehealth": 1, "offers_in_person": 1,
+             "reliability": 1},
+        ) if tid else None
+        # Per-reason 30d count for THIS therapist -- early-warning
+        # signal admin can act on without waiting for the cron flag.
+        same_reason_count_30d = 0
+        for code in (d.get("reason_codes") or []):
+            same_reason_count_30d = max(
+                same_reason_count_30d,
+                await db.declines.count_documents({
+                    "therapist_id": tid,
+                    "reason_codes": code,
+                    "declined_at": {"$gte": cutoff_30d},
+                }),
+            )
+        rel = (t or {}).get("reliability") or {}
+        declines_enriched.append({
+            "decline_id": d.get("id"),
+            "declined_at": d.get("declined_at"),
+            "therapist": {
+                "id": tid,
+                "name": (t or {}).get("name"),
+                "email": (t or {}).get("email"),
+                "credential_type": (t or {}).get("credential_type"),
+                "primary_specialties": (t or {}).get("primary_specialties", []),
+                "modalities": (t or {}).get("modalities", []),
+                "office_locations": (t or {}).get("office_locations", []),
+                "cash_rate": (t or {}).get("cash_rate"),
+                "insurance_accepted": (t or {}).get("insurance_accepted", []),
+                "telehealth": (t or {}).get("telehealth"),
+                "offers_in_person": (t or {}).get("offers_in_person"),
+            } if t else None,
+            "reason_codes": d.get("reason_codes") or [],
+            "notes": d.get("notes") or "",
+            "match_score": d.get("match_score"),
+            "match_breakdown": d.get("match_breakdown") or {},
+            "therapist_load_at_decline": d.get("therapist_load_at_decline"),
+            # Impact summary on the therapist's matching profile.
+            "impact": {
+                "response_rate": rel.get("response_rate"),
+                "selection_rate": rel.get("selection_rate"),
+                "same_reason_count_30d": same_reason_count_30d,
+                # Note: decline reasons themselves don't directly feed
+                # the matcher score today. The decline DOES update the
+                # therapist's response_rate (responded=True) via the
+                # update_therapist_response_rate helper, vs ghosting
+                # which lowers it. The reason_code is captured in
+                # db.declines for admin review + the new
+                # therapist_decline_flags queue (cron, daily) but isn't
+                # used in matching.py:_score_reliability today.
+            },
+        })
+
     return {
         "request": req,
         "notified": notified,
         "applications": apps,
         "invited": invited,
         "match_gap": match_gap,
+        "declines": declines_enriched,
     }
 
 
@@ -1655,6 +1726,68 @@ async def admin_list_declines(_: bool = Depends(require_role("view"))):
         for code in d.get("reason_codes") or []:
             counts[code] = counts.get(code, 0) + 1
     return {"declines": declines, "reason_counts": counts}
+
+
+@router.get("/admin/decline-flags")
+async def admin_list_decline_flags(
+    status: Optional[str] = "open",
+    _: bool = Depends(require_role("view")),
+):
+    """Returns the cron-generated per-therapist decline-pattern flags.
+    By default lists open flags only (status=open). Pass ?status=all to
+    see auto-closed too. Each flag enriched with therapist info so the
+    admin can act without a second fetch."""
+    query: dict[str, Any] = {}
+    if status and status != "all":
+        query["status"] = status
+    flags = await db.therapist_decline_flags.find(
+        query, {"_id": 0},
+    ).sort("count_30d", -1).to_list(500)
+    enriched: list[dict] = []
+    for f in flags:
+        t = await db.therapists.find_one(
+            {"id": f.get("therapist_id")},
+            {"_id": 0, "id": 1, "name": 1, "email": 1, "credential_type": 1,
+             "primary_specialties": 1, "is_active": 1,
+             "pending_approval": 1, "subscription_status": 1},
+        )
+        enriched.append({**f, "therapist": t})
+    return {"flags": enriched, "total": len(enriched)}
+
+
+@router.post("/admin/decline-flags/run-now")
+async def admin_run_decline_flags_now(_: bool = Depends(require_admin)):
+    """Trigger the decline-pattern scan immediately rather than waiting
+    for the daily cron. Useful for first-time setup or when admin wants
+    fresh counts after manually closing a flag."""
+    from cron import _run_decline_pattern_flags
+    return await _run_decline_pattern_flags()
+
+
+@router.post("/admin/decline-flags/{therapist_id}/{reason}/close")
+async def admin_close_decline_flag(
+    therapist_id: str,
+    reason: str,
+    payload: dict[str, Any],
+    _: bool = Depends(require_role("edit")),
+):
+    """Close a flag manually after admin reviews it. Body:
+    {"resolution": "spoke_with_therapist|narrowed_specialty|no_action|...",
+     "notes": "free text"}. Closing a flag doesn't stop the cron from
+    re-flagging it -- if the underlying pattern persists past the next
+    run, it'll come back as a new open flag."""
+    res = await db.therapist_decline_flags.update_one(
+        {"therapist_id": therapist_id, "reason": reason},
+        {"$set": {
+            "status": "admin_closed",
+            "admin_resolution": (payload or {}).get("resolution", "no_action"),
+            "admin_notes": (payload or {}).get("notes", ""),
+            "closed_at": _now_iso(),
+        }},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(404, "Flag not found")
+    return {"ok": True}
 
 
 @router.post("/admin/backfill-therapists")
