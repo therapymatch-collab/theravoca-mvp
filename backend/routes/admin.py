@@ -3081,10 +3081,19 @@ async def _resolve_campaign_recipients(
         q.setdefault("unsubscribed", {"$ne": True})
         q.setdefault("hard_bounced", {"$ne": True})
 
+        # SECURITY/CORRECTNESS (2026-05-16 audit, HIGH #13): cap the
+        # filter-mode recipient resolution. The prior unbounded
+        # `async for` would silently iterate every matching therapist;
+        # a misconfigured filter (empty or accidentally broad) could
+        # blast a marketing email to every therapist in the directory.
+        # Hard cap at 5000 -- well above the current roster, low enough
+        # that an accidental "send to all imports" can't reach a real
+        # full directory unattended.
+        BROADCAST_MAX_RECIPIENTS = 5000
         cur = db.therapists.find(q, {
             "_id": 0, "id": 1, "name": 1, "email": 1, "real_email": 1,
             "source": 1, "credential_type": 1,
-        })
+        }).limit(BROADCAST_MAX_RECIPIENTS)
         async for t in cur:
             email = _resolve_email(t)
             if not email or email.lower() in seen_emails:
@@ -3411,29 +3420,45 @@ async def admin_campaign_send(cid: str, request: Request) -> dict[str, Any]:
 
     is_transactional = bool(doc.get("transactional"))
     sent, skipped, failed = 0, 0, 0
+    # SECURITY/CORRECTNESS (2026-05-16 audit, broadcast loop guard):
+    # WRAP the per-recipient body so a single failure (bad merge value,
+    # Mongo blip in _therapist_unsub_url, network error in send_broadcast)
+    # does NOT abort the entire campaign mid-flight. Previously a single
+    # row's exception left the campaign stuck in `draft` with partial
+    # sends and no recovery path -- the idempotency on rerun would
+    # double-skip already-sent recipients but the campaign could never
+    # be marked sent. Per-row try/except converts the same failure into
+    # a `failed += 1` counter and keeps going.
     for r in rows:
-        addr = (r.get("email") or "").lower()
-        if not addr or addr in prior_to:
-            skipped += 1
-            continue
-        rendered = _render_campaign_body(doc.get("body_html") or "", r)
-        unsub_url = (
-            None if is_transactional
-            else (_therapist_unsub_url(r["therapist_id"]) if r.get("therapist_id") else None)
-        )
-        res = await send_broadcast(
-            addr,
-            doc.get("subject") or "(no subject)",
-            rendered,
-            campaign_id=cid,
-            unsubscribe_url=unsub_url,
-            force=True,
-        )
-        if res is None:
+        try:
+            addr = (r.get("email") or "").lower()
+            if not addr or addr in prior_to:
+                skipped += 1
+                continue
+            rendered = _render_campaign_body(doc.get("body_html") or "", r)
+            unsub_url = (
+                None if is_transactional
+                else (_therapist_unsub_url(r["therapist_id"]) if r.get("therapist_id") else None)
+            )
+            res = await send_broadcast(
+                addr,
+                doc.get("subject") or "(no subject)",
+                rendered,
+                campaign_id=cid,
+                unsubscribe_url=unsub_url,
+                force=True,
+            )
+            if res is None:
+                failed += 1
+            else:
+                sent += 1
+                prior_to.add(addr)
+        except Exception as e:
             failed += 1
-        else:
-            sent += 1
-            prior_to.add(addr)
+            logger.warning(
+                "Broadcast %s: per-recipient send failed for %s: %s",
+                cid, (r.get("email") or "?"), e,
+            )
         # Polite throttle for Resend's API.
         await _asyncio.sleep(0.2)
 
