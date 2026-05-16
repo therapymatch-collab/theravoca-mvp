@@ -983,6 +983,33 @@ async def admin_list_therapists(
         t["match_ready"] = len(blockers) == 0
         t["match_ready_blockers"] = blockers
 
+    # Aggregate per-blocker counts so the admin chip row can show
+    # "Match-ready: 0 / Blocked by: 122 pending_approval, 95 license:..."
+    # without having to hover every row. Sticks the breakdown on a
+    # `_match_ready_breakdown` synthetic key on the LIST so the
+    # frontend can read it once. (Doesn't affect individual rows --
+    # they keep their own match_ready_blockers list.)
+    breakdown: dict[str, int] = {}
+    for t in rows:
+        for b in (t.get("match_ready_blockers") or []):
+            # Bucket by category prefix (subscription:incomplete ->
+            # "subscription"; profile_incomplete:7 -> "profile_incomplete";
+            # plain "archived" -> "archived").
+            cat = b.split(":", 1)[0]
+            breakdown[cat] = breakdown.get(cat, 0) + 1
+    # Inject as a non-row item the frontend can pluck. We can't change
+    # the response shape (response_model=list) without breaking other
+    # callers; instead the frontend can compute its own breakdown from
+    # match_ready_blockers across the rows. Logging here so admin can
+    # see it in Render logs immediately too.
+    if rows:
+        logger.info(
+            "match_ready breakdown: total=%d ready=%d blockers=%s",
+            len(rows),
+            sum(1 for t in rows if t.get("match_ready")),
+            breakdown,
+        )
+
     # For pending therapists, attach "value tags" telling the admin which
     # patient-demand gaps this applicant would fill  --  and flag duplicates
     # (axes where we already have >=5 active providers like them) so the

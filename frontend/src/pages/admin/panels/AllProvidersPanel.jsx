@@ -120,6 +120,22 @@ export default function AllProvidersPanel({
     return counts;
   }, [filteredAllTherapists]);
 
+  // Aggregate per-blocker breakdown across all therapists. Surfaces
+  // "why is everyone failing?" -- if Match-ready=0 you can see at a
+  // glance whether it's pending_approval (admin needs to approve) or
+  // license errors or sub issues. Each blocker is bucketed by its
+  // category prefix (e.g. "subscription:incomplete" -> "subscription").
+  const blockerBreakdown = useMemo(() => {
+    const counts = {};
+    for (const t of filteredAllTherapists) {
+      for (const b of (t.match_ready_blockers || [])) {
+        const cat = String(b).split(":", 1)[0];
+        counts[cat] = (counts[cat] || 0) + 1;
+      }
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [filteredAllTherapists]);
+
   const activeFilter =
     STATE_FILTERS.find((f) => f.key === stateFilter) || STATE_FILTERS[0];
   const filtered = filteredAllTherapists.filter(activeFilter.test);
@@ -186,6 +202,31 @@ export default function AllProvidersPanel({
           );
         })}
       </div>
+      {/* Per-blocker breakdown: only renders when there's at least
+          one blocker (i.e. not everyone is match-ready). Answers
+          "why is no one match-ready?" without making the admin
+          hover every row's tooltip. Each pill is a category name +
+          count of therapists tripping that gate. */}
+      {blockerBreakdown.length > 0 && (
+        <div
+          className="px-4 pt-3 flex items-center gap-2 flex-wrap text-[11px] text-[#6D6A65]"
+          data-testid="match-ready-blocker-breakdown"
+        >
+          <span className="font-semibold uppercase tracking-wider text-[10px]">
+            Blocked by:
+          </span>
+          {blockerBreakdown.map(([cat, n]) => (
+            <span
+              key={cat}
+              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#FDF1EF] border border-[#E8C4BB] text-[#8B3220]"
+              title={`${n} therapist${n === 1 ? "" : "s"} blocked by ${cat.replace(/_/g, " ")}`}
+            >
+              <span>{cat.replace(/_/g, " ")}</span>
+              <span className="font-semibold">{n}</span>
+            </span>
+          ))}
+        </div>
+      )}
       <ProviderTableControls
         total={allTherapists.length}
         visibleTotal={filtered.length}
