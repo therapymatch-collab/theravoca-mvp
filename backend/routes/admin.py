@@ -585,6 +585,25 @@ async def admin_request_detail(request_id: str, request: Request, _: bool = Depe
             },
         })
 
+    # Patient lifecycle state for the AdminLifecycleActionsPanel wired
+    # into the request detail view (frontend AdminDashboard.jsx). Keyed
+    # on the request's email; falls back to {} for legacy patient_accounts
+    # rows that don't exist yet (the panel still renders the buttons --
+    # the backend authoritatively decides what's allowed, so missing
+    # state just means no "paused" / "deleted" banners are shown).
+    patient_lifecycle = {}
+    req_email = (req.get("email") or "").strip().lower()
+    if req_email:
+        pa = await db.patient_accounts.find_one(
+            {"email": req_email},
+            {"_id": 0, "paused_at": 1, "deleted_at": 1},
+        )
+        if pa:
+            patient_lifecycle = {
+                "paused_at": pa.get("paused_at"),
+                "deleted_at": pa.get("deleted_at"),
+            }
+
     return {
         "request": req,
         "notified": notified,
@@ -592,6 +611,7 @@ async def admin_request_detail(request_id: str, request: Request, _: bool = Depe
         "invited": invited,
         "match_gap": match_gap,
         "declines": declines_enriched,
+        "patient_lifecycle": patient_lifecycle,
     }
 
 

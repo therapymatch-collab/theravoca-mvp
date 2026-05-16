@@ -50,6 +50,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import AdminLifecycleActionsPanel from "@/components/AdminLifecycleActionsPanel";
 import OptOutsPanel from "@/pages/admin/panels/OptOutsPanel";
+import DeclineFlagsPanel from "@/pages/admin/panels/DeclineFlagsPanel";
 import BroadcastEmailsPanel from "@/pages/admin/panels/BroadcastEmailsPanel";
 import ProfileCompletionPanel from "@/pages/admin/panels/ProfileCompletionPanel";
 import TeamPanel from "@/pages/admin/panels/TeamPanel";
@@ -1883,6 +1884,8 @@ export default function AdminDashboard() {
 
               {tab === "sms_status" && <SmsStatusPanel client={client} />}
 
+              {tab === "decline_flags" && <DeclineFlagsPanel client={client} />}
+
               {tab === "waitlist" && <WaitlistPanel client={client} />}
               {tab === "feedback_tracking" && <><FeedbackTrackingPanel /><FeedbackTestPanel /></>}
 
@@ -2901,6 +2904,25 @@ export default function AdminDashboard() {
             <div className="space-y-5">
               <RequestFullBrief request={detail.request} />
 
+              {/* Patient lifecycle actions -- mirrors the therapist
+                  edit-modal panel. Wired here (not its own tab) because
+                  patients are keyed by email and the request detail is
+                  the only admin surface that natively shows that
+                  email. Run when a patient emails support@ asking to
+                  download their data or delete their account. */}
+              {detail.request?.email && (
+                <AdminLifecycleActionsPanel
+                  client={client}
+                  role="patient"
+                  target={{
+                    email: detail.request.email,
+                    paused_at: detail.patient_lifecycle?.paused_at || null,
+                    deleted_at: detail.patient_lifecycle?.deleted_at || null,
+                  }}
+                  onChanged={() => openDetail(detail.request.id)}
+                />
+              )}
+
               {detail.match_gap && <MatchGapPanel gap={detail.match_gap} />}
 
               <div className="flex flex-wrap gap-3">
@@ -3853,6 +3875,10 @@ function AdminTabsBar({
           label: "Opt-outs",
           count: optOuts?.total ?? null,
           onClick: onLoadOptOuts,
+        },
+        {
+          id: "decline_flags",
+          label: "Decline patterns",
         },
         {
           id: "broadcast_emails",
