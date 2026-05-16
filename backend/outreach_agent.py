@@ -583,16 +583,18 @@ async def _filter_existing_contacts(candidates: list[dict]) -> tuple[list[dict],
     }
     therapist_phones.discard(None)
 
-    # Per-therapist re-invite cooldown: a prior invite within the last
-    # INVITE_COOLDOWN_DAYS blocks a re-send. Older invites don't block --
-    # if they didn't unsubscribe (caught by the opt-out check above) and
-    # didn't sign up (caught by the existing-therapist check above), we
-    # try them again. Replies and bounces aren't tracked yet (no Resend
-    # webhook), so a "no thanks" reply within the window can still get
-    # re-pinged after 30 days. Tracked as a follow-up.
-    INVITE_COOLDOWN_DAYS = 30
-    cooldown_cutoff = (
-        datetime.now(timezone.utc) - timedelta(days=INVITE_COOLDOWN_DAYS)
+    # Per-therapist re-invite cap: at most ONE outbound contact per
+    # CALENDAR MONTH. We compute the cutoff as the first day of the
+    # current calendar month rather than a 30-day rolling window, so
+    # the rule is intuitive ("any contact this month blocks the next
+    # one until the 1st") and there's no edge case where someone gets
+    # contacted on the 1st of consecutive months. Tightened from 30-day
+    # rolling per Josh 2026-05-16 -- earlier behavior allowed
+    # day1->day31->day61 = 3 contacts in 60 days which felt close to
+    # spam territory.
+    _now_utc = datetime.now(timezone.utc)
+    cooldown_cutoff = _now_utc.replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0,
     ).isoformat()
 
     invite_query: dict = {"$or": []}
