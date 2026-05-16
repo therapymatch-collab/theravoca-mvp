@@ -132,13 +132,24 @@ def _inject_email_block_styles(html: str, *, wysiwyg: bool = False) -> str:
     # collapse pass below. Pre-collapse paragraphs containing <br> are
     # body text by definition (sig collapse only matches text-only
     # paragraphs `<p[^>]*>([^<]*)</p>`).
-    # Only strip <br> that's followed by actual text content (a letter
-    # or digit, possibly after whitespace). This preserves `<p><br></p>`
-    # (br followed by `</p>` -- not a letter/digit) which Quill emits
-    # for blank lines and we WANT to keep in wysiwyg mode so a typed
-    # blank line still shows up in the rendered email.
+    # Strip ALL <br> tags except those immediately followed by `</p>`
+    # (which means it's an empty paragraph blank-line marker the user
+    # typed deliberately). The earlier `(?=\s*[A-Za-z0-9])` lookahead
+    # missed two real Quill cases:
+    #   1. <br class="ql-x">  -- Quill v2 sometimes adds attributes;
+    #      the pattern `<br\s*/?>` doesn't allow attributes between
+    #      `br` and `>`, so attribute-bearing <br> survived the strip
+    #      and rendered as a hard line break mid-word ("ima<br>gine").
+    #   2. <br>&nbsp;text     -- Quill normalises pasted whitespace
+    #      to a non-breaking-space entity. The lookahead `\s*[A-Za-z0-9]`
+    #      doesn't match the literal `&nbsp;` characters, so these
+    #      <br> tags also survived.
+    # New pattern uses `<br[^>]*>` to allow any attributes, and a
+    # negative lookahead `(?!\s*</p>)` so the only <br> we keep is
+    # the empty-paragraph marker. Sig collapse runs after and adds its
+    # own <br> separators inside the merged signature <p>, unaffected.
     html = _re.sub(
-        r"<br\s*/?>(?=\s*[A-Za-z0-9])",
+        r"<br[^>]*>(?!\s*</p>)",
         " ",
         html,
         flags=_re.IGNORECASE,
