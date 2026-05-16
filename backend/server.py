@@ -230,6 +230,111 @@ async def lifespan(_app: FastAPI):
             "Migrated %d backfilled therapist(s) to data: license_picture",
             _legacy_license_res.modified_count,
         )
+    # ── FAQ canonical entries (idempotent) ─────────────────────────────
+    # The public /faqs endpoint reads from db.faqs; admin-edited entries
+    # win over any in-code defaults. To guarantee a few canonical Q/A
+    # pairs land regardless of admin state, we upsert them here on every
+    # boot. If an entry exists with the same audience+question, we
+    # update its answer to the canonical string; if it's missing, we
+    # insert at the next position. Admin can still REWORD or REORDER
+    # these afterwards via the FAQ admin panel -- the key is the exact
+    # question string, so any tweak to the question text creates a new
+    # row instead of overwriting.
+    from datetime import datetime as _dt, timezone as _tz
+    import uuid as _uuid
+    _CANONICAL_FAQS = [
+        # Patient FAQs
+        {
+            "audience": "patient",
+            "question": "Is my information safe and private?",
+            "answer": (
+                "Technically: all traffic is encrypted in transit (TLS 1.2+), and your "
+                "data is encrypted at rest in our database (MongoDB Atlas, US-hosted). "
+                "Passwords are stored as one-way bcrypt hashes that even our engineers "
+                "can't reverse. Optional two-factor authentication is available, your "
+                "sign-in history is visible to you in your portal, and we email you "
+                "when we see a sign-in from a new device or location. We don't run "
+                "third-party tracking pixels, session-replay tools, or behavior "
+                "analytics on patient pages, and we never sell or share your "
+                "information with advertisers, data brokers, or social-media "
+                "platforms. Payment data, when relevant, is handled directly by "
+                "Stripe — we never see or store your card number. Full list of "
+                "safeguards in our Privacy Notice."
+            ),
+        },
+        {
+            "audience": "patient",
+            "question": "Can I download a copy of my data, or delete my account?",
+            "answer": (
+                "Yes to both. Email support@theravoca.com with the subject line "
+                "\"Download my data\" or \"Delete my account.\" We'll send you an "
+                "Excel workbook with everything we have on file (your match "
+                "requests, therapist replies, feedback) within one business day, "
+                "or permanently remove your account on confirmation. Account "
+                "deletion is reversible within a 24-hour window after "
+                "confirmation; permanent after that. We handle these by email so "
+                "a real person can confirm what you're asking for and answer "
+                "questions."
+            ),
+        },
+        # Therapist FAQs
+        {
+            "audience": "therapist",
+            "question": "Can I pause referrals when I'm full?",
+            "answer": (
+                "Yes — email support@theravoca.com with \"Pause referrals\" "
+                "in the subject and we'll stop sending you new patient matches "
+                "that same business day. Your profile stays visible, your "
+                "subscription continues, and any referrals already in your inbox "
+                "are unaffected (you can decline them individually). Email us "
+                "again to resume."
+            ),
+        },
+        {
+            "audience": "therapist",
+            "question": "Can I download a copy of my data, or delete my account?",
+            "answer": (
+                "Yes to both. Email support@theravoca.com with the subject line "
+                "\"Download my data\" or \"Delete my account.\" We'll send you an "
+                "Excel workbook with everything on file (profile, referrals you "
+                "received, declines, feedback about you) within one business "
+                "day, or permanently remove your account on confirmation. "
+                "Account deletion also cancels your active TheraVoca "
+                "subscription at end-of-period — no surprise renewals — "
+                "and is reversible within a 24-hour window. We handle these by "
+                "email so a real person can confirm what you're asking for and "
+                "answer questions."
+            ),
+        },
+    ]
+    _faq_now = _dt.now(_tz.utc).isoformat()
+    for _faq in _CANONICAL_FAQS:
+        existing = await db.faqs.find_one(
+            {"audience": _faq["audience"], "question": _faq["question"]},
+            {"_id": 0, "id": 1, "answer": 1},
+        )
+        if existing:
+            if existing.get("answer") != _faq["answer"]:
+                await db.faqs.update_one(
+                    {"id": existing["id"]},
+                    {"$set": {"answer": _faq["answer"], "updated_at": _faq_now}},
+                )
+        else:
+            last = await db.faqs.find(
+                {"audience": _faq["audience"]}, {"_id": 0, "position": 1},
+            ).sort("position", -1).limit(1).to_list(1)
+            next_pos = (last[0]["position"] + 1) if last else 0
+            await db.faqs.insert_one({
+                "id": str(_uuid.uuid4()),
+                "audience": _faq["audience"],
+                "question": _faq["question"],
+                "answer": _faq["answer"],
+                "position": next_pos,
+                "published": True,
+                "created_at": _faq_now,
+                "updated_at": _faq_now,
+            })
+
     # Reset the availability-prompt cron to Mondays only. Josh asked
     # 2026-05-14 to drop the Friday cadence -- the code default in
     # deps.py is already Mon (0) but a DB override or Render env var
