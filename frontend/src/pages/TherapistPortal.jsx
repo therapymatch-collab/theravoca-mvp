@@ -394,7 +394,11 @@ export default function TherapistPortal() {
     const sessionId = params.get("session_id");
     const canceled = params.get("canceled");
     if (subscribedId && sessionId) {
-      api
+      // /sync-payment-method now requires a therapist session matching
+      // the URL therapist_id (2026-05-16 security fix). Portal users
+      // already have a session in sessionStorage; sessionClient
+      // attaches the bearer token automatically.
+      sessionClient()
         .post(`/therapists/${subscribedId}/sync-payment-method`, {
           session_id: sessionId,
         })
@@ -425,10 +429,13 @@ export default function TherapistPortal() {
       // Tell the backend to send Stripe's return-arrow + cancel back to
       // the portal (not the signup form). The portal-side return handler
       // below detects ?subscribed=... and calls sync-payment-method.
+      // /subscribe-checkout now requires a therapist session (2026-05-16
+      // security fix); portal users already have one.
       const return_url = `${window.location.origin}/portal/therapist`;
-      const res = await api.post(`/therapists/${tid}/subscribe-checkout`, {
-        return_url,
-      });
+      const res = await sessionClient().post(
+        `/therapists/${tid}/subscribe-checkout`,
+        { return_url },
+      );
       if (res.data?.url) {
         window.location.href = res.data.url;
       }

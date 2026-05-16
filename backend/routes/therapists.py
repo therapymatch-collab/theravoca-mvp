@@ -6,6 +6,7 @@ import base64
 import hashlib
 import hmac
 import os
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -232,7 +233,16 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
             400,
             "You must agree to the Therapist Terms of Use to sign up.",
         )
-    existing = await db.therapists.find_one({"email": payload.email}, {"_id": 0, "id": 1})
+    # Normalise email to lowercase BEFORE the dup-check + insert so we
+    # can't end up with `Joe@x.com` and `joe@x.com` as two separate
+    # therapist rows (later lookups are case-insensitive regex, so the
+    # second signup would silently work but auth would be unpredictable
+    # about which row resolves). 2026-05-16 audit fix.
+    payload.email = (payload.email or "").strip().lower()
+    existing = await db.therapists.find_one(
+        {"email": {"$regex": f"^{re.escape(payload.email)}$", "$options": "i"}},
+        {"_id": 0, "id": 1},
+    )
     if existing:
         raise HTTPException(409, "A therapist with this email already exists.")
     tid = str(uuid.uuid4())
@@ -255,8 +265,12 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
     recruit_code = (data.pop("recruit_code", None) or "").strip().upper()
     converted_draft_id: str | None = None
     if recruit_code:
+        # SECURITY: re.escape the user-controlled code so a value like
+        # ".*" can't match arbitrary drafts and forge recruit attribution
+        # (2026-05-16 audit fix). Anchored ^ + escaped pattern restricts
+        # to legitimate prefix match on the draft id.
         draft = await db.recruit_drafts.find_one(
-            {"id": {"$regex": f"^{recruit_code.lower()}", "$options": "i"}},
+            {"id": {"$regex": f"^{re.escape(recruit_code.lower())}", "$options": "i"}},
             {"_id": 0, "id": 1},
         )
         if draft:
@@ -319,6 +333,17 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
         "New therapist signup: tid=%s with %d geocoded offices, recruit_code=%s",
         tid, len(office_geos), recruit_code or "none",
     )
+    # Issue a therapist session_token immediately on signup. The
+    # subsequent /therapists/{id}/subscribe-checkout +
+    # /therapists/{id}/sync-payment-method calls REQUIRE this session
+    # (2026-05-16 security fix) -- prior to that fix, an attacker who
+    # knew a therapist_id could create a checkout, pay with their
+    # own card, and trick /sync-payment-method into issuing them a
+    # session for that therapist. Now the session must already be in
+    # the request, and the URL therapist_id is verified to match the
+    # session's email. The session is for an UNAPPROVED therapist;
+    # the portal still gates most actions on approval state.
+    signup_session_token = _create_session_token(payload.email, "therapist")
     # Kick off deep web-research enrichment in the background so by the
     # time admin reviews the application, we already have evidence-graded
     # specialty themes + public footprint cached. Best-effort; failures
@@ -337,16 +362,73 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
         _spawn_bg(_bg_deep_research(), name=f"deep_research_{tid[:8]}")
     except ImportError:
         pass
-    return {"id": tid, "status": "pending_approval"}
+    return {
+        "id": tid,
+        "status": "pending_approval",
+        # 2026-05-16 security fix: returning the session_token here so
+        # the frontend can pass it on the immediate next call to
+        # /subscribe-checkout (which now REQUIRES auth). The session is
+        # short-lived (THERAPIST_SESSION_TTL_DAYS) and bound to the
+        # email the user just typed -- they're trivially proving
+        # ownership of "this email I just typed" until they click the
+        # signup-receipt link, which is the normal verification path.
+        "session_token": signup_session_token,
+    }
+
+
+def _therapist_owns_or_403(session: dict, therapist_id: str, t: dict) -> None:
+    """Reject if the bearer session's email doesn't match the URL
+    therapist. Used by the Stripe-touching therapist endpoints below
+    so an attacker who knows a therapist_id can't create a checkout /
+    sync a payment method for somebody else's account.
+    """
+    sess_email = (session.get("email") or "").lower()
+    t_email = (t.get("email") or "").lower()
+    if not sess_email or not t_email or sess_email != t_email:
+        raise HTTPException(
+            403,
+            "Session does not own this therapist.",
+        )
+
+
+def _safe_return_url(return_url: str, base: str) -> str:
+    """Open-redirect-proof check against the canonical PUBLIC_APP_URL.
+
+    The prior implementation used `return_url.startswith(base)` which
+    accepts e.g. `https://theravoca.com.attacker.com/...` when base is
+    `https://theravoca.com` -- post-Stripe-success redirect could land
+    on an attacker domain for credential phishing. Parse the URL and
+    compare scheme+netloc EXACTLY against the base. 2026-05-16 audit.
+    """
+    if not return_url:
+        return ""
+    try:
+        from urllib.parse import urlparse
+        ru = urlparse(return_url)
+        bu = urlparse(base or "")
+        if (ru.scheme, ru.netloc) != (bu.scheme, bu.netloc):
+            return ""
+        return return_url
+    except Exception:
+        return ""
 
 
 @router.post("/therapists/{therapist_id}/subscribe-checkout")
-async def therapist_subscribe_checkout(therapist_id: str, payload: dict | None = None):
+async def therapist_subscribe_checkout(
+    therapist_id: str,
+    payload: dict | None = None,
+    session: dict = Depends(require_session(("therapist",))),
+):
     """Create a Stripe Checkout session for the therapist's payment-method
     setup. Optional body param `return_url` controls where Stripe sends
     the user on success / cancel; defaults to the signup form for new
     signups. The portal passes its own URL so signed-up therapists who
     add a payment method don't get sent back to the signup form.
+
+    SECURITY: requires a therapist session whose email matches the URL
+    therapist_id. Before this gate, anyone who knew a therapist_id
+    could create a Stripe Checkout for that therapist and (combined
+    with the old sync-payment-method behaviour) hijack a session.
     """
     t = await db.therapists.find_one(
         {"id": therapist_id},
@@ -354,11 +436,12 @@ async def therapist_subscribe_checkout(therapist_id: str, payload: dict | None =
     )
     if not t:
         raise HTTPException(404)
+    _therapist_owns_or_403(session, therapist_id, t)
     base = os.environ.get("PUBLIC_APP_URL", "")
-    return_url = ((payload or {}).get("return_url") or "").strip()
-    # Whitelist: only allow same-origin paths to prevent open-redirect.
-    if return_url and not return_url.startswith(base):
-        return_url = ""
+    return_url = _safe_return_url(
+        ((payload or {}).get("return_url") or "").strip(),
+        base,
+    )
     return_base = return_url or f"{base}/therapists/join"
     sep = "&" if "?" in return_base else "?"
     success_url = (
@@ -381,20 +464,40 @@ async def therapist_subscribe_checkout(therapist_id: str, payload: dict | None =
 
 
 @router.post("/therapists/{therapist_id}/sync-payment-method")
-async def therapist_sync_payment_method(therapist_id: str, payload: dict):
+async def therapist_sync_payment_method(
+    therapist_id: str,
+    payload: dict,
+    session: dict = Depends(require_session(("therapist",))),
+):
+    """Finalise a Stripe Checkout session: persist the payment-method
+    id on the therapist + flip status to trialing.
+
+    SECURITY: requires a therapist session whose email matches the URL
+    therapist_id. Before this gate, an attacker who created their own
+    Stripe Checkout for someone else's therapist_id could call this
+    endpoint and either (a) attach their card to the victim's account
+    or (b) trick the legacy version into issuing them a session token
+    for the victim. Both are now closed. The session token is NO
+    LONGER issued here -- the caller (signup or portal) already has
+    one.
+    """
     session_id = (payload or {}).get("session_id")
     if not session_id:
         raise HTTPException(400, "session_id required")
-    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0, "id": 1})
+    t = await db.therapists.find_one(
+        {"id": therapist_id}, {"_id": 0, "id": 1, "email": 1},
+    )
     if not t:
         raise HTTPException(404)
+    _therapist_owns_or_403(session, therapist_id, t)
 
     info = stripe_service.retrieve_session(session_id)
     if not info:
         raise HTTPException(502, "Could not retrieve Stripe session")
     if info.get("status") != "complete":
         return {"ok": False, "status": info.get("status")}
-    # Verify this Stripe session was created for THIS therapist
+    # Verify this Stripe session was created for THIS therapist (belt +
+    # suspenders alongside the session-ownership check above).
     if info.get("client_reference_id") != therapist_id:
         raise HTTPException(
             403, "Stripe session does not belong to this therapist"
@@ -413,18 +516,10 @@ async def therapist_sync_payment_method(therapist_id: str, payload: dict):
             "updated_at": _now_iso(),
         }},
     )
-    # Issue a portal session token so the user can land directly on
-    # /portal/therapist after Stripe success without bouncing through
-    # email / magic-code sign-in.
-    full = await db.therapists.find_one({"id": therapist_id}, {"_id": 0, "email": 1})
-    session_token = (
-        _create_session_token(full["email"], "therapist") if full else None
-    )
     return {
         "ok": True,
         "subscription_status": "trialing",
         "trial_ends_at": trial_end.isoformat(),
-        "session_token": session_token,
     }
 
 

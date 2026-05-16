@@ -5,7 +5,7 @@ import { CheckCircle2, ArrowRight, Sparkles } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import useFaqs from "@/lib/useFaqs";
 import useSiteCopy from "@/lib/useSiteCopy";
-import { api } from "@/lib/api";
+import { api, sessionClient, setSession } from "@/lib/api";
 import TherapistDeepMatchStep from "@/pages/therapist/TherapistDeepMatchStep";
 import PreviewModal from "@/pages/therapist/SignupPreviewModal";
 import { Group } from "@/pages/therapist/TherapistSignupUI";
@@ -493,7 +493,14 @@ export default function TherapistSignup() {
     const subscribedId = params.get("subscribed");
     const sessionId = params.get("session_id");
     if (subscribedId && sessionId) {
-      api
+      // /sync-payment-method now requires the therapist session set on
+      // signup (2026-05-16 security fix). sessionClient attaches the
+      // bearer from sessionStorage. The same-tab Stripe redirect
+      // preserves sessionStorage, so this call is authenticated as
+      // long as the user completes Stripe in the original tab. If
+      // they finish in a fresh browser, the session is gone and we
+      // fall back to the welcome-email magic-link flow.
+      sessionClient()
         .post(`/therapists/${subscribedId}/sync-payment-method`, { session_id: sessionId })
         .then((res) => {
           if (res.data?.ok) {
@@ -501,8 +508,10 @@ export default function TherapistSignup() {
             setSubmitted(true);
             setTherapistId(subscribedId);
             sessionStorage.removeItem("tv_signup_pending");
-            // Persist a portal session so the "Go to my dashboard" CTA
-            // logs the therapist straight in without an email round-trip.
+            // No session_token issued by the backend anymore -- the
+            // signup flow already set one. This branch becomes a
+            // no-op for forward-compat with old responses (legacy
+            // clients that hit the new backend won't see this field).
             if (res.data.session_token) {
               try {
                 sessionStorage.setItem(
@@ -595,6 +604,21 @@ export default function TherapistSignup() {
       delete payload.t3_breakthrough;
       const res = await api.post("/therapists/signup", payload);
       setTherapistId(res.data?.id);
+      // Backend now returns a session_token on signup; persist it so
+      // the immediate next call to /subscribe-checkout (which requires
+      // a therapist session per the 2026-05-16 security fix) succeeds
+      // without a magic-link round-trip.
+      if (res.data?.session_token) {
+        try {
+          setSession({
+            token: res.data.session_token,
+            role: "therapist",
+            email: payload.email,
+          });
+        } catch (e) {
+          console.warn("setSession failed:", e?.message);
+        }
+      }
       setSubmitted(true);
       // Persist the post-submit context so the back-from-Stripe round
       // trip lands on the same "Add payment method" screen rather than
@@ -643,7 +667,13 @@ export default function TherapistSignup() {
     if (!therapistId) return;
     setCheckoutLoading(true);
     try {
-      const res = await api.post(`/therapists/${therapistId}/subscribe-checkout`, {});
+      // sessionClient attaches the bearer token from sessionStorage
+      // (set above on signup). /subscribe-checkout now requires a
+      // therapist session per the 2026-05-16 security fix.
+      const res = await sessionClient().post(
+        `/therapists/${therapistId}/subscribe-checkout`,
+        {},
+      );
       if (res.data?.url) {
         window.location.href = res.data.url;
       } else {
