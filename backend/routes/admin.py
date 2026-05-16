@@ -1585,37 +1585,55 @@ async def admin_export_patient_data(
         _PATIENT_ACCOUNT_STRIP, _REQUEST_STRIP, _LOGIN_EVENT_STRIP,
     )
     email_norm = email.strip().lower()
-    account = await db.patient_accounts.find_one({"email": email_norm})
-    requests_docs = await db.requests.find(
-        {"email": {"$regex": f"^{re.escape(email_norm)}$", "$options": "i"}},
-        {"_id": 0, "verification_token": 0},
-    ).to_list(500)
-    request_ids = [r["id"] for r in requests_docs if r.get("id")]
-    apps: list[dict] = []
-    if request_ids:
-        apps = await db.applications.find(
-            {"request_id": {"$in": request_ids}}, {"_id": 0},
+    # Wrap the whole export in try/except so a failure surfaces as a
+    # 502 with a real reason instead of a bare 500 with no signal --
+    # 2026-05-16: Josh reported "Download failed" from the admin UI
+    # and the actual cause was hidden behind FastAPI's default 500.
+    try:
+        account = await db.patient_accounts.find_one({"email": email_norm})
+        requests_docs = await db.requests.find(
+            {"email": {"$regex": f"^{re.escape(email_norm)}$", "$options": "i"}},
+            {"_id": 0, "verification_token": 0},
+        ).to_list(500)
+        request_ids = [r["id"] for r in requests_docs if r.get("id")]
+        apps: list[dict] = []
+        if request_ids:
+            apps = await db.applications.find(
+                {"request_id": {"$in": request_ids}}, {"_id": 0},
+            ).to_list(2000)
+        fb = await db.feedback.find(
+            {"patient_email": email_norm}, {"_id": 0},
         ).to_list(2000)
-    fb = await db.feedback.find(
-        {"patient_email": email_norm}, {"_id": 0},
-    ).to_list(2000)
-    logins = await db.login_events.find(
-        {"role": "patient", "email": email_norm}, {"_id": 0},
-    ).sort("at", -1).to_list(500)
-    sheets = [
-        ("Summary", [{
-            "exported_at": _now_iso(),
-            "exported_for": email_norm,
-            "role": "patient",
-            "exported_by": "admin",
-        }]),
-        ("Account", [_strip_keys(account or {}, _PATIENT_ACCOUNT_STRIP)]),
-        ("Match Requests", [_strip_keys(r, _REQUEST_STRIP) for r in requests_docs]),
-        ("Therapist Replies", [_strip_keys(a, _APPLICATION_STRIP) for a in apps]),
-        ("Feedback Submitted", [_strip_keys(f, _FEEDBACK_STRIP) for f in fb]),
-        ("Login History", [_strip_keys(le, _LOGIN_EVENT_STRIP) for le in logins]),
-    ]
-    content = _build_excel_workbook(sheets)
+        logins = await db.login_events.find(
+            {"role": "patient", "email": email_norm}, {"_id": 0},
+        ).sort("at", -1).to_list(500)
+        sheets = [
+            ("Summary", [{
+                "exported_at": _now_iso(),
+                "exported_for": email_norm,
+                "role": "patient",
+                "exported_by": "admin",
+                "match_request_count": len(requests_docs),
+                "therapist_reply_count": len(apps),
+                "feedback_submitted_count": len(fb),
+                "login_event_count": len(logins),
+                "patient_account_found": bool(account),
+            }]),
+            ("Account", [_strip_keys(account or {}, _PATIENT_ACCOUNT_STRIP)] if account else []),
+            ("Match Requests", [_strip_keys(r, _REQUEST_STRIP) for r in requests_docs]),
+            ("Therapist Replies", [_strip_keys(a, _APPLICATION_STRIP) for a in apps]),
+            ("Feedback Submitted", [_strip_keys(f, _FEEDBACK_STRIP) for f in fb]),
+            ("Login History", [_strip_keys(le, _LOGIN_EVENT_STRIP) for le in logins]),
+        ]
+        content = _build_excel_workbook(sheets)
+    except Exception as e:
+        logger.exception(
+            "Patient export failed for %s: %s", email_norm[:3] + "***", e,
+        )
+        raise HTTPException(
+            502,
+            f"Export build failed -- {type(e).__name__}: {str(e)[:160]}",
+        )
     audit.emit(
         actor_type="admin", actor_id="admin",
         action="admin_export_patient_data", resource="patient",
