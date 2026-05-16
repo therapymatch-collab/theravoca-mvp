@@ -132,22 +132,28 @@ def _inject_email_block_styles(html: str, *, wysiwyg: bool = False) -> str:
     # collapse pass below. Pre-collapse paragraphs containing <br> are
     # body text by definition (sig collapse only matches text-only
     # paragraphs `<p[^>]*>([^<]*)</p>`).
-    # Strip ALL <br> tags except those immediately followed by `</p>`
-    # (which means it's an empty paragraph blank-line marker the user
-    # typed deliberately). The earlier `(?=\s*[A-Za-z0-9])` lookahead
-    # missed two real Quill cases:
-    #   1. <br class="ql-x">  -- Quill v2 sometimes adds attributes;
-    #      the pattern `<br\s*/?>` doesn't allow attributes between
-    #      `br` and `>`, so attribute-bearing <br> survived the strip
-    #      and rendered as a hard line break mid-word ("ima<br>gine").
-    #   2. <br>&nbsp;text     -- Quill normalises pasted whitespace
-    #      to a non-breaking-space entity. The lookahead `\s*[A-Za-z0-9]`
-    #      doesn't match the literal `&nbsp;` characters, so these
-    #      <br> tags also survived.
-    # New pattern uses `<br[^>]*>` to allow any attributes, and a
-    # negative lookahead `(?!\s*</p>)` so the only <br> we keep is
-    # the empty-paragraph marker. Sig collapse runs after and adds its
-    # own <br> separators inside the merged signature <p>, unaffected.
+    # Strip <br> in two passes so we handle BOTH the common case
+    # (between-words <br> from word-wrapped paste) and the surprise
+    # case (inside-word <br> from char-wrapped paste). Either case the
+    # `<p><br></p>` empty-paragraph marker stays put for the wysiwyg
+    # blank-line behaviour.
+    #
+    # Pass 1: <br> sandwiched directly between two letters/digits
+    # without ANY whitespace -- almost certainly a char-wrapped word
+    # split mid-letter ("ima<br>gine"). Strip with empty so the word
+    # rejoins ("imagine"). If we replaced with a space here we'd get
+    # "ima gine" which then word-wraps at the space and visually still
+    # looks broken at the column edge.
+    html = _re.sub(
+        r"(?<=[A-Za-z0-9])<br[^>]*>(?=[A-Za-z0-9])",
+        "",
+        html,
+        flags=_re.IGNORECASE,
+    )
+    # Pass 2: any remaining <br> -- between words, after punctuation,
+    # at end of paragraph, etc. Strip with a space so adjacent words
+    # don't get glued together. Negative lookahead preserves the
+    # empty-paragraph blank-line marker `<br></p>`.
     html = _re.sub(
         r"<br[^>]*>(?!\s*</p>)",
         " ",
@@ -855,6 +861,36 @@ async def _send_simple_cta_template(
     await _send(to, subject, _wrap(heading, inner, unsubscribe_url=unsubscribe_url), template_key=template_key)
 
 
+def _text_to_paragraph_html(text: str, *, p_style: str) -> str:
+    """Convert a textarea-style multi-paragraph string to HTML paragraphs.
+
+    Admin email-template fields (`intro`, `body`) are entered in a
+    plain <textarea>, so paragraph breaks land as `\\n\\n` and soft
+    breaks as single `\\n`. Wrapping the whole thing in one <p> lets
+    the browser collapse all whitespace, so what the admin types as
+    three paragraphs renders as one wall of text in the preview AND
+    in the actual sent email.
+
+    This helper:
+      - splits on blank lines (`\\n\\s*\\n+`) -> separate <p>s
+      - inside a paragraph, replaces single `\\n` with `<br>` so
+        explicit single-line breaks survive
+      - applies the supplied inline style to every <p>
+
+    Empty input returns "" so callers can keep their `if intro` gates.
+    """
+    if not text or not str(text).strip():
+        return ""
+    import re as _re
+    paras = _re.split(r"\n\s*\n+", str(text).strip())
+    out_parts = []
+    for p in paras:
+        # Soft single-line breaks inside a paragraph -> <br>
+        inner = p.strip().replace("\n", "<br>")
+        out_parts.append(f'<p style="{p_style}">{inner}</p>')
+    return "".join(out_parts)
+
+
 def _build_cta_email_html(
     tpl: dict, cta_url: str, vars_: dict,
 ) -> tuple[str, str, str]:
@@ -873,10 +909,13 @@ def _build_cta_email_html(
         f'<a href="{cta_url}" style="display:inline-block;background:{BRAND["primary"]};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">{cta_label}</a>'
         f'</p>'
     ) if cta_label else ""
-    body_html = (
-        f'<p style="font-size:15px;line-height:1.7;color:{BRAND["text"]};margin-top:14px;">{body}</p>'
-        if body else ""
-    )
+    # intro + body: convert textarea \n\n into real paragraph breaks
+    # (was wrapping the whole textarea content in one <p>, collapsing
+    # admin-typed paragraph breaks into a wall of text).
+    intro_style = f"font-size:15px;line-height:1.7;color:{BRAND['text']};margin:0 0 14px 0;"
+    intro_html = _text_to_paragraph_html(intro, p_style=intro_style)
+    body_style = f"font-size:15px;line-height:1.7;color:{BRAND['text']};margin:14px 0;"
+    body_html = _text_to_paragraph_html(body, p_style=body_style)
     # Privacy note renders just above the CTA button (v2 survey templates)
     privacy_html = (
         f'<p style="color:{BRAND["muted"]};font-size:12px;line-height:1.5;'
@@ -885,7 +924,7 @@ def _build_cta_email_html(
     ) if privacy_note else ""
     inner = f"""
     {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
-    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">{intro}</p>
+    {intro_html}
     {body_html}
     {privacy_html}
     {cta_html}
