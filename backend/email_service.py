@@ -77,6 +77,20 @@ def _inject_email_block_styles(html: str, *, wysiwyg: bool = False) -> str:
     if not html:
         return html
     import re as _re
+    # Non-breaking-space scrub. Quill (and Google-Docs paste through
+    # Quill) sometimes stores EVERY inter-word space as `&nbsp;` /
+    # ` `. The browser treats those as "do-not-break-here", so
+    # the entire paragraph becomes one unbreakable token wider than
+    # the 640px email shell -- text overflows horizontally and the
+    # preview's `overflow:hidden` clips it mid-word at the right edge.
+    # In Gmail the same body wraps only at the em-dashes / `<p>`
+    # boundaries (the only break opportunities), making the lines
+    # look ragged and unprofessional. Convert ALL `&nbsp;` (and the
+    # Unicode   equivalent) to regular spaces: prose emails
+    # never need per-word non-break, and the trade-off (a "Dr.\nSmith"
+    # wrap is now possible) is much smaller than the wall-of-no-wrap
+    # bug Josh caught 2026-05-16.
+    html = html.replace("&nbsp;", " ").replace("&#160;", " ").replace(" ", " ")
     # Convert empty paragraphs (Quill's "Enter twice" gap marker --
     # `<p><br></p>`, `<p></p>`, `<p>&nbsp;</p>`, NBSP variants) into a
     # guaranteed-visible spacer div. Bare `<p><br></p>` collapses to
