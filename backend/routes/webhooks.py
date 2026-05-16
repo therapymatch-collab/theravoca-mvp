@@ -27,7 +27,7 @@ import hashlib
 import hmac
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -124,6 +124,25 @@ async def resend_webhook(request: Request) -> dict[str, Any]:
         logger.warning("Resend webhook: signature verification failed")
         raise HTTPException(401, "invalid signature")
 
+    # SECURITY/CORRECTNESS (2026-05-16 audit, HIGH #17): event-id
+    # dedupe. Without it, Resend retries cause $inc on bounce_count to
+    # double-fire (a single hard bounce can register as 5+), email_events
+    # gets duplicate rows, and `delivered_at` / `opened_at` get
+    # overwritten by later retry timestamps. svix-id is the canonical
+    # delivery attempt id we can use as the unique key.
+    if svix_id:
+        try:
+            from pymongo.errors import DuplicateKeyError
+            await db.resend_events.insert_one({
+                "_id": svix_id,
+                "received_at": _now_iso(),
+            })
+        except DuplicateKeyError:
+            logger.info("Resend webhook duplicate svix-id=%s -- skipping", svix_id)
+            return {"ok": True, "duplicate": True}
+        except Exception as e:
+            logger.warning("Resend webhook dedupe insert failed (proceeding): %s", e)
+
     import json as _json
     try:
         event = _json.loads(body)
@@ -169,18 +188,19 @@ async def resend_webhook(request: Request) -> dict[str, Any]:
             {"resend_email_id": email_id}, {"_id": 0, "id": 1},
         )
     if not invite and recipients:
+        # SECURITY/CORRECTNESS (2026-05-16 audit, HIGH #7): the prior
+        # `.replace(day=max(1, now.day-30))` does NOT subtract 30 days
+        # -- it stays in the current month. On the 25th the cutoff
+        # became day 1 of the current month (matched only 24 days);
+        # on the 5th it became day 1 of the current month (matched
+        # only 4 days). Bounces older than that silently missed
+        # invites, so bounced therapists kept getting outreach. Now
+        # uses real 30-day timedelta arithmetic.
+        cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
         invite = await db.outreach_invites.find_one(
             {
                 "candidate.email": {"$in": recipients},
-                # Fallback match: scope to recent sends to avoid mapping
-                # this event to an unrelated invite from months ago.
-                "created_at": {
-                    "$gte": (
-                        datetime.now(timezone.utc).replace(microsecond=0)
-                        .replace(day=max(1, datetime.now(timezone.utc).day - 30))
-                        .isoformat()
-                    ),
-                },
+                "created_at": {"$gte": cutoff_iso},
             },
             {"_id": 0, "id": 1},
             sort=[("created_at", -1)],
@@ -305,11 +325,17 @@ def _verify_telnyx_ed25519(
 @router.post("/webhooks/telnyx")
 async def telnyx_webhook(request: Request) -> dict[str, Any]:
     """Telnyx webhook receiver. Single endpoint for all event types --
-    outbound status updates, inbound replies, and creation acks. Handles
-    signature verification when TELNYX_PUBLIC_KEY is configured;
-    otherwise accepts + logs a warning so the URL is reachable for
-    initial setup without env-var blocking. Tighten verification after
-    go-live."""
+    outbound status updates, inbound replies, and creation acks.
+
+    SECURITY (2026-05-16 audit, HIGH #8): fail-CLOSED when
+    TELNYX_PUBLIC_KEY is missing in production. The prior fail-open
+    branch was useful during initial setup but in production it lets
+    anyone POST forged events to mark arbitrary sms_sends rows
+    delivered/failed and add arbitrary phones to outreach_opt_outs --
+    permanently DOS-ing outreach to any real therapist's number. We
+    only allow the unverified path when ENV != "production" AND
+    SMS_LIVE_MODE != "true" (dev/staging).
+    """
     body = await request.body()
     signature = request.headers.get("Telnyx-Signature-Ed25519", "")
     timestamp = request.headers.get("Telnyx-Timestamp", "")
@@ -318,9 +344,19 @@ async def telnyx_webhook(request: Request) -> dict[str, Any]:
         if not _verify_telnyx_ed25519(public_key, body, signature, timestamp):
             raise HTTPException(401, "Invalid Telnyx signature")
     else:
+        # Production / live-mode -> fail closed.
+        env_name = os.environ.get("ENV", "").strip().lower()
+        live_mode = os.environ.get("SMS_LIVE_MODE", "").strip().lower() == "true"
+        if env_name in ("production", "prod") or live_mode:
+            logger.error(
+                "Telnyx webhook: TELNYX_PUBLIC_KEY required in production. "
+                "Refusing to process unverified events."
+            )
+            raise HTTPException(503, "Telnyx webhook verification not configured")
         logger.warning(
             "Telnyx webhook: TELNYX_PUBLIC_KEY not set -- accepting without "
-            "signature verification (tighten this for production)."
+            "signature verification (dev/staging only; will fail-closed once "
+            "ENV=production or SMS_LIVE_MODE=true)."
         )
 
     try:
