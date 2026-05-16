@@ -200,6 +200,39 @@ export default function AdminDashboard() {
   // Email template preview modal — html string is the rendered email
   // (full <html> doc) returned from POST /api/admin/email-templates/{key}/preview
   const [previewTpl, setPreviewTpl] = useState(null); // {key, subject, html, loading}
+  // "Send test" recipient is sticky across sessions so Josh doesn't
+  // have to retype the same dev address every time. Per-row Send-test
+  // button reads from this single field at the top of the templates
+  // panel. Track which key is currently being sent so we can disable
+  // just that row's button instead of a global flag.
+  const [tplTestRecipient, setTplTestRecipient] = useState(
+    () => (typeof window !== "undefined"
+      && window.localStorage?.getItem("tv_admin_tpl_test_recipient")) || "",
+  );
+  const [tplSendingKey, setTplSendingKey] = useState(null);
+  const updateTplTestRecipient = (v) => {
+    setTplTestRecipient(v);
+    try { window.localStorage?.setItem("tv_admin_tpl_test_recipient", v); } catch (_) {}
+  };
+  const sendTplTest = async (key) => {
+    const to = (tplTestRecipient || "").trim();
+    if (!to || !to.includes("@")) {
+      toast.error("Set a recipient email above the templates list first");
+      return;
+    }
+    setTplSendingKey(key);
+    try {
+      const res = await client.post(
+        `/admin/email-templates/${key}/send-test`,
+        { to },
+      );
+      toast.success(`Sent "${res.data?.subject}" to ${to}`, { duration: 6000 });
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || `Send failed for ${key}`);
+    } finally {
+      setTplSendingKey(null);
+    }
+  };
   // Referral source analytics
   const [refSources, setRefSources] = useState(null);
   const [refStart, setRefStart] = useState("");
@@ -1862,6 +1895,33 @@ export default function AdminDashboard() {
 
               {tab === "email_templates" && (
                 <div className="mt-6 space-y-3" data-testid="email-templates-list">
+                  {/* Sticky test-send recipient. Set once, then every
+                      row's "Send test" button fires to this address.
+                      Persists in localStorage so it survives reloads. */}
+                  <div
+                    className="bg-white border border-[#E8E5DF] rounded-2xl p-4 flex items-center gap-3 flex-wrap"
+                    data-testid="tpl-test-recipient-row"
+                  >
+                    <Mail size={16} className="text-[#2D4A3E] shrink-0" />
+                    <label
+                      htmlFor="tpl-test-recipient"
+                      className="text-sm text-[#2B2A29] font-medium shrink-0"
+                    >
+                      Send test emails to:
+                    </label>
+                    <input
+                      id="tpl-test-recipient"
+                      type="email"
+                      value={tplTestRecipient}
+                      onChange={(e) => updateTplTestRecipient(e.target.value)}
+                      placeholder="you@example.com"
+                      className="flex-1 min-w-[200px] border border-[#E8E5DF] rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-[#2D4A3E]"
+                      data-testid="tpl-test-recipient-input"
+                    />
+                    <span className="text-xs text-[#8A8780] basis-full sm:basis-auto">
+                      Subjects prefixed with [TEST]. Saved across sessions.
+                    </span>
+                  </div>
                   {emailTemplates.length === 0 ? (
                     <div className="bg-white border border-[#E8E5DF] rounded-2xl p-12 text-center text-[#6D6A65]">
                       <Loader2 className="animate-spin mx-auto mb-3 text-[#2D4A3E]" />
@@ -1913,6 +1973,24 @@ export default function AdminDashboard() {
                               data-testid={`preview-template-${t.key}`}
                             >
                               <Eye size={14} /> Preview
+                            </button>
+                            <button
+                              className="text-[#2D4A3E] hover:underline text-sm inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                              onClick={() => sendTplTest(t.key)}
+                              disabled={tplSendingKey === t.key || !tplTestRecipient.trim()}
+                              title={
+                                tplTestRecipient.trim()
+                                  ? `Send a [TEST] copy to ${tplTestRecipient}`
+                                  : "Set a recipient email above first"
+                              }
+                              data-testid={`send-test-${t.key}`}
+                            >
+                              {tplSendingKey === t.key ? (
+                                <Loader2 size={14} className="animate-spin" />
+                              ) : (
+                                <Send size={14} />
+                              )}
+                              Send test
                             </button>
                           </div>
                         </div>
