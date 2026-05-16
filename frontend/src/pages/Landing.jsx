@@ -43,6 +43,10 @@ const FAQS = [
     q: "Is TheraVoca available in my area?",
     a: "We are launching state by state. Currently live in Idaho. If we're not in your state, we'll add you to our waitlist.",
   },
+  {
+    q: "Can I download a copy of my data, or delete my account?",
+    a: "Yes to both. Email support@theravoca.com or call (646) 535-8346 with the subject line 'Download my data' or 'Delete my account'. We'll send you an Excel workbook with everything we have on file (your match requests, therapist replies, feedback) within one business day, or permanently remove your account on confirmation. Account deletion is reversible within a 24-hour window after confirmation; permanent after that. We handle these by email so a real person can confirm what you're asking for and answer questions.",
+  },
 ];
 
 export default function Landing() {

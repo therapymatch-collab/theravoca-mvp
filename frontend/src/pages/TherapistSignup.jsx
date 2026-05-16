@@ -64,11 +64,15 @@ const THERAPIST_FAQS = [
   },
   {
     q: "Can I pause referrals when I'm full?",
-    a: "Yes — toggle 'not currently accepting new clients' in your portal and we'll skip you in matching until you flip it back. Your subscription continues so your profile reactivates instantly.",
+    a: "Yes — email support@theravoca.com or call (646) 535-8346 with 'Pause referrals' in the subject and we'll stop sending you new patient matches that same business day. Your profile stays visible, your subscription continues, and any referrals already in your inbox are unaffected (you can decline them individually). Email us again to resume.",
   },
   {
     q: "How do I get paid?",
     a: "TheraVoca only handles the intro. Payment for sessions happens directly between you and the patient on whatever billing system you already use.",
+  },
+  {
+    q: "Can I download a copy of my data, or delete my account?",
+    a: "Yes to both. Email support@theravoca.com or call (646) 535-8346 with the subject line 'Download my data' or 'Delete my account'. We'll send you an Excel workbook with everything on file (profile, referrals you received, declines, feedback about you) within one business day, or permanently remove your account on confirmation. Account deletion also cancels your active TheraVoca subscription at end-of-period — no surprise renewals — and is reversible within a 24-hour window. We handle these by email so a real person can confirm what you're asking for and answer questions.",
   },
 ];
 
