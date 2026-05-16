@@ -5225,22 +5225,49 @@ async def admin_sms_status() -> dict[str, Any]:
     last = await db.app_config.find_one(
         {"key": "last_test_sms"}, {"_id": 0},
     ) or {}
-    enabled = os.environ.get("TWILIO_ENABLED", "").lower() == "true"
-    override_to = os.environ.get("TWILIO_DEV_OVERRIDE_TO", "").strip()
+    twilio_enabled = os.environ.get("TWILIO_ENABLED", "").lower() == "true"
+    telnyx_enabled = os.environ.get("TELNYX_ENABLED", "").lower() == "true"
+    # Mirror sms_service._provider() precedence -- Telnyx wins when
+    # both flags are set so the dashboard verdict tracks what's
+    # actually going out the wire.
+    if telnyx_enabled:
+        active_provider = "telnyx"
+    elif twilio_enabled:
+        active_provider = "twilio"
+    else:
+        active_provider = None
+    override_to = (
+        os.environ.get("SMS_DEV_OVERRIDE_TO", "").strip()
+        or os.environ.get("TWILIO_DEV_OVERRIDE_TO", "").strip()
+    )
     sms_live_mode = os.environ.get("SMS_LIVE_MODE", "").strip().lower() == "true"
     sms_dry_run = os.environ.get("SMS_DRY_RUN", "").strip().lower() == "true"
-    has_creds = bool(
+    twilio_has_creds = bool(
         os.environ.get("TWILIO_ACCOUNT_SID")
         and os.environ.get("TWILIO_AUTH_TOKEN"),
     )
+    telnyx_has_creds = bool(os.environ.get("TELNYX_API_KEY", "").strip())
+    # has_creds reflects the active provider only -- "are we set up to
+    # send right now?" not "do we have leftover creds for the other
+    # provider lying around?"
+    if active_provider == "telnyx":
+        has_creds = telnyx_has_creds
+    elif active_provider == "twilio":
+        has_creds = twilio_has_creds
+    else:
+        # Neither enabled -- report on whichever provider has creds
+        # configured so the verdict says "missing_credentials" instead
+        # of confusingly reporting `has_credentials: true` for an
+        # inactive provider.
+        has_creds = telnyx_has_creds or twilio_has_creds
     last_status = last.get("final_status")
     last_error = last.get("error_code")
     # Pre-launch safety state -- the same three-state model as email.
     # Mirrors the prelaunch_safety_guard inside sms_service.send_sms.
     # Dry-run takes precedence in the display because it changes meaning
-    # of any "send" (none of them actually call Twilio).
+    # of any "send" (none of them actually call the provider).
     if sms_dry_run:
-        safety_state = "dry_run"           # full pipeline, no Twilio call
+        safety_state = "dry_run"           # full pipeline, no provider call
     elif override_to:
         safety_state = "override_routed"   # all SMS rerouted to override
     elif sms_live_mode:
@@ -5250,8 +5277,10 @@ async def admin_sms_status() -> dict[str, Any]:
     # Deliverability verdict  --  pessimistic by design.
     if not has_creds:
         verdict = "missing_credentials"
-    elif not enabled:
-        verdict = "twilio_disabled"
+    elif active_provider is None:
+        # Renamed from `twilio_disabled` to be provider-agnostic; the
+        # frontend VERDICT_META table maps both keys to the same banner.
+        verdict = "provider_disabled"
     elif last_error in (30034, 30032):
         verdict = "blocked_a2p_10dlc"
     elif last_status == "delivered":
@@ -5270,17 +5299,45 @@ async def admin_sms_status() -> dict[str, Any]:
     sms_24h_blocked = await db.sms_sends.count_documents(
         {"sent_at": {"$gte": since}, "blocked": True},
     )
+    # Per-provider breakdown for the same 24h window so admins can see
+    # which provider's actually carrying traffic after the cutover.
+    sms_24h_by_provider: dict[str, int] = {}
+    try:
+        cursor = db.sms_sends.aggregate([
+            {"$match": {"sent_at": {"$gte": since}, "sent_ok": True}},
+            {"$group": {"_id": "$provider", "count": {"$sum": 1}}},
+        ])
+        async for row in cursor:
+            sms_24h_by_provider[row.get("_id") or "unknown"] = int(row.get("count") or 0)
+    except Exception:
+        # Pre-rollout sends won't have a provider field; ignore the
+        # aggregation rather than 500 the whole dashboard.
+        pass
+    from_number = (
+        os.environ.get("TELNYX_FROM_NUMBER", "")
+        or os.environ.get("TWILIO_FROM_NUMBER", "")
+    ).strip()
     return {
         "verdict": verdict,
-        "twilio_enabled": enabled,
+        # Backwards-compat: existing frontend reads `twilio_enabled` and
+        # treats it as "is the SMS pipe live?". We keep that semantic by
+        # OR-ing both providers, then expose the granular flags
+        # alongside for the provider-aware panel rewrite.
+        "twilio_enabled": active_provider is not None,
+        "active_provider": active_provider,           # "twilio" | "telnyx" | null
+        "twilio_provider_enabled": twilio_enabled,
+        "telnyx_provider_enabled": telnyx_enabled,
+        "twilio_has_credentials": twilio_has_creds,
+        "telnyx_has_credentials": telnyx_has_creds,
         "has_credentials": has_creds,
-        "from_number": os.environ.get("TWILIO_FROM_NUMBER", ""),
+        "from_number": from_number,
         "dev_override_to": override_to,
         "sms_live_mode": sms_live_mode,
         "sms_dry_run": sms_dry_run,
         "safety_state": safety_state,
         "sms_24h_sent": sms_24h_sent,
         "sms_24h_blocked": sms_24h_blocked,
+        "sms_24h_by_provider": sms_24h_by_provider,
         "a2p_brand_id": cfg.get("brand_id") or "",
         "a2p_campaign_id": cfg.get("campaign_id") or "",
         "a2p_status": cfg.get("status") or "unregistered",

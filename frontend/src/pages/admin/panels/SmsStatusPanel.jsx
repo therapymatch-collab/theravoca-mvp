@@ -39,21 +39,32 @@ const VERDICT_META = {
     title: "Blocked",
     body: "Last test SMS was undelivered or failed. Check the error code below.",
   },
+  provider_disabled: {
+    color: "#A37700",
+    bg: "#FBF1D6",
+    border: "#E9D78A",
+    icon: MessageSquareWarning,
+    title: "SMS provider disabled",
+    body: "Neither TELNYX_ENABLED nor TWILIO_ENABLED is true in the backend env. Set TELNYX_ENABLED=true (preferred) or TWILIO_ENABLED=true to dispatch SMS.",
+  },
+  // Legacy verdict key — older deployments still return this. Same
+  // styling, same meaning. Remove once all environments are on the
+  // post-Telnyx-cutover backend.
   telnyx_disabled: {
     color: "#A37700",
     bg: "#FBF1D6",
     border: "#E9D78A",
     icon: MessageSquareWarning,
-    title: "Telnyx integration disabled",
-    body: "TWILIO_ENABLED is set to false in the backend env. Re-enable it before SMS will dispatch.",
+    title: "SMS provider disabled",
+    body: "Neither TELNYX_ENABLED nor TWILIO_ENABLED is true in the backend env. Set TELNYX_ENABLED=true (preferred) or TWILIO_ENABLED=true to dispatch SMS.",
   },
   missing_credentials: {
     color: "#A37700",
     bg: "#FBF1D6",
     border: "#E9D78A",
     icon: MessageSquareWarning,
-    title: "Missing Telnyx credentials",
-    body: "TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN is missing in backend .env.",
+    title: "Missing SMS provider credentials",
+    body: "The active SMS provider is missing its API credentials in the backend env. For Telnyx, set TELNYX_API_KEY (and TELNYX_MESSAGING_PROFILE_ID + TELNYX_FROM_NUMBER). For Twilio, set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.",
   },
   untested: {
     color: "#6D6A65",
@@ -227,8 +238,33 @@ export default function SmsStatusPanel({ client }) {
       >
         <Icon size={22} className="mt-0.5 shrink-0" />
         <div className="flex-1">
-          <div className="font-serif-display text-xl">{meta.title}</div>
+          <div className="font-serif-display text-xl flex items-center gap-2 flex-wrap">
+            <span>{meta.title}</span>
+            {status?.active_provider ? (
+              <span
+                className="text-[10px] font-sans font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border"
+                style={{ borderColor: meta.border, background: "rgba(255,255,255,0.6)" }}
+                data-testid="sms-active-provider"
+                title={
+                  status.active_provider === "telnyx"
+                    ? "Telnyx is the active SMS provider (TELNYX_ENABLED=true)"
+                    : "Twilio is the active SMS provider (TWILIO_ENABLED=true, Telnyx off)"
+                }
+              >
+                via {status.active_provider}
+              </span>
+            ) : null}
+          </div>
           <p className="text-sm mt-1 leading-relaxed">{meta.body}</p>
+          {status?.sms_24h_by_provider
+            && Object.keys(status.sms_24h_by_provider).length > 0 ? (
+            <p className="text-xs mt-2 opacity-80">
+              Last 24h:{" "}
+              {Object.entries(status.sms_24h_by_provider)
+                .map(([p, n]) => `${n} via ${p}`)
+                .join(" · ")}
+            </p>
+          ) : null}
           {status?.last_test_sms?.error_code ? (
             <p className="text-xs mt-2 opacity-80">
               Last error: code <strong>{status.last_test_sms.error_code}</strong> ·{" "}
