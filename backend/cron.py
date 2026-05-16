@@ -118,6 +118,30 @@ async def _get_testing_mode() -> bool:
     return bool((doc or {}).get("enabled", False))
 
 
+async def _safe_run(name: str, fn) -> dict[str, Any]:
+    """Per-task safety net for the daily / workday cron bundles.
+
+    Each `_run_*` function ALREADY catches its own exceptions, but
+    something not yet covered (a future task added without a try/except,
+    a transient Mongo / network blip during an `await`, an OOM) can
+    still raise out of the awaited call. Without this wrapper, that
+    exception bubbles up, the next tasks in the chain never run, AND
+    the final `cron_runs.update_one({completed_at})` never fires --
+    the row sits in Mongo as "started but never completed" forever,
+    tripping the daily health alert.
+
+    Returns either the task's normal return value or an error dict so
+    the bundle can keep going + write a complete `completed_at` row
+    that includes the error for forensics.
+    """
+    try:
+        result = await fn()
+        return result if isinstance(result, dict) else {"result": result}
+    except Exception as e:  # noqa: BLE001 -- intentional catch-all
+        logger.exception("Cron task %s raised: %s", name, e)
+        return {"error": str(e)[:500], "task": name}
+
+
 async def _run_daily_billing_charges() -> dict[str, int]:
     now = datetime.now(timezone.utc)
 
@@ -787,36 +811,38 @@ async def _daily_loop() -> None:
                     await db.cron_runs.insert_one(
                         {"name": "daily_tasks", "date": today_iso, "started_at": _now_iso()}
                     )
-                    bill = await _run_daily_billing_charges()
-                    lic = await _run_license_expiry_alerts()
-                    # availability prompts now have their own hour gate
-                    # (see AVAILABILITY_PROMPT_HOUR_LOCAL block below) --
-                    # they land in therapists' workday instead of the
-                    # 2am off-hours sweep.
+                    # Each task wrapped in _safe_run so a single failure
+                    # never poisons the whole bundle. Without this, an
+                    # uncaught exception in (say) _run_gap_recruitment
+                    # would skip every task after it AND prevent the
+                    # final completed_at update -- the run would sit in
+                    # the cron_runs collection forever as "started but
+                    # no end time", tripping the daily health alert
+                    # every 24h. (Diagnosed 2026-05-16 after 5 stuck
+                    # daily_tasks rows from 5/4-5/8 fired the alert.)
+                    bill         = await _safe_run("billing", _run_daily_billing_charges)
+                    lic          = await _safe_run("license", _run_license_expiry_alerts)
+                    # availability prompts have their own hour gate
+                    # (AVAILABILITY_PROMPT_HOUR_LOCAL block below) so
+                    # therapists get pinged during work hours, not
+                    # at 2am with the rest of the daily sweep.
                     avail = {"sent_email": 0, "sent_sms": 0, "reason": "moved_to_workday_hour_block"}
-                    t_follow = await _run_therapist_2w_followups()
-                    t_surveys = await _run_therapist_surveys()
-                    stale = await _run_stale_profile_nag()
-                    recruit = await _run_gap_recruitment()
-                    v2_surveys = await _run_patient_surveys_v2()
-                    v2_reminders = await _run_patient_survey_v2_reminders()
-                    # Weekly self-healing auto-recruit cycle (Mondays).
-                    # _run_auto_recruit_weekly() is itself a no-op on non-
-                    # Monday days so we can just invoke it unconditionally
-                    # and let it self-gate. Internally it also early-exits
-                    # when zero-pool rate is already <= target.
+                    t_follow     = await _safe_run("t_follow",  _run_therapist_2w_followups)
+                    t_surveys    = await _safe_run("t_surveys", _run_therapist_surveys)
+                    stale        = await _safe_run("stale",     _run_stale_profile_nag)
+                    recruit      = await _safe_run("recruit",   _run_gap_recruitment)
+                    v2_surveys   = await _safe_run("v2_surveys",   _run_patient_surveys_v2)
+                    v2_reminders = await _safe_run("v2_reminders", _run_patient_survey_v2_reminders)
+                    # Weekly self-healing auto-recruit cycle (Mondays
+                    # only -- self-gates internally too).
                     auto_rec = None
-                    if local.weekday() == 0:  # Monday
-                        auto_rec = await _run_auto_recruit_weekly()
-                    # Decline-pattern flagging. Runs daily, scans last 30
-                    # days of declines per therapist+reason, flags
-                    # patterns (3+ same reason in window) to the
-                    # therapist_decline_flags queue for admin review.
-                    decline_flags = await _run_decline_pattern_flags()
-                    # Health alert sweep (BACKLOG #25). Runs AFTER everything
-                    # else so today's stuck-job pattern is included. Deduped
-                    # to one email per 24h.
-                    health = await _run_cron_health_alert()
+                    if local.weekday() == 0:
+                        auto_rec = await _safe_run("auto_recruit", _run_auto_recruit_weekly)
+                    decline_flags = await _safe_run("decline_flags", _run_decline_pattern_flags)
+                    # Health alert sweep -- runs LAST so today's
+                    # stuck-job pattern is included. Deduped to one
+                    # email per 24h.
+                    health        = await _safe_run("health", _run_cron_health_alert)
                     await db.cron_runs.update_one(
                         {"name": "daily_tasks", "date": today_iso},
                         {"$set": {

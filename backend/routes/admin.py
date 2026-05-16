@@ -1687,6 +1687,44 @@ async def admin_cron_health(_: bool = Depends(require_role("view"))):
     }
 
 
+@router.post("/admin/cron/cleanup-stuck")
+async def admin_cleanup_stuck_cron_runs(
+    payload: Optional[dict] = None,
+    _: bool = Depends(require_role("edit")),
+):
+    """Mark cron_runs zombies as `status="aborted"` so the daily
+    health-alert email stops firing on them.
+
+    A "zombie" is a cron_runs row whose `started_at` is older than
+    `older_than_hours` (default 24) AND has no `completed_at`. These
+    are runs that crashed or were killed mid-bundle before they could
+    write their final completion timestamp. They're informational --
+    the actual underlying jobs aren't running anymore -- but the daily
+    health alert keeps emailing about them every 24h forever.
+
+    Body (optional): {"older_than_hours": 24}
+    """
+    older_than_hours = int((payload or {}).get("older_than_hours", 24))
+    cutoff = (
+        datetime.now(timezone.utc) - timedelta(hours=older_than_hours)
+    ).isoformat()
+    res = await db.cron_runs.update_many(
+        {"completed_at": None, "started_at": {"$lt": cutoff}},
+        {"$set": {
+            "status": "aborted",
+            "aborted_at": _now_iso(),
+            "aborted_reason": "admin_cleanup_stuck",
+        }},
+    )
+    return {
+        "ok": True,
+        "matched": res.matched_count,
+        "modified": res.modified_count,
+        "older_than_hours": older_than_hours,
+        "cutoff": cutoff,
+    }
+
+
 @router.post("/admin/cron/run")
 async def admin_run_cron(payload: dict, _: bool = Depends(require_role("edit"))):
     """Manually fire one of the allowlisted cron functions. Useful when
