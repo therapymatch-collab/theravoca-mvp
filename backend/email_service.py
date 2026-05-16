@@ -1044,7 +1044,13 @@ async def render_template_preview(
         or "#preview"
     )
     inner, subject, heading = _build_cta_email_html(base, cta_url, vars_)
-    return {"subject": subject, "html": _wrap(heading or "Preview", inner)}
+    # Pass heading through as-is (incl. ""). _wrap skips the H1 block
+    # entirely when heading is empty, which is what letter-style
+    # templates like therapist_welcome want -- they open straight on
+    # the greeting. The old `heading or "Preview"` fallback was
+    # injecting the literal word "Preview" as an H1 above the body
+    # whenever an admin previewed a letter-style template.
+    return {"subject": subject, "html": _wrap(heading or "", inner)}
 
 
 # ── v2 patient survey senders ────────────────────────────────────────
