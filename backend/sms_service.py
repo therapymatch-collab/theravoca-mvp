@@ -196,10 +196,24 @@ async def _send_via_telnyx(
             },
             json=payload,
         )
-    # Telnyx returns 200 with {"data": {...}} on accept. 4xx/5xx -> raise
-    # for the outer try/except in send_sms to convert into a failure
-    # audit row.
-    resp.raise_for_status()
+    # Telnyx returns 200 with {"data": {...}} on accept. 4xx/5xx ->
+    # raise a RuntimeError that includes Telnyx's first error code +
+    # title from the response body so the audit row's block_reason
+    # tells the admin EXACTLY why Telnyx refused (e.g. "10010 -
+    # messaging profile not found") instead of just "400 Bad
+    # Request". Without this, the outer except in send_sms only
+    # captures the bare HTTP status because httpx's HTTPStatusError
+    # doesn't include the response body in str().
+    if resp.status_code >= 400:
+        try:
+            err_body = resp.json() or {}
+            errors = err_body.get("errors") or []
+            first = errors[0] if errors else {}
+            err_code = first.get("code") or "unknown"
+            err_title = first.get("title") or first.get("detail") or "no detail"
+            raise RuntimeError(f"telnyx {resp.status_code} {err_code} - {err_title}")
+        except (ValueError, KeyError):
+            raise RuntimeError(f"telnyx {resp.status_code} (no parseable error body)")
     data = (resp.json() or {}).get("data") or {}
     msg_id = data.get("id") or ""
     # `to[*].status` is "queued" on initial accept. Real delivery status
