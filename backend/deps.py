@@ -241,6 +241,12 @@ def require_admin(
             payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
         except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
             payload = None
+        # SECURITY: reject 2FA challenge tokens (typ=2fa_challenge). An
+        # admin mid-2FA-handshake holds a challenge_token whose role
+        # claim is "admin"; without this guard the challenge alone
+        # would pass require_admin, defeating 2FA.
+        if payload and payload.get("typ") == "2fa_challenge":
+            payload = None
         if payload and payload.get("role") == "admin":
             return True
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin credentials")
@@ -328,6 +334,12 @@ def require_role(min_role: str):
                 payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
             except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
                 payload = None
+            # SECURITY: reject 2FA challenge tokens here too. An admin
+            # mid-2FA-handshake has a challenge_token with role=admin;
+            # without this guard the challenge could pass require_role
+            # and unlock admin endpoints without the TOTP step.
+            if payload and payload.get("typ") == "2fa_challenge":
+                payload = None
             if payload and payload.get("role") == "admin":
                 # Backward compat: missing admin_role on a valid admin
                 # token = full admin (the JWT was issued before tiering).
@@ -348,7 +360,18 @@ def require_role(min_role: str):
 
 
 def require_session(allowed_roles: tuple[str, ...]):
-    """Dependency factory that verifies Bearer JWT and matches role."""
+    """Dependency factory that verifies Bearer JWT and matches role.
+
+    SECURITY: explicitly rejects 2FA challenge tokens (typ=2fa_challenge).
+    Those are issued by /auth/login-password and /auth/verify-code as a
+    5-minute placeholder pending TOTP confirmation. They're signed with
+    the same JWT_SECRET as real session tokens, so without this guard
+    an attacker who captured a challenge_token could pass it as
+    `Authorization: Bearer <challenge>` and access /portal/* endpoints
+    without ever presenting the TOTP code -- complete 2FA bypass.
+    The totp_service comment at line 130 always intended this guard;
+    the call sites just never enforced it.
+    """
     async def _dep(authorization: Optional[str] = Header(None)) -> dict[str, Any]:
         if not authorization or not authorization.lower().startswith("bearer "):
             raise HTTPException(401, "Missing bearer token")
@@ -359,6 +382,11 @@ def require_session(allowed_roles: tuple[str, ...]):
             raise HTTPException(401, "Session expired")
         except jwt.InvalidTokenError:
             raise HTTPException(401, "Invalid session")
+        if payload.get("typ") == "2fa_challenge":
+            # Challenge tokens are NOT session tokens. The only legal
+            # use is POST /auth/verify-2fa, which calls
+            # totp_service.verify_challenge_token directly.
+            raise HTTPException(401, "Challenge token is not a session token")
         if payload.get("role") not in allowed_roles:
             raise HTTPException(403, "Wrong role for this resource")
         return payload
@@ -367,14 +395,22 @@ def require_session(allowed_roles: tuple[str, ...]):
 
 def _decode_session_from_authorization(authorization: Optional[str]) -> Optional[dict[str, Any]]:
     """Soft session decoder — returns None instead of raising when missing
-    or invalid. Used for endpoints that accept multiple auth modes."""
+    or invalid. Used for endpoints that accept multiple auth modes.
+
+    Mirrors require_session's 2FA-challenge guard: a typ=2fa_challenge
+    payload is treated as no session at all so an attacker can't pass
+    it through any of the soft-auth call sites either.
+    """
     if not authorization or not authorization.lower().startswith("bearer "):
         return None
     token = authorization.split(" ", 1)[1].strip()
     try:
-        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         return None
+    if payload.get("typ") == "2fa_challenge":
+        return None
+    return payload
 
 
 # Re-export Depends for convenience
