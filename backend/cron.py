@@ -246,9 +246,31 @@ async def _run_license_expiry_alerts() -> dict[str, int]:
             {"$set": {"license_warn_30_sent_at": _now_iso()}},
         )
         sent += 1
+    # SECURITY/CORRECTNESS (2026-05-16 audit, HIGH #20): re-arm the
+    # alert when a therapist renews. The prior code never $unset the
+    # license_warn_30_sent_at flag, so any therapist who pushed
+    # license_expires_at past the warning window stayed silently
+    # blocked from future alerts. Bulk-clear the flag for anyone
+    # whose license is now MORE than LICENSE_WARN_DAYS in the future
+    # AND has the stale flag set -- they've renewed past the window.
+    rearm_cutoff_iso = (
+        now + timedelta(days=LICENSE_WARN_DAYS + 1)
+    ).date().isoformat()
+    rearm_res = await db.therapists.update_many(
+        {
+            "license_warn_30_sent_at": {"$exists": True},
+            "license_expires_at": {"$gt": rearm_cutoff_iso},
+        },
+        {"$unset": {"license_warn_30_sent_at": ""}},
+    )
     if sent:
         logger.info("License expiry alerts sent: %d", sent)
-    return {"sent": sent}
+    if rearm_res.modified_count:
+        logger.info(
+            "License expiry re-arm: cleared %d stale warn flags",
+            rearm_res.modified_count,
+        )
+    return {"sent": sent, "rearmed": rearm_res.modified_count}
 
 
 async def _run_availability_prompts() -> dict[str, int]:
@@ -732,6 +754,51 @@ async def _run_decline_pattern_flags() -> dict[str, Any]:
         return {"error": str(e)}
 
 
+async def _run_purge_soft_deleted_accounts() -> dict[str, int]:
+    """Hard-delete therapist + patient_account rows whose `deleted_at`
+    is older than the 24-hour reversibility window.
+
+    SECURITY/CORRECTNESS (2026-05-16 audit, HIGH from prior round):
+    the portal.py:1061 comment claims "A nightly cron purges anything
+    with deleted_at < now - 24h" but that cron didn't exist. Result:
+    soft-deleted accounts (and their PHI-adjacent fields -- declines,
+    feedback, match metadata) lived forever in violation of the
+    promised "permanent after 24h" semantic. This task makes the
+    comment true.
+
+    Conservative scope: removes the therapists / patient_accounts
+    documents only. Audit logs (audit collection) reference these by
+    id and are intentionally NOT removed -- audit trail outlives the
+    account. Request rows owned by a deleted patient already have
+    deleted_at + is_active=False set by the admin / portal delete
+    handlers; their PHI fields are kept for audit but the request
+    won't appear in any user-facing surface.
+    """
+    cutoff_iso = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    try:
+        t_res = await db.therapists.delete_many(
+            {"deleted_at": {"$lt": cutoff_iso, "$ne": None}},
+        )
+        pa_res = await db.patient_accounts.delete_many(
+            {"deleted_at": {"$lt": cutoff_iso, "$ne": None}},
+        )
+        n_t = int(getattr(t_res, "deleted_count", 0) or 0)
+        n_p = int(getattr(pa_res, "deleted_count", 0) or 0)
+        if n_t or n_p:
+            logger.info(
+                "Soft-delete purge: therapists=%d patient_accounts=%d (cutoff=%s)",
+                n_t, n_p, cutoff_iso,
+            )
+        return {
+            "purged_therapists": n_t,
+            "purged_patient_accounts": n_p,
+            "cutoff": cutoff_iso,
+        }
+    except Exception as e:
+        logger.warning("Soft-delete purge failed: %s", e)
+        return {"error": str(e)[:300]}
+
+
 async def _run_cron_health_alert() -> dict[str, Any]:
     """Look for stuck / failed / stale cron jobs and email admin.
 
@@ -830,14 +897,35 @@ async def _daily_loop() -> None:
             local = _now_local()
             today_iso = local.date().isoformat()
             if local.hour == DAILY_TASK_HOUR_LOCAL:
-                rec = await db.cron_runs.find_one(
-                    {"name": "daily_tasks", "date": today_iso}, {"_id": 0}
+                # SECURITY/CORRECTNESS (2026-05-16 audit, HIGH #19):
+                # atomic single-winner gate. The prior find_one then
+                # insert_one is NOT atomic -- on a Render rolling
+                # deploy two replicas could both pass the find_one
+                # check (no row yet), both insert (Mongo allows
+                # duplicate inserts here since there's no unique
+                # index on name+date), and both fire the bundle.
+                # Combined with the missing PaymentIntent idempotency
+                # key (fixed in 64d09c5) that was a real double-charge
+                # risk. update_one with upsert + $setOnInsert is a
+                # single atomic command: only the first call sets the
+                # row; the second sees matched_count=1 (the row
+                # already exists, no insert happened) and skips.
+                update_res = await db.cron_runs.update_one(
+                    {"name": "daily_tasks", "date": today_iso},
+                    {
+                        "$setOnInsert": {
+                            "name": "daily_tasks",
+                            "date": today_iso,
+                            "started_at": _now_iso(),
+                        }
+                    },
+                    upsert=True,
                 )
-                if not rec:
+                # matched_count == 0 means we just inserted -> we won
+                # the race. matched_count == 1 means another replica
+                # already started today's bundle -> back off.
+                if update_res.matched_count == 0:
                     logger.info("Running daily tasks for %s", today_iso)
-                    await db.cron_runs.insert_one(
-                        {"name": "daily_tasks", "date": today_iso, "started_at": _now_iso()}
-                    )
                     # Each task wrapped in _safe_run so a single failure
                     # never poisons the whole bundle. Without this, an
                     # uncaught exception in (say) _run_gap_recruitment
@@ -866,6 +954,12 @@ async def _daily_loop() -> None:
                     if local.weekday() == 0:
                         auto_rec = await _safe_run("auto_recruit", _run_auto_recruit_weekly)
                     decline_flags = await _safe_run("decline_flags", _run_decline_pattern_flags)
+                    # Soft-delete purge: hard-deletes any therapist /
+                    # patient_account whose deleted_at is older than
+                    # the 24h reversibility window (delivers on the
+                    # "permanent after 24h" promise that was
+                    # documented in portal.py but never implemented).
+                    purge         = await _safe_run("purge_deleted", _run_purge_soft_deleted_accounts)
                     # Health alert sweep -- runs LAST so today's
                     # stuck-job pattern is included. Deduped to one
                     # email per 24h.
@@ -883,6 +977,7 @@ async def _daily_loop() -> None:
                             "v2_reminders": v2_reminders,
                             "auto_recruit_weekly": auto_rec,
                             "decline_pattern_flags": decline_flags,
+                            "purge_deleted_accounts": purge,
                             "cron_health_alert": health,
                         }},
                     )
