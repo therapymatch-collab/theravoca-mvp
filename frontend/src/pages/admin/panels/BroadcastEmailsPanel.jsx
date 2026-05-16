@@ -644,8 +644,18 @@ function BuilderView({ client, campaign, onBack }) {
                   fontSize: "15px",
                   lineHeight: 1.7,
                   color: "#2B2A29",
-                  wordBreak: "normal",
-                  overflowWrap: "break-word",
+                  // Defensive: stop the preview from EVER breaking a
+                  // word mid-character even if the rendered HTML has
+                  // hidden soft-hyphens / <wbr> / weird CSS picked up
+                  // from the panel context. wordBreak:keep-all forbids
+                  // breaks inside words; overflowWrap:normal stops the
+                  // browser from auto-breaking long unbroken strings
+                  // (URLs/emails will overflow horizontally rather than
+                  // mid-word split, which is the lesser evil for prose
+                  // emails). The 640px shell + admin panel scrollbar
+                  // handle any edge-case overflow.
+                  wordBreak: "keep-all",
+                  overflowWrap: "normal",
                   hyphens: "none",
                 }}
                 data-testid="broadcast-preview-body"

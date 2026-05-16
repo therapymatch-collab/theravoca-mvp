@@ -248,18 +248,11 @@ async def lifespan(_app: FastAPI):
             "audience": "patient",
             "question": "Is my information safe and private?",
             "answer": (
-                "Technically: all traffic is encrypted in transit (TLS 1.2+), and your "
-                "data is encrypted at rest in our database (MongoDB Atlas, US-hosted). "
-                "Passwords are stored as one-way bcrypt hashes that even our engineers "
-                "can't reverse. Optional two-factor authentication is available, your "
-                "sign-in history is visible to you in your portal, and we email you "
-                "when we see a sign-in from a new device or location. We don't run "
-                "third-party tracking pixels, session-replay tools, or behavior "
-                "analytics on patient pages, and we never sell or share your "
-                "information with advertisers, data brokers, or social-media "
-                "platforms. Payment data, when relevant, is handled directly by "
-                "Stripe — we never see or store your card number. Full list of "
-                "safeguards in our Privacy Notice."
+                "Yes. Encrypted in transit (TLS) and at rest in our US-hosted "
+                "database. Passwords are one-way bcrypt hashed — even our team "
+                "can't read them. No third-party tracking pixels, no resale of "
+                "your data, and Stripe handles any payment info. See our "
+                "Privacy Notice for the full list of safeguards."
             ),
         },
         {

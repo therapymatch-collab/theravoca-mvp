@@ -580,7 +580,7 @@ async def send_verification_email(to: str, request_id: str, token: str) -> None:
     ) if cta_label else ""
     inner = f"""
     {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
-    <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">{intro}</p>
+    {_text_to_paragraph_html(intro, p_style=f"font-size:16px;line-height:1.6;color:{BRAND['text']};")}
     {cta_html}
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;">{footer_note}<br/>
       <span style="word-break:break-all;color:{BRAND['primary']};">{verify_url}</span>
@@ -638,7 +638,7 @@ async def send_therapist_notification(
     footer_note = render(tpl["footer_note"], **vars_)
     inner = f"""
     {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
-    <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">{intro}</p>
+    {_text_to_paragraph_html(intro, p_style=f"font-size:16px;line-height:1.6;color:{BRAND['text']};")}
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:28px 0;">
       <tr>
         <td>
@@ -678,7 +678,10 @@ async def send_patient_results(to: str, request_id: str, applications: list[dict
     if not applications:
         tpl_e = await get_template(_db(), "patient_results_empty")
         intro = render(tpl_e["intro"])
-        inner = f'<p style="font-size:16px;line-height:1.6;color:{BRAND["text"]};">{intro}</p>'
+        inner = _text_to_paragraph_html(
+            intro,
+            p_style=f"font-size:16px;line-height:1.6;color:{BRAND['text']};",
+        )
         await _send(to, render(tpl_e["subject"]), _wrap(tpl_e["heading"], inner), template_key="patient_results_empty")
         return
 
@@ -706,7 +709,7 @@ async def send_patient_results(to: str, request_id: str, applications: list[dict
         f'</p></div>'
     )
     inner = f"""
-    <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">{intro}</p>
+    {_text_to_paragraph_html(intro, p_style=f"font-size:16px;line-height:1.6;color:{BRAND['text']};")}
     {cta_html}
     {followup_note}
     """
@@ -723,7 +726,7 @@ async def send_therapist_signup_received(to: str, name: str) -> None:
     footer_note = render(tpl["footer_note"], **vars_)
     inner = f"""
     {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
-    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">{intro}</p>
+    {_text_to_paragraph_html(intro, p_style=f"font-size:15px;line-height:1.7;color:{BRAND['text']};")}
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">{footer_note}</p>
     """
     await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner), template_key="therapist_signup_received")
@@ -800,7 +803,7 @@ async def send_therapist_approved(to: str, name: str) -> None:
     footer_note = render(tpl["footer_note"], **vars_)
     inner = f"""
     {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
-    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">{intro}</p>
+    {_text_to_paragraph_html(intro, p_style=f"font-size:15px;line-height:1.7;color:{BRAND['text']};")}
     <div style="background:{BRAND['bg']};border:1px solid {BRAND['border']};border-radius:12px;padding:18px 22px;margin:22px 0;">
       <div style="font-size:13px;color:{BRAND['muted']};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">
         Next steps (2 minutes)
@@ -836,8 +839,8 @@ async def send_therapist_rejected(to: str, name: str) -> None:
     footer_note = render(tpl["footer_note"], **vars_)
     inner = f"""
     {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
-    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">{intro}</p>
-    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">{body}</p>
+    {_text_to_paragraph_html(intro, p_style=f"font-size:15px;line-height:1.7;color:{BRAND['text']};")}
+    {_text_to_paragraph_html(body, p_style=f"font-size:15px;line-height:1.7;color:{BRAND['text']};")}
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">{footer_note}</p>
     """
     await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner), template_key="therapist_rejected")
@@ -1153,7 +1156,7 @@ async def send_magic_code(to: str, code: str, role: str) -> None:
     intro = render(tpl["intro"], **vars_)
     footer_note = render(tpl["footer_note"], **vars_)
     inner = f"""
-    <p style="font-size:16px;line-height:1.6;color:{BRAND['text']};">{intro}</p>
+    {_text_to_paragraph_html(intro, p_style=f"font-size:16px;line-height:1.6;color:{BRAND['text']};")}
     <div style="margin:32px 0;text-align:center;">
       <div style="display:inline-block;background:{BRAND['bg']};border:1px solid {BRAND['border']};border-radius:14px;padding:22px 36px;">
         <div style="font-family:'SFMono-Regular','Menlo','Consolas','Courier New',monospace;font-size:38px;letter-spacing:0.4em;color:{BRAND['primary']};font-weight:700;">{code}</div>
@@ -1451,7 +1454,7 @@ async def send_claim_profile_email(
     # breaks render as visible spacing.
     inner = f"""
     {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
-    <p style="font-size:15px;line-height:1.7;color:{BRAND['text']};">{intro}</p>
+    {_text_to_paragraph_html(intro, p_style=f"font-size:15px;line-height:1.7;color:{BRAND['text']};")}
     <div style="background:{BRAND['bg']};border:1px solid {BRAND['border']};border-radius:12px;padding:18px 22px;margin:22px 0;">
       <div style="font-size:13px;color:{BRAND['muted']};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">
         Your profile is {score}% complete
