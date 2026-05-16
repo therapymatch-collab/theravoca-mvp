@@ -240,21 +240,18 @@ export default function PrivacyNotice() {
               <p className="font-medium mt-4">b. Data Deletion / Account Cancellation</p>
               <p>
                 You can delete your TheraVoca account and the personal information
-                associated with it at any time:
+                associated with it at any time. We handle these requests by email
+                or phone so a real person can confirm what you're asking for and
+                answer any questions before processing:
               </p>
               <ul className="list-disc pl-5 mt-2 space-y-1">
                 <li>
-                  <strong>Self-serve (fastest):</strong> sign in and click{" "}
-                  <em>Delete my account</em> in your portal's Security
-                  &amp; Account section.
-                </li>
-                <li>
                   <strong>By email:</strong>{" "}
-                  <a href="mailto:privacy@theravoca.com" className="text-[#2D4A3E] underline">
-                    privacy@theravoca.com
+                  <a href="mailto:support@theravoca.com" className="text-[#2D4A3E] underline">
+                    support@theravoca.com
                   </a>{" "}
-                  with the subject line "Delete my account" — we'll
-                  confirm and complete within 7 business days.
+                  with the subject line "Delete my account" — most
+                  requests confirmed within one business day.
                 </li>
                 <li>
                   <strong>By phone:</strong>{" "}
@@ -266,14 +263,11 @@ export default function PrivacyNotice() {
               </ul>
               <p className="mt-3">
                 <strong>What happens when you delete:</strong> within 24 hours
-                we permanently remove your profile, contact details, search
-                requests, message history, and account login from our active
-                systems. Anonymized aggregate analytics (e.g. "X patients
-                matched in May") are retained but cannot be tied back to
-                you. Limited records we are required by law to keep
-                (financial records, fraud-prevention logs, audit-trail
-                evidence) are retained for the legally required period and
-                then deleted.
+                of confirmation we permanently remove your profile, contact
+                details, search requests, message history, and account login
+                from our active systems. Anonymized aggregate analytics (e.g.
+                "X patients matched in May") are retained but cannot be tied
+                back to you.
               </p>
               <p className="mt-3">
                 <strong>Pause vs. delete:</strong> if you'd rather pause
