@@ -644,25 +644,20 @@ function BuilderView({ client, campaign, onBack }) {
                   fontSize: "15px",
                   lineHeight: 1.7,
                   color: "#2B2A29",
-                  // Wrap at word boundaries (the default English-text
-                  // behaviour). The earlier `wordBreak: keep-all` was a
-                  // mis-fix for "mid-word splits" -- keep-all is a CJK
-                  // setting that tells the browser NOT to break between
-                  // tokens, which on English text causes lines to
-                  // overflow the container's right edge (the actual bug
-                  // Josh kept seeing). overflowWrap:break-word is the
-                  // standard safety net for the one case that does
-                  // matter -- a single unbroken token (long URL,
-                  // base64 string) wider than the column gets broken
-                  // rather than overflowing.
+                  // Pure English-text wrap, same as Gmail / Outlook /
+                  // every prose website. Words never split mid-letter.
+                  // The earlier d901c60 used `overflowWrap: break-word`
+                  // as a "safety net for long URLs", but in narrow
+                  // admin-panel columns the browser interpreted that
+                  // too aggressively and split short words like
+                  // "imagine" into "ima | gine" -- exactly the bug
+                  // Josh just reported. Reverted to `normal`: long
+                  // unbroken tokens overflow horizontally instead of
+                  // splitting (acceptable trade-off for prose emails;
+                  // matches what Gmail actually does on rendering).
                   wordBreak: "normal",
-                  overflowWrap: "break-word",
-                  // hyphens:none stays; the issue was never hyphenation.
+                  overflowWrap: "normal",
                   hyphens: "none",
-                  // Hard cap to the shell width so even a renegade
-                  // child element with its own min-width can't push the
-                  // body past the 640px card edge.
-                  maxWidth: "100%",
                 }}
                 data-testid="broadcast-preview-body"
                 dangerouslySetInnerHTML={{
@@ -679,15 +674,11 @@ function BuilderView({ client, campaign, onBack }) {
                   fontSize: "12px",
                   lineHeight: 1.6,
                   color: "#6D6A65",
-                  // Same wrap policy as the body -- without these the
-                  // footer's "support@theravoca.com" + unsubscribe line
-                  // can run off the right edge on narrower panel
-                  // widths (the issue Josh just reported alongside the
-                  // body cutoff).
+                  // Same wrap policy as the body -- standard English
+                  // wrap, never mid-word.
                   wordBreak: "normal",
-                  overflowWrap: "break-word",
+                  overflowWrap: "normal",
                   hyphens: "none",
-                  maxWidth: "100%",
                 }}
                 data-testid="broadcast-preview-footer"
               >
