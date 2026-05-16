@@ -138,27 +138,31 @@ def _inject_email_block_styles(html: str, *, wysiwyg: bool = False) -> str:
     # `<p><br></p>` empty-paragraph marker stays put for the wysiwyg
     # blank-line behaviour.
     #
-    # Pass 1: <br> sandwiched directly between two letters/digits
-    # without ANY whitespace -- almost certainly a char-wrapped word
-    # split mid-letter ("ima<br>gine"). Strip with empty so the word
-    # rejoins ("imagine"). If we replaced with a space here we'd get
-    # "ima gine" which then word-wraps at the space and visually still
-    # looks broken at the column edge.
+    # Single pass: <br> followed (after optional whitespace) by a
+    # LOWERCASE letter -- a soft-wrap artifact from prose pasted
+    # from a narrow pane ("rough<br>for the market" or
+    # "ima<br>gine"). Replace with a space so adjacent words don't
+    # glue (the worst-case result is "ima gine" which reads as a
+    # typo but isn't catastrophic; gluing to "roughfor" would be).
+    # Intentional line breaks (sentence starts, signature lines,
+    # list items) begin with capitals or punctuation and slip past
+    # this heuristic unmodified. The negative lookahead `(?!\s*</p>)`
+    # still preserves the empty-paragraph blank-line marker
+    # `<br></p>`.
+    # 2026-05-16: tightened from "strip ALL <br>" -> "lowercase
+    # only" because the all-strip variant collapsed admin-typed
+    # signatures like
+    #   Best,<br>Joshua Rosenthal, PsyD<br>TheraVoca, Founder
+    # onto one wrapped line (Josh caught this in a live sent email).
+    # Also dropped a no-space mid-word rejoin pass that was gluing
+    # between-word wraps ("rough<br>for" -> "roughfor"). The
+    # cost is that the rare char-wrapped paste "ima<br>gine"
+    # renders as "ima gine" instead of "imagine"; we judged that
+    # acceptable.
     html = _re.sub(
-        r"(?<=[A-Za-z0-9])<br[^>]*>(?=[A-Za-z0-9])",
-        "",
+        r"<[Bb][Rr][^>]*>(\s*)(?=[a-z])(?!\s*</p>)",
+        r" \1",
         html,
-        flags=_re.IGNORECASE,
-    )
-    # Pass 2: any remaining <br> -- between words, after punctuation,
-    # at end of paragraph, etc. Strip with a space so adjacent words
-    # don't get glued together. Negative lookahead preserves the
-    # empty-paragraph blank-line marker `<br></p>`.
-    html = _re.sub(
-        r"<br[^>]*>(?!\s*</p>)",
-        " ",
-        html,
-        flags=_re.IGNORECASE,
     )
     # Collapse runs of whitespace introduced by the strip back to one
     # space so the paragraph reads cleanly.
@@ -903,12 +907,26 @@ def _text_to_paragraph_html(text: str, *, p_style: str) -> str:
         s,
         flags=_re.IGNORECASE,
     )
+    # Collapse the WHITESPACE that render() left after each remaining
+    # single `<br/>` so the upcoming `\n -> <br>` replace can't double
+    # up. Without this step, an admin-typed signature
+    #
+    #   Best,\nJoshua Rosenthal, PsyD\nTheraVoca, Founder
+    #
+    # would go through render() -> `<br/>\n` after each line, then
+    # step 3 below would replace the surviving `\n`s with `<br>` -- so
+    # each intentional newline became `<br/><br>`. The aggressive
+    # strip in _inject_email_block_styles then turned ALL those `<br>`s
+    # into spaces, collapsing the signature into one wrapped line.
+    # Eating the `\n` here keeps the original single `<br>` intact.
+    s = _re.sub(r"<br\s*/?>\s*", "<br>", s, flags=_re.IGNORECASE)
     paras = _re.split(r"\n\s*\n+", s)
     out_parts = []
     for p in paras:
-        # Soft single-line breaks inside a paragraph -> <br>. Catches
-        # both raw `\n` (textarea soft break) and a SINGLE leftover
-        # `<br/>` from a half-render situation.
+        # Soft single-line breaks inside a paragraph -> <br>. Any
+        # `\n` left at this point is a textarea soft break the admin
+        # typed deliberately (the render-injected ones were eaten
+        # above).
         inner = p.strip().replace("\n", "<br>")
         out_parts.append(f'<p style="{p_style}">{inner}</p>')
     return "".join(out_parts)
