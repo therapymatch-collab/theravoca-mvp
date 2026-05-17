@@ -1,80 +1,69 @@
 /**
- * VideoTestimonials — auto-renders a horizontal carousel of native HTML5
- * <video> players. We host the source MP4s on theravoca.com (the user's
- * own WordPress site) and embed them directly so they play inline on the
- * page rather than opening a new tab.
+ * VideoTestimonials -- horizontal carousel of YouTube-hosted patient
+ * testimonials.
  *
- * Each card is a self-contained controlled <video>: clicking play on one
- * card pauses any other card that is currently playing so two voices
- * never overlap.
+ * 2026-05-17: switched from self-hosted mp4s to YouTube embeds.
+ *
+ * Why YouTube:
+ *   - Adaptive bitrate handled by YouTube (mobile gets low-bandwidth
+ *     variant, desktop gets HD) -- no manual encoding.
+ *   - No git bloat from raw mp4s in the repo.
+ *   - Works on both theravoca.com (old WP site) and the new React app
+ *     -- just embed the same iframe.
+ *
+ * Privacy: using `youtube-nocookie.com` domain (the "Enhanced privacy
+ * mode" variant) so YouTube doesn't drop tracking cookies until the
+ * user actually clicks play. Better GDPR / HIPAA-adjacent hygiene
+ * for a healthcare site.
+ *
+ * Lazy-loading: iframes use `loading="lazy"` so they don't fire
+ * network requests until scrolled into view -- otherwise rendering
+ * 5 iframes on landing-page mount would balloon the initial page
+ * payload.
+ *
+ * Pause-others logic from the old <video>-based version is dropped:
+ * the YouTube iframe API would let us programmatically pause other
+ * players, but it adds the iframe-API JS to the page just to handle
+ * the rare case of two videos playing at once. Acceptable to let
+ * the user manually pause one before starting another.
  */
-import { useRef, useState, useEffect } from "react";
-import { Play, ChevronLeft, ChevronRight } from "lucide-react";
+import { useRef } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import useSiteCopy from "@/lib/useSiteCopy";
 import GetMatchedCTA from "@/components/GetMatchedCTA";
 
-// Video sources now served directly from the React app's
-// public/videos/ folder (committed to git 2026-05-17). Josh is
-// moving the new site off the WordPress dependency at theravoca.com.
-// Posters still come from WP for now -- small PNGs/JPGs, low
-// priority; can be migrated to local /videos/{id}-poster.{ext}
-// once the WP install is retired.
-//
-// File-size note: the 5 mp4s total ~300MB committed to git as a
-// pragmatic call (vs setting up R2/Stream/LFS). Render's first
-// build clones the lot; subsequent deploys only pull deltas, so
-// the per-build cost stays small.
+// Each entry's `youtubeId` is the 11-char video ID from the share URL.
+// Shorts URLs (`https://youtube.com/shorts/{id}`) and standard URLs
+// (`https://youtu.be/{id}` or `https://youtube.com/watch?v={id}`) all
+// use the same embed pattern.
 const TESTIMONIALS = [
-  {
-    id: "wz",
-    name: "W.Z., Age 25",
-    src: "/videos/wz.mp4",
-    poster: "https://theravoca.com/wp-content/uploads/W.Z.-age-25.png",
-  },
-  {
-    id: "da",
-    name: "D.A., Age 43",
-    src: "/videos/da.mp4",
-    poster: "https://theravoca.com/wp-content/uploads/photo_2025-05-09_20-35-16.jpg",
-  },
-  {
-    id: "db",
-    name: "D.B., Age 52",
-    src: "/videos/db.mp4",
-    poster: "https://theravoca.com/wp-content/uploads/DB-2.png",
-  },
-  {
-    id: "as",
-    name: "A.S., Age 32",
-    src: "/videos/as.mp4",
-    poster:
-      "https://theravoca.com/wp-content/uploads/Capture-decran-2025-05-23-014536.png",
-  },
-  {
-    id: "nn",
-    name: "N.N., Age 31",
-    src: "/videos/nn.mp4",
-    poster: "https://theravoca.com/wp-content/uploads/N.N.-age-34.png",
-  },
+  { id: "wz", name: "W.Z., Age 25", youtubeId: "aXa8uSqMT3U" },
+  { id: "da", name: "D.A., Age 43", youtubeId: "iZFO6NRYPOw" },
+  { id: "db", name: "D.B., Age 52", youtubeId: "kN7mKqGyhMU" },
+  { id: "as", name: "A.S., Age 32", youtubeId: "Syxb4zJdyrI" },
+  { id: "nn", name: "N.N., Age 31", youtubeId: "nDzeVwuwVO0" },
 ];
 
-export default function VideoTestimonials() {
-  const t = useSiteCopy();
-  const refs = useRef({});
-  const trackRef = useRef(null);
-  // Track whichever video is currently playing so we can pause it when
-  // another card starts.
-  const [playingId, setPlayingId] = useState(null);
+function buildEmbedUrl(videoId) {
+  // modestbranding=1 reduces (but no longer fully removes) the YouTube
+  // logo in the player chrome. rel=0 prevents related videos from other
+  // channels showing at end of playback. playsinline=1 plays inline on
+  // iOS Safari instead of forcing the native full-screen player.
+  const params = new URLSearchParams({
+    modestbranding: "1",
+    rel: "0",
+    playsinline: "1",
+  });
+  return `https://www.youtube-nocookie.com/embed/${videoId}?${params.toString()}`;
+}
 
-  useEffect(() => {
-    if (!playingId) return undefined;
-    Object.entries(refs.current).forEach(([id, el]) => {
-      if (id !== playingId && el && !el.paused) {
-        el.pause();
-      }
-    });
-    return undefined;
-  }, [playingId]);
+export default function VideoTestimonials() {
+  // useSiteCopy hook left in even though no copy keys are currently
+  // wired -- pattern is consistent with other landing-page sections
+  // and admins can later swap the section headline via the copy editor.
+  // eslint-disable-next-line no-unused-vars
+  const t = useSiteCopy();
+  const trackRef = useRef(null);
 
   // Step the carousel by exactly one card so the arrows feel natural
   // even when fractional cards are visible (mobile).
@@ -102,8 +91,8 @@ export default function VideoTestimonials() {
           Patients who tried TheraVoca speak for themselves.
         </p>
         <div className="relative mt-12">
-          {/* Arrow controls — visible only on screens wide enough for them
-              to feel useful (≥ sm). On mobile the user just swipes. */}
+          {/* Arrow controls -- visible only on screens wide enough for them
+              to feel useful (>= sm). On mobile the user just swipes. */}
           <button
             type="button"
             onClick={() => step(-1)}
@@ -127,66 +116,26 @@ export default function VideoTestimonials() {
             className="-mx-5 sm:-mx-8 lg:-mx-0 flex gap-5 overflow-x-auto snap-x snap-mandatory pb-5 px-5 sm:px-8 lg:px-0 tv-no-scrollbar scroll-smooth"
             data-testid="testimonials-track"
           >
-          {TESTIMONIALS.map((t) => (
+          {TESTIMONIALS.map((tt) => (
             <article
-              key={t.id}
+              key={tt.id}
               className="shrink-0 w-[78%] sm:w-[44%] lg:w-[30%] snap-center bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden"
-              data-testid={`testimonial-card-${t.id}`}
+              data-testid={`testimonial-card-${tt.id}`}
             >
               <div className="aspect-[9/16] bg-[#0F1714] relative">
-                <video
-                  ref={(el) => (refs.current[t.id] = el)}
-                  src={t.src}
-                  poster={t.poster}
-                  controls
-                  // 2026-05-16 Josh: hide the download + PiP entry in
-                  // the native video menu so casual visitors can't
-                  // download the testimonial mp4. Note this is a UX
-                  // deterrent, NOT real DRM -- anyone determined can
-                  // still pull the source URL from the page. Keep the
-                  // assets behind a Cloudflare image policy or move
-                  // them off public WP-uploads if hard-block is
-                  // needed (CDN signed URLs).
-                  controlsList="nodownload noplaybackrate noremoteplayback"
-                  disablePictureInPicture
-                  // Disable right-click "Save video as..." in browsers
-                  // that honour it (Chrome/Edge/Firefox).
-                  onContextMenu={(e) => e.preventDefault()}
-                  preload="metadata"
-                  playsInline
-                  onPlay={() => setPlayingId(t.id)}
-                  onPause={() => {
-                    if (playingId === t.id) setPlayingId(null);
-                  }}
-                  className="w-full h-full object-cover"
-                  data-testid={`testimonial-video-${t.id}`}
-                >
-                  Your browser does not support the video tag.
-                </video>
-                {playingId !== t.id && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const v = refs.current[t.id];
-                      if (v) v.play().catch(() => {});
-                    }}
-                    aria-label={`Play ${t.name}`}
-                    className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/10 transition group"
-                    data-testid={`testimonial-play-${t.id}`}
-                  >
-                    <span className="bg-white/90 group-hover:bg-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg">
-                      <Play
-                        size={24}
-                        className="text-[#2D4A3E] ml-1"
-                        fill="currentColor"
-                      />
-                    </span>
-                  </button>
-                )}
+                <iframe
+                  src={buildEmbedUrl(tt.youtubeId)}
+                  title={`Testimonial: ${tt.name}`}
+                  loading="lazy"
+                  allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                  className="w-full h-full"
+                  data-testid={`testimonial-video-${tt.id}`}
+                />
               </div>
               <div className="px-5 py-4">
                 <div className="text-[#2D4A3E] font-serif-display text-lg">
-                  {t.name}
+                  {tt.name}
                 </div>
               </div>
             </article>
