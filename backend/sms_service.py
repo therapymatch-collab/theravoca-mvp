@@ -364,11 +364,15 @@ async def send_sms(to: str, body: str, *, force: bool = False) -> dict[str, Any]
     except Exception as e:
         logger.exception("Failed to send SMS via %s: %s", active_provider, e)
         # httpx errors include the response body in str(e); truncate
-        # to keep the audit row readable.
+        # to keep the audit row readable. 2026-05-17: bumped from
+        # 120 -> 300 because Telnyx's RuntimeError message format
+        # ("telnyx 400 10010 - messaging_profile_id not found and
+        # several more chars of context") gets clipped mid-reason
+        # at 120, hiding the part that says WHY the send failed.
         await _log_sms_send(
             intended_to=intended_to, actual_to=actual_to, body=actual_body,
             sid=None, status=None, sent_ok=False,
-            blocked=True, block_reason=f"{active_provider}_exception:{str(e)[:120]}",
+            blocked=True, block_reason=f"{active_provider}_exception:{str(e)[:300]}",
             provider=active_provider,
         )
         return None
