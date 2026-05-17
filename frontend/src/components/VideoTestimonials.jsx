@@ -129,6 +129,19 @@ export default function VideoTestimonials() {
                   src={t.src}
                   poster={t.poster}
                   controls
+                  // 2026-05-16 Josh: hide the download + PiP entry in
+                  // the native video menu so casual visitors can't
+                  // download the testimonial mp4. Note this is a UX
+                  // deterrent, NOT real DRM -- anyone determined can
+                  // still pull the source URL from the page. Keep the
+                  // assets behind a Cloudflare image policy or move
+                  // them off public WP-uploads if hard-block is
+                  // needed (CDN signed URLs).
+                  controlsList="nodownload noplaybackrate noremoteplayback"
+                  disablePictureInPicture
+                  // Disable right-click "Save video as..." in browsers
+                  // that honour it (Chrome/Edge/Firefox).
+                  onContextMenu={(e) => e.preventDefault()}
                   preload="metadata"
                   playsInline
                   onPlay={() => setPlayingId(t.id)}
