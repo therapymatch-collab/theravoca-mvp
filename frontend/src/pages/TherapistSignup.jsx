@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { CheckCircle2, ArrowRight, Sparkles } from "lucide-react";
+import { CheckCircle2, ArrowRight, Sparkles, Loader2 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import useFaqs from "@/lib/useFaqs";
 import useSiteCopy from "@/lib/useSiteCopy";
@@ -150,6 +150,14 @@ export default function TherapistSignup() {
   const formCardRef = useRef(null);
   // Cloudflare Turnstile (fail-soft) — see comments in IntakeForm.jsx
   const [turnstileToken, setTurnstileToken] = useState("");
+  // Track widget render lifecycle so we can show the user a real
+  // status (loading vs failed vs ready) instead of a blank slot
+  // when something blocks the Cloudflare script (ad blocker, strict
+  // privacy extension, network filter). 2026-05-16 bug: Josh saw a
+  // submit error with no visible Turnstile widget on the page --
+  // the widget never rendered AND there was no signal explaining
+  // why.
+  const [turnstileWidgetState, setTurnstileWidgetState] = useState("loading"); // loading|ready|failed
   const turnstileRef = useRef(null);
   const turnstileWidgetIdRef = useRef(null);
   const [turnstileEnabled, setTurnstileEnabled] = useState(
@@ -180,11 +188,12 @@ export default function TherapistSignup() {
     if (!turnstileSiteKey) return;
     const SCRIPT_ID = "cf-turnstile-script";
     const ensureScript = () =>
-      new Promise((resolve) => {
+      new Promise((resolve, reject) => {
         if (window.turnstile) return resolve();
         const existing = document.getElementById(SCRIPT_ID);
         if (existing) {
           existing.addEventListener("load", () => resolve());
+          existing.addEventListener("error", () => reject(new Error("script-onerror")));
           return;
         }
         const s = document.createElement("script");
@@ -193,31 +202,60 @@ export default function TherapistSignup() {
         s.async = true;
         s.defer = true;
         s.onload = () => resolve();
+        // Ad blocker / network filter blocking the script.
+        s.onerror = () => reject(new Error("script-onerror"));
         document.head.appendChild(s);
       });
     let cancelled = false;
-    ensureScript().then(() => {
-      if (cancelled || !turnstileRef.current || !window.turnstile) return;
-      try {
-        turnstileWidgetIdRef.current = window.turnstile.render(turnstileRef.current, {
-          sitekey: turnstileSiteKey,
-          theme: "light",
-          size: "flexible",
-          // Mobile-stability options — match IntakeForm. Without these
-          // therapists hitting Submit after spending >5 min on the form
-          // see a silent "Security check failed." because the widget's
-          // token quietly expired.
-          "refresh-expired": "auto",
-          retry: "auto",
-          "retry-interval": 4000,
-          callback: (tok) => setTurnstileToken(tok || ""),
-          "error-callback": () => setTurnstileToken(""),
-          "expired-callback": () => setTurnstileToken(""),
-          "timeout-callback": () => setTurnstileToken(""),
-        });
-      } catch (_) { /* ignore double-render */ }
-    });
-    return () => { cancelled = true; };
+    // Fallback: if the widget hasn't rendered (still no token, still
+    // "loading") after 12s, flip to "failed" so the UI tells the
+    // user something useful instead of leaving them staring at an
+    // empty slot.
+    const failTimer = setTimeout(() => {
+      if (!cancelled) {
+        setTurnstileWidgetState((s) => (s === "loading" ? "failed" : s));
+      }
+    }, 12000);
+    ensureScript()
+      .then(() => {
+        if (cancelled || !turnstileRef.current || !window.turnstile) return;
+        try {
+          turnstileWidgetIdRef.current = window.turnstile.render(turnstileRef.current, {
+            sitekey: turnstileSiteKey,
+            theme: "light",
+            size: "flexible",
+            // Mobile-stability options — match IntakeForm. Without these
+            // therapists hitting Submit after spending >5 min on the form
+            // see a silent "Security check failed." because the widget's
+            // token quietly expired.
+            "refresh-expired": "auto",
+            retry: "auto",
+            "retry-interval": 4000,
+            callback: (tok) => {
+              setTurnstileToken(tok || "");
+              if (tok) setTurnstileWidgetState("ready");
+            },
+            "error-callback": () => {
+              setTurnstileToken("");
+              setTurnstileWidgetState("failed");
+            },
+            "expired-callback": () => setTurnstileToken(""),
+            "timeout-callback": () => setTurnstileToken(""),
+          });
+          // The widget container has rendered something -- the user
+          // will see the Cloudflare challenge inside it momentarily.
+          // We don't flip to "ready" here because we still want the
+          // user to actually solve / get a token; the callback above
+          // handles the success transition.
+        } catch (_) { /* ignore double-render */ }
+      })
+      .catch(() => {
+        if (!cancelled) setTurnstileWidgetState("failed");
+      });
+    return () => {
+      cancelled = true;
+      clearTimeout(failTimer);
+    };
   }, [turnstileSiteKey]);
   /**
    * Reset the widget when the backend reports a security failure so
@@ -1366,9 +1404,40 @@ export default function TherapistSignup() {
                     {websiteChecking ? "Checking…" : "Next"} <ArrowRight size={18} />
                   </button>
                 ) : (
-                  <div className="flex flex-col items-end gap-3">
+                  <div className="flex flex-col items-end gap-3 w-full">
                     {turnstileSiteKey && (
-                      <div ref={turnstileRef} data-testid="signup-turnstile" />
+                      <div className="w-full">
+                        {/* The actual Turnstile widget renders into
+                            this div. min-height reserves the slot
+                            so the user can see *something* is
+                            supposed to be here even before the
+                            Cloudflare script loads. */}
+                        <div
+                          ref={turnstileRef}
+                          data-testid="signup-turnstile"
+                          className="w-full min-h-[70px] flex items-center justify-center"
+                        >
+                          {turnstileWidgetState === "loading" && !turnstileToken && (
+                            <div className="text-xs text-[#6D6A65] flex items-center gap-2">
+                              <Loader2 size={14} className="animate-spin text-[#2D4A3E]" />
+                              Loading security check…
+                            </div>
+                          )}
+                        </div>
+                        {turnstileWidgetState === "failed" && !turnstileToken && (
+                          <div
+                            className="text-xs text-[#8B3220] bg-[#FBE9E5] border border-[#F4C7BE] rounded-md px-3 py-2 mt-1"
+                            data-testid="signup-turnstile-failed"
+                          >
+                            Security check couldn't load. This usually
+                            means an ad blocker or strict privacy
+                            extension is blocking{" "}
+                            <code>challenges.cloudflare.com</code>.
+                            Disable it for this page, or try a different
+                            browser, then reload.
+                          </div>
+                        )}
+                      </div>
                     )}
                     {/* Bug Josh caught 2026-05-16: previously the
                         Preview button was enabled even before
