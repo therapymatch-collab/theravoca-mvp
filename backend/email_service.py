@@ -1016,18 +1016,40 @@ _PREVIEW_VARS: dict[str, dict[str, Any]] = {
     "therapist_signup_received": {"first_name": "Alex"},
     "therapist_approved":        {"first_name": "Alex"},
     "therapist_rejected":        {"first_name": "Alex"},
-    "patient_followup_48h":      {"request_id": "sample-id"},
-    "patient_followup_3w":       {"request_id": "sample-id"},
-    "patient_followup_9w":       {"request_id": "sample-id"},
-    "patient_followup_15w":      {"request_id": "sample-id"},
     "therapist_followup_2w":     {"first_name": "Alex"},
     "therapist_stale_profile_nag": {"first_name": "Alex", "days_stale": 14},
-    "license_expiring_therapist": {"first_name": "Alex", "expires_at": "2026-12-31"},
-    "license_expiring_admin":    {"name": "Alex Therapist", "expires_at": "2026-12-31"},
     "magic_code":                {"code": "123456", "role": "patient"},
     "claim_profile":             {"first_name": "Alex", "claim_url": "https://theravoca.com/claim/sample"},
-    "availability_prompt":       {"therapist_name": "Alex Therapist"},
-    "followup_survey":           {"first_name": "Alex"},
+    # 2026-05-17: sync with DEFAULTS keys. Previously these three
+    # rendered literal {first_name} / {code} / {rationale} in the
+    # admin preview because no entry existed -- the audit flagged
+    # the missing-key warning as cosmetic but it makes the preview
+    # genuinely misleading (admin can't see what the substituted
+    # email will look like before sending).
+    "new_referral_inquiry":      {
+        "first_name": "Alex",
+        "score": 87,
+        "rationale": "Strong fit on anxiety + CBT, schedule overlap, in-network with their insurance.",
+        "signup_url": "https://theravoca.com/therapists/join?code=SAMPLE",
+        "opt_out_url": "https://theravoca.com/outreach/opt-out/sample",
+    },
+    "prelaunch_invite":          {
+        "first_name": "Alex",
+        "rationale": "We saw your Psychology Today profile and you match what an Idaho patient is looking for.",
+        "code": "SAMPLE",
+        "signup_url": "https://theravoca.com/therapists/join?code=SAMPLE",
+    },
+    "therapist_survey":          {
+        "first_name": "Alex",
+        "therapist_id": "sample-therapist-id",
+        "survey_number": 1,
+    },
+    # NOTE 2026-05-17: removed orphan PREVIEW_VARS entries for
+    # `patient_followup_*`, `license_expiring_*`,
+    # `availability_prompt`, `followup_survey`. Those template keys
+    # no longer exist in DEFAULTS (replaced by v2 survey + reminder
+    # variants); leaving the orphan entries around was harmless but
+    # misleading when reading this file.
     # v2 patient surveys + reminders
     "patient_survey_v2_48h":          {"request_id": "sample-id"},
     "patient_survey_v2_3w":           {"request_id": "sample-id"},
