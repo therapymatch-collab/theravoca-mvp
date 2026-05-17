@@ -8648,3 +8648,20 @@ async def fire_test_therapist_survey(
         "therapist_email": email,
     }
 
+
+# ── Email Cron Schedules (Content > Email Cron Schedules) ──────
+# 2026-05-17 (Josh): "give me full list of when all emails go out.
+# put in admin under 'content' as new chip for 'Email Cron Schedules'."
+#
+# The data is static (the cron itself is hardcoded in cron.py +
+# email_service.py), so this just hands the catalog back as JSON for
+# the React panel to render. The catalog covers BOTH cron-driven
+# sends (results sweep, daily bundle at 2 AM Idaho, workday block at
+# 10 AM) AND real-time sends (signup confirmations, magic codes,
+# referral notifications, etc.) so admin sees the complete picture
+# of when each template can fire.
+@router.get("/admin/email-cron-schedules")
+async def admin_email_cron_schedules(_: bool = Depends(require_admin)):
+    from email_schedule_catalog import build_schedule_response
+    return build_schedule_response()
+

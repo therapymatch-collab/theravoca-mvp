@@ -56,6 +56,7 @@ import ProfileCompletionPanel from "@/pages/admin/panels/ProfileCompletionPanel"
 import TeamPanel from "@/pages/admin/panels/TeamPanel";
 import MasterQueryPanel from "@/pages/admin/panels/MasterQueryPanel";
 import BlogAdminPanel from "@/pages/admin/panels/BlogAdminPanel";
+import EmailCronSchedulesPanel from "@/pages/admin/panels/EmailCronSchedulesPanel";
 import SettingsPanel from "@/pages/admin/panels/SettingsPanel";
 import ScrapeSourcesPanel from "@/pages/admin/panels/ScrapeSourcesPanel";
 import SmsStatusPanel from "@/pages/admin/panels/SmsStatusPanel";
@@ -1889,6 +1890,8 @@ export default function AdminDashboard() {
               {tab === "blog" && <BlogAdminPanel client={client} />}
 
               {tab === "site_copy" && <SiteCopyAdminPanel client={client} />}
+
+              {tab === "email_cron_schedules" && <EmailCronSchedulesPanel />}
 
               {tab === "faqs" && <FaqAdminPanel client={client} />}
 
@@ -4053,6 +4056,12 @@ function AdminTabsBar({
           count: emailTemplatesCount,
           onClick: onLoadEmailTemplates,
         },
+        // 2026-05-17 (Josh): "give me full list of when all emails
+        // go out. put in admin under 'content' as new chip for
+        // 'Email Cron Schedules'." Static read-only catalog of every
+        // cron-driven and real-time email send + its trigger +
+        // quiet-hours timing.
+        { id: "email_cron_schedules", label: "Email cron schedules" },
       ],
     },
     {
