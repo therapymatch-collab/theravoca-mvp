@@ -188,19 +188,20 @@ export default function Step1Basics({
             stays in the LEFT column (alignment with Name + Email).
             An empty placeholder div preserves the grid cell on >= sm
             so any future addition slots in cleanly. */}
-        <div aria-hidden="true" className="hidden sm:block" />
+        {/* Gender moved into row 3's right column 2026-05-17 (per
+            Josh: the empty placeholder cell next to Website looked
+            bad). PillRow's 3 options fit inside a 50% sm column
+            without wrapping; on mobile the grid collapses and
+            Gender stacks below Website. */}
+        <Field label={<>Gender{" "}<Req /></>} hint="Used only when patients have a stated preference.">
+          <PillRow
+            items={GENDERS}
+            selected={[data.gender]}
+            onSelect={(v) => set("gender", v)}
+            testid="signup-gender"
+          />
+        </Field>
       </div>
-
-      {/* Gender pinned at the bottom of the basics group, full-width
-          pill row. */}
-      <Field label={<>Gender{" "}<Req /></>} hint="Used only when patients have a stated preference.">
-        <PillRow
-          items={GENDERS}
-          selected={[data.gender]}
-          onSelect={(v) => set("gender", v)}
-          testid="signup-gender"
-        />
-      </Field>
     </Group>
   );
 }
