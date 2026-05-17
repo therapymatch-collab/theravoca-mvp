@@ -13,41 +13,47 @@ import { Play, ChevronLeft, ChevronRight } from "lucide-react";
 import useSiteCopy from "@/lib/useSiteCopy";
 import GetMatchedCTA from "@/components/GetMatchedCTA";
 
-// Source URLs come from the user's own theravoca.com WordPress media library.
-// Filenames switched to no-dot names 2026-05-17 because Josh re-uploaded
-// fresh edits (he cut content from each video) and WP media handling is
-// finickier with multi-dot filenames like `D.A.mp4`. Use single-dot
-// names (`DA-new.mp4`) consistently across all 5 entries.
+// Video sources now served directly from the React app's
+// public/videos/ folder (committed to git 2026-05-17). Josh is
+// moving the new site off the WordPress dependency at theravoca.com.
+// Posters still come from WP for now -- small PNGs/JPGs, low
+// priority; can be migrated to local /videos/{id}-poster.{ext}
+// once the WP install is retired.
+//
+// File-size note: the 5 mp4s total ~300MB committed to git as a
+// pragmatic call (vs setting up R2/Stream/LFS). Render's first
+// build clones the lot; subsequent deploys only pull deltas, so
+// the per-build cost stays small.
 const TESTIMONIALS = [
   {
     id: "wz",
     name: "W.Z., Age 25",
-    src: "https://theravoca.com/wp-content/uploads/WZ-new.mp4",
+    src: "/videos/wz.mp4",
     poster: "https://theravoca.com/wp-content/uploads/W.Z.-age-25.png",
   },
   {
     id: "da",
     name: "D.A., Age 43",
-    src: "https://theravoca.com/wp-content/uploads/DA-new.mp4",
+    src: "/videos/da.mp4",
     poster: "https://theravoca.com/wp-content/uploads/photo_2025-05-09_20-35-16.jpg",
   },
   {
     id: "db",
     name: "D.B., Age 52",
-    src: "https://theravoca.com/wp-content/uploads/DB-new.mp4",
+    src: "/videos/db.mp4",
     poster: "https://theravoca.com/wp-content/uploads/DB-2.png",
   },
   {
     id: "as",
     name: "A.S., Age 32",
-    src: "https://theravoca.com/wp-content/uploads/AS-new.mp4",
+    src: "/videos/as.mp4",
     poster:
       "https://theravoca.com/wp-content/uploads/Capture-decran-2025-05-23-014536.png",
   },
   {
     id: "nn",
     name: "N.N., Age 31",
-    src: "https://theravoca.com/wp-content/uploads/NN-new.mp4",
+    src: "/videos/nn.mp4",
     poster: "https://theravoca.com/wp-content/uploads/N.N.-age-34.png",
   },
 ];
