@@ -572,15 +572,24 @@ export default function TherapistSignup() {
     // widget finishes loading get a generic "Security check failed"
     // 400 from the backend.
     if (turnstileSiteKey && !turnstileToken) {
+      // 2026-05-16: clearer message because the submit lives inside
+      // a preview modal that covers the Turnstile widget on the
+      // page behind it. "Scroll down" didn't help mobile users
+      // because the modal was overlaid. Close the modal first so
+      // they can SEE the widget, then scroll to it.
+      setShowPreview(false);
       toast.error(
-        "Hold on a second — the security check hasn't finished. Please scroll down to complete it, then tap Submit again.",
-        { duration: 7000 },
+        "Security check still loading — close this preview, give the box a few seconds to finish, then try again.",
+        { duration: 8000 },
       );
       try {
-        turnstileRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-        });
+        // Defer the scroll one tick so the modal has time to close.
+        setTimeout(() => {
+          turnstileRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        }, 50);
       } catch (_) { /* old iOS Safari — ignore */ }
       return;
     }
@@ -1361,15 +1370,38 @@ export default function TherapistSignup() {
                     {turnstileSiteKey && (
                       <div ref={turnstileRef} data-testid="signup-turnstile" />
                     )}
+                    {/* Bug Josh caught 2026-05-16: previously the
+                        Preview button was enabled even before
+                        Turnstile had issued a token, then the actual
+                        submit (inside the preview modal) failed with
+                        "scroll down to complete it" -- but the
+                        widget is on the page BEHIND the modal so
+                        scrolling did nothing. Now: disable Preview
+                        until the token is in hand, AND show a hint
+                        explaining why so the user looks at the
+                        widget above instead of giving up. */}
                     <button
                       type="button"
                       className="tv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={!valid || submitting}
+                      disabled={
+                        !valid
+                        || submitting
+                        || (turnstileSiteKey && !turnstileToken)
+                      }
                       onClick={() => setShowPreview(true)}
                       data-testid="signup-preview"
                     >
                       Preview profile <ArrowRight size={18} />
                     </button>
+                    {turnstileSiteKey && !turnstileToken && valid && (
+                      <p
+                        className="text-xs text-[#8B3220] max-w-xs text-right"
+                        data-testid="signup-turnstile-hint"
+                      >
+                        Complete the security check above to continue.
+                        On mobile, give it a few seconds to load.
+                      </p>
+                    )}
                   </div>
                 )}
                 </div>
