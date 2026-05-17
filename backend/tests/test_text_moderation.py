@@ -238,6 +238,53 @@ def test_realistic_clean_text_passes(text: str):
     assert ok is True, f"Unexpected reject: {err!r}"
 
 
+# ─── Trauma-context terms MUST pass (regression guard) ───────────
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # Sexual abuse / assault disclosure -- THE WHOLE POINT of a
+        # therapist match service. Must pass unmodified.
+        "I'm looking for a therapist who specializes in sexual abuse trauma.",
+        "I was raped in college and want to find someone who works with PTSD.",
+        "I'm dealing with childhood sexual abuse and need a trauma-informed therapist.",
+        "I struggle with intimacy after being molested as a kid.",
+        # Sexuality / gender identity questions -- common reason for seeking therapy
+        "I have questions about my sexuality and want a queer-affirming therapist.",
+        "Looking for someone experienced with sex therapy for couples.",
+        "I am struggling with my sexual identity.",
+        # Eating disorder + body image
+        "I have body image issues and want to work on my relationship with my body.",
+    ],
+)
+def test_legitimate_trauma_and_sexuality_context_passes(text: str):
+    """Crucial regression guard: words like 'sexual abuse', 'rape',
+    'molested', 'sexuality', 'sex therapy' are EXACTLY what patients
+    describe when seeking the right trauma-informed therapist. The
+    moderation layer MUST let them through -- false-rejects on these
+    terms would turn away the most vulnerable users."""
+    ok, err = validate_open_text(text, field_name="Reason for seeking therapy")
+    assert ok is True, (
+        f"FALSE REJECT on legitimate trauma/sexuality context: {err!r}\n"
+        f"Text: {text!r}\n"
+        f"This is exactly the use case the service exists for."
+    )
+
+
+def test_sexualized_garbage_rejected():
+    """Sexualized garbage (porn talk, masturbation references) IS
+    rejected -- distinct from the legitimate-trauma case above."""
+    for t in [
+        "I love porn and want to talk about it.",
+        "lets discuss masturbation",
+        "nice tits doctor",
+    ]:
+        ok, err = validate_open_text(t, field_name="Bio")
+        assert ok is False, f"Expected reject for {t!r}, got pass"
+        assert "language we can't accept" in (err or "")
+
+
 # ─── Combined / order-of-checks regression ───────────────────────
 
 

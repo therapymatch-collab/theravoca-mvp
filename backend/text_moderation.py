@@ -73,8 +73,22 @@ _PROFANITY: set[str] = {
     "nigger", "nigga",
     # Common slurs / hate terms
     "spic", "kike", "chink", "gook",
-    # Drug + sex slang that doesn't belong in a therapist intake
+    # Sexualized terms (Josh 2026-05-17: "garbage text, inappropriate,
+    # sexualized or irrelevant"). Intentionally OMIT "sex" and "sexy"
+    # -- legitimate intake context like "sexual abuse trauma" or
+    # "sexuality questions" should pass through. The terms below are
+    # ones a real patient describing a presenting issue wouldn't use.
     "porn", "porno",
+    "nude", "naked",  # rare in legit therapy intake free-text
+    "masturbate", "masturbating", "masturbation",
+    "blowjob", "handjob", "rimjob",
+    "pussy", "tits", "boobs", "boobies",
+    "horny", "kinky",
+    "jerkoff",
+    # Note: "rape", "abuse", "molest" intentionally NOT here -- these
+    # are LEGITIMATE topics a patient may need to describe to find the
+    # right trauma-informed therapist. Removing the filter on these
+    # is the whole point of having a therapist match service.
 }
 
 # URLs + obvious link-spam markers. Permissive: real users
