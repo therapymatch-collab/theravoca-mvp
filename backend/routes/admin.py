@@ -6341,7 +6341,14 @@ def _render_opt_out_page(*, success: bool, email: str | None, phone: str | None,
     )
     contact_line = ""
     if success and (email or phone):
-        who = email or phone
+        # SECURITY (2026-05-17): the candidate.email / candidate.phone
+        # fields originate from externally-scraped data (Places API,
+        # PT directory scrapes, manual imports). A scraped value
+        # containing HTML would render unescaped in this page without
+        # this html.escape() -- low likelihood, but stored XSS on an
+        # admin-adjacent surface is worth a 1-line defense.
+        import html as _html
+        who = _html.escape(email or phone)
         contact_line = (
             f'<p style="color:#6D6A65;font-size:13px;margin:12px 0 0;">We have removed '
             f'<strong style="color:#2B2A29;">{who}</strong> from our recruitment list.</p>'
