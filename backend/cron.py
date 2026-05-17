@@ -500,7 +500,7 @@ async def _run_therapist_surveys() -> dict[str, int]:
     now = datetime.now(timezone.utc)
     cutoff_14d = (now - timedelta(days=DAYS_THRESHOLD)).isoformat()
 
-    cur = db.therapists.find(
+    therapists = await db.therapists.find(
         {
             "is_active": {"$ne": False},
             "pending_approval": {"$ne": True},
@@ -511,17 +511,46 @@ async def _run_therapist_surveys() -> dict[str, int]:
         },
         {"_id": 0, "id": 1, "email": 1, "name": 1,
          "created_at": 1, "last_therapist_survey_sent_at": 1},
-    )
+    ).to_list(5000)
+
+    # Pre-aggregate ALL therapists' application data in ONE Mongo
+    # round-trip instead of 2 per therapist (the prior implementation
+    # ran count_documents twice inside the per-therapist loop -- N+1
+    # of 2*N queries that gets painful past ~200 therapists). For each
+    # therapist we need:
+    #   - total count (to skip therapists with 0 apps)
+    #   - list of created_at timestamps so we can compute "new apps
+    #     since last_sent" in-memory for each therapist's individual
+    #     cutoff. Dates are small (~30 bytes each); even 100 therapists
+    #     with 200 apps each is <1MB of payload.
+    therapist_ids = [t["id"] for t in therapists]
+    apps_by_tid: dict[str, dict] = {}
+    if therapist_ids:
+        agg = db.applications.aggregate([
+            {"$match": {"therapist_id": {"$in": therapist_ids}}},
+            {"$group": {
+                "_id": "$therapist_id",
+                "total": {"$sum": 1},
+                "created_ats": {"$push": "$created_at"},
+            }},
+        ])
+        async for row in agg:
+            apps_by_tid[row["_id"]] = {
+                "total": row.get("total", 0),
+                "created_ats": row.get("created_ats", []),
+            }
+
     sent = 0
     skipped_no_apps = 0
     skipped_not_due = 0
-    async for t in cur:
+    for t in therapists:
         tid = t["id"]
         last_sent = t.get("last_therapist_survey_sent_at")
         signup = t.get("created_at")
 
         # Skip if therapist has zero ever-applications -- nothing to ask about.
-        total_apps = await db.applications.count_documents({"therapist_id": tid})
+        bucket = apps_by_tid.get(tid) or {"total": 0, "created_ats": []}
+        total_apps = bucket["total"]
         if total_apps == 0:
             skipped_no_apps += 1
             continue
@@ -530,13 +559,13 @@ async def _run_therapist_surveys() -> dict[str, int]:
         date_anchor = last_sent or signup
         days_ok = (date_anchor is not None and date_anchor <= cutoff_14d)
 
-        # Referrals-based trigger: 10+ new apps since anchor.
-        # When last_sent is null, spec says count ALL applications -- which
-        # equals total_apps we already computed above.
+        # Referrals-based trigger: 10+ new apps since anchor. With
+        # last_sent null, spec says count ALL apps (== total_apps).
+        # Otherwise filter the pre-fetched list in Python -- still O(N
+        # apps) total across the whole cron run, just zero extra Mongo
+        # round-trips.
         if last_sent:
-            new_apps = await db.applications.count_documents(
-                {"therapist_id": tid, "created_at": {"$gt": last_sent}}
-            )
+            new_apps = sum(1 for d in bucket["created_ats"] if d and d > last_sent)
         else:
             new_apps = total_apps
         referral_ok = new_apps >= REFERRAL_THRESHOLD
