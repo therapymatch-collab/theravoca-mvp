@@ -49,7 +49,11 @@ const TESTIMONIALS = [
   {
     id: "da",
     name: "D.A., Age 43",
-    youtubeId: "iZFO6NRYPOw",
+    // Re-uploaded 2026-05-17 as a vertical YouTube Short so DA fills
+    // the 9:16 card the same way the other 4 testimonials do (the
+    // previous regular-format upload iZFO6NRYPOw letterboxed inside
+    // our vertical card).
+    youtubeId: "n2q90Ul7YYE",
     poster: "https://theravoca.com/wp-content/uploads/photo_2025-05-09_20-35-16.jpg",
   },
   {
