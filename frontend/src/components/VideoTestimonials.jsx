@@ -29,7 +29,7 @@
  * would need to re-export DA as a vertical Short for it to fill
  * the card.
  */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Play, ChevronLeft, ChevronRight } from "lucide-react";
 import useSiteCopy from "@/lib/useSiteCopy";
 import GetMatchedCTA from "@/components/GetMatchedCTA";
@@ -171,6 +171,34 @@ export default function VideoTestimonials() {
   // eslint-disable-next-line no-unused-vars
   const t = useSiteCopy();
   const trackRef = useRef(null);
+  // Carousel arrow visibility tracks the scroll position so we don't
+  // show a left chevron at scroll=0 (no videos to the left -- the
+  // chevron implied content that didn't exist) or a right chevron
+  // when we've reached the end. 2026-05-17: Josh caught the left
+  // arrow showing on initial paint.
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
+
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return undefined;
+    const update = () => {
+      // 2px slop accounts for sub-pixel scroll rounding (the track can
+      // sit at scrollLeft=0.4 after a smooth scroll, which would
+      // otherwise still register as "can scroll left").
+      const atLeftEdge = el.scrollLeft <= 2;
+      const atRightEdge = el.scrollLeft + el.clientWidth >= el.scrollWidth - 2;
+      setCanScrollLeft(!atLeftEdge);
+      setCanScrollRight(!atRightEdge);
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      el.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, []);
 
   // Step the carousel by exactly one card so the arrows feel natural
   // even when fractional cards are visible (mobile).
@@ -198,24 +226,34 @@ export default function VideoTestimonials() {
           Patients who tried TheraVoca speak for themselves.
         </p>
         <div className="relative mt-12">
-          <button
-            type="button"
-            onClick={() => step(-1)}
-            aria-label="Previous testimonial"
-            className="hidden sm:flex absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 z-10 w-11 h-11 rounded-full bg-white border border-[#E8E5DF] shadow-md text-[#2D4A3E] items-center justify-center hover:bg-[#FDFBF7] transition"
-            data-testid="testimonials-prev"
-          >
-            <ChevronLeft size={20} />
-          </button>
-          <button
-            type="button"
-            onClick={() => step(1)}
-            aria-label="Next testimonial"
-            className="hidden sm:flex absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 z-10 w-11 h-11 rounded-full bg-white border border-[#E8E5DF] shadow-md text-[#2D4A3E] items-center justify-center hover:bg-[#FDFBF7] transition"
-            data-testid="testimonials-next"
-          >
-            <ChevronRight size={20} />
-          </button>
+          {/* Arrows hide at the edges they can't move to. Initial
+              state on mount = at the LEFT edge, so the left chevron
+              starts hidden -- the user shouldn't see a "scroll left"
+              affordance when there's nothing to the left. As they
+              scroll right, left chevron fades in; when they hit the
+              right edge, right chevron fades out. */}
+          {canScrollLeft && (
+            <button
+              type="button"
+              onClick={() => step(-1)}
+              aria-label="Previous testimonial"
+              className="hidden sm:flex absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 z-10 w-11 h-11 rounded-full bg-white border border-[#E8E5DF] shadow-md text-[#2D4A3E] items-center justify-center hover:bg-[#FDFBF7] transition"
+              data-testid="testimonials-prev"
+            >
+              <ChevronLeft size={20} />
+            </button>
+          )}
+          {canScrollRight && (
+            <button
+              type="button"
+              onClick={() => step(1)}
+              aria-label="Next testimonial"
+              className="hidden sm:flex absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 z-10 w-11 h-11 rounded-full bg-white border border-[#E8E5DF] shadow-md text-[#2D4A3E] items-center justify-center hover:bg-[#FDFBF7] transition"
+              data-testid="testimonials-next"
+            >
+              <ChevronRight size={20} />
+            </button>
+          )}
           <div
             ref={trackRef}
             className="-mx-5 sm:-mx-8 lg:-mx-0 flex gap-5 overflow-x-auto snap-x snap-mandatory pb-5 px-5 sm:px-8 lg:px-0 tv-no-scrollbar scroll-smooth"
