@@ -1,60 +1,163 @@
 /**
- * VideoTestimonials -- horizontal carousel of YouTube-hosted patient
- * testimonials.
+ * VideoTestimonials -- horizontal carousel of patient testimonials.
  *
- * 2026-05-17: switched from self-hosted mp4s to YouTube embeds.
+ * 2026-05-17: switched from self-hosted mp4s to YouTube embeds with a
+ * click-to-load wrapper pattern (a.k.a. "lite-youtube-embed"). The
+ * idle state shows OUR poster image + a custom TheraVoca play
+ * button -- no YouTube chrome at all until the user clicks. On
+ * click, the iframe is mounted with autoplay=1 and the most
+ * branding-stripped params YouTube allows.
  *
- * Why YouTube:
- *   - Adaptive bitrate handled by YouTube (mobile gets low-bandwidth
- *     variant, desktop gets HD) -- no manual encoding.
- *   - No git bloat from raw mp4s in the repo.
- *   - Works on both theravoca.com (old WP site) and the new React app
- *     -- just embed the same iframe.
+ * Why this pattern:
+ *   - Original poster image == fully branded TheraVoca look,
+ *     no YouTube default thumbnail or play button.
+ *   - Iframe doesn't fetch from YouTube at all until clicked --
+ *     so all 5 cards on the landing page don't fire 5 YouTube
+ *     requests on mount (faster initial paint, fewer cookies, no
+ *     YouTube tracking until consent).
+ *   - When playing: YouTube's "watch on YouTube" link, the YT
+ *     logo bottom-right, and the kebab menu still appear because
+ *     YouTube's TOS doesn't let embedders hide those entirely.
+ *     But the relentless related-videos carousel + the channel
+ *     name + the title overlay are killed by rel=0 + iv_load_policy=3
+ *     + the autoplay flag.
  *
- * Privacy: using `youtube-nocookie.com` domain (the "Enhanced privacy
- * mode" variant) so YouTube doesn't drop tracking cookies until the
- * user actually clicks play. Better GDPR / HIPAA-adjacent hygiene
- * for a healthcare site.
- *
- * Lazy-loading: iframes use `loading="lazy"` so they don't fire
- * network requests until scrolled into view -- otherwise rendering
- * 5 iframes on landing-page mount would balloon the initial page
- * payload.
- *
- * Pause-others logic from the old <video>-based version is dropped:
- * the YouTube iframe API would let us programmatically pause other
- * players, but it adds the iframe-API JS to the page just to handle
- * the rare case of two videos playing at once. Acceptable to let
- * the user manually pause one before starting another.
+ * For testimonials where the source video is 16:9 (like DA) vs
+ * vertical Shorts (the rest), the player will letterbox the
+ * horizontal video inside our 9:16 card during playback. That's a
+ * content-format issue, not something an embed param can fix; Josh
+ * would need to re-export DA as a vertical Short for it to fill
+ * the card.
  */
-import { useRef } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useRef, useState } from "react";
+import { Play, ChevronLeft, ChevronRight } from "lucide-react";
 import useSiteCopy from "@/lib/useSiteCopy";
 import GetMatchedCTA from "@/components/GetMatchedCTA";
 
-// Each entry's `youtubeId` is the 11-char video ID from the share URL.
-// Shorts URLs (`https://youtube.com/shorts/{id}`) and standard URLs
-// (`https://youtu.be/{id}` or `https://youtube.com/watch?v={id}`) all
-// use the same embed pattern.
+// Mapping fix 2026-05-17 (Josh caught the swap):
+//   DB <- Syxb4zJdyrI (was on AS slot)
+//   AS <- nDzeVwuwVO0 (was on NN slot)
+//   NN <- kN7mKqGyhMU (was on DB slot)
+// WZ + DA unchanged.
 const TESTIMONIALS = [
-  { id: "wz", name: "W.Z., Age 25", youtubeId: "aXa8uSqMT3U" },
-  { id: "da", name: "D.A., Age 43", youtubeId: "iZFO6NRYPOw" },
-  { id: "db", name: "D.B., Age 52", youtubeId: "kN7mKqGyhMU" },
-  { id: "as", name: "A.S., Age 32", youtubeId: "Syxb4zJdyrI" },
-  { id: "nn", name: "N.N., Age 31", youtubeId: "nDzeVwuwVO0" },
+  {
+    id: "wz",
+    name: "W.Z., Age 25",
+    youtubeId: "aXa8uSqMT3U",
+    poster: "https://theravoca.com/wp-content/uploads/W.Z.-age-25.png",
+  },
+  {
+    id: "da",
+    name: "D.A., Age 43",
+    youtubeId: "iZFO6NRYPOw",
+    poster: "https://theravoca.com/wp-content/uploads/photo_2025-05-09_20-35-16.jpg",
+  },
+  {
+    id: "db",
+    name: "D.B., Age 52",
+    youtubeId: "Syxb4zJdyrI",
+    poster: "https://theravoca.com/wp-content/uploads/DB-2.png",
+  },
+  {
+    id: "as",
+    name: "A.S., Age 32",
+    youtubeId: "nDzeVwuwVO0",
+    poster:
+      "https://theravoca.com/wp-content/uploads/Capture-decran-2025-05-23-014536.png",
+  },
+  {
+    id: "nn",
+    name: "N.N., Age 31",
+    youtubeId: "kN7mKqGyhMU",
+    poster: "https://theravoca.com/wp-content/uploads/N.N.-age-34.png",
+  },
 ];
 
-function buildEmbedUrl(videoId) {
-  // modestbranding=1 reduces (but no longer fully removes) the YouTube
-  // logo in the player chrome. rel=0 prevents related videos from other
-  // channels showing at end of playback. playsinline=1 plays inline on
-  // iOS Safari instead of forcing the native full-screen player.
+function buildEmbedUrl(videoId, { autoplay = false } = {}) {
+  // Minimum-branding params YouTube respects:
+  //   modestbranding=1   : reduce YouTube logo in player chrome
+  //   rel=0              : no related-videos carousel from OTHER
+  //                        channels at end of playback (only the
+  //                        same channel's videos can still appear,
+  //                        per YT policy change)
+  //   playsinline=1      : iOS plays inline, not native fullscreen
+  //   iv_load_policy=3   : hide annotations / video cards
+  //   fs=1               : keep fullscreen button (most users expect it)
+  //   controls=1         : keep play/pause/seek controls (UX)
+  //   autoplay=1         : start playing as soon as iframe mounts
+  //                        (only set when user clicked our overlay
+  //                        so it counts as a user-initiated play
+  //                        and browser autoplay-blockers don't fire)
   const params = new URLSearchParams({
     modestbranding: "1",
     rel: "0",
     playsinline: "1",
+    iv_load_policy: "3",
+    fs: "1",
+    controls: "1",
   });
+  if (autoplay) params.set("autoplay", "1");
   return `https://www.youtube-nocookie.com/embed/${videoId}?${params.toString()}`;
+}
+
+function TestimonialCard({ tt }) {
+  // Local state per card: only mount the iframe once the user clicks
+  // play. Until then, render OUR poster + OUR play button -- no
+  // YouTube chrome on the page at all.
+  const [active, setActive] = useState(false);
+  return (
+    <article
+      className="shrink-0 w-[78%] sm:w-[44%] lg:w-[30%] snap-center bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden"
+      data-testid={`testimonial-card-${tt.id}`}
+    >
+      <div className="aspect-[9/16] bg-[#0F1714] relative">
+        {active ? (
+          <iframe
+            src={buildEmbedUrl(tt.youtubeId, { autoplay: true })}
+            title={`Testimonial: ${tt.name}`}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            className="w-full h-full"
+            data-testid={`testimonial-video-${tt.id}`}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setActive(true)}
+            aria-label={`Play testimonial from ${tt.name}`}
+            className="absolute inset-0 w-full h-full group"
+            data-testid={`testimonial-play-${tt.id}`}
+          >
+            {tt.poster && (
+              <img
+                src={tt.poster}
+                alt=""
+                aria-hidden="true"
+                loading="lazy"
+                className="w-full h-full object-cover"
+              />
+            )}
+            <span
+              className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/15 transition"
+            >
+              <span className="bg-white/95 group-hover:bg-white rounded-full w-16 h-16 flex items-center justify-center shadow-lg transition">
+                <Play
+                  size={28}
+                  className="text-[#2D4A3E] ml-1"
+                  fill="currentColor"
+                />
+              </span>
+            </span>
+          </button>
+        )}
+      </div>
+      <div className="px-5 py-4">
+        <div className="text-[#2D4A3E] font-serif-display text-lg">
+          {tt.name}
+        </div>
+      </div>
+    </article>
+  );
 }
 
 export default function VideoTestimonials() {
@@ -91,8 +194,6 @@ export default function VideoTestimonials() {
           Patients who tried TheraVoca speak for themselves.
         </p>
         <div className="relative mt-12">
-          {/* Arrow controls -- visible only on screens wide enough for them
-              to feel useful (>= sm). On mobile the user just swipes. */}
           <button
             type="button"
             onClick={() => step(-1)}
@@ -116,30 +217,9 @@ export default function VideoTestimonials() {
             className="-mx-5 sm:-mx-8 lg:-mx-0 flex gap-5 overflow-x-auto snap-x snap-mandatory pb-5 px-5 sm:px-8 lg:px-0 tv-no-scrollbar scroll-smooth"
             data-testid="testimonials-track"
           >
-          {TESTIMONIALS.map((tt) => (
-            <article
-              key={tt.id}
-              className="shrink-0 w-[78%] sm:w-[44%] lg:w-[30%] snap-center bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden"
-              data-testid={`testimonial-card-${tt.id}`}
-            >
-              <div className="aspect-[9/16] bg-[#0F1714] relative">
-                <iframe
-                  src={buildEmbedUrl(tt.youtubeId)}
-                  title={`Testimonial: ${tt.name}`}
-                  loading="lazy"
-                  allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                  className="w-full h-full"
-                  data-testid={`testimonial-video-${tt.id}`}
-                />
-              </div>
-              <div className="px-5 py-4">
-                <div className="text-[#2D4A3E] font-serif-display text-lg">
-                  {tt.name}
-                </div>
-              </div>
-            </article>
-          ))}
+            {TESTIMONIALS.map((tt) => (
+              <TestimonialCard key={tt.id} tt={tt} />
+            ))}
           </div>
         </div>
         <GetMatchedCTA id="testimonials-cta" copyKey="cta.testimonials" />
