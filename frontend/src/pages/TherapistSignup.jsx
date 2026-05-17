@@ -185,8 +185,26 @@ export default function TherapistSignup() {
       alive = false;
     };
   }, []);
+  // 2026-05-17 ROOT-CAUSE FIX (was: render() never called on therapist
+  // signup because turnstileRef.current was null when this effect ran
+  // on mount — the widget div is only rendered on the FINAL step
+  // [step 9], but this useEffect's only dependency was
+  // turnstileSiteKey, so it ran exactly once on mount and skipped the
+  // render call because the ref was null). IntakeForm.jsx doesn't
+  // have this bug because its widget div is in the always-visible
+  // form body. Fix: add `step` to the dependency array and gate the
+  // render-call branch on `step === totalSteps` so we re-attempt
+  // render exactly when the user reaches the page that mounts the
+  // div. The 12-second fail timer ALSO only arms once we hit the
+  // final step, so a user spending 5 minutes on early steps doesn't
+  // burn the timeout against a not-yet-mounted div.
   useEffect(() => {
     if (!turnstileSiteKey) return;
+    // Only attempt render when the widget div is actually in the DOM
+    // (final step). On earlier steps, the div doesn't exist yet.
+    if (step !== totalSteps) return;
+    // If a previous render already succeeded, don't double-render.
+    if (turnstileWidgetIdRef.current != null) return;
     const SCRIPT_ID = "cf-turnstile-script";
     const ensureScript = () =>
       new Promise((resolve, reject) => {
@@ -220,12 +238,13 @@ export default function TherapistSignup() {
     ensureScript()
       .then(() => {
         if (cancelled || !turnstileRef.current || !window.turnstile) return;
+        if (turnstileWidgetIdRef.current != null) return; // raced -- skip
         try {
           turnstileWidgetIdRef.current = window.turnstile.render(turnstileRef.current, {
             sitekey: turnstileSiteKey,
             theme: "light",
             size: "flexible",
-            // Mobile-stability options — match IntakeForm. Without these
+            // Mobile-stability options -- match IntakeForm. Without these
             // therapists hitting Submit after spending >5 min on the form
             // see a silent "Security check failed." because the widget's
             // token quietly expired.
@@ -236,15 +255,12 @@ export default function TherapistSignup() {
               setTurnstileToken(tok || "");
               if (tok) setTurnstileWidgetState("ready");
             },
-            // 2026-05-17: log Cloudflare's error args + the site-key
-            // prefix we passed so console diagnostics surface the
-            // exact reason for a failed widget render. Common codes:
-            //   110100 invalid sitekey
-            //   110200 invalid sitekey (deprecated)
+            // Log Cloudflare's error args + sitekey prefix so future
+            // failures self-document. Common codes:
+            //   110100/110200 invalid sitekey
             //   110620 hostname not allowed (since 2024 rename)
             //   400020 invalid sitekey format
             //   600010 timeout
-            // Full reference: https://developers.cloudflare.com/turnstile/troubleshooting/client-side-errors/
             "error-callback": (...args) => {
               // eslint-disable-next-line no-console
               console.error(
@@ -259,11 +275,6 @@ export default function TherapistSignup() {
             "expired-callback": () => setTurnstileToken(""),
             "timeout-callback": () => setTurnstileToken(""),
           });
-          // The widget container has rendered something -- the user
-          // will see the Cloudflare challenge inside it momentarily.
-          // We don't flip to "ready" here because we still want the
-          // user to actually solve / get a token; the callback above
-          // handles the success transition.
         } catch (_) { /* ignore double-render */ }
       })
       .catch(() => {
@@ -273,7 +284,7 @@ export default function TherapistSignup() {
       cancelled = true;
       clearTimeout(failTimer);
     };
-  }, [turnstileSiteKey]);
+  }, [turnstileSiteKey, step, totalSteps]);
   /**
    * Reset the widget when the backend reports a security failure so
    * the therapist can try again without losing their form state.
@@ -628,25 +639,19 @@ export default function TherapistSignup() {
     // widget finishes loading get a generic "Security check failed"
     // 400 from the backend.
     if (turnstileSiteKey && !turnstileToken) {
-      // 2026-05-16: clearer message because the submit lives inside
-      // a preview modal that covers the Turnstile widget on the
-      // page behind it. "Scroll down" didn't help mobile users
-      // because the modal was overlaid. Close the modal first so
-      // they can SEE the widget, then scroll to it.
       setShowPreview(false);
       toast.error(
-        "Security check still loading — close this preview, give the box a few seconds to finish, then try again.",
+        "Security check still loading -- close this preview, give the box a few seconds to finish, then try again.",
         { duration: 8000 },
       );
       try {
-        // Defer the scroll one tick so the modal has time to close.
         setTimeout(() => {
           turnstileRef.current?.scrollIntoView({
             behavior: "smooth",
             block: "center",
           });
         }, 50);
-      } catch (_) { /* old iOS Safari — ignore */ }
+      } catch (_) { /* old iOS Safari -- ignore */ }
       return;
     }
     setSubmitting(true);
