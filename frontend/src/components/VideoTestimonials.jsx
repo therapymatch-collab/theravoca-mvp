@@ -14,23 +14,27 @@ import useSiteCopy from "@/lib/useSiteCopy";
 import GetMatchedCTA from "@/components/GetMatchedCTA";
 
 // Source URLs come from the user's own theravoca.com WordPress media library.
+// Filenames switched to no-dot names 2026-05-17 because Josh re-uploaded
+// fresh edits (he cut content from each video) and WP media handling is
+// finickier with multi-dot filenames like `D.A.mp4`. Use single-dot
+// names (`DA-new.mp4`) consistently across all 5 entries.
 const TESTIMONIALS = [
   {
     id: "wz",
     name: "W.Z., Age 25",
-    src: "https://theravoca.com/wp-content/uploads/W.Z.mp4",
+    src: "https://theravoca.com/wp-content/uploads/WZ-new.mp4",
     poster: "https://theravoca.com/wp-content/uploads/W.Z.-age-25.png",
   },
   {
     id: "da",
     name: "D.A., Age 43",
-    src: "https://theravoca.com/wp-content/uploads/D.A.mp4",
+    src: "https://theravoca.com/wp-content/uploads/DA-new.mp4",
     poster: "https://theravoca.com/wp-content/uploads/photo_2025-05-09_20-35-16.jpg",
   },
   {
     id: "db",
     name: "D.B., Age 52",
-    src: "https://theravoca.com/wp-content/uploads/Referral_4_Cuts_GolorGrading_AudioEnhancement_Version-1.mp4",
+    src: "https://theravoca.com/wp-content/uploads/DB-new.mp4",
     poster: "https://theravoca.com/wp-content/uploads/DB-2.png",
   },
   {
@@ -43,7 +47,7 @@ const TESTIMONIALS = [
   {
     id: "nn",
     name: "N.N., Age 31",
-    src: "https://theravoca.com/wp-content/uploads/N.N.mp4",
+    src: "https://theravoca.com/wp-content/uploads/NN-new.mp4",
     poster: "https://theravoca.com/wp-content/uploads/N.N.-age-34.png",
   },
 ];
