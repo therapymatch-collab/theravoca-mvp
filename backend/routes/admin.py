@@ -2196,6 +2196,98 @@ async def admin_close_decline_flag(
     return {"ok": True}
 
 
+@router.post("/admin/normalize-specialties")
+async def admin_normalize_specialties(
+    payload: dict | None = None,
+    _: bool = Depends(require_role("admin")),
+):
+    """One-shot normalization of existing therapist profiles to the
+    `2 primary / 3 secondary` specialty caps.
+
+    Legacy imports + pre-941f4ec edits bypassed the model's max_length,
+    so some live profiles still carry 5+ primaries. Save-side
+    enforcement (941f4ec) only normalises a row when someone next
+    edits it; this endpoint normalises the existing roster all at
+    once so Josh can run true testing without scoring being skewed
+    by over-stuffed profiles.
+
+    Body (optional):
+      { "dry_run": true }  -- count what would be trimmed, don't write.
+
+    Always returns: scanned, primary_trimmed, secondary_trimmed,
+                    sample (first 5 affected therapists).
+
+    Caps applied (mirrors models.TherapistSignup):
+      primary_specialties:   first 2 kept, rest moved to a one-time
+                             `_specialties_trim_audit.trimmed_primary`
+                             field so admins can see what was cut.
+      secondary_specialties: first 3 kept, rest trimmed similarly.
+    """
+    dry_run = bool((payload or {}).get("dry_run"))
+    cur = db.therapists.find(
+        {
+            "$or": [
+                {"primary_specialties.2": {"$exists": True}},      # has >=3 primary
+                {"secondary_specialties.3": {"$exists": True}},    # has >=4 secondary
+            ],
+        },
+        {"_id": 0, "id": 1, "name": 1, "email": 1,
+         "primary_specialties": 1, "secondary_specialties": 1,
+         "_specialties_trim_audit": 1},
+    )
+    rows = await cur.to_list(length=5000)
+    primary_trimmed = 0
+    secondary_trimmed = 0
+    sample: list[dict] = []
+    now = _now_iso()
+    for t in rows:
+        prim = list(t.get("primary_specialties") or [])
+        sec = list(t.get("secondary_specialties") or [])
+        new_prim = prim[:2]
+        new_sec = sec[:3]
+        trim_p = prim[2:]
+        trim_s = sec[3:]
+        if not trim_p and not trim_s:
+            continue
+        if trim_p:
+            primary_trimmed += 1
+        if trim_s:
+            secondary_trimmed += 1
+        if len(sample) < 5:
+            sample.append({
+                "id": t.get("id"),
+                "name": t.get("name"),
+                "email": t.get("email"),
+                "removed_primary": trim_p,
+                "removed_secondary": trim_s,
+            })
+        if dry_run:
+            continue
+        update: dict[str, Any] = {
+            "primary_specialties": new_prim,
+            "secondary_specialties": new_sec,
+            "updated_at": now,
+        }
+        # Audit so we can recover the cut entries if needed.
+        prev_audit = t.get("_specialties_trim_audit") or {}
+        update["_specialties_trim_audit"] = {
+            "trimmed_at": now,
+            "trimmed_primary": (prev_audit.get("trimmed_primary") or []) + trim_p,
+            "trimmed_secondary": (prev_audit.get("trimmed_secondary") or []) + trim_s,
+        }
+        await db.therapists.update_one(
+            {"id": t["id"]}, {"$set": update},
+        )
+    return {
+        "ok": True,
+        "dry_run": dry_run,
+        "scanned": len(rows),
+        "primary_trimmed": primary_trimmed,
+        "secondary_trimmed": secondary_trimmed,
+        "sample_first_5": sample,
+    }
+
+
 @router.post("/admin/backfill-therapists")
 async def admin_backfill_therapists(_: bool = Depends(require_admin)):
     from backfill import backfill_therapist, build_audit_record
