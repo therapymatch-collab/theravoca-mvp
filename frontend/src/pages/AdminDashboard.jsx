@@ -832,14 +832,34 @@ export default function AdminDashboard() {
     const t = emailTemplates.find((x) => x.key === key);
     if (!t) return;
     setEditingTplKey(key);
-    setTplFields({
+    // Base shape: every template has these six fields.
+    const fields = {
       subject: t.subject || "",
       heading: t.heading || "",
       greeting: t.greeting || "",
       intro: t.intro || "",
       cta_label: t.cta_label || "",
       footer_note: t.footer_note || "",
-    });
+    };
+    // Per-template extras 2026-05-17: only seed these into the editor
+    // state when the template actually defines them. The dialog JSX
+    // below renders the matching FieldRow only when the key is
+    // present on tplFields -- so other templates aren't cluttered
+    // with empty Next-steps inputs they don't use.
+    const EXTRA_KEYS = [
+      "next_steps_heading",
+      "next_steps",
+      "cta_primary",
+      "cta_secondary",
+      "body",
+      "rationale",
+      "pricing_note",
+      "privacy_note",
+    ];
+    for (const k of EXTRA_KEYS) {
+      if (t[k] !== undefined) fields[k] = t[k] || "";
+    }
+    setTplFields(fields);
   };
 
   const saveTpl = async () => {
@@ -2750,6 +2770,106 @@ export default function AdminDashboard() {
                   data-testid="tpl-cta"
                 />
               </FieldRow>
+              {/* Per-template extras 2026-05-17. These only render
+                  when the template actually defines the field --
+                  templates without these stay clean. Currently only
+                  `therapist_approved` uses next_steps_*, cta_primary,
+                  and cta_secondary -- previously these blocks were
+                  hardcoded HTML in email_service.py and admin had no
+                  way to edit them. */}
+              {"next_steps_heading" in tplFields && (
+                <FieldRow label="'Next steps' card heading (small uppercase label above the list — leave blank to hide)">
+                  <Input
+                    value={tplFields.next_steps_heading}
+                    onChange={(e) =>
+                      setTplFields({ ...tplFields, next_steps_heading: e.target.value })
+                    }
+                    data-testid="tpl-next-steps-heading"
+                  />
+                </FieldRow>
+              )}
+              {"next_steps" in tplFields && (
+                <FieldRow label="'Next steps' list (one item per line — supports basic HTML like <strong>)">
+                  <Textarea
+                    rows={4}
+                    value={tplFields.next_steps}
+                    onChange={(e) =>
+                      setTplFields({ ...tplFields, next_steps: e.target.value })
+                    }
+                    data-testid="tpl-next-steps"
+                  />
+                </FieldRow>
+              )}
+              {"cta_primary" in tplFields && (
+                <FieldRow label="Primary CTA button label (filled green button — leave blank to hide)">
+                  <Input
+                    value={tplFields.cta_primary}
+                    onChange={(e) =>
+                      setTplFields({ ...tplFields, cta_primary: e.target.value })
+                    }
+                    data-testid="tpl-cta-primary"
+                  />
+                </FieldRow>
+              )}
+              {"cta_secondary" in tplFields && (
+                <FieldRow label="Secondary CTA button label (outlined button — leave blank to hide)">
+                  <Input
+                    value={tplFields.cta_secondary}
+                    onChange={(e) =>
+                      setTplFields({ ...tplFields, cta_secondary: e.target.value })
+                    }
+                    data-testid="tpl-cta-secondary"
+                  />
+                </FieldRow>
+              )}
+              {"body" in tplFields && (
+                <FieldRow label="Body paragraph (additional copy after intro)">
+                  <Textarea
+                    rows={4}
+                    value={tplFields.body}
+                    onChange={(e) =>
+                      setTplFields({ ...tplFields, body: e.target.value })
+                    }
+                    data-testid="tpl-body"
+                  />
+                </FieldRow>
+              )}
+              {"rationale" in tplFields && (
+                <FieldRow label="Rationale paragraph (LLM-generated 'why this fit' explainer)">
+                  <Textarea
+                    rows={3}
+                    value={tplFields.rationale}
+                    onChange={(e) =>
+                      setTplFields({ ...tplFields, rationale: e.target.value })
+                    }
+                    data-testid="tpl-rationale"
+                  />
+                </FieldRow>
+              )}
+              {"pricing_note" in tplFields && (
+                <FieldRow label="Pricing note (small block above the footer)">
+                  <Textarea
+                    rows={3}
+                    value={tplFields.pricing_note}
+                    onChange={(e) =>
+                      setTplFields({ ...tplFields, pricing_note: e.target.value })
+                    }
+                    data-testid="tpl-pricing-note"
+                  />
+                </FieldRow>
+              )}
+              {"privacy_note" in tplFields && (
+                <FieldRow label="Privacy note (italic block below the body)">
+                  <Textarea
+                    rows={3}
+                    value={tplFields.privacy_note}
+                    onChange={(e) =>
+                      setTplFields({ ...tplFields, privacy_note: e.target.value })
+                    }
+                    data-testid="tpl-privacy-note"
+                  />
+                </FieldRow>
+              )}
               <FieldRow label="Footer note (small text below the body)">
                 <Textarea
                   rows={2}

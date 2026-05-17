@@ -822,6 +822,20 @@ async def send_intake_receipt(to: str, request_id: str, summary_rows: list[tuple
 
 
 async def send_therapist_approved(to: str, name: str) -> None:
+    """Approval email.
+
+    2026-05-17: the Next-steps block + both CTA button labels are now
+    admin-editable via the template store (next_steps_heading,
+    next_steps, cta_primary, cta_secondary). The list items are split
+    on newline -- one <li> per line -- so admin can add/remove items
+    from the editor without touching code. Leaving next_steps blank
+    hides the entire surrounding card; leaving either CTA label blank
+    hides that single button (so admin can drop to a one-button or
+    zero-button layout if they want). The hardcoded fallbacks live in
+    email_templates.DEFAULTS["therapist_approved"] -- they match the
+    original hardcoded HTML so existing recipients get the same email
+    until admin saves an override.
+    """
     tpl = await get_template(_db(), "therapist_approved")
     first_name = _first_name(name)
     portal_url = f"{_get_app_url()}/sign-in?role=therapist"
@@ -830,27 +844,63 @@ async def send_therapist_approved(to: str, name: str) -> None:
     greeting = render(tpl["greeting"], **vars_)
     intro = render(tpl["intro"], **vars_)
     footer_note = render(tpl["footer_note"], **vars_)
+    # New 2026-05-17 editable fields -- fall back to "" when an older
+    # DB override didn't include them (get_template merges DEFAULTS so
+    # this only happens if someone explicitly saved a null/empty).
+    next_steps_heading = (tpl.get("next_steps_heading") or "").strip()
+    next_steps_raw = tpl.get("next_steps") or ""
+    cta_primary = (tpl.get("cta_primary") or "").strip()
+    cta_secondary = (tpl.get("cta_secondary") or "").strip()
+
+    # Build the Next-steps card only if there's content (heading OR
+    # items). Each non-blank line becomes a list item. We do NOT pass
+    # next_steps through render()'s newline -> <br/> transform because
+    # we're already turning each line into its own <li> -- a <br/>
+    # inside an <li> would double-space the bullets.
+    next_steps_items = [
+        ln.strip() for ln in next_steps_raw.replace("\r\n", "\n").split("\n")
+        if ln.strip()
+    ]
+    next_steps_html = ""
+    if next_steps_heading or next_steps_items:
+        heading_html = (
+            f'<div style="font-size:13px;color:{BRAND["muted"]};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">{next_steps_heading}</div>'
+            if next_steps_heading else ""
+        )
+        items_html = "".join(
+            f'<li style="margin-bottom:6px;">{item}</li>' for item in next_steps_items
+        )
+        list_html = (
+            f'<ol style="margin:0;padding-left:20px;color:{BRAND["text"]};font-size:14px;line-height:1.7;">{items_html}</ol>'
+            if items_html else ""
+        )
+        next_steps_html = (
+            f'<div style="background:{BRAND["bg"]};border:1px solid {BRAND["border"]};border-radius:12px;padding:18px 22px;margin:22px 0;">'
+            f'{heading_html}{list_html}'
+            f'</div>'
+        )
+
+    # CTA row: render whichever button labels are non-empty. Both
+    # blank => no button row at all.
+    cta_buttons = []
+    if cta_primary:
+        cta_buttons.append(
+            f'<a href="{portal_url}" style="display:inline-block;background:{BRAND["primary"]};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;margin:4px;">{cta_primary}</a>'
+        )
+    if cta_secondary:
+        cta_buttons.append(
+            f'<a href="{edit_url}" style="display:inline-block;background:#ffffff;color:{BRAND["primary"]};border:1px solid {BRAND["primary"]};text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;margin:4px;">{cta_secondary}</a>'
+        )
+    cta_html = (
+        f'<p style="margin:28px 0;text-align:center;">{"".join(cta_buttons)}</p>'
+        if cta_buttons else ""
+    )
+
     inner = f"""
     {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
     {_text_to_paragraph_html(intro, p_style=f"font-size:15px;line-height:1.7;color:{BRAND['text']};")}
-    <div style="background:{BRAND['bg']};border:1px solid {BRAND['border']};border-radius:12px;padding:18px 22px;margin:22px 0;">
-      <div style="font-size:13px;color:{BRAND['muted']};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">
-        Next steps (2 minutes)
-      </div>
-      <ol style="margin:0;padding-left:20px;color:{BRAND['text']};font-size:14px;line-height:1.7;">
-        <li><strong>Sign in</strong> with your email — we'll email you a 6-digit code. No password required.</li>
-        <li><strong>Add a warm bio and your openings</strong> so patients pick you quickly.</li>
-        <li>Watch your inbox for referrals. You'll get an email + text when a patient matches your profile at 70%+.</li>
-      </ol>
-    </div>
-    <p style="margin:28px 0;text-align:center;">
-      <a href="{portal_url}" style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;margin:4px;">
-        Sign in to your portal
-      </a>
-      <a href="{edit_url}" style="display:inline-block;background:#ffffff;color:{BRAND['primary']};border:1px solid {BRAND['primary']};text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;margin:4px;">
-        Complete your profile
-      </a>
-    </p>
+    {next_steps_html}
+    {cta_html}
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">{footer_note}</p>
     """
     await _send(to, render(tpl["subject"], **vars_), _wrap(tpl["heading"], inner), template_key="therapist_approved")
@@ -959,22 +1009,84 @@ def _text_to_paragraph_html(text: str, *, p_style: str) -> str:
 
 def _build_cta_email_html(
     tpl: dict, cta_url: str, vars_: dict,
+    cta_url_secondary: str | None = None,
 ) -> tuple[str, str, str]:
     """Build the rendered (inner_html, subject, heading) for a simple CTA
     email given a template dict + CTA URL + substitution vars. Pulled out
     of `_send_simple_cta_template` so the admin preview endpoint can
-    re-use the exact same render path."""
+    re-use the exact same render path.
+
+    2026-05-17: also renders the optional next_steps_heading / next_steps
+    list and the cta_primary / cta_secondary button pair when present
+    on the template. Those fields are admin-editable (introduced for
+    `therapist_approved`); when none are set, the template falls back
+    to a single CTA button using `cta_label` + `cta_url` as before.
+    Pass `cta_url_secondary` to point the second button at a different
+    URL than the first; defaults to the same `cta_url` so previews
+    still link somewhere.
+    """
     greeting = render(tpl.get("greeting", ""), **vars_)
     intro = render(tpl.get("intro", "") or "", **vars_)
     cta_label = render(tpl.get("cta_label", ""), **vars_)
     footer_note = render(tpl.get("footer_note", ""), **vars_)
     body = render(tpl.get("body", "") or "", **vars_)
     privacy_note = render(tpl.get("privacy_note", "") or "", **vars_)
-    cta_html = (
-        f'<p style="margin:28px 0;text-align:center;">'
-        f'<a href="{cta_url}" style="display:inline-block;background:{BRAND["primary"]};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">{cta_label}</a>'
-        f'</p>'
-    ) if cta_label else ""
+    # New 2026-05-17 admin-editable fields (currently only the
+    # therapist_approved template uses these).
+    next_steps_heading = (tpl.get("next_steps_heading") or "").strip()
+    next_steps_raw = tpl.get("next_steps") or ""
+    cta_primary = render((tpl.get("cta_primary") or "").strip(), **vars_)
+    cta_secondary = render((tpl.get("cta_secondary") or "").strip(), **vars_)
+
+    # Next-steps card. Each non-blank line becomes a list item. We
+    # intentionally do NOT pass next_steps through render()'s newline
+    # -> <br/> transform because we're already turning each line into
+    # its own <li>; a <br/> inside an <li> double-spaces the bullets.
+    next_steps_items = [
+        ln.strip() for ln in next_steps_raw.replace("\r\n", "\n").split("\n")
+        if ln.strip()
+    ]
+    next_steps_html = ""
+    if next_steps_heading or next_steps_items:
+        heading_html = (
+            f'<div style="font-size:13px;color:{BRAND["muted"]};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">{next_steps_heading}</div>'
+            if next_steps_heading else ""
+        )
+        items_html = "".join(
+            f'<li style="margin-bottom:6px;">{item}</li>' for item in next_steps_items
+        )
+        list_html = (
+            f'<ol style="margin:0;padding-left:20px;color:{BRAND["text"]};font-size:14px;line-height:1.7;">{items_html}</ol>'
+            if items_html else ""
+        )
+        next_steps_html = (
+            f'<div style="background:{BRAND["bg"]};border:1px solid {BRAND["border"]};border-radius:12px;padding:18px 22px;margin:22px 0;">'
+            f'{heading_html}{list_html}'
+            f'</div>'
+        )
+
+    # CTA buttons. If cta_primary / cta_secondary are set, render the
+    # paired buttons. Otherwise fall back to the single-button
+    # `cta_label` legacy path so all other templates keep their
+    # existing behavior.
+    if cta_primary or cta_secondary:
+        secondary_url = cta_url_secondary or cta_url
+        buttons = []
+        if cta_primary:
+            buttons.append(
+                f'<a href="{cta_url}" style="display:inline-block;background:{BRAND["primary"]};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;margin:4px;">{cta_primary}</a>'
+            )
+        if cta_secondary:
+            buttons.append(
+                f'<a href="{secondary_url}" style="display:inline-block;background:#ffffff;color:{BRAND["primary"]};border:1px solid {BRAND["primary"]};text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;margin:4px;">{cta_secondary}</a>'
+            )
+        cta_html = f'<p style="margin:28px 0;text-align:center;">{"".join(buttons)}</p>'
+    else:
+        cta_html = (
+            f'<p style="margin:28px 0;text-align:center;">'
+            f'<a href="{cta_url}" style="display:inline-block;background:{BRAND["primary"]};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:600;">{cta_label}</a>'
+            f'</p>'
+        ) if cta_label else ""
     # intro + body: convert textarea \n\n into real paragraph breaks
     # (was wrapping the whole textarea content in one <p>, collapsing
     # admin-typed paragraph breaks into a wall of text).
@@ -992,6 +1104,7 @@ def _build_cta_email_html(
     {f'<p style="font-size:16px;line-height:1.6;">{greeting}</p>' if greeting else ''}
     {intro_html}
     {body_html}
+    {next_steps_html}
     {privacy_html}
     {cta_html}
     <p style="color:{BRAND['muted']};font-size:13px;line-height:1.6;margin-top:24px;">{footer_note}</p>
@@ -1072,7 +1185,15 @@ async def render_template_preview(
     """
     base = await get_template(_db(), template_key)
     if draft:
-        for k in ("subject", "heading", "greeting", "intro", "cta_label", "footer_note", "body", "privacy_note"):
+        # 2026-05-17: forward the new admin-editable fields too so the
+        # admin "Preview" button reflects unsaved edits to next_steps /
+        # cta_primary / cta_secondary / pricing_note / rationale, not
+        # just the core six fields.
+        for k in (
+            "subject", "heading", "greeting", "intro", "cta_label", "footer_note",
+            "body", "privacy_note", "rationale", "pricing_note",
+            "next_steps_heading", "next_steps", "cta_primary", "cta_secondary",
+        ):
             if k in draft and draft[k] is not None:
                 base[k] = draft[k]
     vars_ = dict(_PREVIEW_VARS.get(template_key) or {})

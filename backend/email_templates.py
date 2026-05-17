@@ -70,12 +70,33 @@ DEFAULTS: dict[str, dict[str, str]] = {
     },
     "therapist_approved": {
         "title": "Therapist approved",
-        "description": "Sent when admin approves a pending therapist signup.",
+        "description": (
+            "Sent when admin approves a pending therapist signup. The "
+            "'Next steps' block + both CTA buttons are admin-editable -- "
+            "previously they were hardcoded HTML and only the standard "
+            "subject/heading/greeting/intro/footer were editable. The "
+            "next-steps list takes one item per line; the two CTA labels "
+            "drive the primary (Sign in to your portal) + secondary "
+            "(Complete your profile) buttons. Leave next_steps blank to "
+            "hide the entire block."
+        ),
         "subject": "You're approved — welcome to TheraVoca",
         "heading": "You're live on TheraVoca",
         "greeting": "Hi {first_name},",
         "intro": "Great news — your TheraVoca profile is approved and live. Referrals matched to your specialties start flowing from today.",
         "cta_label": "",
+        # New editable fields 2026-05-17 (Josh: "missing text (next steps...)
+        # in template that shows up in the live email"). Each newline in
+        # `next_steps` becomes an <li> in the rendered list -- so admin
+        # can add/remove/reorder items without touching code.
+        "next_steps_heading": "Next steps (2 minutes)",
+        "next_steps": (
+            "<strong>Sign in</strong> with your email — we'll email you a 6-digit code. No password required.\n"
+            "<strong>Add a warm bio and your openings</strong> so patients pick you quickly.\n"
+            "Watch your inbox for referrals. You'll get an email + text when a patient matches your profile at 70%+."
+        ),
+        "cta_primary": "Sign in to your portal",
+        "cta_secondary": "Complete your profile",
         "footer_note": "We route referrals to you whenever a patient match scores 70% or higher. No passwords — we'll email a 6-digit code when you sign in. Reply to this email anytime if you need a hand.",
         "available_vars": "first_name",
     },
@@ -423,7 +444,12 @@ async def upsert_template(
     """Persist editable fields for a template. Whitelisted fields only."""
     if key not in DEFAULTS:
         raise ValueError(f"Unknown template key: {key}")
-    allowed = {"subject", "heading", "greeting", "intro", "cta_label", "footer_note", "rationale", "pricing_note", "body", "privacy_note"}
+    allowed = {
+        "subject", "heading", "greeting", "intro", "cta_label", "footer_note",
+        "rationale", "pricing_note", "body", "privacy_note",
+        # therapist_approved-specific editable fields (2026-05-17)
+        "next_steps_heading", "next_steps", "cta_primary", "cta_secondary",
+    }
     update = {k: v for k, v in fields.items() if k in allowed and isinstance(v, str)}
     update["key"] = key
     await db.email_templates.update_one(
