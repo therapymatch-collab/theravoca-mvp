@@ -254,6 +254,27 @@ async def create_request(payload: RequestCreate, request: Request):
     if not payload.confirm_not_emergency:
         raise HTTPException(400, "You must confirm this is not an emergency")
 
+    # ─── Open-text moderation (2026-05-17, Josh) ──────────────────────
+    # Validate the two patient-facing free-text fields against
+    # gibberish, profanity, all-caps shouting, and link spam BEFORE
+    # any DB writes. Pydantic already enforces the max_length cap;
+    # this layer adds the content checks. Empty strings pass through
+    # (these fields are optional) -- only non-empty content is
+    # validated.
+    from text_moderation import validate_or_raise as _validate_text
+    if (payload.other_issue or "").strip():
+        _validate_text(
+            payload.other_issue,
+            field_name="Other issue description",
+            max_length=200,
+        )
+    if (payload.prior_therapy_notes or "").strip():
+        _validate_text(
+            payload.prior_therapy_notes,
+            field_name="Prior therapy notes",
+            max_length=250,
+        )
+
     # ─── Geographic eligibility gate (scope-out posture) ───────────────
     # The frontend gates this via `COVERED_STATES` in intakeOptions.js,
     # but a direct API POST or a stale browser tab could bypass it. We

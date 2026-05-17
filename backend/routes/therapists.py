@@ -233,6 +233,43 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
             400,
             "You must agree to the Therapist Terms of Use to sign up.",
         )
+    # 6. Open-text moderation (2026-05-17, Josh) -- gate every
+    #    free-text field a therapist can submit against gibberish,
+    #    profanity, all-caps shouting, and link spam. We run this
+    #    before any DB writes so a rejected submission leaves no
+    #    artifacts (no half-created therapist row, no embeddings
+    #    queued, no Stripe customer). Each non-empty field is
+    #    validated; empty fields pass through (pydantic schema
+    #    already enforces the optional/required contract).
+    from text_moderation import validate_or_raise as _validate_text
+    if (payload.bio or "").strip():
+        # Bio has no max_length in the schema today (oversight); cap
+        # it here at 3000 chars -- generous for a full bio but
+        # protects against accidental paste of an entire CV.
+        _validate_text(
+            payload.bio,
+            field_name="Bio",
+            max_length=3000,
+            min_length=20,  # a 5-character bio is clearly low-effort
+        )
+    if (getattr(payload, "t2_progress_story", "") or "").strip():
+        _validate_text(
+            payload.t2_progress_story,
+            field_name="Progress story",
+            max_length=2000,
+        )
+    if (getattr(payload, "t5_lived_experience", "") or "").strip():
+        _validate_text(
+            payload.t5_lived_experience,
+            field_name="Lived experience",
+            max_length=2000,
+        )
+    if (getattr(payload, "t6_early_sessions_description", "") or "").strip():
+        _validate_text(
+            payload.t6_early_sessions_description,
+            field_name="Early sessions description",
+            max_length=2000,
+        )
     # Normalise email to lowercase BEFORE the dup-check + insert so we
     # can't end up with `Joe@x.com` and `joe@x.com` as two separate
     # therapist rows (later lookups are case-insensitive regex, so the

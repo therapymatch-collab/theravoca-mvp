@@ -1018,6 +1018,20 @@ async def submit_widget_feedback(payload: WidgetFeedback, request: Request):
         # with the rest of the codebase's fail-soft Turnstile policy.
         logger.warning("Turnstile not enforced on feedback widget: %s", e)
 
+    # 2026-05-17 (Josh) -- open-text moderation. Run heuristic
+    # checks against the message body BEFORE persisting so abusive
+    # content never lands in the admin inbox. Pydantic already
+    # enforces 5..2000 chars; this layer adds gibberish / profanity
+    # / all-caps / link-spam checks.
+    from text_moderation import validate_or_raise as _validate_text
+    _validate_text(
+        payload.message,
+        field_name="Feedback message",
+        min_length=5,
+        max_length=2000,
+        required=True,
+    )
+
     import html as _html
     doc = {
         "id": str(uuid.uuid4()),
