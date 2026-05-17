@@ -1,4 +1,4 @@
-name: Encoding Check
+name: Encoding + Regression Checks
 
 on:
   push:
@@ -13,3 +13,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run encoding sanity check
         run: bash scripts/check_encoding.sh
+      # Regression guard for the 2026-05-17 Turnstile-render-on-step-9
+      # bug. The widget div mounts only on the final step, so the init
+      # useEffect's deps must include `step` or render() never fires.
+      # CI's e2e tests can't catch this because Turnstile is disabled
+      # in CI (no REACT_APP_TURNSTILE_SITE_KEY).
+      - name: Check Turnstile useEffect deps
+        run: bash scripts/check_turnstile_deps.sh
