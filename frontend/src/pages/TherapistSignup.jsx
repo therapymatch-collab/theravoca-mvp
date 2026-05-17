@@ -1466,77 +1466,84 @@ export default function TherapistSignup() {
                     {websiteChecking ? "Checking…" : "Next"} <ArrowRight size={18} />
                   </button>
                 ) : (
-                  <div className="flex flex-col items-end gap-3 w-full">
-                    {turnstileSiteKey && (
-                      <div className="w-full">
-                        {/* The actual Turnstile widget renders into
-                            this div. min-height reserves the slot
-                            so the user can see *something* is
-                            supposed to be here even before the
-                            Cloudflare script loads. */}
-                        <div
-                          ref={turnstileRef}
-                          data-testid="signup-turnstile"
-                          className="w-full min-h-[70px] flex items-center justify-center"
-                        >
-                          {turnstileWidgetState === "loading" && !turnstileToken && (
-                            <div className="text-xs text-[#6D6A65] flex items-center gap-2">
-                              <Loader2 size={14} className="animate-spin text-[#2D4A3E]" />
-                              Loading security check…
-                            </div>
-                          )}
-                        </div>
-                        {turnstileWidgetState === "failed" && !turnstileToken && (
-                          <div
-                            className="text-xs text-[#8B3220] bg-[#FBE9E5] border border-[#F4C7BE] rounded-md px-3 py-2 mt-1"
-                            data-testid="signup-turnstile-failed"
-                          >
-                            Security check couldn't load. This usually
-                            means an ad blocker or strict privacy
-                            extension is blocking{" "}
-                            <code>challenges.cloudflare.com</code>.
-                            Disable it for this page, or try a different
-                            browser, then reload.
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {/* Bug Josh caught 2026-05-16: previously the
-                        Preview button was enabled even before
-                        Turnstile had issued a token, then the actual
-                        submit (inside the preview modal) failed with
-                        "scroll down to complete it" -- but the
-                        widget is on the page BEHIND the modal so
-                        scrolling did nothing. Now: disable Preview
-                        until the token is in hand, AND show a hint
-                        explaining why so the user looks at the
-                        widget above instead of giving up. */}
-                    <button
-                      type="button"
-                      className="tv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={
-                        !valid
-                        || submitting
-                        || (turnstileSiteKey && !turnstileToken)
-                      }
-                      onClick={() => setShowPreview(true)}
-                      data-testid="signup-preview"
-                    >
-                      Preview profile <ArrowRight size={18} />
-                    </button>
-                    {turnstileSiteKey && !turnstileToken && valid && (
-                      <p
-                        className="text-xs text-[#8B3220] max-w-xs text-right"
-                        data-testid="signup-turnstile-hint"
-                      >
-                        Complete the security check above to continue.
-                        On mobile, give it a few seconds to load.
-                      </p>
-                    )}
-                  </div>
+                  /* Bug Josh caught 2026-05-16: previously the
+                     Preview button was enabled even before
+                     Turnstile had issued a token, then the actual
+                     submit (inside the preview modal) failed with
+                     "scroll down to complete it" -- but the
+                     widget is on the page BEHIND the modal so
+                     scrolling did nothing. Now: disable Preview
+                     until the token is in hand, AND show a hint
+                     explaining why so the user looks at the
+                     widget below instead of giving up.
+
+                     2026-05-17 layout (Josh: "move cloudflare
+                     below submit box like on patient request
+                     form"): the Turnstile widget moved OUT of
+                     the action row and now sits in a centered
+                     card below the Back + Preview buttons. Same
+                     pattern as IntakeForm -- widget auto-solves
+                     in the background; user clicks Preview when
+                     it goes green. */
+                  <button
+                    type="button"
+                    className="tv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={
+                      !valid
+                      || submitting
+                      || (turnstileSiteKey && !turnstileToken)
+                    }
+                    onClick={() => setShowPreview(true)}
+                    data-testid="signup-preview"
+                  >
+                    Preview profile <ArrowRight size={18} />
+                  </button>
                 )}
                 </div>
               </div>
+              {/* Step 9 only: Cloudflare Turnstile widget rendered
+                  BELOW the Back + Preview button row, in a centered
+                  card. Matches the patient intake form layout so
+                  users get a consistent "submit -> security check
+                  -> success" visual flow on both surfaces. */}
+              {step === totalSteps && turnstileSiteKey && (
+                <div className="mt-6 flex flex-col items-center gap-2">
+                  <div
+                    ref={turnstileRef}
+                    data-testid="signup-turnstile"
+                    className="w-full max-w-md min-h-[70px] flex items-center justify-center"
+                  >
+                    {turnstileWidgetState === "loading" && !turnstileToken && (
+                      <div className="text-xs text-[#6D6A65] flex items-center gap-2">
+                        <Loader2 size={14} className="animate-spin text-[#2D4A3E]" />
+                        Loading security check…
+                      </div>
+                    )}
+                  </div>
+                  {turnstileWidgetState === "failed" && !turnstileToken && (
+                    <div
+                      className="text-xs text-[#8B3220] bg-[#FBE9E5] border border-[#F4C7BE] rounded-md px-3 py-2 mt-1 max-w-md"
+                      data-testid="signup-turnstile-failed"
+                    >
+                      Security check couldn't load. This usually
+                      means an ad blocker or strict privacy
+                      extension is blocking{" "}
+                      <code>challenges.cloudflare.com</code>.
+                      Disable it for this page, or try a different
+                      browser, then reload.
+                    </div>
+                  )}
+                  {!turnstileToken && valid && turnstileWidgetState !== "failed" && (
+                    <p
+                      className="text-xs text-[#6D6A65] text-center max-w-md"
+                      data-testid="signup-turnstile-hint"
+                    >
+                      Complete the security check above, then click Preview profile.
+                      On mobile, give it a few seconds to load.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </section>
