@@ -6,6 +6,7 @@ import { Header, Footer } from "@/components/SiteShell";
 import useFaqs from "@/lib/useFaqs";
 import useSiteCopy from "@/lib/useSiteCopy";
 import { api, sessionClient, setSession } from "@/lib/api";
+import { formatUsPhone } from "@/lib/phone";
 import TherapistDeepMatchStep from "@/pages/therapist/TherapistDeepMatchStep";
 import PreviewModal from "@/pages/therapist/SignupPreviewModal";
 import { Group } from "@/pages/therapist/TherapistSignupUI";
@@ -456,8 +457,9 @@ export default function TherapistSignup() {
         return "Include your credential after a comma (e.g. Sarah Lin, LCSW).";
       if (!data.email.includes("@")) return "Enter a valid email address.";
       if (!data.credential_type) return "Select your credential type.";
-      if (!(data.phone_alert?.trim() || data.phone?.trim()))
-        return "Enter a private alert phone number.";
+      // 2026-05-17: private SMS phone moved to Step 9 (notifications)
+      // so the consent + the field live together. No longer a Step 1
+      // requirement.
       if (!data.office_phone?.trim())
         return "Enter your public office phone number.";
       if (!data.gender) return "Select your gender.";
@@ -1266,62 +1268,64 @@ export default function TherapistSignup() {
                     />
                     <span className="text-sm text-[#2B2A29]">Email me each new referral</span>
                   </label>
-                  {/* SMS opt-in restored 2026-05-15: since we collect the
-                      mobile number earlier in signup, offer SMS alerts as
-                      an opt-in here. Defaults OFF -- therapist must
-                      explicitly check to receive texts. Standard CTIA
-                      disclosure language under the checkbox per Telnyx
-                      toll-free verification requirements.
-                      2026-05-16: GREY OUT if step 1's "Contact phone
-                      (private)" field is empty. Without a number to
-                      text, the opt-in is meaningless (and would
-                      silently drop messages on send). If the user
-                      ticked it earlier and then went back and cleared
-                      the phone, also force-uncheck so the persisted
-                      preference doesn't claim "yes I want SMS" with
-                      no destination. */}
-                  {(() => {
-                    const _privatePhone = (data.phone_alert || data.phone || "").trim();
-                    const _smsDisabled = !_privatePhone;
-                    // Auto-uncheck if the phone got cleared after the
-                    // user opted in. Lives in an effect-equivalent
-                    // pattern -- using a render-time guard because the
-                    // state is owned by the parent.
-                    if (_smsDisabled && data.notify_sms) {
-                      // Defer so we don't setState during render.
-                      setTimeout(() => set("notify_sms", false), 0);
-                    }
-                    return (
+                  {/* 2026-05-17: private SMS phone moved here from Step 1
+                      so the phone + the CTIA consent live in the same
+                      place at signup checkout. The grey-out logic that
+                      previously gated the SMS checkbox on "no phone
+                      typed in step 1" is gone -- the input is right
+                      above the checkbox now. */}
+                  <div className="mt-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3">
+                    <label
+                      htmlFor="signup-phone-alert"
+                      className="block text-xs font-semibold text-[#6D6A65] uppercase tracking-wider"
+                    >
+                      Contact phone (private &mdash; for account issues &amp; SMS alerts)
+                    </label>
+                    <input
+                      id="signup-phone-alert"
+                      type="tel"
+                      inputMode="tel"
+                      maxLength={12}
+                      value={data.phone_alert || data.phone || ""}
+                      onChange={(e) => set("phone_alert", formatUsPhone(e.target.value))}
+                      placeholder="208-555-0123"
+                      className="mt-1.5 w-full bg-white border border-[#E8E5DF] rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[#2D4A3E]"
+                      data-testid="signup-phone-alert"
+                    />
+                    <p className="mt-1.5 text-[11px] text-[#6D6A65]">
+                      Not shown to patients. Only used for account issues
+                      and (optionally) SMS referral alerts via the
+                      checkbox below.
+                    </p>
+                  </div>
+                  {/* SMS opt-in checkbox with full CTIA disclosure --
+                      Telnyx + carrier compliance review requires the
+                      consent language be visible AT the point of opt-in.
+                      Checkbox is always interactive; if the phone above
+                      is empty when the user submits, the send path
+                      silently drops (and they can fix in the portal
+                      later). Backend cron filters out empty phones at
+                      send time. */}
                   <label
-                    className={
-                      "flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 mt-2 "
-                      + (_smsDisabled
-                        ? "opacity-60 cursor-not-allowed"
-                        : "cursor-pointer")
-                    }
+                    className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 mt-2 cursor-pointer"
                   >
                     <Checkbox
-                      checked={!_smsDisabled && !!data.notify_sms}
-                      onCheckedChange={(v) => !_smsDisabled && set("notify_sms", !!v)}
-                      disabled={_smsDisabled}
+                      checked={!!data.notify_sms}
+                      onCheckedChange={(v) => set("notify_sms", !!v)}
                       data-testid="signup-notify-sms"
                       className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E] mt-0.5"
                     />
                     <span className="text-sm text-[#2B2A29] leading-relaxed">
-                      Also text me at the number above
-                      {_smsDisabled && (
-                        <span
-                          className="block text-[11px] text-[#8B3220] mt-1 leading-snug"
-                          data-testid="signup-notify-sms-missing-phone"
-                        >
-                          Add a private contact phone on Step 1 to
-                          enable SMS alerts.
-                        </span>
-                      )}
+                      <strong>Text me at the number above</strong> when a
+                      new patient referral matches my profile.
                       <span className="block text-[11px] text-[#6D6A65] mt-1 leading-snug">
-                        Msg frequency varies (typically 1-3/month). Msg
-                        &amp; data rates may apply. Reply STOP to opt out,
-                        HELP for help. See our{" "}
+                        By checking this box, you consent to receive
+                        recurring SMS from TheraVoca for account &amp;
+                        referral notifications at the number above.
+                        Message frequency varies (typically 1-3
+                        messages/month). Message &amp; data rates may
+                        apply. Reply <strong>STOP</strong> to unsubscribe,
+                        reply <strong>HELP</strong> for help. See our{" "}
                         <a
                           href="/sms-terms"
                           target="_blank"
@@ -1339,12 +1343,10 @@ export default function TherapistSignup() {
                         >
                           Privacy Notice
                         </a>
-                        .
+                        . Consent is not a condition of using TheraVoca.
                       </span>
                     </span>
                   </label>
-                    );
-                  })()}
                 </Group>
                 <Group title="Agreement">
                   <label className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer">

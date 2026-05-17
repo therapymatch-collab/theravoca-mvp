@@ -1,18 +1,25 @@
 import { Camera } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Group, Field, Req, PillRow } from "@/pages/therapist/TherapistSignupUI";
 import { formatUsPhone } from "@/lib/phone";
 import { imageToDataUrl } from "@/lib/image";
 import { CREDENTIAL_TYPES, GENDERS } from "./signupOptions";
 
 /**
- * Step 1 — "Basics"
+ * Step 1 -- "Basics"
  *
- * Profile photo, name + degree, credential type, email, website,
- * private alert phone, public office phone, gender. Website is
- * validated on blur via the `websiteIsValid` predicate passed in.
+ * 2026-05-17 layout (per Josh): profile photo on the left, full name +
+ * degree on the right at the top. Then 2-col grid of
+ * (credential | email) and (website | office_phone). Gender pinned
+ * at the bottom.
+ *
+ * The private SMS-alert phone + CTIA opt-in block lived here until
+ * 2026-05-17; both moved to the final Notifications step so the
+ * phone field and the SMS-consent checkbox live together at signup
+ * checkout (Josh asked therapists shouldn't have to think about
+ * SMS consent until they're confirming their notification
+ * preferences).
  */
 export default function Step1Basics({
   data,
@@ -23,64 +30,65 @@ export default function Step1Basics({
 }) {
   return (
     <Group title="Basics">
-      <Field label="Profile photo (optional)">
-        <div className="flex items-center gap-4">
-          <div className="relative w-20 h-20 rounded-full bg-[#FDFBF7] border border-[#E8E5DF] overflow-hidden flex items-center justify-center">
-            {data.profile_picture ? (
-              <img
-                src={data.profile_picture}
-                alt="Profile preview"
-                className="w-full h-full object-cover"
-                data-testid="signup-photo-preview"
-              />
-            ) : (
-              <Camera size={22} className="text-[#6D6A65]" />
-            )}
-          </div>
-          <div className="flex-1">
-            <label
-              className="tv-btn-secondary !py-2 !px-4 text-sm cursor-pointer inline-flex"
-              data-testid="signup-photo-label"
-            >
-              {data.profile_picture ? "Replace" : "Upload"}
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                className="hidden"
-                data-testid="signup-photo-input"
-                onChange={async (e) => {
-                  const f = e.target.files?.[0];
-                  if (!f) return;
-                  try {
-                    const url = await imageToDataUrl(f);
-                    set("profile_picture", url);
-                  } catch (err) {
-                    toast.error(err.message || "Couldn't process image");
-                  }
-                  e.target.value = "";
-                }}
-              />
-            </label>
-            {data.profile_picture && (
-              <button
-                type="button"
-                className="ml-3 text-sm text-[#D45D5D] hover:underline"
-                onClick={() => set("profile_picture", null)}
-                data-testid="signup-photo-remove"
+      {/* Top row: profile photo on the left, name + degree on the
+          right. On mobile (< sm) they stack: photo first, then name. */}
+      <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr] sm:items-start gap-4">
+        <Field label="Profile photo (optional)">
+          <div className="flex items-center gap-4">
+            <div className="relative w-20 h-20 rounded-full bg-[#FDFBF7] border border-[#E8E5DF] overflow-hidden flex items-center justify-center">
+              {data.profile_picture ? (
+                <img
+                  src={data.profile_picture}
+                  alt="Profile preview"
+                  className="w-full h-full object-cover"
+                  data-testid="signup-photo-preview"
+                />
+              ) : (
+                <Camera size={22} className="text-[#6D6A65]" />
+              )}
+            </div>
+            <div className="flex-1">
+              <label
+                className="tv-btn-secondary !py-2 !px-4 text-sm cursor-pointer inline-flex"
+                data-testid="signup-photo-label"
               >
-                Remove
-              </button>
-            )}
-            <p className="text-xs text-[#6D6A65] mt-1.5">
-              A square headshot works best. Resized to 256×256, &lt;500KB.
-            </p>
+                {data.profile_picture ? "Replace" : "Upload"}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  data-testid="signup-photo-input"
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    try {
+                      const url = await imageToDataUrl(f);
+                      set("profile_picture", url);
+                    } catch (err) {
+                      toast.error(err.message || "Couldn't process image");
+                    }
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              {data.profile_picture && (
+                <button
+                  type="button"
+                  className="ml-3 text-sm text-[#D45D5D] hover:underline"
+                  onClick={() => set("profile_picture", null)}
+                  data-testid="signup-photo-remove"
+                >
+                  Remove
+                </button>
+              )}
+              <p className="text-xs text-[#6D6A65] mt-1.5">
+                A square headshot works best. Resized to 256x256, &lt;500KB.
+              </p>
+            </div>
           </div>
-        </div>
-      </Field>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        </Field>
         <Field
-          label={<>Full name + degree{" "}<Req /></>}
+          label={<>Full name + degree{" "}<Req /></>}
           hint="e.g. Sarah Lin, LCSW"
         >
           <Input
@@ -91,20 +99,24 @@ export default function Step1Basics({
             data-testid="signup-name"
           />
         </Field>
-        <Field label={<>Credential type{" "}<Req /></>}>
+      </div>
+
+      {/* Body: 2-col grid of (credential | email) and (website | office_phone). */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Field label={<>Credential type{" "}<Req /></>}>
           <select
             value={data.credential_type}
             onChange={(e) => set("credential_type", e.target.value)}
             className="w-full bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5 text-sm"
             data-testid="signup-credential-type"
           >
-            <option value="">Select credential type…</option>
+            <option value="">Select credential type...</option>
             {CREDENTIAL_TYPES.map((c) => (
               <option key={c.v} value={c.v}>{c.l}</option>
             ))}
           </select>
         </Field>
-        <Field label={<>Email{" "}<Req /></>}>
+        <Field label={<>Email{" "}<Req /></>}>
           <Input
             type="email"
             value={data.email}
@@ -128,7 +140,7 @@ export default function Step1Basics({
             onBlur={() => {
               if (data.website && !websiteIsValid(data.website)) {
                 setWebsiteError(
-                  "That doesn't look like a valid URL — try e.g. yourpractice.com",
+                  "That doesn't look like a valid URL -- try e.g. yourpractice.com",
                 );
               }
             }}
@@ -146,21 +158,7 @@ export default function Step1Basics({
           )}
         </Field>
         <Field
-          label={<>Contact phone (private)</>}
-        >
-          <Input
-            type="tel"
-            inputMode="tel"
-            maxLength={12}
-            value={data.phone_alert || data.phone}
-            onChange={(e) => set("phone_alert", formatUsPhone(e.target.value))}
-            placeholder="208-555-0123"
-            className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-            data-testid="signup-phone-alert"
-          />
-        </Field>
-        <Field
-          label={<>Office phone (public){" "}<Req /></>}
+          label={<>Office phone (public){" "}<Req /></>}
           hint="Patients see this on your profile."
         >
           <Input
@@ -174,57 +172,10 @@ export default function Step1Basics({
             data-testid="signup-office-phone"
           />
         </Field>
-        {/* Inline SMS opt-in + CTIA disclosure on its OWN row spanning
-            both grid columns. ALWAYS rendered (was previously
-            conditional on a phone being typed -- Telnyx review-1
-            rejected because a reviewer screenshotting an empty form
-            never saw the disclosure). Stays visible at all times so
-            Telnyx + CTIA compliance reviewers see the full disclosure
-            at the point of opt-in regardless of form state. */}
-        <label
-          className="sm:col-span-2 flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-3 py-2.5 cursor-pointer"
-          data-testid="signup-phone-sms-optin"
-        >
-          <Checkbox
-            checked={!!data.notify_sms}
-            onCheckedChange={(v) => set("notify_sms", !!v)}
-            className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E] mt-0.5"
-          />
-          <span className="text-xs text-[#2B2A29] leading-snug">
-            <strong>Text me at this number</strong> when a new patient
-            referral matches my profile.
-            <span className="block text-[11px] text-[#6D6A65] mt-1 leading-snug">
-              By checking this box, you consent to receive recurring
-              SMS from TheraVoca for account &amp; referral
-              notifications at the number above. Message frequency
-              varies (typically 1-3 messages/month). Message &amp;
-              data rates may apply. Reply <strong>STOP</strong> to
-              unsubscribe, reply <strong>HELP</strong> for help. See
-              our{" "}
-              <a
-                href="/sms-terms"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#2D4A3E] underline"
-              >
-                SMS Terms
-              </a>{" "}
-              and{" "}
-              <a
-                href="/privacy"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#2D4A3E] underline"
-              >
-                Privacy Notice
-              </a>
-              . Consent is not a condition of using TheraVoca.
-            </span>
-          </span>
-        </label>
       </div>
 
-      <Field label={<>Gender{" "}<Req /></>} hint="Used only when patients have a stated preference.">
+      {/* Gender pinned at the bottom of the basics group. */}
+      <Field label={<>Gender{" "}<Req /></>} hint="Used only when patients have a stated preference.">
         <PillRow
           items={GENDERS}
           selected={[data.gender]}
