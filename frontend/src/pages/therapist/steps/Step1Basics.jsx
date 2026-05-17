@@ -9,17 +9,23 @@ import { CREDENTIAL_TYPES, GENDERS } from "./signupOptions";
 /**
  * Step 1 -- "Basics"
  *
- * 2026-05-17 layout (per Josh): profile photo on the left, full name +
- * degree on the right at the top. Then 2-col grid of
- * (credential | email) and (website | office_phone). Gender pinned
- * at the bottom.
+ * 2026-05-17 layout (revised after Josh caught misaligned columns):
  *
- * The private SMS-alert phone + CTIA opt-in block lived here until
- * 2026-05-17; both moved to the final Notifications step so the
- * phone field and the SMS-consent checkbox live together at signup
- * checkout (Josh asked therapists shouldn't have to think about
- * SMS consent until they're confirming their notification
- * preferences).
+ *   [Profile photo (compact, on its own row at top)]
+ *   [Full name + degree     | Credential type]
+ *   [Email                  | Office phone (public)]
+ *   [Website                | (empty)]
+ *   [Gender (pill row, full-width)]
+ *
+ * All form fields share one 2-col grid so widths line up vertically.
+ * Name vertically aligns with Email below it, both in the LEFT column
+ * (the slot the user's eye lands on first). Photo lives on its own
+ * row so the photo container's width doesn't steal space from the
+ * name input.
+ *
+ * The private SMS-alert phone + CTIA opt-in moved out of Step 1 in
+ * the 2026-05-17 reshuffle -- they live on the final Notifications
+ * step now so the phone + consent live together at checkout.
  */
 export default function Step1Basics({
   data,
@@ -30,65 +36,75 @@ export default function Step1Basics({
 }) {
   return (
     <Group title="Basics">
-      {/* Top row: profile photo on the left, name + degree on the
-          right. On mobile (< sm) they stack: photo first, then name. */}
-      <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr] sm:items-start gap-4">
-        <Field label="Profile photo (optional)">
-          <div className="flex items-center gap-4">
-            <div className="relative w-20 h-20 rounded-full bg-[#FDFBF7] border border-[#E8E5DF] overflow-hidden flex items-center justify-center">
-              {data.profile_picture ? (
-                <img
-                  src={data.profile_picture}
-                  alt="Profile preview"
-                  className="w-full h-full object-cover"
-                  data-testid="signup-photo-preview"
-                />
-              ) : (
-                <Camera size={22} className="text-[#6D6A65]" />
-              )}
-            </div>
-            <div className="flex-1">
-              <label
-                className="tv-btn-secondary !py-2 !px-4 text-sm cursor-pointer inline-flex"
-                data-testid="signup-photo-label"
-              >
-                {data.profile_picture ? "Replace" : "Upload"}
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  className="hidden"
-                  data-testid="signup-photo-input"
-                  onChange={async (e) => {
-                    const f = e.target.files?.[0];
-                    if (!f) return;
-                    try {
-                      const url = await imageToDataUrl(f);
-                      set("profile_picture", url);
-                    } catch (err) {
-                      toast.error(err.message || "Couldn't process image");
-                    }
-                    e.target.value = "";
-                  }}
-                />
-              </label>
-              {data.profile_picture && (
-                <button
-                  type="button"
-                  className="ml-3 text-sm text-[#D45D5D] hover:underline"
-                  onClick={() => set("profile_picture", null)}
-                  data-testid="signup-photo-remove"
-                >
-                  Remove
-                </button>
-              )}
-              <p className="text-xs text-[#6D6A65] mt-1.5">
-                A square headshot works best. Resized to 256x256, &lt;500KB.
-              </p>
-            </div>
+      {/* Profile photo on its own row so its container width doesn't
+          push the name input around. Compact -- avatar circle + small
+          Upload button inline, hint text below. */}
+      <Field label="Profile photo (optional)">
+        <div className="flex items-center gap-4">
+          <div className="relative w-20 h-20 shrink-0 rounded-full bg-[#FDFBF7] border border-[#E8E5DF] overflow-hidden flex items-center justify-center">
+            {data.profile_picture ? (
+              <img
+                src={data.profile_picture}
+                alt="Profile preview"
+                className="w-full h-full object-cover"
+                data-testid="signup-photo-preview"
+              />
+            ) : (
+              <Camera size={22} className="text-[#6D6A65]" />
+            )}
           </div>
-        </Field>
+          <div className="flex-1 min-w-0">
+            <label
+              className="tv-btn-secondary !py-2 !px-4 text-sm cursor-pointer inline-flex"
+              data-testid="signup-photo-label"
+            >
+              {data.profile_picture ? "Replace" : "Upload"}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                data-testid="signup-photo-input"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  if (!f) return;
+                  try {
+                    const url = await imageToDataUrl(f);
+                    set("profile_picture", url);
+                  } catch (err) {
+                    toast.error(err.message || "Couldn't process image");
+                  }
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            {data.profile_picture && (
+              <button
+                type="button"
+                className="ml-3 text-sm text-[#D45D5D] hover:underline"
+                onClick={() => set("profile_picture", null)}
+                data-testid="signup-photo-remove"
+              >
+                Remove
+              </button>
+            )}
+            <p className="text-xs text-[#6D6A65] mt-1.5">
+              A square headshot works best. Resized to 256x256, &lt;500KB.
+            </p>
+          </div>
+        </div>
+      </Field>
+
+      {/* All form fields in a single 2-col grid so widths line up.
+          Reading order top-to-bottom, left-to-right:
+            row 1: Name (LEFT) | Credential (RIGHT)
+            row 2: Email (LEFT) | Office phone (RIGHT)
+            row 3: Website (LEFT) | (empty 2nd col on >= sm)
+          Name + Email + Website all live in the LEFT column so the
+          most-important fields the user fills are vertically stacked
+          and visually anchored to the left edge of the form. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field
-          label={<>Full name + degree{" "}<Req /></>}
+          label={<>Full name + degree{" "}<Req /></>}
           hint="e.g. Sarah Lin, LCSW"
         >
           <Input
@@ -99,11 +115,7 @@ export default function Step1Basics({
             data-testid="signup-name"
           />
         </Field>
-      </div>
-
-      {/* Body: 2-col grid of (credential | email) and (website | office_phone). */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Field label={<>Credential type{" "}<Req /></>}>
+        <Field label={<>Credential type{" "}<Req /></>}>
           <select
             value={data.credential_type}
             onChange={(e) => set("credential_type", e.target.value)}
@@ -116,7 +128,7 @@ export default function Step1Basics({
             ))}
           </select>
         </Field>
-        <Field label={<>Email{" "}<Req /></>}>
+        <Field label={<>Email{" "}<Req /></>}>
           <Input
             type="email"
             value={data.email}
@@ -124,6 +136,21 @@ export default function Step1Basics({
             placeholder="you@practice.com"
             className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
             data-testid="signup-email"
+          />
+        </Field>
+        <Field
+          label={<>Office phone (public){" "}<Req /></>}
+          hint="Patients see this on your profile."
+        >
+          <Input
+            type="tel"
+            inputMode="tel"
+            maxLength={12}
+            value={data.office_phone}
+            onChange={(e) => set("office_phone", formatUsPhone(e.target.value))}
+            placeholder="208-555-0150"
+            className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
+            data-testid="signup-office-phone"
           />
         </Field>
         <Field
@@ -157,25 +184,16 @@ export default function Step1Basics({
             </p>
           )}
         </Field>
-        <Field
-          label={<>Office phone (public){" "}<Req /></>}
-          hint="Patients see this on your profile."
-        >
-          <Input
-            type="tel"
-            inputMode="tel"
-            maxLength={12}
-            value={data.office_phone}
-            onChange={(e) => set("office_phone", formatUsPhone(e.target.value))}
-            placeholder="208-555-0150"
-            className="bg-[#FDFBF7] border-[#E8E5DF] rounded-xl"
-            data-testid="signup-office-phone"
-          />
-        </Field>
+        {/* The 2nd column of row 3 is intentionally empty so Website
+            stays in the LEFT column (alignment with Name + Email).
+            An empty placeholder div preserves the grid cell on >= sm
+            so any future addition slots in cleanly. */}
+        <div aria-hidden="true" className="hidden sm:block" />
       </div>
 
-      {/* Gender pinned at the bottom of the basics group. */}
-      <Field label={<>Gender{" "}<Req /></>} hint="Used only when patients have a stated preference.">
+      {/* Gender pinned at the bottom of the basics group, full-width
+          pill row. */}
+      <Field label={<>Gender{" "}<Req /></>} hint="Used only when patients have a stated preference.">
         <PillRow
           items={GENDERS}
           selected={[data.gender]}
