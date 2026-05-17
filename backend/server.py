@@ -43,17 +43,82 @@ logging.basicConfig(
 
 # -- Sentry error tracking: reads SENTRY_DSN from env. If unset, Sentry
 # is silently disabled (safe for local dev).
+#
+# PII scrubbing (HIPAA-adjacent hygiene): a `before_send` hook walks
+# the outgoing event and replaces any email-like, phone-like, or
+# 6-digit-OTP-like substring with a redaction marker before the event
+# leaves the process. This covers exception messages, breadcrumbs,
+# request bodies, and log captures -- the places PII most commonly
+# leaks into error reports. `send_default_pii=False` ALSO prevents
+# Sentry from auto-including cookies, IP addresses, and user objects.
+import re as _re  # noqa: E402
 import sentry_sdk  # noqa: E402
 
 _sentry_dsn = os.environ.get("SENTRY_DSN", "").strip()
+
+# Patterns wide enough to catch the obvious shapes without being
+# expensive. Run on string fields only.
+_PII_EMAIL_RE = _re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+_PII_PHONE_RE = _re.compile(r"(?<!\d)(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)")
+_PII_OTP_RE = _re.compile(r"(?<!\d)\d{6}(?!\d)")
+
+
+def _scrub_str(s):
+    if not isinstance(s, str) or not s:
+        return s
+    s = _PII_EMAIL_RE.sub("<email>", s)
+    s = _PII_PHONE_RE.sub("<phone>", s)
+    s = _PII_OTP_RE.sub("<otp>", s)
+    return s
+
+
+def _scrub_obj(obj, depth=0):
+    """Recursively scrub strings inside dicts/lists. Depth cap so a
+    pathological object can't blow the stack."""
+    if depth > 6:
+        return obj
+    if isinstance(obj, str):
+        return _scrub_str(obj)
+    if isinstance(obj, dict):
+        return {k: _scrub_obj(v, depth + 1) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_scrub_obj(v, depth + 1) for v in obj]
+    return obj
+
+
+def _sentry_before_send(event, _hint):
+    try:
+        return _scrub_obj(event)
+    except Exception:
+        # If scrubbing itself fails, drop the event entirely rather
+        # than risk leaking the unscrubbed version. Safer default.
+        return None
+
+
 if _sentry_dsn:
+    try:
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+        _sentry_integrations = [FastApiIntegration(), StarletteIntegration()]
+    except Exception:
+        # Older sentry-sdk -- auto-detection still works.
+        _sentry_integrations = []
     sentry_sdk.init(
         dsn=_sentry_dsn,
         environment=_ENV,
-        traces_sample_rate=0.1,
+        # Sample 10% of traces in prod (rest are errors-only).
+        traces_sample_rate=0.1 if _ENV == "production" else 1.0,
         send_default_pii=False,
+        before_send=_sentry_before_send,
+        # Optional release tag wired from a git commit env var (Render
+        # auto-sets RENDER_GIT_COMMIT). Errors then group by release.
+        release=os.environ.get("SENTRY_RELEASE")
+        or os.environ.get("RENDER_GIT_COMMIT", "")
+        or None,
+        integrations=_sentry_integrations,
     )
-    logger.info("Sentry initialized for env=%s", _ENV)
+    logger.info("Sentry initialized for env=%s release=%s",
+                _ENV, sentry_sdk.Hub.current.client.options.get("release") or "<none>")
 
 
 _sweep_task: Optional[asyncio.Task] = None
