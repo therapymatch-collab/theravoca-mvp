@@ -11,23 +11,78 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
+// In-memory cache survives same-tab navigation between React routes.
+// localStorage cache survives reloads / new tabs / first-paint-of-day --
+// without it every page load flashes the hardcoded React fallback for
+// ~150-400ms while /api/site-copy is in flight, then snaps to whatever
+// the admin edited in the Site Copy editor.
 let _cache = null; // { fetched_at: number, map: {} }
-const TTL_MS = 60_000;
+const TTL_MS = 60_000;             // in-memory freshness
+const LS_TTL_MS = 7 * 24 * 60 * 60_000; // localStorage cap: 7 days
+const LS_KEY = "tv_site_copy_v1";
 const _listeners = new Set();
+
+function _readLocalCache() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage?.getItem(LS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    if (typeof parsed.fetched_at !== "number" || typeof parsed.map !== "object") {
+      return null;
+    }
+    if (Date.now() - parsed.fetched_at > LS_TTL_MS) return null;
+    return parsed;
+  } catch (_) {
+    return null;
+  }
+}
+
+function _writeLocalCache(entry) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage?.setItem(LS_KEY, JSON.stringify(entry));
+  } catch (_) {
+    /* quota / private mode -- ignore */
+  }
+}
+
+// Hydrate the in-memory cache from localStorage at module load so the
+// FIRST render of any useSiteCopy() consumer sees the last-known map
+// instead of {} (which would force the fallback text to flash through).
+(() => {
+  const local = _readLocalCache();
+  if (local) {
+    // Mark as stale (fetched_at older than TTL_MS) so the first mount
+    // still triggers a background refresh -- the local copy is just for
+    // instant first-paint, not authoritative.
+    _cache = { fetched_at: 0, map: local.map };
+  }
+})();
 
 async function _refreshOverrides() {
   try {
     const r = await api.get("/site-copy");
-    _cache = { fetched_at: Date.now(), map: r.data || {} };
+    const entry = { fetched_at: Date.now(), map: r.data || {} };
+    _cache = entry;
+    _writeLocalCache(entry);
     _listeners.forEach((fn) => fn(_cache.map));
   } catch (_) {
-    _cache = { fetched_at: Date.now(), map: {} };
+    _cache = { fetched_at: Date.now(), map: _cache?.map || {} };
+    // Don't overwrite localStorage on fetch failure -- keep the last
+    // known-good map around for the next page load.
     _listeners.forEach((fn) => fn(_cache.map));
   }
 }
 
 export function bustSiteCopyCache() {
   _cache = null;
+  try {
+    if (typeof window !== "undefined") {
+      window.localStorage?.removeItem(LS_KEY);
+    }
+  } catch (_) { /* ignore */ }
   _refreshOverrides();
 }
 
