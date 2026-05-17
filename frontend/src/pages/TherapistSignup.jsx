@@ -1271,16 +1271,53 @@ export default function TherapistSignup() {
                       an opt-in here. Defaults OFF -- therapist must
                       explicitly check to receive texts. Standard CTIA
                       disclosure language under the checkbox per Telnyx
-                      toll-free verification requirements. */}
-                  <label className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer mt-2">
+                      toll-free verification requirements.
+                      2026-05-16: GREY OUT if step 1's "Contact phone
+                      (private)" field is empty. Without a number to
+                      text, the opt-in is meaningless (and would
+                      silently drop messages on send). If the user
+                      ticked it earlier and then went back and cleared
+                      the phone, also force-uncheck so the persisted
+                      preference doesn't claim "yes I want SMS" with
+                      no destination. */}
+                  {(() => {
+                    const _privatePhone = (data.phone_alert || data.phone || "").trim();
+                    const _smsDisabled = !_privatePhone;
+                    // Auto-uncheck if the phone got cleared after the
+                    // user opted in. Lives in an effect-equivalent
+                    // pattern -- using a render-time guard because the
+                    // state is owned by the parent.
+                    if (_smsDisabled && data.notify_sms) {
+                      // Defer so we don't setState during render.
+                      setTimeout(() => set("notify_sms", false), 0);
+                    }
+                    return (
+                  <label
+                    className={
+                      "flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 mt-2 "
+                      + (_smsDisabled
+                        ? "opacity-60 cursor-not-allowed"
+                        : "cursor-pointer")
+                    }
+                  >
                     <Checkbox
-                      checked={!!data.notify_sms}
-                      onCheckedChange={(v) => set("notify_sms", !!v)}
+                      checked={!_smsDisabled && !!data.notify_sms}
+                      onCheckedChange={(v) => !_smsDisabled && set("notify_sms", !!v)}
+                      disabled={_smsDisabled}
                       data-testid="signup-notify-sms"
                       className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E] mt-0.5"
                     />
                     <span className="text-sm text-[#2B2A29] leading-relaxed">
                       Also text me at the number above
+                      {_smsDisabled && (
+                        <span
+                          className="block text-[11px] text-[#8B3220] mt-1 leading-snug"
+                          data-testid="signup-notify-sms-missing-phone"
+                        >
+                          Add a private contact phone on Step 1 to
+                          enable SMS alerts.
+                        </span>
+                      )}
                       <span className="block text-[11px] text-[#6D6A65] mt-1 leading-snug">
                         Msg frequency varies (typically 1-3/month). Msg
                         &amp; data rates may apply. Reply STOP to opt out,
@@ -1306,6 +1343,8 @@ export default function TherapistSignup() {
                       </span>
                     </span>
                   </label>
+                    );
+                  })()}
                 </Group>
                 <Group title="Agreement">
                   <label className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer">
