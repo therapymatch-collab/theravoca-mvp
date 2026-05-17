@@ -304,9 +304,19 @@ def _gender_pass(t: dict, r: dict) -> bool:
 
 def _score_issue_one(t: dict, issue: str) -> float:
     issue = issue.lower()
-    if issue in [s.lower() for s in t.get("primary_specialties") or []]:
+    # SECURITY/CORRECTNESS (2026-05-16): cap the considered specialty
+    # lists at signup-spec limits (2 primary, 3 secondary). Legacy
+    # imports + old admin saves bypassed the model's max_length so
+    # some live profiles have 5+ primaries. Without this cap a
+    # therapist with 5 primary specialties got the 35-point bonus on
+    # any of 5 issues -- overscoring vs properly-limited therapists.
+    # Save-side enforcement is also in place (routes/portal.py +
+    # routes/admin.py), so over time the stored data normalises too.
+    primaries = (t.get("primary_specialties") or [])[:2]
+    secondaries = (t.get("secondary_specialties") or [])[:3]
+    if issue in [s.lower() for s in primaries]:
         return 35.0
-    if issue in [s.lower() for s in t.get("secondary_specialties") or []]:
+    if issue in [s.lower() for s in secondaries]:
         return 25.0
     if issue in [s.lower() for s in t.get("general_treats") or []]:
         return 15.0

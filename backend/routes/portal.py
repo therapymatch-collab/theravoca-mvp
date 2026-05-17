@@ -486,6 +486,16 @@ async def portal_therapist_update_profile(
     # Enforce 3-age-group cap on self-edit too
     if "age_groups" in clean and isinstance(clean["age_groups"], list):
         clean["age_groups"] = clean["age_groups"][:3]
+    # Enforce specialty caps (2 primary, 3 secondary) -- the signup
+    # model has these limits but the portal edit endpoint historically
+    # didn't, so therapists could save 5+ primary specialties from
+    # the edit UI. 2026-05-16: enforce here so the matcher's hard
+    # filters stay meaningful. Backend = source of truth; frontend
+    # also hints to keep UX clean.
+    if "primary_specialties" in clean and isinstance(clean["primary_specialties"], list):
+        clean["primary_specialties"] = clean["primary_specialties"][:2]
+    if "secondary_specialties" in clean and isinstance(clean["secondary_specialties"], list):
+        clean["secondary_specialties"] = clean["secondary_specialties"][:3]
 
     current = await db.therapists.find_one(
         {"email": {"$regex": f"^{re.escape(session['email'])}$", "$options": "i"}},

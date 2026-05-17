@@ -1700,6 +1700,15 @@ async def admin_update_therapist(
     # rule applied at the model layer for new signups.
     if "age_groups" in update and isinstance(update["age_groups"], list):
         update["age_groups"] = update["age_groups"][:3]
+    # Same enforcement for specialties (2 primary, 3 secondary) -- the
+    # signup model already caps these (models.TherapistSignup) but the
+    # admin/portal edit paths historically didn't, so live profiles
+    # exist with 5+ primary specialties. 2026-05-16: cap on save so
+    # subsequent edits normalise the data over time.
+    if "primary_specialties" in update and isinstance(update["primary_specialties"], list):
+        update["primary_specialties"] = update["primary_specialties"][:2]
+    if "secondary_specialties" in update and isinstance(update["secondary_specialties"], list):
+        update["secondary_specialties"] = update["secondary_specialties"][:3]
     update["updated_at"] = _now_iso()
     # When the admin saves the profile, treat that as an implicit
     # re-approval  --  clear the pending flag so the row stops surfacing
