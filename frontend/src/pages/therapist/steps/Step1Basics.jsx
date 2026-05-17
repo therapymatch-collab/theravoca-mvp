@@ -80,7 +80,7 @@ export default function Step1Basics({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field
-          label={<>Full name + degree <Req /></>}
+          label={<>Full name + degree{" "}<Req /></>}
           hint="e.g. Sarah Lin, LCSW"
         >
           <Input
@@ -91,7 +91,7 @@ export default function Step1Basics({
             data-testid="signup-name"
           />
         </Field>
-        <Field label={<>Credential type <Req /></>}>
+        <Field label={<>Credential type{" "}<Req /></>}>
           <select
             value={data.credential_type}
             onChange={(e) => set("credential_type", e.target.value)}
@@ -104,7 +104,7 @@ export default function Step1Basics({
             ))}
           </select>
         </Field>
-        <Field label={<>Email <Req /></>}>
+        <Field label={<>Email{" "}<Req /></>}>
           <Input
             type="email"
             value={data.email}
@@ -160,7 +160,7 @@ export default function Step1Basics({
           />
         </Field>
         <Field
-          label={<>Office phone (public) <Req /></>}
+          label={<>Office phone (public){" "}<Req /></>}
           hint="Patients see this on your profile."
         >
           <Input
@@ -224,7 +224,7 @@ export default function Step1Basics({
         </label>
       </div>
 
-      <Field label={<>Gender <Req /></>} hint="Used only when patients have a stated preference.">
+      <Field label={<>Gender{" "}<Req /></>} hint="Used only when patients have a stated preference.">
         <PillRow
           items={GENDERS}
           selected={[data.gender]}

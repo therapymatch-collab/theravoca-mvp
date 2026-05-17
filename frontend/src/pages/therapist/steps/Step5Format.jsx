@@ -71,7 +71,7 @@ export default function Step5Format({
 
   return (
     <>
-      <Group title={<>Modalities you practice (pick 1–5) <Req /></>}>
+      <Group title={<>Modalities you practice (pick 1–5)<Req /></>}>
         <div className="flex flex-wrap gap-2">
           {MODALITIES.map((m) => {
             const active = data.modalities.includes(m);
@@ -95,7 +95,7 @@ export default function Step5Format({
       </Group>
 
       <Group title="Practice format & availability">
-        <Field label={<>Where do you see clients? <Req /></>}>
+        <Field label={<>Where do you see clients?<Req /></>}>
           <PillRow
             items={MODALITY_OFFERINGS}
             selected={[data.modality_offering]}
@@ -105,7 +105,7 @@ export default function Step5Format({
         </Field>
         {data.modality_offering !== "telehealth" && (
           <Field
-            label={<>Office addresses (Idaho) <Req /></>}
+            label={<>Office addresses (Idaho)<Req /></>}
             hint="Patients see these on your profile. We use them to match you within ~30 miles of patient cities/ZIPs."
           >
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
@@ -144,7 +144,7 @@ export default function Step5Format({
             <Tags items={data.office_addresses} onRemove={removeOffice} />
           </Field>
         )}
-        <Field label={<>Sessions you can offer <Req /></>}>
+        <Field label={<>Sessions you can offer<Req /></>}>
           <PillRow
             items={AVAILABILITY}
             selected={data.availability_windows}

@@ -76,10 +76,19 @@ export function Field({ label, hint, topHint, children }) {
 }
 
 // Red asterisk used inline next to required field labels.
+//
+// The whitespace-nowrap span absorbs the space-then-asterisk pair so
+// it can't break onto its own line at narrow widths (the mobile
+// signup bug Josh caught 2026-05-16). Call sites pass
+// `<>Label text<Req /></>` -- the leading space lives inside the
+// span here so it is glued to the asterisk.
 export function Req() {
   return (
-    <span className="text-[#D45D5D] ml-0.5" aria-label="required">
-      *
+    <span
+      className="text-[#D45D5D] font-bold whitespace-nowrap"
+      aria-label="required"
+    >
+      {" *"}
     </span>
   );
 }

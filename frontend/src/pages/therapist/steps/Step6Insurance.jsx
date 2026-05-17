@@ -142,7 +142,7 @@ export default function Step6Insurance({
 
       <Group title="Rates & experience">
         <div className="grid grid-cols-2 gap-4">
-          <Field label={<>Cash rate per session ($) <Req /></>}>
+          <Field label={<>Cash rate per session ($)<Req /></>}>
             <Input
               type="number"
               value={data.cash_rate}
@@ -153,7 +153,7 @@ export default function Step6Insurance({
               data-testid="signup-cash-rate"
             />
           </Field>
-          <Field label={<>Years of experience <Req /></>}>
+          <Field label={<>Years of experience<Req /></>}>
             <Input
               type="number"
               value={data.years_experience}

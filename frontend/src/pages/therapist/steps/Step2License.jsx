@@ -69,7 +69,7 @@ export default function Step2License({ data, set }) {
         title="License & verification"
       >
         <Field
-          label={<>License state <Req /></>}
+          label={<>License state<Req /></>}
           hint="We're currently live in Idaho only — more states coming soon."
         >
           <select
@@ -114,7 +114,7 @@ export default function Step2License({ data, set }) {
 
         {stateChoice === "ID" && (
           <>
-            <Field label={<>License number <Req /></>}>
+            <Field label={<>License number<Req /></>}>
               <Input
                 value={data.license_number}
                 onChange={(e) => set("license_number", e.target.value)}
@@ -123,7 +123,7 @@ export default function Step2License({ data, set }) {
                 data-testid="signup-license-number"
               />
             </Field>
-            <Field label={<>License expiration date <Req /></>}>
+            <Field label={<>License expiration date<Req /></>}>
               <Input
                 type="date"
                 value={data.license_expires_at || ""}
@@ -133,7 +133,7 @@ export default function Step2License({ data, set }) {
               />
             </Field>
             <Field
-              label={<>Upload a photo of your license <Req /></>}
+              label={<>Upload a photo of your license<Req /></>}
               hint="Required so we can manually verify your credentials match. PNG, JPG or PDF. Patients never see this."
             >
               <div className="flex items-center gap-4">

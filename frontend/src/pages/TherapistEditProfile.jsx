@@ -817,17 +817,19 @@ function Field({ label, required = false, missing = false, children }) {
   // `missing`  -- required AND currently empty/invalid (drives the red dot)
   return (
     <label className="block">
-      <div className="text-sm font-medium text-[#2B2A29] mb-1.5 flex items-center gap-1.5 flex-wrap">
-        <span>{label}</span>
-        {required && (
-          <span
-            className={`text-base font-bold ${missing ? "text-[#D45D5D]" : "text-[#9AB6A4]"}`}
-            title={missing ? "Required to go live" : "Required (filled)"}
-            aria-label={missing ? "Required, missing" : "Required"}
-          >
-            *
-          </span>
-        )}
+      <div className="text-sm font-medium text-[#2B2A29] mb-1.5 flex items-baseline gap-1.5 flex-wrap">
+        <span>
+          {label}
+          {required && (
+            <span
+              className="text-base font-bold text-[#D45D5D] whitespace-nowrap"
+              title={missing ? "Required to go live" : "Required (filled)"}
+              aria-label={missing ? "Required, missing" : "Required"}
+            >
+              {" *"}
+            </span>
+          )}
+        </span>
         {missing && (
           <span className="text-[10px] uppercase tracking-wider text-[#8B3220] bg-[#FBE8E2] px-1.5 py-0.5 rounded-full font-semibold">
             Required to go live

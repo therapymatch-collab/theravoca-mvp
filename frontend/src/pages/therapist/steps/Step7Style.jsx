@@ -15,7 +15,7 @@ import { STYLE_TAGS } from "./signupOptions";
 export default function Step7Style({ data, set, toggleArr }) {
   return (
     <>
-      <Group title={<>How would you describe your style? <Req /></>}>
+      <Group title={<>How would you describe your style?<Req /></>}>
         <PillRow
           items={STYLE_TAGS}
           selected={data.style_tags}

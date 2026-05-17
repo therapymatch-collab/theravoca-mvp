@@ -14,7 +14,7 @@ export default function Step3WhoYouSee({ data, toggleArr }) {
       title="Who do you see?"
       hint="Required — patients are pre-filtered by these"
     >
-      <Field label={<>Client types <Req /></>}>
+      <Field label={<>Client types<Req /></>}>
         <PillRow
           items={CLIENT_TYPES}
           selected={data.client_types}
@@ -27,7 +27,7 @@ export default function Step3WhoYouSee({ data, toggleArr }) {
           <>
             Age groups{" "}
             <span className="text-xs text-[#6D6A65] font-normal">(pick up to 3)</span>{" "}
-            <Req />
+           <Req />
           </>
         }
       >
