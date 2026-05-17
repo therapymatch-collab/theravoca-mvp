@@ -4,8 +4,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
 import resend
 from dotenv import load_dotenv
@@ -16,6 +18,122 @@ from email_templates import get_template, render
 load_dotenv(Path(__file__).parent / ".env")
 
 logger = logging.getLogger(__name__)
+
+# ── Quiet-hours guard 2026-05-17 ─────────────────────────────────
+# Josh: "make sure times all emails are sent are always 8-8pm local
+# Idaho time. however, new referrals can come in anytime they are
+# triggered."
+#
+# Idaho is in America/Boise (Mountain Time, DST observed). We use
+# Resend's native `scheduled_at` field to defer outbound emails to
+# the next 8 AM Idaho local time when triggered outside the
+# 8 AM–8 PM window. Resend supports scheduling up to 72 hours out,
+# which always covers "next 8 AM" from any starting point.
+#
+# Categorization rule: only DEFER for system-initiated, batched, or
+# non-urgent emails. User-initiated flows (sign-in code, intake
+# verification, immediate confirmations) and new patient-referral
+# notifications to therapists always SEND NOW per Josh.
+_IDAHO_TZ = ZoneInfo("America/Boise")
+_QUIET_HOURS_START = time(8, 0)    # 8 AM Idaho local
+_QUIET_HOURS_END = time(20, 0)     # 8 PM Idaho local
+
+# Templates that respect quiet hours (defer if triggered 8pm–8am).
+# Defaults aim to be safe: anything user-facing-batched lives here.
+# Add a template key here to start deferring its sends.
+_QUIET_HOURS_DEFERRABLE: set[str] = {
+    # v2 patient surveys + reminders (research-grade quality, never urgent)
+    "patient_survey_v2_48h",
+    "patient_survey_v2_3w",
+    "patient_survey_v2_9w",
+    "patient_survey_v2_15w",
+    "patient_survey_v2_48h_reminder",
+    "patient_survey_v2_3w_reminder",
+    "patient_survey_v2_9w_reminder",
+    "patient_survey_v2_15w_reminder",
+    # Therapist surveys + follow-ups
+    "therapist_followup_2w",
+    "therapist_survey",
+    # Nudges + maintenance
+    "therapist_stale_profile_nag",
+    "claim_profile",
+    # Cold outbound recruiting (admin can already gate via approval,
+    # but quiet-hours is a second belt: don't email a Boise therapist
+    # at 11 PM even if the autoreviewer cleared the draft).
+    "new_referral_inquiry",
+    "prelaunch_invite",
+    # Approval / rejection decisions: the therapist isn't actively
+    # waiting at a screen; respecting 8–8 is courteous.
+    "therapist_approved",
+    "therapist_rejected",
+    # Status update -- patient is told "we're still working on it";
+    # no harm waiting until morning.
+    "patient_results_empty",
+}
+
+# Templates that ALWAYS send now (user is actively waiting OR Josh's
+# rule for referrals). Documented explicitly so the defer set can be
+# audited at a glance without inverting the policy in your head.
+_QUIET_HOURS_ALWAYS_SEND: set[str] = {
+    "verification",                 # user just submitted intake form
+    "magic_code",                   # user just clicked sign-in
+    "patient_intake_receipt",       # immediate "we got it" confirmation
+    "therapist_signup_received",    # immediate "we got your application" confirmation
+    "patient_results",              # patient is actively waiting for matches
+    "therapist_notification",       # NEW REFERRAL — Josh: always send
+}
+
+
+def _next_idaho_business_hour() -> Optional[datetime]:
+    """Return None if current Idaho local time is within 8 AM–8 PM
+    (send now); otherwise return the next 8 AM Idaho local time as a
+    UTC datetime (suitable for Resend's `scheduled_at` ISO 8601 str).
+
+    Edge cases:
+      - 7:59 AM Idaho -> defer to 8:00 AM today
+      - 8:00 AM Idaho -> send now (inclusive lower bound)
+      - 7:59 PM Idaho -> send now (still inside window)
+      - 8:00 PM Idaho -> defer to 8:00 AM tomorrow
+      - 11:59 PM Idaho -> defer to 8:00 AM tomorrow
+    """
+    now_idaho = datetime.now(_IDAHO_TZ)
+    now_t = now_idaho.time()
+    if _QUIET_HOURS_START <= now_t < _QUIET_HOURS_END:
+        return None
+    # Compute next 8 AM Idaho local
+    if now_t < _QUIET_HOURS_START:
+        next_send_local = now_idaho.replace(
+            hour=_QUIET_HOURS_START.hour,
+            minute=_QUIET_HOURS_START.minute,
+            second=0,
+            microsecond=0,
+        )
+    else:
+        # past 8 PM -- next 8 AM is tomorrow
+        next_send_local = (now_idaho + timedelta(days=1)).replace(
+            hour=_QUIET_HOURS_START.hour,
+            minute=_QUIET_HOURS_START.minute,
+            second=0,
+            microsecond=0,
+        )
+    return next_send_local.astimezone(timezone.utc)
+
+
+def _compute_scheduled_at(template_key: Optional[str]) -> Optional[str]:
+    """Return ISO 8601 string for Resend's scheduled_at if this template
+    should defer to next 8 AM Idaho; None means send immediately.
+
+    Unknown template keys (or None) send immediately so any new template
+    added later doesn't silently start deferring before being categorized.
+    """
+    if not template_key:
+        return None
+    if template_key not in _QUIET_HOURS_DEFERRABLE:
+        return None
+    scheduled = _next_idaho_business_hour()
+    if scheduled is None:
+        return None
+    return scheduled.isoformat()
 
 
 def _db():
@@ -448,14 +566,34 @@ async def _send(
         "html": html,
         "reply_to": _get_reply_to(),
     }
+    # Quiet-hours guard: defer non-urgent templates to next 8 AM
+    # Idaho local. Helper returns None for templates that always
+    # send now (referrals, magic codes, intake confirmations) and
+    # for sends that happen to land inside the 8 AM–8 PM window.
+    # We honor force=True the same way for both -- if the operator
+    # is calling _send(force=True), they want immediate delivery
+    # regardless of quiet hours.
+    scheduled_at = None if force else _compute_scheduled_at(template_key)
+    if scheduled_at:
+        params["scheduled_at"] = scheduled_at
+        actual_subject = f"[scheduled {scheduled_at[:16]}Z] {actual_subject}" if override else actual_subject
+        # Don't overwrite the recipient-visible subject in production --
+        # only annotate for override-redirected test inboxes so we can
+        # confirm the schedule via the inbox listing.
+        if override:
+            params["subject"] = actual_subject
     try:
         result = await asyncio.to_thread(resend.Emails.send, params)
-        logger.info("Sent email id=%s", result.get("id"))
+        logger.info(
+            "Sent email id=%s template=%s scheduled_at=%s",
+            result.get("id"), template_key, scheduled_at,
+        )
         await _log_send(
             to=to, actual_to=actual_to, subject=actual_subject,
             template_key=template_key,
             resend_id=result.get("id") if isinstance(result, dict) else None,
             sent_ok=True,
+            block_reason=(f"deferred_until:{scheduled_at}" if scheduled_at else None),
         )
         return result
     except Exception as e:
