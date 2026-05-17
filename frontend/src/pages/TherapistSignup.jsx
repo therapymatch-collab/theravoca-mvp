@@ -236,7 +236,23 @@ export default function TherapistSignup() {
               setTurnstileToken(tok || "");
               if (tok) setTurnstileWidgetState("ready");
             },
-            "error-callback": () => {
+            // 2026-05-17: log Cloudflare's error args + the site-key
+            // prefix we passed so console diagnostics surface the
+            // exact reason for a failed widget render. Common codes:
+            //   110100 invalid sitekey
+            //   110200 invalid sitekey (deprecated)
+            //   110620 hostname not allowed (since 2024 rename)
+            //   400020 invalid sitekey format
+            //   600010 timeout
+            // Full reference: https://developers.cloudflare.com/turnstile/troubleshooting/client-side-errors/
+            "error-callback": (...args) => {
+              // eslint-disable-next-line no-console
+              console.error(
+                "[TheraVoca] Turnstile error-callback",
+                "args=", args,
+                "sitekey_prefix=", String(turnstileSiteKey || "").slice(0, 10) + "...",
+                "hostname=", typeof window !== "undefined" ? window.location.hostname : "?",
+              );
               setTurnstileToken("");
               setTurnstileWidgetState("failed");
             },
