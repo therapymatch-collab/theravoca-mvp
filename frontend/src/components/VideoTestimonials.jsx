@@ -40,7 +40,7 @@ const TESTIMONIALS = [
   {
     id: "as",
     name: "A.S., Age 32",
-    src: "https://theravoca.com/wp-content/uploads/Reerral_4-1.mp4",
+    src: "https://theravoca.com/wp-content/uploads/AS-new.mp4",
     poster:
       "https://theravoca.com/wp-content/uploads/Capture-decran-2025-05-23-014536.png",
   },
