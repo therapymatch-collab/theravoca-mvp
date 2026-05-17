@@ -222,17 +222,58 @@ class _SPAApp:
                 and os.path.isfile(file_path)
                 and path != "/"
             ):
-                response = FileResponse(file_path)
+                response = FileResponse(file_path, headers=_spa_security_headers())
                 await response(scope, receive, send)
                 return
 
             # For all other routes, serve index.html (SPA client-side routing)
-            response = FileResponse(_INDEX_HTML, media_type="text/html")
+            response = FileResponse(
+                _INDEX_HTML,
+                media_type="text/html",
+                headers=_spa_security_headers(),
+            )
             await response(scope, receive, send)
             return
 
         # No static build — fall through to FastAPI (which will 404)
         await self.api_app(scope, receive, send)
+
+
+# Security headers for SPA-served responses (HTML + static assets).
+# 2026-05-17: the FastAPI security_headers middleware lives inside
+# `api_app` and runs ONLY for /api/* responses. Static-file responses
+# served by `_SPAApp` above (index.html + JS bundle + CSS) bypass
+# that middleware entirely -- so Cloudflare's edge / browser defaults
+# were filling the CSP vacuum on the SPA HTML page with a strict
+# nonce + trusted-types policy that blocked Turnstile from loading.
+# Setting the same permissive policy here so the SPA HTML gets the
+# Cloudflare-allowlisted CSP the API responses already have.
+def _spa_security_headers() -> dict:
+    csp = os.environ.get(
+        "CONTENT_SECURITY_POLICY",
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
+        "https://js.stripe.com https://challenges.cloudflare.com "
+        "https://us.i.posthog.com https://us-assets.i.posthog.com "
+        "https://challenges.cloudflare.com/turnstile/; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self' https://api.stripe.com "
+        "https://challenges.cloudflare.com https://us.i.posthog.com; "
+        "frame-src https://js.stripe.com https://challenges.cloudflare.com "
+        "https://www.youtube-nocookie.com https://www.youtube.com; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'",
+    )
+    return {
+        "Content-Security-Policy": csp,
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "geolocation=(), microphone=(), camera=(), payment=(self)",
+    }
 
 
 app = _SPAApp(_authed_app)
