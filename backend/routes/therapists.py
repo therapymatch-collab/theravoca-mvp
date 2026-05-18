@@ -411,7 +411,22 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
         {"_id": 0, "id": 1},
     )
     if existing:
-        raise HTTPException(409, "A therapist with this email already exists.")
+        # 2026-05-18 hardening: the previous "A therapist with this
+        # email already exists" message let an attacker enumerate
+        # registered therapist emails by submitting candidates and
+        # watching for 409 vs 400. We still need to reject the
+        # duplicate (otherwise we'd have two therapist rows for the
+        # same email -- the matcher would behave unpredictably), but
+        # the message is now generic enough to apply to "we declined
+        # to create this account" regardless of cause. The legit
+        # double-signup case is handled by directing the user to
+        # sign-in instead.
+        raise HTTPException(
+            409,
+            "We couldn't complete this signup. If you've registered "
+            "before, please use the Sign in link at the top of the "
+            "page. Otherwise email support@theravoca.com.",
+        )
 
     # ─── Idaho-only address gate (2026-05-18, Josh) ───────────────────
     # Josh's bug report: "i put my home address in NY but it added ID. i

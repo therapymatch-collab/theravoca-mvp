@@ -55,6 +55,26 @@ if not ADMIN_PASSWORD:
         "FATAL: ADMIN_PASSWORD environment variable is not set. "
         "Refusing to start with no admin password."
     )
+# 2026-05-18 hardening: brute-force resistance.
+# Admin login is rate-limited (5 attempts per 15 min per IP), so a
+# short password is exposed to ~5 attempts/hour per source. Even with
+# rate limiting, an 8-char password gives ~10^15 possibilities -- worth
+# the floor. Production gets the strict check; dev/staging are
+# warned-only so we don't break local boots with throwaway passwords.
+_ADMIN_PASSWORD_MIN_LEN = 12
+if len(ADMIN_PASSWORD) < _ADMIN_PASSWORD_MIN_LEN:
+    if os.environ.get("ENV", "").lower() == "production":
+        raise RuntimeError(
+            f"FATAL: ADMIN_PASSWORD is too short ({len(ADMIN_PASSWORD)} chars). "
+            f"Production requires at least {_ADMIN_PASSWORD_MIN_LEN} chars. "
+            "Generate a strong one with `python -c "
+            "'import secrets; print(secrets.token_urlsafe(24))'`."
+        )
+    logger.warning(
+        "ADMIN_PASSWORD is %d chars; production requires >=%d. "
+        "OK for dev/staging; fix before flipping ENV=production.",
+        len(ADMIN_PASSWORD), _ADMIN_PASSWORD_MIN_LEN,
+    )
 DEFAULT_THRESHOLD = float(os.environ.get("DEFAULT_MATCH_THRESHOLD", "80"))
 MIN_TARGET_MATCHES = int(os.environ.get("MIN_TARGET_MATCHES", "30"))
 AUTO_DELAY_HOURS = float(os.environ.get("AUTO_RESULTS_DELAY_HOURS", "24"))
