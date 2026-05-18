@@ -688,39 +688,168 @@ export default function TherapistPortal() {
               </div>
 
               {therapist && (
-                <div className="mt-5 bg-white border border-[#E8E5DF] rounded-xl p-5">
+                <div className="mt-5 bg-white border border-[#E8E5DF] rounded-xl p-5" data-testid="pending-profile-preview">
                   <div className="text-xs uppercase tracking-wider text-[#6D6A65] mb-3">
                     Profile we received
                   </div>
-                  <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm" data-testid="pending-profile-preview">
+                  {/* 2026-05-18 (Josh: "only shows part of profile, not entire thing").
+                      Expanded the readonly preview to show every field the
+                      therapist filled out at signup, grouped by section. Mirrors
+                      the admin ProviderPreviewCard layout so the therapist sees
+                      the same thing the admin sees when reviewing them. */}
+                  <PreviewSection title="Identity">
                     <PreviewRow label="Name" value={therapist.name} />
                     <PreviewRow label="Credential" value={therapist.credential_type} />
+                    <PreviewRow label="Gender" value={therapist.gender} />
+                    <PreviewRow label="Years of experience" value={therapist.years_experience != null ? `${therapist.years_experience}` : null} />
+                    <PreviewRow label="Email" value={therapist.email} />
+                    <PreviewRow label="Office phone (public)" value={therapist.office_phone} />
+                    <PreviewRow label="Alert phone (private)" value={therapist.phone_alert || therapist.phone} />
+                    <PreviewRow label="Website" value={therapist.website} />
+                    <PreviewRow label="Profile photo" value={therapist.profile_picture ? "Uploaded" : null} />
+                  </PreviewSection>
+
+                  <PreviewSection title="License">
                     <PreviewRow label="License #" value={therapist.license_number} />
                     <PreviewRow label="License expires" value={therapist.license_expires_at?.slice(0, 10)} />
-                    <PreviewRow label="Office phone" value={therapist.office_phone} />
-                    <PreviewRow label="Alert phone (private)" value={therapist.phone_alert || therapist.phone} />
-                    <PreviewRow label="Cash rate" value={therapist.cash_rate ? `$${therapist.cash_rate}` : "—"} />
-                    <PreviewRow label="Sliding scale" value={therapist.sliding_scale ? "Yes" : "No"} />
                     <PreviewRow
-                      label="Primary specialties"
-                      value={(therapist.primary_specialties || []).join(", ") || "—"}
+                      label="Licensed states"
+                      value={(therapist.licensed_states || []).join(", ") || null}
+                    />
+                    <PreviewRow
+                      label="License document"
+                      value={therapist.license_document?.data_base64 || (therapist.license_picture || "").startsWith?.("data:") ? "On file" : null}
+                    />
+                  </PreviewSection>
+
+                  <PreviewSection title="Practice">
+                    <PreviewRow
+                      label="Session format"
+                      value={
+                        therapist.modality_offering === "both"
+                          ? "Virtual + In-person"
+                          : therapist.modality_offering === "telehealth"
+                            ? "Virtual"
+                            : therapist.modality_offering === "in_person"
+                              ? "In-person"
+                              : null
+                      }
+                    />
+                    <PreviewRow label="Cash rate" value={therapist.cash_rate ? `$${therapist.cash_rate} / session` : null} />
+                    <PreviewRow label="Sliding scale" value={therapist.sliding_scale === true ? "Yes" : therapist.sliding_scale === false ? "No" : null} />
+                    <PreviewRow label="Free 15-min consult" value={therapist.free_consult === true ? "Yes" : therapist.free_consult === false ? "No" : null} />
+                    <PreviewRow
+                      label="Office addresses"
+                      value={(therapist.office_addresses || []).join(" / ") || null}
                       span={2}
                     />
                     <PreviewRow
-                      label="Modalities"
-                      value={(therapist.modalities || []).join(", ") || "—"}
+                      label="Insurance accepted"
+                      value={(therapist.insurance_accepted || []).join(", ") || null}
                       span={2}
+                    />
+                    <PreviewRow
+                      label="Languages (English implicit)"
+                      value={(therapist.languages_spoken || []).join(", ") || null}
                     />
                     <PreviewRow
                       label="Availability"
                       value={
                         (therapist.availability_windows || [])
                           .map((w) => w.replace(/_/g, " "))
-                          .join(", ") || "—"
+                          .join(", ") || null
                       }
+                    />
+                  </PreviewSection>
+
+                  <PreviewSection title="Who you see">
+                    <PreviewRow
+                      label="Age groups served"
+                      value={(therapist.age_groups || []).map((a) => a.replace(/_/g, " ")).join(", ") || null}
+                    />
+                    <PreviewRow
+                      label="Client types"
+                      value={(therapist.client_types || []).join(", ") || null}
+                    />
+                    <PreviewRow
+                      label="Primary specialties"
+                      value={(therapist.primary_specialties || []).map((s) => s.replace(/_/g, " ")).join(", ") || null}
                       span={2}
                     />
-                  </div>
+                    <PreviewRow
+                      label="Secondary specialties"
+                      value={(therapist.secondary_specialties || []).map((s) => s.replace(/_/g, " ")).join(", ") || null}
+                      span={2}
+                    />
+                    <PreviewRow
+                      label="Also treats"
+                      value={(therapist.general_treats || []).map((s) => s.replace(/_/g, " ")).join(", ") || null}
+                      span={2}
+                    />
+                  </PreviewSection>
+
+                  <PreviewSection title="Approach & style">
+                    <PreviewRow
+                      label="Therapy modalities"
+                      value={(therapist.modalities || []).join(", ") || null}
+                      span={2}
+                    />
+                    <PreviewRow
+                      label="Style tags"
+                      value={(therapist.style_tags || []).map((s) => s.replace(/_/g, " ")).join(", ") || null}
+                      span={2}
+                    />
+                  </PreviewSection>
+
+                  {(therapist.bio || "").trim() && (
+                    <PreviewSection title="Bio (shown to patients)">
+                      <div className="sm:col-span-2 text-sm text-[#2B2A29] leading-relaxed whitespace-pre-wrap">
+                        {therapist.bio}
+                      </div>
+                    </PreviewSection>
+                  )}
+
+                  {(therapist.t4_hard_truth
+                    || (therapist.t5_lived_experience || "").trim()
+                    || (therapist.t6_session_expectations || []).length
+                    || (therapist.t6_early_sessions_description || "").trim()) ? (
+                    <PreviewSection title="Deep-match signals (used by matching, not shown to patients)">
+                      <PreviewRow
+                        label="When a patient resists a hard truth, you tend to..."
+                        value={therapist.t4_hard_truth?.replace(/_/g, " ") || null}
+                        span={2}
+                      />
+                      <PreviewRow
+                        label="What sessions 1-3 typically look like"
+                        value={
+                          (therapist.t6_session_expectations || [])
+                            .map((s) => s.replace(/_/g, " "))
+                            .join(", ") || null
+                        }
+                        span={2}
+                      />
+                      {(therapist.t5_lived_experience || "").trim() && (
+                        <div className="sm:col-span-2">
+                          <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">
+                            Lived experience phrasing
+                          </div>
+                          <div className="text-sm text-[#2B2A29] leading-relaxed whitespace-pre-wrap mt-0.5">
+                            {therapist.t5_lived_experience}
+                          </div>
+                        </div>
+                      )}
+                      {(therapist.t6_early_sessions_description || "").trim() && (
+                        <div className="sm:col-span-2">
+                          <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">
+                            What early sessions feel like
+                          </div>
+                          <div className="text-sm text-[#2B2A29] leading-relaxed whitespace-pre-wrap mt-0.5">
+                            {therapist.t6_early_sessions_description}
+                          </div>
+                        </div>
+                      )}
+                    </PreviewSection>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -1240,10 +1369,29 @@ export default function TherapistPortal() {
 }
 
 function PreviewRow({ label, value, span = 1 }) {
+  const isEmpty = value === undefined || value === null || value === "";
   return (
     <div className={span === 2 ? "sm:col-span-2" : ""}>
       <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">{label}</div>
-      <div className="font-medium text-[#2B2A29]">{value || "—"}</div>
+      <div className={isEmpty ? "italic text-[#9C9893]" : "font-medium text-[#2B2A29]"}>
+        {isEmpty ? "—" : value}
+      </div>
+    </div>
+  );
+}
+
+// Section wrapper for the readonly "Profile we received" preview.
+// Renders a labelled group with a top-border separator between sections
+// and the 2-col grid we use for every PreviewRow.
+function PreviewSection({ title, children }) {
+  return (
+    <div className="border-t border-[#F2EFE8] pt-3 mt-3 first:border-t-0 first:pt-0 first:mt-0">
+      <div className="text-xs font-semibold text-[#2D4A3E] mb-2 uppercase tracking-wider">
+        {title}
+      </div>
+      <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+        {children}
+      </div>
     </div>
   );
 }
