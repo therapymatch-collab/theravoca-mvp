@@ -314,7 +314,7 @@ export default function SignIn() {
               </div>
 
               <label className="mt-6 block text-xs uppercase tracking-wider text-[#6D6A65] mb-2">
-                Email address
+                {t("signin.email_label", "Email address")}
               </label>
               <div className="relative">
                 <Mail
@@ -446,7 +446,7 @@ export default function SignIn() {
                     className="tv-btn-primary w-full mt-5 justify-center disabled:opacity-50"
                     data-testid="signin-send-code"
                   >
-                    {submitting ? "Sending..." : "Send me a code"}{" "}
+                    {submitting ? "Sending..." : t("btn.signin.send_code", "Send me a code")}{" "}
                     <ArrowRight size={16} />
                   </button>
                 </>

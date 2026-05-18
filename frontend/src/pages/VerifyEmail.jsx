@@ -4,8 +4,10 @@ import { CheckCircle2, Loader2, Mail } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import { api, setSession } from "@/lib/api";
 import { ICON_SIZE_LG } from "@/lib/constants";
+import useSiteCopy from "@/lib/useSiteCopy";
 
 export default function VerifyEmail() {
+  const t = useSiteCopy();
   const { token } = useParams();
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -60,10 +62,13 @@ export default function VerifyEmail() {
                 <Mail size={ICON_SIZE_LG} strokeWidth={1.6} />
               </div>
               <h1 className="font-serif-display text-4xl text-[#2D4A3E] mt-5">
-                Check your inbox
+                {t("intake.success.heading", "Check your inbox")}
               </h1>
               <p className="text-[#6D6A65] mt-3 leading-relaxed">
-                We just sent you a confirmation link. Click it to start matching with therapists.
+                {t(
+                  "intake.success.body",
+                  "We just sent you a confirmation link. Click it to start matching with therapists.",
+                )}
               </p>
               <p className="text-xs text-[#6D6A65] mt-6">
                 Don't see it? Check your spam folder. Request ID:{" "}

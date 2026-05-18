@@ -165,10 +165,6 @@ function TestimonialCard({ tt }) {
 }
 
 export default function VideoTestimonials() {
-  // useSiteCopy hook left in even though no copy keys are currently
-  // wired -- pattern is consistent with other landing-page sections
-  // and admins can later swap the section headline via the copy editor.
-  // eslint-disable-next-line no-unused-vars
   const t = useSiteCopy();
   const trackRef = useRef(null);
   // Carousel arrow visibility tracks the scroll position so we don't
@@ -220,10 +216,10 @@ export default function VideoTestimonials() {
           From the people we've matched
         </p>
         <h2 className="font-serif-display text-4xl sm:text-5xl text-[#2D4A3E] leading-tight text-center mt-3">
-          Real referrals, real relief
+          {t("landing.testimonials.heading", "Real referrals, real relief")}
         </h2>
         <p className="text-[#6D6A65] mt-4 max-w-2xl mx-auto leading-relaxed text-center">
-          Patients who tried TheraVoca speak for themselves.
+          {t("landing.testimonials.subhead", "Patients who tried TheraVoca speak for themselves.")}
         </p>
         <div className="relative mt-12">
           {/* Arrows hide at the edges they can't move to. Initial

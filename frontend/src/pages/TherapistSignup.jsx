@@ -946,7 +946,7 @@ export default function TherapistSignup() {
                 <div className="w-2 h-2 rounded-full bg-[#2D4A3E]" />
                 <div className="text-sm text-[#2B2A29]">
                   <span className="font-semibold text-[#2D4A3E]">$45/month</span>
-                  <span className="text-[#6D6A65]"> · 30-day free trial · cancel anytime</span>
+                  <span className="text-[#6D6A65]">{t("btn.therapist.cta.subline", " · 30-day free trial · cancel anytime")}</span>
                 </div>
               </div>
               <div className="mt-7 flex flex-wrap gap-3 items-center">
@@ -1012,7 +1012,7 @@ export default function TherapistSignup() {
           <div className="max-w-5xl mx-auto px-5 sm:px-8">
             <div className="text-center mb-10 max-w-2xl mx-auto">
               <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] mb-3">
-                Why join TheraVoca
+                {t("therapist.why.heading", "Why join TheraVoca")}
               </p>
               <h2 className="font-serif-display text-3xl sm:text-4xl text-[#2D4A3E] leading-[1.1]">
                 Built for therapists who want to grow{" "}
@@ -1030,16 +1030,16 @@ export default function TherapistSignup() {
             <ul className="grid sm:grid-cols-2 gap-4 text-sm text-[#2B2A29]">
               {[
                 {
-                  t: "Only ideal-fit referrals",
-                  d: "Pre-screened patient leads aligned with your specialties and schedule. Every match scores ≥ 70%.",
+                  t: t("therapist.why.card1.title", "Only ideal-fit referrals"),
+                  d: t("therapist.why.card1.body", "Pre-screened patient leads aligned with your specialties and schedule. Every match scores ≥ 70%."),
                 },
                 {
-                  t: "You're always in control",
-                  d: "Review each referral and opt in — or pass. No pressure, no obligations.",
+                  t: t("therapist.why.card2.title", "You're always in control"),
+                  d: t("therapist.why.card2.body", "Review each referral and opt in — or pass. No pressure, no obligations."),
                 },
                 {
-                  t: "No public profile, no spam",
-                  d: "Your info stays private until you say yes to a specific match.",
+                  t: t("therapist.why.card3.title", "No public profile, no spam"),
+                  d: t("therapist.why.card3.body", "Your info stays private until you say yes to a specific match."),
                 },
                 {
                   t: "30-day free trial, then $45/month",
@@ -1081,10 +1081,10 @@ export default function TherapistSignup() {
         <section className="border-t border-[#E8E5DF] py-16 bg-white">
           <div className="max-w-3xl mx-auto px-5 sm:px-8">
             <p className="text-xs uppercase tracking-[0.25em] text-[#C87965] mb-3 text-center">
-              FAQs for therapists
+              {t("therapist.faq.heading", "FAQs for therapists")}
             </p>
             <h2 className="font-serif-display text-4xl text-[#2D4A3E] leading-tight text-center">
-              Common questions
+              {t("therapist.faq.subhead", "Common questions")}
             </h2>
             {/* `therapistFaqs` comes from `useFaqs("therapist", THERAPIST_FAQS)`
                 which fetches the admin-edited FAQ list from MongoDB

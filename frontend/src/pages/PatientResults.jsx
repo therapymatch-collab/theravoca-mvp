@@ -890,7 +890,10 @@ export default function PatientResults() {
               <p className="text-[#6D6A65] mt-4 max-w-md mx-auto leading-relaxed">
                 {hold_active
                   ? "We'll show your matches once the 24-hour window closes."
-                  : "Therapists are reviewing your referral. Responses typically arrive within 24 hours. We'll email you as soon as your matches are ready."}
+                  : copy(
+                      "results.empty.body",
+                      "Therapists are reviewing your referral. Responses typically arrive within 24 hours. We'll email you as soon as your matches are ready.",
+                    )}
               </p>
             </div>
           ) : (
@@ -1223,6 +1226,7 @@ export default function PatientResults() {
 }
 
 function ReferFriendTile({ code }) {
+  const t = useSiteCopy();
   const link = `${window.location.origin}/?ref=${code}`;
   const copy = () => {
     navigator.clipboard
@@ -1239,11 +1243,13 @@ function ReferFriendTile({ code }) {
         <Share2 size={18} className="text-[#C87965] mt-1 shrink-0" />
         <div>
           <div className="text-sm font-semibold text-[#2B2A29]">
-            Know someone else looking for a therapist?
+            {t("results.share.heading", "Know someone else looking for a therapist?")}
           </div>
           <p className="text-xs text-[#6D6A65] mt-1 leading-relaxed">
-            Share TheraVoca with a friend or family member. They'll get the same
-            anonymous matching service — no signup, no spam.
+            {t(
+              "results.share.body",
+              "Share TheraVoca with a friend or family member. They'll get the same anonymous matching service — no signup, no spam.",
+            )}
           </p>
         </div>
       </div>

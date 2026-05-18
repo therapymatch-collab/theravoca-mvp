@@ -610,7 +610,7 @@ export default function IntakeForm() {
   const STEP_LABELS = isDeep
     ? [...STEPS_DEFAULTS.slice(0, 6), ...DEEP_MATCH_STEPS, STEPS_DEFAULTS[6]]
     : STEPS_DEFAULTS;
-  const STEPS = STEP_LABELS.map((d, i) => t(`intake.step.${STEP_IDS[i]}`, d));
+  const STEPS = STEP_LABELS.map((d, i) => t(`intake.step.${i}`, d));
   const currentId = STEP_IDS[step] || BASE_IDS[step];
   const progressPct = ((step + 1) / STEPS.length) * 100;
 

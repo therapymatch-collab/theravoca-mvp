@@ -30,7 +30,6 @@ const SEED_KEYS = [
   { section: "Landing — Hero", key: "landing.hero.promise",  label: "Big promise",      fallback: "3+ matched therapists in 24 hours, guaranteed.", previewPath: "/" },
   { section: "Landing — Hero", key: "landing.hero.subhead",  label: "Subhead",          fallback: "No more searching, cold-calls, or waiting to hear back. Pick what matters, and we'll route your request to therapists in your network who actually want to work with you.", previewPath: "/" },
   { section: "Landing — Hero", key: "landing.hero.cta",      label: "Primary CTA",      fallback: "Get matched — free", previewPath: "/" },
-  { section: "Landing — Hero", key: "landing.hero.subcta",   label: "Secondary CTA hint", fallback: "Free · No login required · ~2 min", previewPath: "/" },
   // Three proof-point bullets under the hero CTA. Each has a short
   // title + a 1-2 sentence body — same structure as we used to have
   // duplicated in the "How we're different" block but moved up so
@@ -55,7 +54,6 @@ const SEED_KEYS = [
   // ─── LANDING — Why TheraVoca ───────────────────────────────────────
   { section: "Landing — Why TheraVoca", key: "landing.different.eyebrow", label: "Eyebrow", fallback: "How we're different", previewPath: "/#different" },
   { section: "Landing — Why TheraVoca", key: "landing.different.heading", label: "Heading", fallback: "Finding the right therapist shouldn't feel like a full-time job.", previewPath: "/#different" },
-  { section: "Landing — Why TheraVoca", key: "landing.different.subhead", label: "Subhead", fallback: "We flip the script. You describe what you need. Therapists come to you.", previewPath: "/#different" },
   // Note: the old `landing.different.bullet{1,2,3}.{title,body}` keys
   // moved into the Hero section (`landing.hero.bullet*`) — they render
   // above-the-fold now, not inside this differentiator block.
@@ -67,8 +65,8 @@ const SEED_KEYS = [
   { section: "Landing — Our promise", key: "landing.promise.tagline",  label: "Closing tagline", fallback: "Patient + therapist + time = a third thing — a relationship that helps. Everything we build serves that.", previewPath: "/#promise" },
 
   // ─── LANDING — Testimonials / social proof ─────────────────────────
-  { section: "Landing — Social proof", key: "landing.testimonials.heading", label: "Section heading", fallback: "What patients are saying", previewPath: "/#testimonials" },
-  { section: "Landing — Social proof", key: "landing.testimonials.subhead", label: "Section subhead", fallback: "Real users. Lightly edited for privacy.", previewPath: "/#testimonials" },
+  { section: "Landing — Social proof", key: "landing.testimonials.heading", label: "Section heading", fallback: "Real referrals, real relief", previewPath: "/#testimonials" },
+  { section: "Landing — Social proof", key: "landing.testimonials.subhead", label: "Section subhead", fallback: "Patients who tried TheraVoca speak for themselves.", previewPath: "/#testimonials" },
 
   // ─── LANDING — FAQ ─────────────────────────────────────────────────
   { section: "Landing — FAQ", key: "landing.faq.eyebrow", label: "Eyebrow", fallback: "FAQs", previewPath: "/#faq" },
@@ -76,9 +74,6 @@ const SEED_KEYS = [
   { section: "Landing — FAQ", key: "landing.faq.subhead", label: "Subhead", fallback: "Don't see your question? Email support@theravoca.com.", previewPath: "/#faq" },
 
   // ─── LANDING — Final CTA ───────────────────────────────────────────
-  { section: "Landing — Final CTA", key: "landing.finalcta.heading", label: "Heading", fallback: "Ready to find your therapist?", previewPath: "/" },
-  { section: "Landing — Final CTA", key: "landing.finalcta.subhead", label: "Subhead", fallback: "Two minutes. No login. We'll do the rest.", previewPath: "/" },
-  { section: "Landing — Final CTA", key: "landing.finalcta.cta",     label: "CTA label", fallback: "Get matched — free", previewPath: "/" },
 
   // ─── HEADER + FOOTER ───────────────────────────────────────────────
   { section: "Header & Footer", key: "header.nav.how",         label: "Nav · How it works", fallback: "How it works", previewPath: "/" },
@@ -100,33 +95,28 @@ const SEED_KEYS = [
   { section: "Therapist Join — Hero", key: "therapist.hero.subhead",  label: "Subhead",  fallback: "Marketing yourself to attract the right patients can feel frustrating and time-consuming. We do all the work by sending pre-screened referrals straight to your inbox — so you can spend your hours on clients, not on SEO.", previewPath: "/therapists/join" },
 
   // ─── THERAPIST JOIN — Why join cards ───────────────────────────────
-  { section: "Therapist Join — Why join", key: "therapist.why.heading", label: "Section heading", fallback: "Why join TheraVoca?", previewPath: "/therapists/join#why" },
-  { section: "Therapist Join — Why join", key: "therapist.why.subhead", label: "Section subhead", fallback: "Built by therapists, for therapists — to take the busywork off your plate.", previewPath: "/therapists/join#why" },
-  { section: "Therapist Join — Why join", key: "therapist.why.card1.title", label: "Card 1 title", fallback: "Stop chasing leads",   previewPath: "/therapists/join#why" },
-  { section: "Therapist Join — Why join", key: "therapist.why.card1.body",  label: "Card 1 body",  fallback: "Patients come to you, pre-screened. No more cold calls or networking dinners.", previewPath: "/therapists/join#why" },
-  { section: "Therapist Join — Why join", key: "therapist.why.card2.title", label: "Card 2 title", fallback: "Right-fit referrals", previewPath: "/therapists/join#why" },
-  { section: "Therapist Join — Why join", key: "therapist.why.card2.body",  label: "Card 2 body",  fallback: "Our match engine sends you only the patients you can actually help. Higher conversion, less attrition.", previewPath: "/therapists/join#why" },
-  { section: "Therapist Join — Why join", key: "therapist.why.card3.title", label: "Card 3 title", fallback: "Skip the marketing", previewPath: "/therapists/join#why" },
-  { section: "Therapist Join — Why join", key: "therapist.why.card3.body",  label: "Card 3 body",  fallback: "We handle the SEO, ads, and intake forms. You handle the therapy.", previewPath: "/therapists/join#why" },
+  { section: "Therapist Join — Why join", key: "therapist.why.heading", label: "Section heading", fallback: "Why join TheraVoca", previewPath: "/therapists/join#why" },
+  { section: "Therapist Join — Why join", key: "therapist.why.card1.title", label: "Card 1 title", fallback: "Only ideal-fit referrals",   previewPath: "/therapists/join#why" },
+  { section: "Therapist Join — Why join", key: "therapist.why.card1.body",  label: "Card 1 body",  fallback: "Pre-screened patient leads aligned with your specialties and schedule. Every match scores ≥ 70%.", previewPath: "/therapists/join#why" },
+  { section: "Therapist Join — Why join", key: "therapist.why.card2.title", label: "Card 2 title", fallback: "You're always in control", previewPath: "/therapists/join#why" },
+  { section: "Therapist Join — Why join", key: "therapist.why.card2.body",  label: "Card 2 body",  fallback: "Review each referral and opt in — or pass. No pressure, no obligations.", previewPath: "/therapists/join#why" },
+  { section: "Therapist Join — Why join", key: "therapist.why.card3.title", label: "Card 3 title", fallback: "No public profile, no spam", previewPath: "/therapists/join#why" },
+  { section: "Therapist Join — Why join", key: "therapist.why.card3.body",  label: "Card 3 body",  fallback: "Your info stays private until you say yes to a specific match.", previewPath: "/therapists/join#why" },
 
   // ─── THERAPIST JOIN — Pricing / trial ──────────────────────────────
-  { section: "Therapist Join — Pricing", key: "therapist.pricing.heading", label: "Heading", fallback: "Simple pricing — start free", previewPath: "/therapists/join#pricing" },
-  { section: "Therapist Join — Pricing", key: "therapist.pricing.subhead", label: "Subhead", fallback: "30-day free trial. Cancel anytime. No setup fees.", previewPath: "/therapists/join#pricing" },
-  { section: "Therapist Join — Pricing", key: "therapist.pricing.note",    label: "Note below pricing card", fallback: "Your card isn't charged until your trial ends. We'll email you 3 days before billing starts.", previewPath: "/therapists/join#pricing" },
 
   // ─── THERAPIST JOIN — FAQ ──────────────────────────────────────────
-  { section: "Therapist Join — FAQ", key: "therapist.faq.heading", label: "Heading", fallback: "Therapist FAQs", previewPath: "/therapists/join#faq" },
-  { section: "Therapist Join — FAQ", key: "therapist.faq.subhead", label: "Subhead", fallback: "Common questions from licensed clinicians.", previewPath: "/therapists/join#faq" },
+  { section: "Therapist Join — FAQ", key: "therapist.faq.heading", label: "Heading", fallback: "FAQs for therapists", previewPath: "/therapists/join#faq" },
+  { section: "Therapist Join — FAQ", key: "therapist.faq.subhead", label: "Subhead", fallback: "Common questions", previewPath: "/therapists/join#faq" },
 
   // ─── INTAKE — Step titles ──────────────────────────────────────────
   { section: "Intake form — Step titles", key: "intake.step.0", label: "Step 1 title", fallback: "Who is this for?", previewPath: "/#start" },
   { section: "Intake form — Step titles", key: "intake.step.1", label: "Step 2 title", fallback: "What's going on?", previewPath: "/#start" },
-  { section: "Intake form — Step titles", key: "intake.step.2", label: "Step 3 title", fallback: "Format & location", previewPath: "/#start" },
-  { section: "Intake form — Step titles", key: "intake.step.3", label: "Step 4 title", fallback: "Payment", previewPath: "/#start" },
-  { section: "Intake form — Step titles", key: "intake.step.4", label: "Step 5 title", fallback: "Logistics", previewPath: "/#start" },
+  { section: "Intake form — Step titles", key: "intake.step.2", label: "Step 3 title", fallback: "First sessions", previewPath: "/#start" },
+  { section: "Intake form — Step titles", key: "intake.step.3", label: "Step 4 title", fallback: "Format & logistics", previewPath: "/#start" },
+  { section: "Intake form — Step titles", key: "intake.step.4", label: "Step 5 title", fallback: "Payment", previewPath: "/#start" },
   { section: "Intake form — Step titles", key: "intake.step.5", label: "Step 6 title", fallback: "Therapist preferences", previewPath: "/#start" },
-  { section: "Intake form — Step titles", key: "intake.step.6", label: "Step 7 title", fallback: "What matters most?", previewPath: "/#start" },
-  { section: "Intake form — Step titles", key: "intake.step.7", label: "Step 8 title", fallback: "Where to reach you", previewPath: "/#start" },
+  { section: "Intake form — Step titles", key: "intake.step.6", label: "Step 7 title", fallback: "Where to reach you", previewPath: "/#start" },
 
   // ─── INTAKE — Priority picker ──────────────────────────────────────
   { section: "Intake form — Priorities", key: "intake.priorities.label",       label: "Question label",       fallback: "Which of these matter most to you?", previewPath: "/#start" },
@@ -135,27 +125,22 @@ const SEED_KEYS = [
   { section: "Intake form — Priorities", key: "intake.priorities.strict_desc", label: "Strict-mode description", fallback: "only show me therapists who are a real fit on every priority I picked. (Fewer matches, but tighter.)", previewPath: "/#start" },
 
   // ─── INTAKE — Final / agreements ───────────────────────────────────
-  { section: "Intake form — Final step", key: "intake.final.heading",        label: "'Where to reach you' lead-in", fallback: "Last bit — where should we send your matches?", previewPath: "/#start" },
   { section: "Intake form — Final step", key: "intake.final.adult",          label: "Adult-confirmation checkbox",  fallback: "I confirm I'm 18 or older.", previewPath: "/#start" },
   { section: "Intake form — Final step", key: "intake.final.not_emergency",  label: "Not-an-emergency checkbox",    fallback: "I understand this is not an emergency service. If this is a crisis, I'll call 911 or 988.", previewPath: "/#start" },
-  { section: "Intake form — Final step", key: "intake.final.terms",          label: "Terms-agreement checkbox",     fallback: "I agree to the Terms of Use and Privacy Notice.", previewPath: "/#start" },
 
   // ─── INTAKE — Result-saved screen ──────────────────────────────────
-  { section: "Intake form — Confirmation", key: "intake.success.heading", label: "Success heading", fallback: "Check your email", previewPath: "/get-matched/sent" },
-  { section: "Intake form — Confirmation", key: "intake.success.body",    label: "Success body",    fallback: "We just sent a verification link. Click it to start matching — we'll follow up within 24 hours with your top picks.", previewPath: "/get-matched/sent" },
+  { section: "Intake form — Confirmation", key: "intake.success.heading", label: "Success heading", fallback: "Check your inbox", previewPath: "/get-matched/sent" },
+  { section: "Intake form — Confirmation", key: "intake.success.body",    label: "Success body",    fallback: "We just sent you a confirmation link. Click it to start matching with therapists.", previewPath: "/get-matched/sent" },
 
   // ─── SIGN IN ───────────────────────────────────────────────────────
   { section: "Sign in", key: "signin.heading",        label: "Heading",         fallback: "Sign in", previewPath: "/sign-in" },
   { section: "Sign in", key: "signin.subhead",        label: "Subhead",         fallback: "We'll email you a 6-digit code. No password required.", previewPath: "/sign-in" },
   { section: "Sign in", key: "signin.role.patient",   label: "Role tab · Patient",   fallback: "Patient", previewPath: "/sign-in" },
   { section: "Sign in", key: "signin.role.therapist", label: "Role tab · Therapist", fallback: "Therapist", previewPath: "/sign-in" },
-  { section: "Sign in", key: "signin.email_label",    label: "Email field label",    fallback: "Email", previewPath: "/sign-in" },
-  { section: "Sign in", key: "signin.email_hint",     label: "Email field hint",     fallback: "Use the email you signed up with.", previewPath: "/sign-in" },
-  { section: "Sign in", key: "signin.code_hint",      label: "Code-entry hint",      fallback: "Enter the 6-digit code we just emailed you. Codes expire in 10 minutes.", previewPath: "/sign-in" },
+  { section: "Sign in", key: "signin.email_label",    label: "Email field label",    fallback: "Email address", previewPath: "/sign-in" },
 
   // ─── PATIENT PORTAL ────────────────────────────────────────────────
   { section: "Patient portal", key: "portal.heading",       label: "Heading",      fallback: "Your matches",  previewPath: "/portal/patient" },
-  { section: "Patient portal", key: "portal.subhead",       label: "Subhead",      fallback: "Track every request you've made and the therapists who've reached out.", previewPath: "/portal/patient" },
   { section: "Patient portal", key: "portal.empty.heading", label: "Empty state heading", fallback: "No requests yet", previewPath: "/portal/patient" },
   { section: "Patient portal", key: "portal.empty.body",    label: "Empty state body",    fallback: "Submit an intake from the homepage and your matches will land here.", previewPath: "/portal/patient" },
   { section: "Patient portal", key: "portal.empty.cta",     label: "Empty state CTA",     fallback: "Get matched — free", previewPath: "/portal/patient" },
@@ -163,13 +148,11 @@ const SEED_KEYS = [
   // ─── PATIENT RESULTS ───────────────────────────────────────────────
   { section: "Patient results", key: "results.heading",     label: "Heading",     fallback: "Your top matches", previewPath: "/results/sample" },
   { section: "Patient results", key: "results.subhead",     label: "Subhead",     fallback: "These therapists reviewed your request and want to work with you. Reach out to whoever feels right.", previewPath: "/results/sample" },
-  { section: "Patient results", key: "results.empty.heading", label: "Empty state heading", fallback: "Still gathering responses", previewPath: "/results/sample" },
-  { section: "Patient results", key: "results.empty.body",    label: "Empty state body",    fallback: "Therapists have 24 hours to respond. We'll email you the moment your first match comes in.", previewPath: "/results/sample" },
-  { section: "Patient results", key: "results.share.heading", label: "Share section heading", fallback: "Share with a friend", previewPath: "/results/sample" },
-  { section: "Patient results", key: "results.share.body",    label: "Share section body",    fallback: "Know someone else looking? Share your link and they'll skip the line.", previewPath: "/results/sample" },
+  { section: "Patient results", key: "results.empty.body",    label: "Empty state body",    fallback: "Therapists are reviewing your referral. Responses typically arrive within 24 hours. We'll email you as soon as your matches are ready.", previewPath: "/results/sample" },
+  { section: "Patient results", key: "results.share.heading", label: "Share section heading", fallback: "Know someone else looking for a therapist?", previewPath: "/results/sample" },
+  { section: "Patient results", key: "results.share.body",    label: "Share section body",    fallback: "Share TheraVoca with a friend or family member. They'll get the same anonymous matching service — no signup, no spam.", previewPath: "/results/sample" },
 
   // ─── BUTTONS — General ─────────────────────────────────────────────
-  { section: "Buttons", key: "btn.intake.start",          label: "Intake · Start CTA",         fallback: "Get matched — free", previewPath: "/" },
   { section: "Buttons", key: "btn.intake.next",           label: "Intake · 'Continue'",        fallback: "Continue", previewPath: "/#start" },
   { section: "Buttons", key: "btn.intake.back",           label: "Intake · 'Back'",            fallback: "← Back", previewPath: "/#start" },
   { section: "Buttons", key: "btn.intake.submit",         label: "Intake · 'Review & submit'", fallback: "Review & submit", previewPath: "/#start" },
@@ -191,9 +174,8 @@ const SEED_KEYS = [
   { section: "Intake — Review modal", key: "intake.preview.warning.body",    label: "Lock-warning body",    fallback: "Please double-check your answers below before submitting. If something needs to change later, just email us and we'll resend a corrected match.", previewPath: "/#start" },
   { section: "Buttons", key: "btn.signin.send_code",      label: "Sign-in · 'Send me a code'", fallback: "Send me a code", previewPath: "/sign-in" },
   { section: "Buttons", key: "btn.signin.verify",         label: "Sign-in · 'Verify & sign in'", fallback: "Verify & sign in", previewPath: "/sign-in" },
-  { section: "CTA buttons", key: "cta.therapist_faq",     label: "After therapist FAQ",             fallback: "Join our network", previewPath: "/therapists/join#faq" },
   { section: "Buttons", key: "btn.therapist.cta.headline",label: "Therapist · 'Get more referrals'", fallback: "Get more referrals", previewPath: "/therapists/join" },
-  { section: "Buttons", key: "btn.therapist.cta.subline", label: "Therapist · CTA subline",    fallback: "30-day free trial · Cancel anytime", previewPath: "/therapists/join" },
+  { section: "Buttons", key: "btn.therapist.cta.subline", label: "Therapist · CTA subline",    fallback: " · 30-day free trial · cancel anytime", previewPath: "/therapists/join" },
   { section: "Buttons", key: "btn.therapist.signup_cta",  label: "Therapist · Hero signup CTA", fallback: "Sign up — start free trial", previewPath: "/therapists/join" },
   { section: "Buttons", key: "btn.therapist.add_payment", label: "Therapist · Add payment method", fallback: "Add payment method & start free trial", previewPath: "/therapists/join" },
   { section: "Buttons", key: "btn.therapist.skip_payment",label: "Therapist · 'I'll do this later'", fallback: "I'll do this later", previewPath: "/therapists/join" },
