@@ -70,15 +70,34 @@ const TESTIMONIALS = [
 
 function buildEmbedUrl(streamId, { autoplay = false } = {}) {
   // Stream player params -- see Cloudflare docs link in module
-  // header for the full list. We set the same UX defaults we had on
-  // the YouTube embed:
-  //   autoplay=true     : start playing as soon as iframe mounts
-  //                       (only set when user clicked our overlay so
-  //                       browser autoplay blockers don't fire).
-  //   muted=false       : user-initiated play, no need to mute.
+  // header for the full list.
+  //
+  // 2026-05-18 (Josh: "make volume default on not silent") --
+  // DELIBERATE NO-AUTOPLAY DESIGN. Mobile browsers (iOS Safari +
+  // mobile Chrome) physically block unmuted autoplay -- no
+  // workaround exists per their autoplay-restrictions policy. The
+  // only way to guarantee audio-from-second-zero on every platform
+  // is to skip autoplay entirely and let the user tap Cloudflare's
+  // play button inside the iframe. That tap is a fresh user gesture
+  // INSIDE the iframe origin, so the browser grants unmuted playback
+  // and audio plays from the start on all devices.
+  //
+  // Cost: one extra tap on desktop too (our overlay tap loads the
+  // iframe; the Cloudflare play button inside the iframe starts
+  // playback). The trade is intentional -- consistent audio
+  // experience beats a smoother single-tap with broken mobile
+  // unmute.
+  //
+  // The `autoplay` arg is kept on the function signature so a
+  // future change can flip back to autoplay-muted easily, but
+  // today all callers pass false (or omit it).
+  //
+  //   muted=false       : default unmuted; the user's play tap
+  //                       inside the iframe is a fresh gesture,
+  //                       so the browser allows unmuted playback.
   //   preload=metadata  : only fetch the manifest until the user
   //                       hits play (lite-embed pattern handles the
-  //                       page-mount case already, this is for
+  //                       page-mount case already; this controls
   //                       in-iframe behavior).
   //   poster=...        : Stream's own thumbnail URL so the player's
   //                       loading frame matches the lite-embed's
@@ -88,7 +107,12 @@ function buildEmbedUrl(streamId, { autoplay = false } = {}) {
     preload: "metadata",
     poster: thumbnailUrl(streamId),
   });
-  if (autoplay) params.set("autoplay", "true");
+  if (autoplay) {
+    // Reserved for future use -- mobile browsers block this combo,
+    // so callers should leave autoplay false unless they're prepared
+    // to layer on the autoplay-muted + tap-to-unmute UI path.
+    params.set("autoplay", "true");
+  }
   return `https://${STREAM_SUBDOMAIN}/${streamId}/iframe?${params.toString()}`;
 }
 
@@ -111,8 +135,13 @@ function TestimonialCard({ tt }) {
     >
       <div className="aspect-[9/16] bg-[#0F1714] relative">
         {active ? (
+          /* No autoplay -- the user taps Cloudflare's play button
+             inside the iframe to start playback, which counts as a
+             fresh user gesture inside the iframe origin and lets
+             audio play from second 0 on every platform. See
+             buildEmbedUrl() for the long-form rationale. */
           <iframe
-            src={buildEmbedUrl(tt.streamId, { autoplay: true })}
+            src={buildEmbedUrl(tt.streamId, { autoplay: false })}
             title={`Testimonial: ${tt.name}`}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
