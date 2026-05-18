@@ -8695,6 +8695,44 @@ async def admin_email_cron_schedules(_: bool = Depends(require_admin)):
 # are gated behind admin review (matching disabled until released).
 # See routes/patients.py:create_request for where the flag is set
 # and verify_request for where matching is skipped.
+# Read + write the global "review every patient request" policy
+# toggle. Default true (safest for early launch) when the
+# app_config row doesn't exist. UI toggle lives in the Settings
+# panel under "Patient intake review gate".
+@router.get("/admin/settings/intake-review-all")
+async def admin_get_intake_review_all(_: bool = Depends(require_admin)):
+    row = await db.app_config.find_one(
+        {"key": "intake_review_all_requests"}, {"_id": 0, "enabled": 1, "updated_at": 1, "updated_by": 1},
+    )
+    return {
+        "enabled": True if row is None else bool(row.get("enabled", True)),
+        "updated_at": (row or {}).get("updated_at"),
+        "updated_by": (row or {}).get("updated_by"),
+    }
+
+
+@router.put("/admin/settings/intake-review-all", dependencies=[Depends(require_role("admin"))])
+async def admin_set_intake_review_all(payload: dict):
+    from datetime import datetime, timezone
+    enabled = bool(payload.get("enabled", True))
+    await db.app_config.update_one(
+        {"key": "intake_review_all_requests"},
+        {"$set": {
+            "key": "intake_review_all_requests",
+            "enabled": enabled,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_by": "admin",
+        }},
+        upsert=True,
+    )
+    audit.emit(
+        actor_type="admin", actor_id="admin",
+        action="set_intake_review_all", resource="app_config",
+        detail=f"enabled={enabled}",
+    )
+    return {"ok": True, "enabled": enabled}
+
+
 @router.get("/admin/requests/flagged-for-review")
 async def admin_requests_flagged_for_review(
     limit: int = 100,

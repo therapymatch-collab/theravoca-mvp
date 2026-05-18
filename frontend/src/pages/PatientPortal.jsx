@@ -11,6 +11,7 @@ import {
   Sparkles,
   ClipboardCheck,
   ClipboardList,
+  ShieldCheck,
 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
 import SetPasswordPrompt from "@/components/SetPasswordPrompt";
@@ -224,14 +225,32 @@ function StatusBadge({ s, verified }) {
 }
 
 /**
- * Visual 4-step timeline: Submitted → Email verified → Matches → Results ready.
- * Steps light up based on the request's flags so patients can see where they
- * are in the process at a glance. The earlier "Matched" + "Responses" axes
- * were collapsed into a single "Matches" stage so we don't expose internal
- * notify/application counts to patients.
+ * Visual 5-step timeline: Submitted → Email verified → Request approved → Matching → Results.
+ *
+ * 2026-05-18 (Josh): "steps should be 'submitted' 'email verified'
+ * 'request approved' 'matching' 'results' with short help text under".
+ * The new "Request approved" stage reflects the admin-review gate
+ * added in 8792ac0 -- every request waits for admin Release before
+ * matching fires. Even when admin auto-releases, the stage briefly
+ * shows so the patient knows the workflow goes through quality
+ * review.
+ *
+ * Stage logic:
+ *   - Request approved: done when admin_review_required is false
+ *     (either was never set, or admin clicked Release). Pending
+ *     when admin_review_required is true (admin still has it
+ *     queued).
+ *   - Matching: kicks off only AFTER both email verified AND
+ *     request approved.
  */
 function StatusTimeline({ req }) {
   const verified = !!req.verified;
+  // Approval gate. The backend sets admin_review_required: true on
+  // flagged requests AND on every request when the global "review
+  // all" policy toggle is on. Absent the field => already approved
+  // (legacy requests + clean ones in heuristic-only mode).
+  const reviewRequired = !!req.admin_review_required;
+  const approved = !reviewRequired;
   const notified = req.notified_count > 0;
   const applied = req.application_count > 0;
   const resultsReady = !!req.results_sent_at || req.status === "completed";
@@ -247,28 +266,40 @@ function StatusTimeline({ req }) {
     {
       key: "verified",
       label: "Email verified",
-      sublabel: verified ? "Confirmed" : "Check inbox",
+      sublabel: verified ? "Confirmed" : "Check your inbox",
       icon: Mail,
       done: verified,
       pending: !verified,
     },
     {
-      key: "matches",
-      label: "Matches",
+      key: "approved",
+      label: "Request approved",
+      sublabel: approved
+        ? "Cleared by our team"
+        : verified
+          ? "Under quick review"
+          : "Awaiting verification",
+      icon: ShieldCheck,
+      done: approved,
+      pending: verified && !approved,
+    },
+    {
+      key: "matching",
+      label: "Matching",
       sublabel: applied
         ? "We found your therapists"
         : notified
-          ? "Looking now"
-          : verified
-            ? "Starting"
+          ? "Reaching out to therapists"
+          : verified && approved
+            ? "Starting now"
             : "Waiting",
       icon: Users,
       done: applied || resultsReady,
-      pending: verified && !applied && !resultsReady,
+      pending: verified && approved && !applied && !resultsReady,
     },
     {
       key: "results",
-      label: "Results ready",
+      label: "Results",
       sublabel: resultsReady
         ? shortDate(req.results_sent_at)
         : applied
@@ -285,7 +316,7 @@ function StatusTimeline({ req }) {
 
   return (
     <div className="mt-5 pt-5 border-t border-[#E8E5DF]" data-testid="status-timeline">
-      <div className="grid grid-cols-4 gap-1 sm:gap-2">
+      <div className="grid grid-cols-5 gap-1 sm:gap-2">
         {steps.map((step, i) => {
           const Icon = step.icon;
           const isActive = i === activeIdx;

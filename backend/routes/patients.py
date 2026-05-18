@@ -476,12 +476,45 @@ async def create_request(payload: RequestCreate, request: Request):
         doc["risk_score"] = risk_total
         doc["risk_signals"] = risk_signals
         doc["risk_scored_at"] = _now_iso()
-    if should_flag:
+
+    # ─── Global "review every request" toggle (2026-05-18 followup) ──
+    # Josh: "see this match that just go through with inappropriate
+    # question in prior therapy notes - that can never reach the
+    # therapists but it did, so either we have very tight controls
+    # over text boxes or we manually check each request in the
+    # beginning to make sure only quality referrals get through."
+    #
+    # Heuristics only catch obvious abuse (wordlist + obfuscation).
+    # For early launch where therapist-perception risk is high, gate
+    # EVERY new patient request behind admin review regardless of
+    # risk score. Flip the setting off in Admin -> Settings once
+    # there's enough volume + trust to let the heuristics drive.
+    #
+    # Setting lives in db.app_config keyed "intake_review_all_requests";
+    # defaults to True (safe / conservative) when the row is missing,
+    # so a fresh database is locked-down by default.
+    review_all_cfg = await db.app_config.find_one(
+        {"key": "intake_review_all_requests"}, {"_id": 0, "enabled": 1},
+    )
+    review_all_enabled = (
+        True if review_all_cfg is None else bool(review_all_cfg.get("enabled", True))
+    )
+
+    if should_flag or review_all_enabled:
         # When true: matching will NOT fire on email-verify; admin
         # must POST /api/admin/requests/{id}/release to clear this
         # and kick off matching. Status stays "pending_verification"
         # so the rest of the verify flow is unchanged for the patient.
         doc["admin_review_required"] = True
+        # Reason field surfaces in the Requests admin panel tooltip so
+        # admin sees at a glance WHY a request is gated -- distinguishes
+        # heuristic-flagged from policy-gated.
+        if should_flag and review_all_enabled:
+            doc["review_required_reason"] = "policy: review-all enabled (risk score flagged too)"
+        elif should_flag:
+            doc["review_required_reason"] = "heuristic: risk score above threshold"
+        else:
+            doc["review_required_reason"] = "policy: review-all enabled (clean content)"
 
     await db.requests.insert_one(doc.copy())
 

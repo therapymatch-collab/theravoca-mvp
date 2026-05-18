@@ -57,7 +57,13 @@ export default function ReviewPreviewModal({
     data.referral_source === "Other" && data.referral_source_other
       ? `Other: ${data.referral_source_other}`
       : data.referral_source || "—";
-  const notes = (data.notes || "").trim();
+  // 2026-05-18 (Josh): "notes from therapy is not showing up in
+  // preview button before submitting. check it" -- the field is
+  // `prior_therapy_notes` on the intake payload, not `notes`
+  // (which never existed). The legacy `data.notes` read just
+  // always evaluated to "" and the row never rendered, so patients
+  // had no way to verify what they typed before final submit.
+  const notes = (data.prior_therapy_notes || "").trim();
   // Which rows count as "hard requirements" for this referral.
   // Always-hard fields are flagged unconditionally. Patient-toggleable
   // hards (insurance, format/distance, availability, urgency) only get
@@ -231,9 +237,12 @@ export default function ReviewPreviewModal({
               );
             })}
             {notes && (
-              <div className="sm:col-span-2">
+              <div
+                className="sm:col-span-2"
+                data-testid="intake-preview-row-prior-therapy-notes"
+              >
                 <dt className="text-[10px] uppercase tracking-wider text-[#6D6A65]">
-                  Notes you shared
+                  Your note about past therapy
                 </dt>
                 <dd className="text-[#2B2A29] leading-relaxed mt-1 whitespace-pre-wrap">
                   {notes}
