@@ -1838,3 +1838,124 @@ async def send_claim_profile_email(
         ),
         template_key="claim_profile",
     )
+
+
+# ── Admin alerts: content moderation + risk-flag (2026-05-18) ──
+# Two operational alerts so admin learns about abuse attempts
+# immediately, not by checking the User Content Flagging panel hours
+# later. Both bypass quiet-hours via force=True -- abuse can't wait
+# until 8 AM.
+
+async def send_moderation_rejection_alert_to_admin(
+    to: str,
+    *,
+    field_name: str,
+    category: str,
+    route: str,
+    actor_email: Optional[str],
+    error_message: str,
+    text_snippet: str,
+) -> None:
+    """Fires when text_moderation HARD-REJECTS a submission (the user
+    got a 400 with a 'rephrase respectfully' message). Sends admin a
+    concise email so they know an abuse attempt happened in real time.
+    """
+    import html as _html
+    subject = f"[TheraVoca] Content rejected: {category} on {route}"
+    snippet_safe = _html.escape((text_snippet or "")[:500])
+    actor_line = (
+        f'<p style="font-size:14px;color:{BRAND["muted"]};margin:6px 0;">'
+        f'Actor: <span style="font-family:monospace;">{_html.escape(actor_email)}</span></p>'
+        if actor_email else ""
+    )
+    inner = f"""
+    <p style="font-size:15px;line-height:1.6;color:{BRAND['text']};">
+      A user submission was rejected by the content moderation layer.
+    </p>
+    <table style="font-size:14px;color:{BRAND['text']};line-height:1.7;margin:18px 0;border-collapse:collapse;">
+      <tr><td style="padding:2px 12px 2px 0;color:{BRAND['muted']};">Category</td><td><strong>{_html.escape(category)}</strong></td></tr>
+      <tr><td style="padding:2px 12px 2px 0;color:{BRAND['muted']};">Field</td><td><code>{_html.escape(field_name)}</code></td></tr>
+      <tr><td style="padding:2px 12px 2px 0;color:{BRAND['muted']};">Route</td><td><code>{_html.escape(route)}</code></td></tr>
+    </table>
+    {actor_line}
+    <p style="font-size:13px;color:{BRAND['muted']};margin:14px 0 4px 0;">Rejected text:</p>
+    <blockquote style="font-size:14px;background:#FBE9E5;border-left:3px solid #C87965;padding:10px 14px;margin:0 0 14px 0;color:{BRAND['text']};font-style:italic;">
+      "{snippet_safe}"
+    </blockquote>
+    <p style="font-size:13px;color:{BRAND['muted']};margin:14px 0;">
+      Nothing persisted -- the user got a 400 with the message:
+      <em>"{_html.escape(error_message)}"</em>
+    </p>
+    <p style="margin:24px 0;">
+      <a href="{_get_app_url()}/admin/dashboard"
+         style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:999px;font-weight:600;">
+        Open Admin: User Content Flagging
+      </a>
+    </p>
+    """
+    await _send(
+        to,
+        subject,
+        _wrap("Content moderation alert", inner),
+        template_key="moderation_rejection_alert",
+        force=True,
+    )
+
+
+async def send_request_flagged_alert_to_admin(
+    to: str,
+    *,
+    request_id: str,
+    patient_email: str,
+    risk_score: int,
+    risk_signals: dict,
+) -> None:
+    """Fires when a patient request PASSED hard moderation but tripped
+    the soft-flag risk score (risk_scoring.score_request). Matching
+    will NOT fire until admin releases the request via the Requests
+    panel.
+    """
+    import html as _html
+    subject = f"[TheraVoca] Request flagged for review (score {risk_score})"
+    signal_rows = ""
+    for field_label, signals in (risk_signals or {}).items():
+        items = "".join(f'<li>{_html.escape(s)}</li>' for s in signals)
+        signal_rows += (
+            f'<p style="margin:10px 0 4px 0;"><strong>{_html.escape(field_label)}</strong></p>'
+            f'<ul style="font-size:13px;color:{BRAND["text"]};margin:0 0 8px 18px;line-height:1.6;">{items}</ul>'
+        )
+    portal_url = f"{_get_app_url()}/admin/dashboard"
+    inner = f"""
+    <p style="font-size:15px;line-height:1.6;color:{BRAND['text']};">
+      A new patient request just came in and tripped the soft-flag
+      review gate. No therapist notifications will fire until you
+      release it from the Requests panel.
+    </p>
+    <table style="font-size:14px;color:{BRAND['text']};line-height:1.7;margin:18px 0;border-collapse:collapse;">
+      <tr><td style="padding:2px 12px 2px 0;color:{BRAND['muted']};">Request ID</td><td><code>{_html.escape(request_id)}</code></td></tr>
+      <tr><td style="padding:2px 12px 2px 0;color:{BRAND['muted']};">Patient email</td><td><code>{_html.escape(patient_email or '')}</code></td></tr>
+      <tr><td style="padding:2px 12px 2px 0;color:{BRAND['muted']};">Risk score</td><td><strong>{risk_score}</strong> (flag threshold: 30 per-field or 50 total)</td></tr>
+    </table>
+    <p style="font-size:13px;color:{BRAND['muted']};margin:18px 0 4px 0;">Signals that tripped:</p>
+    {signal_rows}
+    <p style="font-size:13px;color:{BRAND['muted']};margin:18px 0;">
+      <strong>Next step:</strong> open the Requests panel and either
+      <em>Release to matching</em> (if the content looks fine on review)
+      or leave it gated (if it's clearly low-quality / abusive). The
+      patient still got the verification email and sees the normal
+      "check your inbox" UX -- they don't know they were flagged.
+    </p>
+    <p style="margin:24px 0;">
+      <a href="{portal_url}"
+         style="display:inline-block;background:{BRAND['primary']};color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:999px;font-weight:600;">
+        Open Admin: Requests
+      </a>
+    </p>
+    """
+    await _send(
+        to,
+        subject,
+        _wrap("Request flagged for review", inner),
+        template_key="request_flagged_alert",
+        force=True,
+    )

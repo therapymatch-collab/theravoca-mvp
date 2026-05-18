@@ -383,6 +383,13 @@ async def admin_list_requests(request: Request, _: bool = Depends(require_role("
         "outreach_run_at": 1, "outreach_sent_count": 1,
         "outreach_sent_email_count": 1, "outreach_sent_sms_count": 1,
         "outreach_needed_count": 1,
+        # Soft-flag review gate (2026-05-18). admin_review_required
+        # drives the yellow "flagged" badge + Release button in the
+        # Requests admin panel. risk_score / risk_signals are shown
+        # on hover so admin can quickly judge severity before
+        # clicking Release.
+        "admin_review_required": 1, "risk_score": 1, "risk_signals": 1,
+        "admin_released_at": 1, "admin_released_by": 1,
     }
     docs = await db.requests.find(
         {}, _LIST_PROJECTION
@@ -8683,6 +8690,89 @@ async def admin_email_cron_schedules(_: bool = Depends(require_admin)):
 # `category` (profanity_or_sexualized, gibberish_repeated_chars,
 # all_caps_shouting, url_spam, too_short, too_long, missing_required)
 # to see abuse patterns at a glance.
+# ── Risk-flag review queue + release (2026-05-18) ──────────────
+# Lists patient requests that hit the soft-flag risk threshold and
+# are gated behind admin review (matching disabled until released).
+# See routes/patients.py:create_request for where the flag is set
+# and verify_request for where matching is skipped.
+@router.get("/admin/requests/flagged-for-review")
+async def admin_requests_flagged_for_review(
+    limit: int = 100,
+    _: bool = Depends(require_admin),
+):
+    limit = max(1, min(int(limit or 100), 500))
+    rows = await db.requests.find(
+        {"admin_review_required": True},
+        {
+            "_id": 0,
+            "id": 1,
+            "email": 1,
+            "created_at": 1,
+            "verified": 1,
+            "verified_at": 1,
+            "status": 1,
+            "risk_score": 1,
+            "risk_signals": 1,
+            "risk_scored_at": 1,
+            "other_issue": 1,
+            "prior_therapy_notes": 1,
+            "p3_resonance": 1,
+            "admin_released_at": 1,
+            "admin_released_by": 1,
+        },
+    ).sort("created_at", -1).to_list(limit)
+    return {"rows": rows, "total": len(rows)}
+
+
+@router.post("/admin/requests/{request_id}/release")
+async def admin_release_flagged_request(
+    request_id: str,
+    _: bool = Depends(require_admin),
+):
+    """Clear admin_review_required flag and (if verified) trigger
+    matching. The two gates (email verified + admin released) both
+    must be satisfied before therapist notifications fire."""
+    from datetime import datetime, timezone
+    req = await db.requests.find_one(
+        {"id": request_id},
+        {"_id": 0, "id": 1, "verified": 1, "admin_review_required": 1, "email": 1},
+    )
+    if not req:
+        raise HTTPException(404, "Request not found")
+    if not req.get("admin_review_required"):
+        return {"ok": True, "already_released": True, "matching_triggered": False}
+    await db.requests.update_one(
+        {"id": request_id},
+        {"$set": {
+            "admin_review_required": False,
+            "admin_released_at": datetime.now(timezone.utc).isoformat(),
+            "admin_released_by": "admin",
+        }},
+    )
+    audit.emit(
+        actor_type="admin", actor_id="admin",
+        action="release_flagged_request",
+        resource="request", resource_id=request_id,
+    )
+    matching_triggered = False
+    if req.get("verified"):
+        # Patient already verified -- kick matching now.
+        from helpers import _trigger_matching, _spawn_bg
+        _spawn_bg(
+            _trigger_matching(request_id),
+            name=f"release_match_{request_id[:8]}",
+        )
+        matching_triggered = True
+    # If not verified yet, the verify_request handler will trigger
+    # matching when the patient clicks the link (admin_review_required
+    # is now false, so the gate is open).
+    return {
+        "ok": True,
+        "already_released": False,
+        "matching_triggered": matching_triggered,
+    }
+
+
 @router.get("/admin/content-moderation")
 async def admin_content_moderation(
     limit: int = 100,

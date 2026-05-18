@@ -1327,6 +1327,7 @@ export default function AdminDashboard() {
                   filteredRequests={filteredRequests}
                   openDetail={openDetail}
                   StatusBadge={StatusBadge}
+                  refresh={refresh}
                 />
               )}
 

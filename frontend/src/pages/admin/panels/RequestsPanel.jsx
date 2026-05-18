@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronRight, ShieldAlert, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Th } from "./_shared";
+import useAdminClient from "@/lib/useAdminClient";
 
 // Coverage threshold — when notified_count drops below this, the row
 // gets a red "low coverage" warning so the admin can scan a long
@@ -17,6 +19,10 @@ const TARGET_NOTIFIED = 30;
 // the red dot.
 const STATUS_FILTERS = {
   all:                  { label: "All statuses",                                 statuses: null }, // null = no filter
+  // 2026-05-18 -- review-gate filter. Special: filters on the
+  // `admin_review_required` boolean rather than the `status` string.
+  // Handled inline below.
+  flagged_for_review:   { label: "⚠ Flagged for review",                         statuses: null, requireFlag: true },
   active:               { label: "Active (open + pending verification)",          statuses: ["open", "pending_verification"] },
   pending_verification: { label: "Pending verification",                          statuses: ["pending_verification"] },
   open:                 { label: "Open",                                          statuses: ["open"] },
@@ -39,7 +45,10 @@ export default function RequestsPanel({
   filteredRequests,
   openDetail,
   StatusBadge,
+  refresh,
 }) {
+  const client = useAdminClient();
+  const [releasingId, setReleasingId] = useState(null);
   // Default date window: last 30 days (inclusive of today).
   const today = useMemo(() => new Date(), []);
   const thirtyDaysAgo = useMemo(
@@ -56,7 +65,9 @@ export default function RequestsPanel({
   const fullyFilteredRequests = useMemo(() => {
     const startMs = startDate ? new Date(`${startDate}T00:00:00`).getTime() : null;
     const endMs = endDate ? new Date(`${endDate}T23:59:59.999`).getTime() : null;
-    const statusSet = STATUS_FILTERS[statusFilter]?.statuses;
+    const cfg = STATUS_FILTERS[statusFilter];
+    const statusSet = cfg?.statuses;
+    const requireFlag = cfg?.requireFlag;
     return filteredRequests.filter((r) => {
       // Date range
       if (r.created_at) {
@@ -71,9 +82,40 @@ export default function RequestsPanel({
         const s = String(r.status || "").toLowerCase();
         if (!statusSet.includes(s)) return false;
       }
+      // Soft-flag review gate (2026-05-18)
+      if (requireFlag && !r.admin_review_required) return false;
       return true;
     });
   }, [filteredRequests, startDate, endDate, statusFilter]);
+
+  // Count of requests currently gated behind admin review -- drives
+  // a top-of-panel banner so admin sees the queue immediately.
+  const flaggedCount = useMemo(
+    () => requests.filter((r) => r.admin_review_required).length,
+    [requests],
+  );
+
+  // POST /admin/requests/{id}/release. Clears the gate and (if the
+  // patient already verified their email) triggers matching now.
+  const releaseRequest = async (rid, e) => {
+    e.stopPropagation(); // don't open the detail dialog
+    setReleasingId(rid);
+    try {
+      const res = await client.post(`/admin/requests/${rid}/release`);
+      if (res.data?.matching_triggered) {
+        toast.success("Released — matching is running now.");
+      } else if (res.data?.already_released) {
+        toast.info("Already released.");
+      } else {
+        toast.success("Released. Matching will fire when the patient verifies their email.");
+      }
+      if (refresh) await refresh();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Release failed");
+    } finally {
+      setReleasingId(null);
+    }
+  };
 
   // Backward-compat alias for any code below that still references the
   // old name. Identical content.
@@ -90,6 +132,32 @@ export default function RequestsPanel({
 
   return (
     <div className="mt-6 space-y-3">
+      {/* Soft-flag review queue banner (2026-05-18). Visible whenever
+          there's at least one request gated behind admin review.
+          Clicking the chip auto-selects the "Flagged for review"
+          status filter so the table shows just the queue. */}
+      {flaggedCount > 0 && (
+        <div
+          className="bg-[#FBE9E5] border border-[#F4C7BE] rounded-xl px-4 py-3 flex items-center gap-3 text-sm"
+          data-testid="requests-flagged-banner"
+        >
+          <ShieldAlert size={18} className="text-[#8B3220] shrink-0" />
+          <span className="text-[#8B3220]">
+            <strong>{flaggedCount}</strong> request{flaggedCount === 1 ? "" : "s"} flagged for review — matching is paused until you release each one.
+          </span>
+          {statusFilter !== "flagged_for_review" && (
+            <button
+              type="button"
+              onClick={() => setStatusFilter("flagged_for_review")}
+              className="ml-auto text-xs font-semibold text-[#2D4A3E] underline hover:text-[#3A5E50]"
+              data-testid="requests-flagged-filter-link"
+            >
+              Show flagged →
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="bg-white border border-[#E8E5DF] rounded-2xl px-4 py-3 flex items-center gap-3 flex-wrap text-sm">
         <span className="text-xs uppercase tracking-wider text-[#6D6A65] font-semibold">Date range</span>
         <input
@@ -245,6 +313,19 @@ export default function RequestsPanel({
                       </title>
                     </AlertTriangle>
                   )}
+                  {r.admin_review_required && (
+                    <ShieldAlert
+                      size={14}
+                      className="text-[#8B3220] shrink-0"
+                      aria-label="Flagged for review — matching paused"
+                      data-testid={`request-flagged-${r.id}`}
+                    >
+                      <title>
+                        Flagged for review (risk score {r.risk_score || "?"}).
+                        Matching is paused until you click Release.
+                      </title>
+                    </ShieldAlert>
+                  )}
                   {r.email}
                 </div>
                 <div className="text-xs text-[#6D6A65]">
@@ -255,7 +336,34 @@ export default function RequestsPanel({
                 {r.location_state || ""}
               </td>
               <td className="p-4">
-                <StatusBadge s={r.status} verified={r.verified} />
+                <div className="flex flex-col gap-1.5 items-start">
+                  <StatusBadge s={r.status} verified={r.verified} />
+                  {r.admin_review_required && (
+                    <button
+                      type="button"
+                      onClick={(e) => releaseRequest(r.id, e)}
+                      disabled={releasingId === r.id}
+                      className="text-[11px] font-semibold bg-[#2D4A3E] text-white px-2.5 py-1 rounded-full hover:bg-[#3A5E50] disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-1 whitespace-nowrap"
+                      title={
+                        r.risk_signals
+                          ? "Signals: " + Object.entries(r.risk_signals)
+                              .map(([f, s]) => `${f}: ${(s || []).join(", ")}`)
+                              .join(" | ")
+                          : "Release this request to matching"
+                      }
+                      data-testid={`request-release-${r.id}`}
+                    >
+                      {releasingId === r.id ? (
+                        <>
+                          <Loader2 size={11} className="animate-spin" />
+                          Releasing...
+                        </>
+                      ) : (
+                        "Release to matching"
+                      )}
+                    </button>
+                  )}
+                </div>
               </td>
               <td
                 className="p-4 text-xs text-[#2B2A29] max-w-[140px] truncate"

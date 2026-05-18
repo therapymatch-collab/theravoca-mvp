@@ -245,15 +245,16 @@ async def _log_rejection(
     actor_email: Optional[str],
 ) -> None:
     """Persist one rejection to db.moderation_rejections for the
-    User Content Flagging admin panel. Best-effort: failures are
-    swallowed so a logging hiccup never blocks the rejection
-    response. We truncate the offending text to 500 chars so a
-    pathological 2 MB paste can't blow up the audit row.
+    User Content Flagging admin panel + fire an admin alert email.
+    Both are best-effort: failures are swallowed so a logging hiccup
+    never blocks the rejection response.
     """
+    snippet = (text or "")[:500]
+    category = _classify_rejection(snippet, err)
+    # 1. Persist to audit collection
     try:
         from datetime import datetime, timezone
         from deps import db
-        snippet = (text or "")[:500]
         await db.moderation_rejections.insert_one({
             "rejected_at": datetime.now(timezone.utc).isoformat(),
             "field_name": field_name,
@@ -263,14 +264,12 @@ async def _log_rejection(
             # admin-only and the actor is the user who tried to
             # submit, not a third party.
             "actor_email": (actor_email or "").lower().strip() or None,
-            "category": _classify_rejection(snippet, err),
+            "category": category,
             "error_message": err,
             "text_snippet": snippet,
             "text_length": len(text or ""),
         })
     except Exception:
-        # Log to logger if available, but never raise -- the
-        # rejection response is more important than the audit row.
         try:
             import logging
             logging.getLogger(__name__).warning(
@@ -278,6 +277,32 @@ async def _log_rejection(
             )
         except Exception:
             pass
+    # 2. Fire admin alert email (only for content categories worth
+    # alerting -- skip too_short / missing_required which are just
+    # validation noise, not abuse signals).
+    if category in {"profanity_or_sexualized", "url_spam", "gibberish_repeated_chars", "all_caps_shouting"}:
+        try:
+            import os
+            admin_email = os.environ.get("ADMIN_NOTIFY_EMAIL", "").strip()
+            if admin_email:
+                from email_service import send_moderation_rejection_alert_to_admin
+                await send_moderation_rejection_alert_to_admin(
+                    to=admin_email,
+                    field_name=field_name,
+                    category=category,
+                    route=route or "",
+                    actor_email=actor_email,
+                    error_message=err,
+                    text_snippet=snippet,
+                )
+        except Exception:
+            try:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "moderation_rejection admin alert failed", exc_info=True,
+                )
+            except Exception:
+                pass
 
 
 def validate_or_raise(

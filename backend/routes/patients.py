@@ -457,7 +457,53 @@ async def create_request(payload: RequestCreate, request: Request):
     if content_flags:
         doc["content_flags"] = content_flags
 
+    # ─── Soft-flag risk scoring (2026-05-18, Josh) ────────────────────
+    # Hard moderation already ran above (text_moderation.validate_or_raise)
+    # and would have 400'd on profanity / gibberish / etc. This LAYER
+    # catches softer signals (near-profanity obfuscation, very short
+    # answers, mid-range all-caps) and gates matching behind admin
+    # review when the request crosses a risk threshold. Patient still
+    # gets the verification email + standard "check your email" UX --
+    # admin's release step is what actually triggers therapist
+    # notifications.
+    from risk_scoring import score_request as _score_request
+    risk_total, risk_signals, should_flag = _score_request({
+        "Other issue": (payload.other_issue, 0),
+        "Prior therapy notes": (payload.prior_therapy_notes, 0),
+        "P3 (deep match)": (payload.p3_resonance, 15),
+    })
+    if risk_total > 0:
+        doc["risk_score"] = risk_total
+        doc["risk_signals"] = risk_signals
+        doc["risk_scored_at"] = _now_iso()
+    if should_flag:
+        # When true: matching will NOT fire on email-verify; admin
+        # must POST /api/admin/requests/{id}/release to clear this
+        # and kick off matching. Status stays "pending_verification"
+        # so the rest of the verify flow is unchanged for the patient.
+        doc["admin_review_required"] = True
+
     await db.requests.insert_one(doc.copy())
+
+    # Fire admin alert email if flagged (best-effort, fire-and-forget).
+    # bypass quiet-hours via force=True -- admin wants to know about
+    # potential abuse immediately.
+    if should_flag:
+        async def _bg_flag_alert() -> None:
+            try:
+                from email_service import send_request_flagged_alert_to_admin
+                from deps import ADMIN_NOTIFY_EMAIL
+                if ADMIN_NOTIFY_EMAIL:
+                    await send_request_flagged_alert_to_admin(
+                        to=ADMIN_NOTIFY_EMAIL,
+                        request_id=rid,
+                        patient_email=payload.email,
+                        risk_score=risk_total,
+                        risk_signals=risk_signals,
+                    )
+            except Exception as e:
+                logger.warning("flagged-request admin alert failed for %s: %s", rid, e)
+        _spawn_bg(_bg_flag_alert(), name=f"flag_alert_{rid[:8]}")
     # Tag requests where the patient selected low-supply categories so
     # the admin and future automation can prioritize recruiting.
     if payload.low_supply_categories:
@@ -575,12 +621,27 @@ async def verify_request(token: str, request: Request):
             {"id": req["id"]},
             {"$set": {"verified": True, "status": "open", "verified_at": _now_iso()}},
         )
-        # Hold a strong ref to the task so Python's GC can't kill it mid-run.
-        from helpers import _spawn_bg
-        _spawn_bg(
-            _trigger_matching(req["id"]),
-            name=f"match_for_{req['id'][:8]}",
-        )
+        # 2026-05-18: gate matching behind admin review when the
+        # request was flagged by risk_scoring at submit. We still mark
+        # the email verified (the patient sees normal UX -- "you're in,
+        # we'll email you when matches are ready") but no therapist
+        # notifications fire until admin clicks "Release" in the
+        # Requests panel. That endpoint then calls _trigger_matching
+        # explicitly. Without this gate, a flagged request that the
+        # admin hasn't reviewed yet would silently match through to
+        # therapists -- the exact scenario Josh asked to prevent.
+        if req.get("admin_review_required"):
+            logger.info(
+                "verify: skipping matching for %s -- admin_review_required",
+                req["id"],
+            )
+        else:
+            # Hold a strong ref to the task so Python's GC can't kill it mid-run.
+            from helpers import _spawn_bg
+            _spawn_bg(
+                _trigger_matching(req["id"]),
+                name=f"match_for_{req['id'][:8]}",
+            )
     # Issue a patient session token here too — the email link itself proves
     # the user owns this address, so we can drop them straight into account
     # setup without a second magic-code round-trip.
