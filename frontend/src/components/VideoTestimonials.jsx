@@ -123,18 +123,25 @@ function thumbnailUrl(streamId) {
   return `https://${STREAM_SUBDOMAIN}/${streamId}/thumbnails/thumbnail.jpg?time=2s`;
 }
 
-function TestimonialCard({ tt }) {
-  // Local state per card: only mount the iframe once the user clicks
-  // play. Until then, render Stream's auto-thumbnail + our custom
-  // play button -- no third-party chrome on the page at all.
-  const [active, setActive] = useState(false);
+function TestimonialCard({ tt, isActive, onActivate }) {
+  // 2026-05-18 (Josh: "can you control video play so only 1 video
+  // plays at a time?"). `active` state lifted from per-card local
+  // state to the parent <VideoTestimonials>. When the user clicks
+  // card B's play overlay, the parent sets activeId="B", which
+  // sets ALL OTHER cards' isActive back to false -- their iframes
+  // unmount, tearing down playback. Only card B's iframe remains.
+  //
+  // Trade-off: clicking a different card LOSES playback position
+  // on the prior one (iframe gets torn down). For 30-second
+  // testimonials people don't typically resume mid-clip, so the
+  // simplicity beats the polish cost of postMessage-based pause.
   return (
     <article
       className="shrink-0 w-[78%] sm:w-[44%] lg:w-[30%] snap-center bg-white border border-[#E8E5DF] rounded-2xl overflow-hidden"
       data-testid={`testimonial-card-${tt.id}`}
     >
       <div className="aspect-[9/16] bg-[#0F1714] relative">
-        {active ? (
+        {isActive ? (
           /* No autoplay -- the user taps Cloudflare's play button
              inside the iframe to start playback, which counts as a
              fresh user gesture inside the iframe origin and lets
@@ -151,7 +158,7 @@ function TestimonialCard({ tt }) {
         ) : (
           <button
             type="button"
-            onClick={() => setActive(true)}
+            onClick={onActivate}
             aria-label={`Play testimonial from ${tt.name}`}
             className="absolute inset-0 w-full h-full group"
             data-testid={`testimonial-play-${tt.id}`}
@@ -189,6 +196,12 @@ function TestimonialCard({ tt }) {
 export default function VideoTestimonials() {
   const t = useSiteCopy();
   const trackRef = useRef(null);
+  // 2026-05-18: parent-level "which card is playing" state so only
+  // one iframe is mounted at a time. Clicking a different card
+  // unmounts the previous one, stopping its playback. null = no
+  // card active (initial state -- all cards show poster + play
+  // overlay).
+  const [activeId, setActiveId] = useState(null);
   // Carousel arrow visibility tracks the scroll position so we don't
   // show a left chevron at scroll=0 (no videos to the left -- the
   // chevron implied content that didn't exist) or a right chevron
@@ -278,7 +291,12 @@ export default function VideoTestimonials() {
             data-testid="testimonials-track"
           >
             {TESTIMONIALS.map((tt) => (
-              <TestimonialCard key={tt.id} tt={tt} />
+              <TestimonialCard
+                key={tt.id}
+                tt={tt}
+                isActive={activeId === tt.id}
+                onActivate={() => setActiveId(tt.id)}
+              />
             ))}
           </div>
         </div>
