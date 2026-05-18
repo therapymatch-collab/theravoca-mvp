@@ -3048,8 +3048,12 @@ export default function AdminDashboard() {
             </DialogTitle>
             <DialogDescription className="text-sm text-[#6D6A65]">
               How this therapist appears on a patient's match results
-              page. Public bio + photo + credential + modalities — no
-              email, phone, or address shown.
+              page — the same card layout, including office address,
+              website, insurance, and email/phone (which the patient
+              taps to open their email or phone app). Match-score %,
+              "Why we matched" chips, gaps, and the per-patient
+              research rationale aren't previewable here because they
+              depend on the specific patient's intake.
             </DialogDescription>
           </DialogHeader>
           {previewTherapist && (
