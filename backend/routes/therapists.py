@@ -1067,7 +1067,42 @@ async def therapist_apply(
             app_doc["apply_fit_rationale"] = fit.get("rationale") or ""
     except Exception:
         pass
-    await db.applications.insert_one(app_doc.copy())
+    # 2026-05-18: defense against the find_one->insert_one race the
+    # audit caught. If two concurrent requests slip past the existence
+    # check at the top of this handler, the unique index on
+    # (request_id, therapist_id) (set up in server.py:ensure_indexes)
+    # raises DuplicateKeyError on the second insert. We catch that and
+    # re-fetch the row the first request inserted, returning its data
+    # so the second click behaves like an idempotent retry instead of
+    # erroring or duplicating.
+    from pymongo.errors import DuplicateKeyError
+    try:
+        await db.applications.insert_one(app_doc.copy())
+    except DuplicateKeyError:
+        existing = await db.applications.find_one(
+            {"request_id": request_id, "therapist_id": therapist_id},
+            {"_id": 0},
+        )
+        if existing:
+            return ApplicationOut(
+                id=existing["id"],
+                request_id=request_id,
+                therapist_id=therapist_id,
+                therapist_name=therapist["name"],
+                match_score=existing.get("match_score") or score,
+                message=existing.get("message", ""),
+                created_at=existing["created_at"],
+                session_token=auto_token,
+                portal_url=portal_url,
+            )
+        # Truly degenerate: index says duplicate but find_one returns
+        # nothing. Bubble a 500 with logging so we'd see it in Sentry.
+        logger.error(
+            "DuplicateKeyError on applications insert but no existing row "
+            "found for request_id=%s therapist_id=%s",
+            request_id, therapist_id,
+        )
+        raise HTTPException(500, "Application state inconsistent; please retry.")
     # Strip fields that aren't on ApplicationOut before unpacking.
     out_kwargs = {k: v for k, v in app_doc.items() if k in {
         "id", "request_id", "therapist_id", "therapist_name",
@@ -1152,12 +1187,32 @@ async def therapist_decline_action(
         "created_at": now,
         "declined_at": now,
     }
-    await db.declines.update_one(
+    # 2026-05-18: previously this used {"$set": doc} which overwrote
+    # the stored `id` field on every re-fire. The upsert semantics
+    # mean the (request_id, therapist_id) row is unique either way,
+    # but the app-level `id` UUID would change on each click -- and
+    # the return statement returned doc["id"] (the local one) which
+    # might not match what's in the DB. Split into $set (mutable
+    # fields) + $setOnInsert (immutable identity) so the `id` only
+    # gets written when the row is actually being created. Same
+    # behavior on first call; re-fires now preserve the original id.
+    set_only_on_insert = {"id": doc.pop("id")}
+    res = await db.declines.update_one(
         {"request_id": request_id, "therapist_id": therapist_id},
-        {"$set": doc},
+        {"$set": doc, "$setOnInsert": set_only_on_insert},
         upsert=True,
     )
-    return {"id": doc["id"], "status": "declined"}
+    # Re-read so the response always reflects the canonical stored id
+    # (in case this was a re-fire where the original insert had a
+    # different UUID than our local one).
+    if not res.upserted_id:
+        existing = await db.declines.find_one(
+            {"request_id": request_id, "therapist_id": therapist_id},
+            {"_id": 0, "id": 1},
+        )
+        if existing and existing.get("id"):
+            set_only_on_insert["id"] = existing["id"]
+    return {"id": set_only_on_insert["id"], "status": "declined"}
 
 
 @router.get("/therapist/{therapist_id}/referrals")

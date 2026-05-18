@@ -204,6 +204,31 @@ async def lifespan(_app: FastAPI):
         await _safe_idx(
             db.feedback, [("request_id", 1), ("milestone", 1)], unique=True,
         )
+        # Applications: one row per (request, therapist). 2026-05-18
+        # audit caught a find_one->insert_one race in the apply
+        # endpoint -- two rapid Apply clicks before the first finishes
+        # both pass the existence check, both insert, two duplicate
+        # application records land in the DB and the patient sees the
+        # therapist twice in their results. Unique index is defense in
+        # depth; the endpoint also catches DuplicateKeyError and falls
+        # back to the existing application path. If existing DB rows
+        # have duplicates the index creation will fail and _safe_idx
+        # will log a warning -- run a dedupe pass before re-deploying
+        # in that case.
+        await _safe_idx(
+            db.applications,
+            [("request_id", 1), ("therapist_id", 1)],
+            unique=True,
+        )
+        # Declines: same defense. update_one(upsert=True) is already
+        # atomic for (request_id, therapist_id) collisions, but the
+        # unique index guards against any future code path that does
+        # an unconditional insert.
+        await _safe_idx(
+            db.declines,
+            [("request_id", 1), ("therapist_id", 1)],
+            unique=True,
+        )
         # Therapist surveys: one row per (therapist, survey number).
         await _safe_idx(
             db.therapist_surveys,
