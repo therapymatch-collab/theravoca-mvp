@@ -523,6 +523,43 @@ app.add_middleware(
 )
 
 
+# ── Global request-body size cap ───────────────────────────────────
+# 2026-05-18 DoS audit: FastAPI had no global request-size limit. An
+# attacker could send a Content-Length: 50MB request to any endpoint,
+# tying up server memory during the body read BEFORE per-endpoint
+# validation runs. The license-doc upload had its own 5MB cap on
+# decoded bytes (good), but other endpoints accepted arbitrarily large
+# JSON bodies.
+#
+# Cap at 6MB to fit the legitimate biggest payload (license-doc upload
+# at 5MB raw + base64 overhead ~33%). Stripe + Resend + Telnyx webhooks
+# all stay well under that. Anything bigger gets a 413 before the body
+# is fully buffered.
+_MAX_BODY_BYTES = int(os.environ.get("MAX_REQUEST_BODY_BYTES", str(6 * 1024 * 1024)))
+
+
+@app.middleware("http")
+async def _enforce_max_body(request, call_next):
+    cl = request.headers.get("content-length")
+    if cl:
+        try:
+            if int(cl) > _MAX_BODY_BYTES:
+                from fastapi.responses import JSONResponse as _JR
+                return _JR(
+                    status_code=413,
+                    content={
+                        "detail": (
+                            f"Request body too large "
+                            f"({int(cl) // 1024} KB). "
+                            f"Max {_MAX_BODY_BYTES // 1024} KB."
+                        ),
+                    },
+                )
+        except (TypeError, ValueError):
+            pass
+    return await call_next(request)
+
+
 # ── Security headers middleware ────────────────────────────────────
 # HIPAA quick win (2026-05-12): set baseline security headers on every
 # response so PHI in transit is protected and the served SPA is harder

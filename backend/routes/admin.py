@@ -1256,6 +1256,31 @@ async def admin_approve_therapist(therapist_id: str, _: bool = Depends(require_r
         send_therapist_approved(t["email"], t["name"]),
         name=f"approve_email_{therapist_id[:8]}",
     )
+    # 2026-05-18: deep-research enrichment moved here from the public
+    # signup endpoint. Reason: enrichment costs $0.05-$0.20 in
+    # Anthropic/OpenAI spend per therapist, and on the signup endpoint
+    # it was an unauthenticated cost-amplification surface. Gating
+    # behind admin-approval means only admin-vetted profiles trigger
+    # the spend. The cache lands before the welcome email's first read,
+    # so the therapist's profile page renders with enriched data on
+    # their first login.
+    try:
+        from research_enrichment import get_or_build_research
+
+        async def _bg_deep_research():
+            try:
+                fresh = await db.therapists.find_one({"id": therapist_id}, {"_id": 0})
+                if fresh:
+                    await get_or_build_research(fresh, force=True, deep=True)
+            except Exception as e:
+                logger.warning(
+                    "Post-approval deep-research for %s failed: %s",
+                    therapist_id, e,
+                )
+
+        _spawn_bg(_bg_deep_research(), name=f"deep_research_{therapist_id[:8]}")
+    except ImportError:
+        pass
     return {"id": therapist_id, "status": "approved"}
 
 
@@ -2982,6 +3007,15 @@ async def admin_bulk_approve_therapists(payload: dict, _: bool = Depends(require
     import asyncio
     ids = [str(x) for x in (payload or {}).get("therapist_ids") or []][:200]
     approved: list[str] = []
+    # 2026-05-18: also kick off deep-research on bulk approve (matches
+    # the single-approve endpoint behaviour). Cost gate is still
+    # admin-only, so no abuse surface.
+    try:
+        from research_enrichment import get_or_build_research as _gobr
+        _enrich_available = True
+    except ImportError:
+        _enrich_available = False
+
     for tid in ids:
         t = await db.therapists.find_one({"id": tid}, {"_id": 0, "id": 1, "email": 1, "name": 1})
         if not t:
@@ -2994,6 +3028,17 @@ async def admin_bulk_approve_therapists(payload: dict, _: bool = Depends(require
             send_therapist_approved(t["email"], t["name"]),
             name=f"bulk_approve_{tid[:8]}",
         )
+        if _enrich_available:
+            async def _bg_research(_tid=tid):
+                try:
+                    fresh = await db.therapists.find_one({"id": _tid}, {"_id": 0})
+                    if fresh:
+                        await _gobr(fresh, force=True, deep=True)
+                except Exception as e:
+                    logger.warning(
+                        "Bulk-approve deep-research for %s failed: %s", _tid, e,
+                    )
+            _spawn_bg(_bg_research(), name=f"bulk_research_{tid[:8]}")
         approved.append(tid)
     return {"ok": True, "approved": approved, "count": len(approved)}
 

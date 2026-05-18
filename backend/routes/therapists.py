@@ -565,24 +565,19 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
     # session's email. The session is for an UNAPPROVED therapist;
     # the portal still gates most actions on approval state.
     signup_session_token = _create_session_token(payload.email, "therapist")
-    # Kick off deep web-research enrichment in the background so by the
-    # time admin reviews the application, we already have evidence-graded
-    # specialty themes + public footprint cached. Best-effort; failures
-    # are logged in research_enrichment but never block signup.
-    try:
-        from research_enrichment import get_or_build_research
-
-        async def _bg_deep_research():
-            try:
-                t = await db.therapists.find_one({"id": tid}, {"_id": 0})
-                if t:
-                    await get_or_build_research(t, force=True, deep=True)
-            except Exception as e:
-                logger.warning("Auto deep-research for new signup failed: %s", e)
-
-        _spawn_bg(_bg_deep_research(), name=f"deep_research_{tid[:8]}")
-    except ImportError:
-        pass
+    # Deep web-research enrichment was previously kicked off in the
+    # background HERE on every signup so that by the time admin reviewed
+    # the application, the cached research was ready. 2026-05-18 DoS
+    # audit: this turns an unauthenticated POST into ~$0.05-$0.20 of
+    # Anthropic/OpenAI spend per request. The IP rate limit (3/hr) caps
+    # the burst from a single source, but a botnet defeats that easily.
+    #
+    # Moved to fire on admin-approval instead -- the admin clicks
+    # "Approve" → backend kicks off deep-research → cached by the time
+    # the therapist receives the welcome email. Same end-state, but
+    # the LLM spend is gated behind an authenticated admin action.
+    # See: backend/routes/admin.py:approve_therapist (the spawn lives
+    # there now). The cost-asymmetry attack class is closed.
     return {
         "id": tid,
         "status": "pending_approval",
