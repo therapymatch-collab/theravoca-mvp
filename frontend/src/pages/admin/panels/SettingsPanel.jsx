@@ -187,6 +187,137 @@ function TurnstileToggleCard({ client: clientProp }) {
   );
 }
 
+// Global "review every patient request" policy toggle. When ON
+// (default for early launch), every new patient request lands in
+// admin_review_required: true and matching is paused until admin
+// clicks Release in the Requests panel. Heuristic risk-scoring
+// still runs but no longer gates matching by itself; the policy
+// toggle does. Flip OFF once you trust the heuristics + want
+// throughput at scale.
+//
+// Backend endpoints (admin role only):
+//   GET  /api/admin/settings/intake-review-all -> {enabled, updated_at, updated_by}
+//   PUT  /api/admin/settings/intake-review-all body {enabled: bool}
+function ReviewAllToggleCard({ client: clientProp }) {
+  const ctxClient = useAdminClient();
+  const client = clientProp || ctxClient;
+  const [loaded, setLoaded] = useState(false);
+  const [enabled, setEnabled] = useState(true);
+  const [updatedAt, setUpdatedAt] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    try {
+      const r = await _adminGetWithRetry(client, "/admin/settings/intake-review-all");
+      setEnabled(!!r.data?.enabled);
+      setUpdatedAt(r.data?.updated_at || null);
+      setLoaded(true);
+    } catch (e) {
+      toast.error(
+        e?.response?.data?.detail
+        || "Failed to load 'review every request' setting",
+      );
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const save = async (nextEnabled) => {
+    setSaving(true);
+    try {
+      await client.put("/admin/settings/intake-review-all", {
+        enabled: nextEnabled,
+      });
+      toast.success(
+        nextEnabled
+          ? "Review-every-request is ON -- new intakes will wait for your Release click"
+          : "Review-every-request is OFF -- only heuristically-flagged requests need release",
+      );
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Update failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className={`border rounded-2xl p-6 ${
+        enabled ? "bg-[#FBF3E0] border-[#E5B267]" : "bg-white border-[#E8E5DF]"
+      }`}
+      data-testid="review-all-toggle-card"
+    >
+      <div className="flex items-start gap-3 flex-wrap">
+        <div className={`rounded-full p-2.5 ${enabled ? "bg-[#F5E0B5]" : "bg-[#EAF2E8]"}`}>
+          {enabled ? (
+            <Shield size={20} className="text-[#B37E35]" />
+          ) : (
+            <ShieldOff size={20} className="text-[#2D4A3E]" />
+          )}
+        </div>
+        <div className="flex-1 min-w-[200px]">
+          <h3 className="font-serif-display text-2xl text-[#2D4A3E]">
+            Review every patient request
+          </h3>
+          <p className="text-sm text-[#6D6A65] mt-1 max-w-2xl leading-relaxed">
+            When ON, every new intake gets gated behind your Release click
+            in the Requests panel before therapists are notified -- the
+            safest setting for early launch where the biggest risk is
+            bad-quality content reaching therapists. When OFF, only
+            heuristically-flagged requests (profanity, gibberish, near-
+            profanity obfuscation) wait for review; clean requests
+            auto-flow to matching.
+          </p>
+          <p className="text-xs text-[#6D6A65] mt-2 italic">
+            Risk heuristics still run either way -- this toggle controls
+            whether CLEAN requests also need review.
+          </p>
+        </div>
+        {loaded && (
+          <label className="inline-flex items-center gap-2 bg-white border border-[#E8E5DF] rounded-lg px-3 py-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={enabled}
+              disabled={saving}
+              onChange={(e) => save(e.target.checked)}
+              className="h-4 w-4"
+              data-testid="review-all-toggle-input"
+            />
+            <span className="text-sm font-semibold text-[#3F3D3B]">
+              Review every request
+            </span>
+          </label>
+        )}
+      </div>
+
+      {enabled && loaded && updatedAt && (
+        <div className="mt-4 text-xs text-[#6D6A65]">
+          Enabled since{" "}
+          <span className="font-semibold text-[#B37E35]">
+            {new Date(updatedAt).toLocaleString()}
+          </span>
+          . Flip off once heuristics are catching everything you'd manually
+          flag and you want throughput at scale.
+        </div>
+      )}
+      {!enabled && loaded && updatedAt && (
+        <div className="mt-4 text-xs text-[#6D6A65]">
+          Off since{" "}
+          <span className="font-semibold text-[#2D4A3E]">
+            {new Date(updatedAt).toLocaleString()}
+          </span>
+          . Heuristic-flagged requests still pause for review.
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 // Go-Live runbook. Shows the live state of each pre-launch protective
 // feature (email override, fake therapist emails, backfilled profile
 // data, Track B dry-run, test request data) and lets the admin flip
@@ -1072,6 +1203,7 @@ export default function SettingsPanel({ client: clientProp }) {
       <GoLiveCard client={client} />
       <MasterTestingCard client={client} />
       <TurnstileToggleCard client={client} />
+      <ReviewAllToggleCard client={client} />
 
       <div className="bg-white border border-[#E8E5DF] rounded-2xl p-6">
         <h3 className="font-serif-display text-2xl text-[#2D4A3E]">
