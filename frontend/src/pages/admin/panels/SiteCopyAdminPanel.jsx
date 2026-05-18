@@ -136,8 +136,12 @@ const SEED_KEYS = [
   // rewritten to reflect the admin-review gate -- the old copy
   // claimed "we're reaching out to therapists" but matching is
   // paused until admin releases the request.
-  { section: "Intake form — Confirmation", key: "intake.verified.heading", label: "Post-verification heading", fallback: "You're in -- we'll take it from here", previewPath: "/verify/pending" },
-  { section: "Intake form — Confirmation", key: "intake.verified.body",    label: "Post-verification body",    fallback: "Our team is reviewing your request now. As soon as it's cleared we'll start reaching out to therapists in Idaho who fit your needs. You'll get your personalized list by email -- typically within 24 hours of approval.", previewPath: "/verify/pending" },
+  // previewPath uses the /verify/preview sentinel route (VerifyEmail.jsx)
+  // which renders the post-verification "verified" state without
+  // hitting the API. /verify/pending would land on the PRE-verification
+  // "Check your inbox" screen -- wrong state for these two keys.
+  { section: "Intake form — Confirmation", key: "intake.verified.heading", label: "Post-verification heading", fallback: "You're in -- we'll take it from here", previewPath: "/verify/preview" },
+  { section: "Intake form — Confirmation", key: "intake.verified.body",    label: "Post-verification body",    fallback: "Our team is reviewing your request now. As soon as it's cleared we'll start reaching out to therapists in Idaho who fit your needs. You'll get your personalized list by email -- typically within 24 hours of approval.", previewPath: "/verify/preview" },
 
   // ─── SIGN IN ───────────────────────────────────────────────────────
   { section: "Sign in", key: "signin.heading",        label: "Heading",         fallback: "Sign in", previewPath: "/sign-in" },

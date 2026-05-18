@@ -12,14 +12,23 @@ export default function VerifyEmail() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const isPending = token === "pending";
+  // 2026-05-18 (Josh): sentinel route /verify/preview renders the
+  // post-verification state WITHOUT hitting the API. Lets the Site
+  // Copy admin Preview button land on the success screen so admins
+  // can preview edits to intake.verified.heading / .body before
+  // saving. Same pattern as the existing `token === "pending"`
+  // sentinel above.
+  const isPreview = token === "preview";
   const requestId = params.get("id");
-  const [state, setState] = useState(isPending ? "pending" : "loading");
-  const [verifiedId, setVerifiedId] = useState(null);
+  const [state, setState] = useState(
+    isPending ? "pending" : isPreview ? "verified" : "loading",
+  );
+  const [verifiedId, setVerifiedId] = useState(isPreview ? "preview" : null);
   const [verifiedEmail, setVerifiedEmail] = useState(null);
   const [offerAccount, setOfferAccount] = useState(false);
 
   useEffect(() => {
-    if (isPending) return;
+    if (isPending || isPreview) return;
     api
       .get(`/requests/verify/${token}`)
       .then((res) => {
@@ -49,7 +58,7 @@ export default function VerifyEmail() {
         }
       })
       .catch(() => setState("error"));
-  }, [token, isPending]);
+  }, [token, isPending, isPreview]);
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
