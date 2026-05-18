@@ -2,6 +2,7 @@ import { Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Group, Field, Req } from "@/pages/therapist/TherapistSignupUI";
+import ResearchCallout from "@/pages/therapist/ResearchCallout";
 import { IDAHO_INSURERS } from "@/lib/insurers";
 import { ADDITIONAL_LANGUAGES } from "@/lib/languages";
 
@@ -44,6 +45,14 @@ export default function Step6Insurance({
 
   return (
     <>
+      <ResearchCallout citation="SAMHSA (2023), National Survey on Drug Use and Health — cost cited as a leading reason for not entering or continuing mental health treatment.">
+        Cost is the most common surprise that ends a would-be therapy
+        relationship at the intro call. Accurate rates + insurance
+        up-front prevents the "I thought you took my plan" disconnect
+        that wastes your time and the patient's. We filter matches by
+        what you actually accept — your honest list means better-fit
+        referrals and fewer dead-end calls.
+      </ResearchCallout>
       <Group
         title="Insurance accepted (optional)"
         hint="Tap any plans you're in-network with — this helps patients on insurance see you. If your plan isn't listed, add it under 'Other'."

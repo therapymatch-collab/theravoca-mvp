@@ -8,6 +8,7 @@ import useSiteCopy from "@/lib/useSiteCopy";
 import { api, sessionClient, setSession } from "@/lib/api";
 import { formatUsPhone } from "@/lib/phone";
 import TherapistDeepMatchStep from "@/pages/therapist/TherapistDeepMatchStep";
+import ResearchCallout from "@/pages/therapist/ResearchCallout";
 import PreviewModal from "@/pages/therapist/SignupPreviewModal";
 import { Group } from "@/pages/therapist/TherapistSignupUI";
 import Step1Basics from "@/pages/therapist/steps/Step1Basics";
@@ -1345,13 +1346,23 @@ export default function TherapistSignup() {
                     so the in-portal edit form and signup form stay
                     in sync. */}
                 {step === 8 && (
-                  <TherapistDeepMatchStep
-                    data={data}
-                    set={set}
-                    toggleArr={toggleArr}
-                    testidPrefix="signup"
-                    GroupComponent={Group}
-                  />
+                  <>
+                    <ResearchCallout citation="Cabral & Smith (2011), Journal of Counseling Psychology — meta-analysis on matching effects in cross-cultural counseling. Owen et al. (2016) on early-session dropout.">
+                      Match on lived experience overlap meaningfully boosts
+                      rapport in the first 3 sessions — the window where most
+                      early dropout happens. Specific, honest answers here help
+                      our matcher surface the patients you're best-positioned
+                      to help. Vague or generic answers score neutral — you
+                      miss those matches.
+                    </ResearchCallout>
+                    <TherapistDeepMatchStep
+                      data={data}
+                      set={set}
+                      toggleArr={toggleArr}
+                      testidPrefix="signup"
+                      GroupComponent={Group}
+                    />
+                  </>
                 )}
 
                 {step === 9 && (<>

@@ -1,4 +1,5 @@
 import { Group } from "@/pages/therapist/TherapistSignupUI";
+import ResearchCallout from "@/pages/therapist/ResearchCallout";
 import { ISSUES, SPECIALTY_TIERS } from "./signupOptions";
 
 /**
@@ -10,6 +11,14 @@ import { ISSUES, SPECIALTY_TIERS } from "./signupOptions";
  */
 export default function Step4Specialties({ data, issueTier, setIssueTier }) {
   return (
+    <>
+    <ResearchCallout citation="Owen et al. (2016), Counselling & Psychotherapy Research — psychotherapy retention rates and reasons for early termination.">
+      Specialty fit is one of the strongest controllable predictors of
+      a patient staying past session 3. Listing every issue you "could
+      see" instead of what you genuinely treat well backfires — patients
+      leave feeling unseen, and our matcher learns to weight your
+      profile down.
+    </ResearchCallout>
     <Group
       title="Specialties"
       hint="Tap an issue, then choose its tier. Higher tier = stronger match score. (At least 1 Primary required.)"
@@ -65,5 +74,6 @@ export default function Step4Specialties({ data, issueTier, setIssueTier }) {
         {data.general_treats.length}/5
       </p>
     </Group>
+    </>
   );
 }

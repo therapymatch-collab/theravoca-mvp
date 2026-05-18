@@ -7,6 +7,7 @@ import {
   Req,
   PillRow,
 } from "@/pages/therapist/TherapistSignupUI";
+import ResearchCallout from "@/pages/therapist/ResearchCallout";
 import { STYLE_TAGS } from "./signupOptions";
 import { api } from "@/lib/api";
 
@@ -63,6 +64,15 @@ export default function Step7Style({ data, set, toggleArr }) {
 
   return (
     <>
+      <ResearchCallout citation="Norcross & Lambert (2019), Psychotherapy Relationships That Work, 3rd ed. — meta-analytic estimate of alliance contribution to outcome variance.">
+        Therapeutic alliance — the patient's sense of fit with you —
+        accounts for roughly <strong>30% of treatment outcome
+        variance</strong>. That's more than the specific modality you
+        use. Your bio and style tags are the patient's first signal of
+        alliance fit. Write to your real style, not a marketing voice —
+        the patients who pick you because the bio rings true are the
+        ones who stay.
+      </ResearchCallout>
       <Group
         title={
           <>

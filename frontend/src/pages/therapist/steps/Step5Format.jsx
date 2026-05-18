@@ -8,6 +8,7 @@ import {
   PillRow,
   Tags,
 } from "@/pages/therapist/TherapistSignupUI";
+import ResearchCallout from "@/pages/therapist/ResearchCallout";
 import {
   MODALITIES,
   MODALITY_OFFERINGS,
@@ -71,6 +72,13 @@ export default function Step5Format({
 
   return (
     <>
+      <ResearchCallout citation="Wampold (2015), The Great Psychotherapy Debate — operational fit (format, availability) accounts for meaningful variance in retention.">
+        Schedule and format mismatches drive a large share of
+        first-session no-shows. List only what you can <em>reliably</em>
+        offer — over-listing hurts your reliability score in the
+        matcher; under-listing means you miss great-fit patients you
+        could actually help.
+      </ResearchCallout>
       <Group title={<>Modalities you practice (pick 1–5)<Req /></>}>
         <div className="flex flex-wrap gap-2">
           {MODALITIES.map((m) => {

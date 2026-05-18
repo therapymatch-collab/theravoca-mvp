@@ -1,4 +1,5 @@
 import { Group, Field, Req, PillRow } from "@/pages/therapist/TherapistSignupUI";
+import ResearchCallout from "@/pages/therapist/ResearchCallout";
 import { CLIENT_TYPES, AGE_GROUPS } from "./signupOptions";
 
 /**
@@ -10,10 +11,17 @@ import { CLIENT_TYPES, AGE_GROUPS } from "./signupOptions";
  */
 export default function Step3WhoYouSee({ data, toggleArr }) {
   return (
-    <Group
-      title="Who do you see?"
-      hint="Required — patients are pre-filtered by these"
-    >
+    <>
+      <ResearchCallout citation="Norcross & Lambert (2019), Psychotherapy Relationships That Work, 3rd ed. — meta-analytic review.">
+        Patients who feel their therapist truly understands their life
+        stage stay in therapy longer and report stronger alliance early
+        on. Only pick groups where you have real depth — vague-fit
+        matches drop out fast and damage both sides of the relationship.
+      </ResearchCallout>
+      <Group
+        title="Who do you see?"
+        hint="Required — patients are pre-filtered by these"
+      >
       <Field
         label={
           <>
@@ -47,5 +55,6 @@ export default function Step3WhoYouSee({ data, toggleArr }) {
         />
       </Field>
     </Group>
+    </>
   );
 }
