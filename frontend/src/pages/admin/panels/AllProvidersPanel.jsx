@@ -90,6 +90,9 @@ export default function AllProvidersPanel({
   onDelete,
   onDeepResearch,
   onFireTestSurvey,
+  onMarkTestAccount,
+  onUnmarkTestAccount,
+  onBulkMarkIncompleteAsTest,
 }) {
   // Defaults to "match_ready" -- the most useful daily view for ops.
   // Persisted per-browser so an admin who prefers a different starting
@@ -225,6 +228,23 @@ export default function AllProvidersPanel({
               <span className="font-semibold">{n}</span>
             </span>
           ))}
+          {/* Test-mode bulk action (2026-05-18) -- only render when
+              the "incomplete subscription" gate is what's blocking
+              therapists. One click flips all of them to fake-trialing
+              test accounts so Josh's QA loop unblocks. Action is
+              destructive-ish (writes to many rows) so the handler
+              double-confirms first. */}
+          {onBulkMarkIncompleteAsTest && blockerBreakdown.some(([cat]) => cat === "subscription") && (
+            <button
+              type="button"
+              onClick={onBulkMarkIncompleteAsTest}
+              className="ml-1 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#2D4A3E] text-white text-[11px] font-semibold hover:bg-[#3A5E50]"
+              title="Bulk-mark every subscription-blocked therapist as a TEST account so they pass the matching filter without going through Stripe. For testing only."
+              data-testid="bulk-mark-test-accounts"
+            >
+              Bulk mark as test
+            </button>
+          )}
         </div>
       )}
       <ProviderTableControls
@@ -299,6 +319,16 @@ export default function AllProvidersPanel({
                     onDeepResearch ? () => onDeepResearch(t) : undefined
                   }
                   onFireTestSurvey={onFireTestSurvey}
+                  onMarkTestAccount={
+                    onMarkTestAccount && !t.is_test_account
+                      ? () => onMarkTestAccount(t)
+                      : undefined
+                  }
+                  onUnmarkTestAccount={
+                    onUnmarkTestAccount && t.is_test_account
+                      ? () => onUnmarkTestAccount(t)
+                      : undefined
+                  }
                   visibleCols={visibleCols}
                 />
               ))}

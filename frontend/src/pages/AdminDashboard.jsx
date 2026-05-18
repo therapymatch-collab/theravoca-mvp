@@ -540,6 +540,52 @@ export default function AdminDashboard() {
     }
   };
 
+  // 2026-05-18 (Josh): test-account helpers. Flip a therapist
+  // into fake-trialing state so they're matchable WITHOUT going
+  // through Stripe checkout. Safe -- the daily-billing cron is
+  // gated on stripe_customer_id + stripe_payment_method_id being
+  // non-null, so test accounts (which have neither) are never
+  // charged.
+  const markTestAccount = async (t) => {
+    if (!window.confirm(
+      `Mark "${t.name}" as a TEST account?\n\nThey'll be flipped to subscription_status="trialing" so the matcher will surface them WITHOUT Stripe checkout. The daily billing cron skips test accounts -- no real money moves. Use Unmark to reverse.`,
+    )) return;
+    try {
+      await client.post(`/admin/therapists/${t.id}/mark-test-account`);
+      toast.success(`${t.name} marked as test account`);
+      refresh();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to mark test account");
+    }
+  };
+
+  const unmarkTestAccount = async (t) => {
+    if (!window.confirm(
+      `Unmark "${t.name}" as a test account?\n\nThey'll revert to subscription_status="incomplete" and stop appearing in matches until they complete real Stripe checkout.`,
+    )) return;
+    try {
+      await client.post(`/admin/therapists/${t.id}/unmark-test-account`);
+      toast.success(`${t.name} unmarked`);
+      refresh();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to unmark");
+    }
+  };
+
+  const bulkMarkIncompleteAsTest = async () => {
+    if (!window.confirm(
+      "Bulk-mark every therapist currently stuck at subscription_status='incomplete' as a TEST account?\n\nThis unlocks your existing test data for matching all at once. DO NOT RUN IN PRODUCTION -- it would mark real partial signups as test too.",
+    )) return;
+    try {
+      const res = await client.post("/admin/therapists/mark-all-incomplete-as-test");
+      const n = res.data?.count ?? 0;
+      toast.success(`Marked ${n} therapist${n === 1 ? "" : "s"} as test accounts`);
+      refresh();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Bulk mark failed");
+    }
+  };
+
   const rejectTherapist = async (id) => {
     try {
       await client.post(`/admin/therapists/${id}/reject`);
@@ -1378,6 +1424,9 @@ export default function AdminDashboard() {
                   onDelete={deleteTherapist}
                   onDeepResearch={deepResearchTherapist}
                   onFireTestSurvey={fireTestTherapistSurvey}
+                  onMarkTestAccount={markTestAccount}
+                  onUnmarkTestAccount={unmarkTestAccount}
+                  onBulkMarkIncompleteAsTest={bulkMarkIncompleteAsTest}
                 />
               )}
               {tab === "referral_sources" && (
@@ -4974,7 +5023,8 @@ function useProviderColumnPrefs() {
 }
 
 function ProviderRow({
-  t, onEdit, onPreview, onArchive, onRestore, onDelete, onDeepResearch, onFireTestSurvey, visibleCols,
+  t, onEdit, onPreview, onArchive, onRestore, onDelete, onDeepResearch, onFireTestSurvey,
+  onMarkTestAccount, onUnmarkTestAccount, visibleCols,
 }) {
   const cols = PROVIDER_COLUMNS.filter((c) => visibleCols.includes(c.key));
   const archived = t.is_active === false;
@@ -5012,6 +5062,19 @@ function ProviderRow({
       ))}
       <td className="p-4 text-right whitespace-nowrap w-px">
         <div className="inline-flex flex-col items-end gap-1">
+          {/* TEST account chip -- visible whenever the therapist was
+              marked via the admin Mark-as-test-account flow. Lets
+              admin scan the directory for accidental test accounts
+              before going live. */}
+          {t.is_test_account && (
+            <span
+              className="inline-flex items-center gap-1 text-[10px] font-semibold bg-[#FBF2E8] border border-[#F0DEC8] text-[#8B5A1F] rounded-full px-2 py-0.5"
+              title="Marked as a test account -- subscription_status was flipped to 'trialing' without going through Stripe. Daily billing cron skips this row."
+              data-testid={`test-account-chip-${t.id}`}
+            >
+              TEST
+            </span>
+          )}
           {/* Edit · Preview share a row — most-used actions, side-by-side */}
           <div className="inline-flex items-center gap-3">
             <button
@@ -5080,6 +5143,31 @@ function ProviderRow({
               title="Archive — hides from matching but keeps history"
             >
               <Ban size={12} /> Archive
+            </button>
+          )}
+          {/* Mark / unmark test account (2026-05-18 -- Josh).
+              Only one of these renders at a time depending on
+              t.is_test_account. The mark button flips the row to
+              fake-trialing so the matcher surfaces it without
+              Stripe checkout. The unmark button reverses it. */}
+          {onMarkTestAccount && (
+            <button
+              className="text-[#8B5A1F] hover:underline text-xs inline-flex items-center gap-1"
+              onClick={onMarkTestAccount}
+              data-testid={`mark-test-account-${t.id}`}
+              title="Flip to fake-trialing so the matcher surfaces this therapist without Stripe checkout. For testing only."
+            >
+              <Sparkles size={12} /> Mark as test
+            </button>
+          )}
+          {onUnmarkTestAccount && (
+            <button
+              className="text-[#8B5A1F] hover:underline text-xs inline-flex items-center gap-1"
+              onClick={onUnmarkTestAccount}
+              data-testid={`unmark-test-account-${t.id}`}
+              title="Reverse the test-account flag -- reverts to incomplete subscription, removes from matching until real Stripe checkout."
+            >
+              <RotateCw size={12} /> Unmark test
             </button>
           )}
           <button

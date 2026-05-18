@@ -1027,6 +1027,13 @@ async def admin_list_therapists(
         "is_active": 1, "pending_approval": 1, "subscription_status": 1,
         "pending_reapproval": 1, "pending_reapproval_fields": 1,
         "notify_email": 1, "notify_sms": 1,
+        # Test-account marker (2026-05-18). When true, the therapist
+        # was flipped to fake-trialing via the Mark as test account
+        # admin button so they can pass the matching filter without
+        # going through Stripe checkout. Used by the admin UI to
+        # render the "TEST" chip + the Unmark button.
+        "is_test_account": 1,
+        "test_account_marked_at": 1,
         # Research enrichment (research_enrichment.py)
         "research_summary": 1, "research_depth_signal": 1,
         "research_style_signals": 1,
@@ -1250,6 +1257,112 @@ async def admin_approve_therapist(therapist_id: str, _: bool = Depends(require_r
         name=f"approve_email_{therapist_id[:8]}",
     )
     return {"id": therapist_id, "status": "approved"}
+
+
+# ── Test account helpers (2026-05-18) ──────────────────────────
+# Josh: "for testing, remove CC block on match-ready or i can do
+# any testing." Lets admin flip a specific therapist into a fake-
+# trialing state so they pass the matching filter
+# (subscription_status not in [past_due, canceled, unpaid,
+# incomplete]) WITHOUT going through Stripe checkout.
+#
+# Safety:
+#   - `is_test_account: True` flag lets us filter test accounts
+#     out of production-y dashboards + clean them up before go-live.
+#   - Daily billing cron is gated on `stripe_customer_id` and
+#     `stripe_payment_method_id` being non-null, so test accounts
+#     (which have neither) are never charged.
+#   - current_period_end pushed 30 days out so the cron doesn't
+#     even try to look at the row until then.
+#   - Endpoints require admin role -- not callable by anyone else.
+
+async def _flip_to_test_account(t: dict) -> dict:
+    """Flip a single therapist row into the fake-trialing test state.
+    Returns the updated fields for response/audit logging."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    update = {
+        "is_test_account": True,
+        "subscription_status": "trialing",
+        "pending_approval": False,
+        "is_active": True,
+        "current_period_end": (now + timedelta(days=30)).isoformat(),
+        "trial_ends_at": (now + timedelta(days=30)).isoformat(),
+        "test_account_marked_at": now.isoformat(),
+        "test_account_marked_by": "admin",
+    }
+    await db.therapists.update_one({"id": t["id"]}, {"$set": update})
+    return update
+
+
+@router.post("/admin/therapists/{therapist_id}/mark-test-account",
+             dependencies=[Depends(require_role("edit"))])
+async def admin_mark_test_account(therapist_id: str):
+    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0, "id": 1, "email": 1, "name": 1})
+    if not t:
+        raise HTTPException(404, "Therapist not found")
+    update = await _flip_to_test_account(t)
+    audit.emit(
+        actor_type="admin", actor_id="admin",
+        action="mark_test_account", resource="therapist",
+        resource_id=therapist_id, detail=f"email={t.get('email','')}",
+    )
+    return {"id": therapist_id, "status": "marked_test_account", "fields": update}
+
+
+@router.post("/admin/therapists/{therapist_id}/unmark-test-account",
+             dependencies=[Depends(require_role("edit"))])
+async def admin_unmark_test_account(therapist_id: str):
+    """Reverse the mark: drops the is_test_account flag and reverts
+    subscription_status to 'incomplete' so the therapist has to go
+    through real Stripe checkout to be matchable again. Useful if
+    a test account was accidentally created for a real therapist."""
+    t = await db.therapists.find_one({"id": therapist_id}, {"_id": 0, "id": 1, "is_test_account": 1})
+    if not t:
+        raise HTTPException(404, "Therapist not found")
+    if not t.get("is_test_account"):
+        return {"id": therapist_id, "status": "not_a_test_account", "noop": True}
+    await db.therapists.update_one(
+        {"id": therapist_id},
+        {
+            "$set": {
+                "subscription_status": "incomplete",
+                "test_account_unmarked_at": _now_iso(),
+            },
+            "$unset": {"is_test_account": "", "current_period_end": "", "trial_ends_at": ""},
+        },
+    )
+    audit.emit(
+        actor_type="admin", actor_id="admin",
+        action="unmark_test_account", resource="therapist",
+        resource_id=therapist_id,
+    )
+    return {"id": therapist_id, "status": "unmarked_test_account"}
+
+
+@router.post("/admin/therapists/mark-all-incomplete-as-test",
+             dependencies=[Depends(require_role("admin"))])
+async def admin_mark_all_incomplete_as_test_account():
+    """Bulk: flip every therapist currently stuck at
+    subscription_status='incomplete' (i.e. signed up but never
+    completed Stripe checkout) into test-account state. Use ONCE at
+    the start of testing to unlock the existing test population --
+    avoid running repeatedly in prod or it'll mark real partial-
+    signups as test accounts."""
+    cur = db.therapists.find(
+        {"subscription_status": "incomplete", "is_test_account": {"$ne": True}},
+        {"_id": 0, "id": 1, "email": 1, "name": 1},
+    )
+    flipped = []
+    async for t in cur:
+        await _flip_to_test_account(t)
+        flipped.append({"id": t["id"], "email": t.get("email", "")})
+    audit.emit(
+        actor_type="admin", actor_id="admin",
+        action="bulk_mark_test_accounts",
+        resource="therapist", detail=f"count={len(flipped)}",
+    )
+    return {"count": len(flipped), "therapists": flipped}
 
 
 @router.post("/admin/therapists/{therapist_id}/reject")
