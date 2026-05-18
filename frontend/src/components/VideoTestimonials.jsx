@@ -17,9 +17,12 @@
  * The click-to-load lite-embed pattern is unchanged:
  *   - Idle state: Stream's auto-generated thumbnail + custom TheraVoca
  *     play button overlay. Zero Cloudflare chrome on the page.
- *   - On click: mount the Stream iframe with autoplay=true. Because
- *     the iframe doesn't load on mount, all 5 cards on the landing
- *     page don't fire 5 video requests on initial paint.
+ *   - On click: mount the Stream iframe WITHOUT autoplay (see the
+ *     long-form rationale in buildEmbedUrl below -- mobile browsers
+ *     block unmuted autoplay, so the user taps Cloudflare's own play
+ *     button inside the iframe to start unmuted playback on every
+ *     platform). Because the iframe doesn't load on mount, all 5
+ *     cards don't fire 5 video requests on initial paint.
  *
  * For the per-video iframe params Stream accepts, see:
  *   https://developers.cloudflare.com/stream/viewing-videos/using-the-stream-player/#player-parameters
