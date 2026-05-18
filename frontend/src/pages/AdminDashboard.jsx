@@ -44,6 +44,7 @@ import { currentAdminRole } from "@/lib/admin-permissions";
 import useAdminClient, { AdminClientProvider } from "@/lib/useAdminClient";
 import credentialLabel from "@/lib/credentialLabel";
 import { imageToDataUrl } from "@/lib/image";
+import { safeExternalUrl } from "@/lib/safeUrl";
 import { STATUS_UNAUTHORIZED } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -4963,18 +4964,34 @@ const PROVIDER_COLUMNS = [
   {
     key: "website",
     label: "Website",
+    // 2026-05-18 security: scrub URL before rendering. Was prepending
+    // https:// to schemeless input, which would have neutralized a
+    // raw "javascript:..." -- but the prepend only triggered when the
+    // input didn't ALREADY start with http, so a website value of
+    // "https://x" would render unchanged, and there's no protection
+    // against full "javascript:" / "data:" URLs that the safeExternalUrl
+    // helper now rejects.
     render: (t) => (
       <td className="p-4 whitespace-nowrap text-xs text-[#2D4A3E] max-w-[220px]">
-        {t.website ? (
-          <a
-            href={t.website.startsWith("http") ? t.website : `https://${t.website}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline decoration-dotted truncate inline-block max-w-full align-bottom"
-          >
-            {t.website.replace(/^https?:\/\//, "")}
-          </a>
-        ) : "—"}
+        {t.website ? (() => {
+          const candidate = t.website.startsWith("http") ? t.website : `https://${t.website}`;
+          const safeHref = safeExternalUrl(candidate);
+          const display = t.website.replace(/^https?:\/\//, "");
+          return safeHref ? (
+            <a
+              href={safeHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline decoration-dotted truncate inline-block max-w-full align-bottom"
+            >
+              {display}
+            </a>
+          ) : (
+            <span className="italic text-[#6D6A65] truncate inline-block max-w-full align-bottom" title="URL blocked by safe-link check">
+              {display} <span className="text-[#D45D5D] not-italic">[blocked]</span>
+            </span>
+          );
+        })() : "—"}
       </td>
     ),
   },

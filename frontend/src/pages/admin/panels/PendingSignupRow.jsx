@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { CheckCircle2, XCircle, Pencil } from "lucide-react";
+import { safeExternalUrl } from "@/lib/safeUrl";
 
 export default function PendingSignupRow({ t, onApprove, onReject, onEdit }) {
   const [expanded, setExpanded] = useState(false);
@@ -152,16 +153,28 @@ export default function PendingSignupRow({ t, onApprove, onReject, onEdit }) {
               </Block>
               <Block label="Office phone">{t.office_phone || "—"}</Block>
               <Block label="Website">
-                {t.website ? (
-                  <a
-                    href={t.website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[#2D4A3E] underline break-all"
-                  >
-                    {t.website}
-                  </a>
-                ) : (
+                {/* 2026-05-18 security: scrub URL -- this row is shown
+                    to admin reviewing a pending signup, and the
+                    attacker-controlled website field is the most
+                    dangerous place for javascript: schemes (admin
+                    session = high blast radius). */}
+                {t.website ? (() => {
+                  const safeHref = safeExternalUrl(t.website);
+                  return safeHref ? (
+                    <a
+                      href={safeHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#2D4A3E] underline break-all"
+                    >
+                      {t.website}
+                    </a>
+                  ) : (
+                    <span className="text-[#6D6A65] italic break-all" title="URL blocked by safe-link check">
+                      {t.website} <span className="text-[#D45D5D] not-italic">[blocked]</span>
+                    </span>
+                  );
+                })() : (
                   "—"
                 )}
               </Block>

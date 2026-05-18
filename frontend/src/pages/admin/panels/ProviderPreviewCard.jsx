@@ -1,5 +1,6 @@
 import { Mail, Phone, CalendarPlus } from "lucide-react";
 import credentialLabel from "@/lib/credentialLabel";
+import { safeExternalUrl } from "@/lib/safeUrl";
 
 // Admin preview of a single therapist. Two-pane layout:
 //
@@ -116,21 +117,36 @@ export default function ProviderPreviewCard({ t }) {
           ) : officeCities ? (
             <PreviewDetail label="Offices" value={officeCities} span={2} />
           ) : null}
-          {t.website && (
-            <div className="col-span-2 text-xs">
-              <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">
-                Website
+          {/* 2026-05-18 security: scrub website URL before render.
+              See lib/safeUrl.js for rationale -- attacker therapist
+              could put javascript: in this field, admin clicks the
+              link in the preview, runs the script in their admin
+              session (worse than the patient-facing surface). */}
+          {t.website && (() => {
+            const safeHref = safeExternalUrl(t.website);
+            const display = String(t.website).replace(/^https?:\/\//, "");
+            return (
+              <div className="col-span-2 text-xs">
+                <div className="text-[10px] uppercase tracking-wider text-[#6D6A65]">
+                  Website
+                </div>
+                {safeHref ? (
+                  <a
+                    href={safeHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#2D4A3E] underline break-all hover:text-[#C87965]"
+                  >
+                    {display}
+                  </a>
+                ) : (
+                  <span className="text-[#6D6A65] italic break-all" title="URL blocked by safe-link check (not http or https)">
+                    {display} <span className="text-[#D45D5D] not-italic">[blocked]</span>
+                  </span>
+                )}
               </div>
-              <a
-                href={t.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#2D4A3E] underline break-all hover:text-[#C87965]"
-              >
-                {t.website.replace(/^https?:\/\//, "")}
-              </a>
-            </div>
-          )}
+            );
+          })()}
           <PreviewDetail label="Insurance" value={insuranceStr} span={2} />
           {(t.languages_spoken || []).length > 0 && (
             <PreviewDetail
@@ -359,14 +375,23 @@ function Row({ label, value, mono, link, long, muted }) {
   const isEmpty = value === undefined || value === null || value === "" ||
                   (Array.isArray(value) && value.length === 0);
   const display = isEmpty ? "--" : value;
+  // 2026-05-18 security: scrub the link prop -- the only caller today
+  // passes therapist.website which is attacker-controlled.
+  const safeHref = link ? safeExternalUrl(link) : null;
   return (
     <div className={`grid grid-cols-[minmax(180px,1fr)_2fr] gap-3 py-1.5 text-xs ${muted ? "opacity-50" : ""}`}>
       <div className="text-[#6D6A65]">{label}</div>
       <div className={`break-words ${mono ? "font-mono text-[11px]" : ""} ${long ? "whitespace-pre-wrap leading-relaxed" : ""} ${isEmpty ? "italic text-[#9C9893]" : "text-[#2B2A29]"}`}>
-        {link && !isEmpty ? (
-          <a href={link} target="_blank" rel="noreferrer noopener" className="text-[#2D4A3E] underline">
+        {safeHref && !isEmpty ? (
+          <a href={safeHref} target="_blank" rel="noreferrer noopener" className="text-[#2D4A3E] underline">
             {display}
           </a>
+        ) : link && !isEmpty ? (
+          // URL provided but failed the safe-link check -- render as
+          // plain text so admin can still see what the therapist typed.
+          <span className="italic" title="URL blocked by safe-link check (not http or https)">
+            {String(display)} <span className="text-[#D45D5D] not-italic">[blocked]</span>
+          </span>
         ) : (
           String(display)
         )}

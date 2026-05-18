@@ -116,10 +116,21 @@ function renderMarkdown(src) {
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
   let html = escape(src);
-  // links
+  // Links. 2026-05-18: previously the URL `$2` was inserted into
+  // href verbatim. DOMPurify downstream WOULD have stripped a
+  // javascript:/data:/vbscript: URL from the href attr (its default
+  // ALLOWED_URI_REGEXP blocks those), but relying on a third-party
+  // library's default config for an XSS guard is fragile. Scrub the
+  // URL ourselves so the protection is visible in this file and
+  // doesn't break if someone tunes DOMPurify config later.
+  const SAFE_HREF_RE = /^(?:https?:\/\/|mailto:|tel:|\/|#)/i;
   html = html.replace(
     /\[([^\]]+)\]\(([^)]+)\)/g,
-    '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-[#2D4A3E] underline">$1</a>',
+    (_match, label, rawUrl) => {
+      const url = String(rawUrl).trim();
+      const safe = SAFE_HREF_RE.test(url) ? url : "#";
+      return `<a href="${safe}" target="_blank" rel="noopener noreferrer" class="text-[#2D4A3E] underline">${label}</a>`;
+    },
   );
   // bold/italic
   html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");

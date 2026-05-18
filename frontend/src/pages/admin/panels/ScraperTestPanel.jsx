@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Search, ExternalLink, Phone, Mail, Globe, Zap, CheckCircle2, XCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { safeExternalUrl } from "@/lib/safeUrl";
 
 // Scraper test panel -- runs the live recruiting pipeline (discovery
 // cascade + contact enrichment) against a city/state/specialty combo
@@ -510,12 +511,23 @@ export default function ScraperTestPanel({ client }) {
                             ) : <span className="text-[#C4C0B8]">—</span>}
                           </td>
                           <td className="px-3 py-2">
-                            {c.website ? (
-                              <a href={c.website} target="_blank" rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-[#2D4A3E] hover:underline">
-                                <Globe size={12} /> open
-                              </a>
-                            ) : <span className="text-[#C4C0B8]">—</span>}
+                            {/* 2026-05-18 security: scrub scraped URLs --
+                                external scraper output is not trusted
+                                input; a malicious scraped page could
+                                contain a javascript: URL. */}
+                            {c.website ? (() => {
+                              const safeHref = safeExternalUrl(c.website);
+                              return safeHref ? (
+                                <a href={safeHref} target="_blank" rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-[#2D4A3E] hover:underline">
+                                  <Globe size={12} /> open
+                                </a>
+                              ) : (
+                                <span className="text-[#C4C0B8] italic" title="URL blocked by safe-link check">
+                                  [blocked]
+                                </span>
+                              );
+                            })() : <span className="text-[#C4C0B8]">—</span>}
                           </td>
                           <td className="px-3 py-2">
                             <SourceChip src={c.source} />

