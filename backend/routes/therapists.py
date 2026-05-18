@@ -1265,8 +1265,18 @@ async def therapist_upload_license(
     """Therapist uploads a base64-encoded license document. Body:
         {filename, content_type, data_base64}
     """
-    email = session.get("email")
-    therapist = await db.therapists.find_one({"email": email}, {"_id": 0})
+    email = session.get("email") or ""
+    # 2026-05-18 (Josh: "I uploaded a license document but it didn't save").
+    # The legacy case-sensitive find_one was silently 404-ing for any
+    # therapist whose stored email casing differed from the session email
+    # (signup-vs-backfill normalization, mixed-case manual entry, etc.).
+    # The /portal/therapist/profile GET already uses a case-insensitive
+    # regex lookup; license-document upload + read now match.
+    import re as _re
+    therapist = await db.therapists.find_one(
+        {"email": {"$regex": f"^{_re.escape(email)}$", "$options": "i"}},
+        {"_id": 0},
+    )
     if not therapist:
         raise HTTPException(404, "Therapist profile not found")
 
@@ -1320,9 +1330,11 @@ async def therapist_upload_license(
 async def therapist_get_my_license_doc(
     session: dict = Depends(require_session(("therapist",))),
 ):
-    email = session.get("email")
+    email = session.get("email") or ""
+    # Case-insensitive lookup -- see POST handler above for rationale.
+    import re as _re
     t = await db.therapists.find_one(
-        {"email": email},
+        {"email": {"$regex": f"^{_re.escape(email)}$", "$options": "i"}},
         {"_id": 0, "license_document": 1, "license_picture": 1, "_backfill_audit": 1},
     )
     if not t:
