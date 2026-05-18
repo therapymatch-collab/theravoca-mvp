@@ -127,10 +127,23 @@ export default function NetworkHealthPanel({ client: clientProp }) {
 
   // Waitlist demand
   const [waitlistData, setWaitlistData] = useState(null);
+  const [waitlistLoadFailed, setWaitlistLoadFailed] = useState(false);
   useEffect(() => {
     loadGaps();
     loadDrafts();
-    client.get("/admin/waitlist").then((r) => setWaitlistData(r.data)).catch(() => {});
+    // 2026-05-18: was swallowing the fetch error silently, so admin saw
+    // a blank waitlist with no diagnostic and assumed there's no demand.
+    // Surface the failure so admin knows the panel isn't trustworthy.
+    client
+      .get("/admin/waitlist")
+      .then((r) => {
+        setWaitlistData(r.data);
+        setWaitlistLoadFailed(false);
+      })
+      .catch((e) => {
+        console.warn("admin/waitlist fetch failed:", e?.message);
+        setWaitlistLoadFailed(true);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -184,6 +197,11 @@ export default function NetworkHealthPanel({ client: clientProp }) {
                     {" "}({(waitlistData.by_state || []).slice(0, 3).map(([s, n]) => `${s}: ${n}`).join(", ")}
                     {(waitlistData.by_state || []).length > 3 ? ` +${waitlistData.by_state.length - 3} more` : ""})
                   </span>
+                </span>
+              )}
+              {waitlistLoadFailed && (
+                <span className="text-[#D45D5D] italic">
+                  {" "}· waitlist data unavailable (check server logs)
                 </span>
               )}
             </p>

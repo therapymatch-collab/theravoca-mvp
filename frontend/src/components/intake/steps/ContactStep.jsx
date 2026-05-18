@@ -77,7 +77,17 @@ export default function ContactStep({
           );
         }
       })
-      .catch(() => {});
+      .catch((e) => {
+        // Returning-patient prefill is a nice-to-have; failure here
+        // shouldn't pop a toast (the patient hasn't asked for anything
+        // -- it's a background lookup on email change). But log so
+        // future debugging isn't blind: a real backend issue here
+        // means returning patients re-type data they already gave us.
+        // 2026-05-18: was bare ".catch(() => {})" -- swapped for a
+        // logged catch.
+        // eslint-disable-next-line no-console
+        console.warn("intake prefill lookup failed:", e?.message);
+      });
   };
 
   return (

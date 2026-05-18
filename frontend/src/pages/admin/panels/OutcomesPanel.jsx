@@ -262,12 +262,28 @@ export default function OutcomesPanel({ data, loading, onReload }) {
   const client = useAdminClient();
   const [testingEnabled, setTestingEnabled] = useState(false);
   const [testingBusy, setTestingBusy] = useState(false);
+  const [testingLoadFailed, setTestingLoadFailed] = useState(false);
 
   useEffect(() => {
+    // 2026-05-18: if the load fails we used to swallow the error silently,
+    // which meant the toggle defaulted to false regardless of the actual
+    // server state -- admin could think testing was OFF when it was ON
+    // (or vice versa) and accidentally fire real-money flows. Now we
+    // surface the failure and disable the toggle until a reload.
     client
       .get("/admin/feedback-testing")
-      .then((r) => setTestingEnabled(Boolean(r.data?.enabled)))
-      .catch(() => {});
+      .then((r) => {
+        setTestingEnabled(Boolean(r.data?.enabled));
+        setTestingLoadFailed(false);
+      })
+      .catch((e) => {
+        console.warn("feedback-testing fetch failed:", e?.message);
+        setTestingLoadFailed(true);
+        toast.error(
+          "Couldn't load testing-mode state -- refresh before toggling so you don't fight the server's actual setting.",
+          { duration: 8000 },
+        );
+      });
   }, [client]);
 
   const toggleTesting = async () => {
@@ -362,13 +378,22 @@ export default function OutcomesPanel({ data, loading, onReload }) {
               )}
             </div>
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2" title="When ON, follow-up survey emails can be fired on-demand for any request (for testing). Turn OFF before launch.">
-                <span className="text-xs text-[#6D6A65]">Testing mode</span>
+              <div
+                className="flex items-center gap-2"
+                title={
+                  testingLoadFailed
+                    ? "Couldn't load testing-mode state from server -- refresh before toggling."
+                    : "When ON, follow-up survey emails can be fired on-demand for any request (for testing). Turn OFF before launch."
+                }
+              >
+                <span className={`text-xs ${testingLoadFailed ? "text-[#D45D5D]" : "text-[#6D6A65]"}`}>
+                  Testing mode{testingLoadFailed ? " (state unknown)" : ""}
+                </span>
                 <button onClick={toggleTesting}
-                        disabled={testingBusy}
+                        disabled={testingBusy || testingLoadFailed}
                         data-testid="feedback-testing-toggle"
                         aria-pressed={testingEnabled}
-                        className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
+                        className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${
                           testingEnabled ? "bg-[#2D4A3E]" : "bg-[#D3D1C7]"
                         }`}>
                   <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 mt-0.5 ${

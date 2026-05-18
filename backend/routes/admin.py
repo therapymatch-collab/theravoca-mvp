@@ -3481,8 +3481,18 @@ async def _resolve_campaign_recipients(
                 if el in seen_emails:
                     continue
                 seen_emails.add(el)
+                # 2026-05-18 bug fix: was matching on raw `e` (mixed-case
+                # admin paste). Therapist records are typically stored
+                # lowercase, so pasted "John@Example.Com" silently missed
+                # the existing John record and treated it as external --
+                # broadcast went out with first_name="there" instead of
+                # "John". Use a case-insensitive regex against the
+                # normalized token so the match works regardless of how
+                # the admin (or their copy-paste source) cased the email.
+                import re as _re
+                _email_re = {"$regex": f"^{_re.escape(el)}$", "$options": "i"}
                 t = await db.therapists.find_one(
-                    {"$or": [{"email": e}, {"real_email": e}]},
+                    {"$or": [{"email": _email_re}, {"real_email": _email_re}]},
                     {"_id": 0, "id": 1, "name": 1, "email": 1, "real_email": 1,
                      "source": 1, "credential_type": 1},
                 )
