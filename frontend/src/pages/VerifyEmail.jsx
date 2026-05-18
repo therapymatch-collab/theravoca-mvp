@@ -87,12 +87,31 @@ export default function VerifyEmail() {
               <div className="mx-auto w-14 h-14 rounded-full bg-[#2D4A3E]/10 text-[#2D4A3E] flex items-center justify-center">
                 <CheckCircle2 size={28} strokeWidth={1.6} />
               </div>
-              <h1 className="font-serif-display text-4xl text-[#2D4A3E] mt-5">
-                You're matched up!
+              {/* 2026-05-18 (Josh): now site-copy-editable + copy
+                  rewritten to be honest about the review step.
+                  Previous defaults claimed "we're reaching out to
+                  therapists" but with the admin-review gate (default
+                  on), matching hasn't actually started yet here --
+                  it kicks off only after admin clicks Release in
+                  the Requests panel. New copy reflects the queue
+                  state without alarming patients. */}
+              <h1
+                className="font-serif-display text-4xl text-[#2D4A3E] mt-5"
+                data-testid="verify-success-heading"
+              >
+                {t(
+                  "intake.verified.heading",
+                  "You're in -- we'll take it from here",
+                )}
               </h1>
-              <p className="text-[#6D6A65] mt-3 leading-relaxed">
-                We're reaching out to therapists in Idaho who are a strong fit for your needs.
-                You'll receive your personalized list within 24 hours.
+              <p
+                className="text-[#6D6A65] mt-3 leading-relaxed"
+                data-testid="verify-success-body"
+              >
+                {t(
+                  "intake.verified.body",
+                  "Our team is reviewing your request now. As soon as it's cleared we'll start reaching out to therapists in Idaho who fit your needs. You'll get your personalized list by email -- typically within 24 hours of approval.",
+                )}
               </p>
               <Link
                 to={`/results/${verifiedId}`}

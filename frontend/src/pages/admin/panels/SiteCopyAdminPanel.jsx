@@ -131,6 +131,13 @@ const SEED_KEYS = [
   // ─── INTAKE — Result-saved screen ──────────────────────────────────
   { section: "Intake form — Confirmation", key: "intake.success.heading", label: "Success heading", fallback: "Check your inbox", previewPath: "/get-matched/sent" },
   { section: "Intake form — Confirmation", key: "intake.success.body",    label: "Success body",    fallback: "We just sent you a confirmation link. Click it to start matching with therapists.", previewPath: "/get-matched/sent" },
+  // 2026-05-18 (Josh): post-verification success screen (the page
+  // the patient lands on AFTER clicking the email link). Defaults
+  // rewritten to reflect the admin-review gate -- the old copy
+  // claimed "we're reaching out to therapists" but matching is
+  // paused until admin releases the request.
+  { section: "Intake form — Confirmation", key: "intake.verified.heading", label: "Post-verification heading", fallback: "You're in -- we'll take it from here", previewPath: "/verify/pending" },
+  { section: "Intake form — Confirmation", key: "intake.verified.body",    label: "Post-verification body",    fallback: "Our team is reviewing your request now. As soon as it's cleared we'll start reaching out to therapists in Idaho who fit your needs. You'll get your personalized list by email -- typically within 24 hours of approval.", previewPath: "/verify/pending" },
 
   // ─── SIGN IN ───────────────────────────────────────────────────────
   { section: "Sign in", key: "signin.heading",        label: "Heading",         fallback: "Sign in", previewPath: "/sign-in" },

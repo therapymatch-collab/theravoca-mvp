@@ -807,13 +807,37 @@ export default function PatientResults() {
   // per UX direction — just qualitative milestones the patient cares about).
   const matchedAt = request?.matched_at || request?.created_at;
   const releasedAt = request?.results_released_at;
+  // 2026-05-18 (Josh): "keep 3 steps, but make the middle stage
+  // smart" -- the middle step's title + sub copy now changes based
+  // on whether the request is still awaiting admin Release (from
+  // the review-gate added in 8792ac0). Step count stays 3 to keep
+  // the page light, but the patient gets honest copy about what's
+  // actually happening.
+  const reviewPending = !!request?.admin_review_required;
   const stage = !matchedAt
     ? "submitted"
-    : hold_active
-      ? "matching"
-      : applications.length === 0
-        ? "waiting"
-        : "ready";
+    : reviewPending
+      ? "review"
+      : hold_active
+        ? "matching"
+        : applications.length === 0
+          ? "waiting"
+          : "ready";
+  const middleStage = reviewPending
+    ? {
+        key: "review",
+        icon: Inbox,
+        title: "Under quick review",
+        sub: "Our team is reviewing your request now. Once cleared, we'll start reaching out to therapists -- the 24-hour matching window starts then.",
+      }
+    : {
+        key: "matching",
+        icon: Inbox,
+        title: "Matching with therapists",
+        sub: hold_active
+          ? `We'll release your matched therapists within 24 hours — full results unlock ${holdEndsLabel}.`
+          : "We'll release your matched therapists within 24 hours.",
+      };
   const STAGES = [
     {
       key: "submitted",
@@ -821,14 +845,7 @@ export default function PatientResults() {
       title: "Referral submitted",
       sub: "We received your request and started looking for matches.",
     },
-    {
-      key: "matching",
-      icon: Inbox,
-      title: "Matching with therapists",
-      sub: hold_active
-        ? `We'll release your matched therapists within 24 hours — full results unlock ${holdEndsLabel}.`
-        : "We'll release your matched therapists within 24 hours.",
-    },
+    middleStage,
     {
       key: "ready",
       icon: CheckCircle2,
@@ -838,7 +855,7 @@ export default function PatientResults() {
         : "Your matched therapists will appear below once the 24-hour window closes.",
     },
   ];
-  const stageIdx = { submitted: 0, matching: 1, waiting: 1, ready: 2 }[stage] ?? 0;
+  const stageIdx = { submitted: 0, review: 1, matching: 1, waiting: 1, ready: 2 }[stage] ?? 0;
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
@@ -876,7 +893,12 @@ export default function PatientResults() {
             <YourReferralPanel request={request} />
           )}
 
-          {hold_active && (
+          {/* Show the timeline whenever the patient is in a pre-results
+              state (under admin review OR inside the 24h hold). Without
+              the reviewPending check, a patient whose request is gated
+              for review would see the empty-state spinner with no
+              context about why nothing is happening yet. */}
+          {(hold_active || reviewPending) && (
             <StatusTimeline
               stages={STAGES}
               activeIdx={stageIdx}
@@ -888,12 +910,14 @@ export default function PatientResults() {
             <div className="mt-10 bg-white border border-[#E8E5DF] rounded-2xl p-10 text-center">
               <Loader2 className="animate-spin mx-auto text-[#2D4A3E]" />
               <p className="text-[#6D6A65] mt-4 max-w-md mx-auto leading-relaxed">
-                {hold_active
-                  ? "We'll show your matches once the 24-hour window closes."
-                  : copy(
-                      "results.empty.body",
-                      "Therapists are reviewing your referral. Responses typically arrive within 24 hours. We'll email you as soon as your matches are ready.",
-                    )}
+                {reviewPending
+                  ? "Our team is reviewing your request now. As soon as it's cleared we'll start reaching out to therapists -- the 24-hour matching window starts then. You'll get an email once your matches are ready."
+                  : hold_active
+                    ? "We'll show your matches once the 24-hour window closes."
+                    : copy(
+                        "results.empty.body",
+                        "Therapists are reviewing your referral. Responses typically arrive within 24 hours. We'll email you as soon as your matches are ready.",
+                      )}
               </p>
             </div>
           ) : (
