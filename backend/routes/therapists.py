@@ -170,6 +170,129 @@ async def _embed_therapist_signals(
 
 # ─── Self-signup + Stripe onboarding ────────────────────────────────────────
 
+# ── AI bio drafter (2026-05-18 -- Josh) ────────────────────────
+# Lets a therapist on Step 7 of signup hit "Draft my bio with AI"
+# and get a 2-3 sentence bio generated from the structured fields
+# they've already filled out (credential, specialties, modalities,
+# years of experience, etc). Saves the therapist 5-10 minutes of
+# "how do I describe myself" friction. They edit / re-draft until
+# happy.
+#
+# Auth: unauthenticated (Step 7 is mid-signup before account
+# creation), but per-IP rate-limited to prevent abuse (10 drafts
+# per IP per hour). PHI: low risk -- input is therapist's own
+# self-described professional fields, no patient data.
+#
+# Cost: ~$0.001 per draft using Claude Haiku. At 1000 signups/yr
+# with avg 2 drafts per signup, that's ~$2/yr.
+
+class _DraftBioRequest(BaseModel):
+    name: str = Field(default="", max_length=120)
+    credential_type: str = Field(default="", max_length=50)
+    years_experience: int = Field(default=0, ge=0, le=70)
+    primary_specialties: list[str] = Field(default_factory=list, max_length=2)
+    secondary_specialties: list[str] = Field(default_factory=list, max_length=3)
+    modalities: list[str] = Field(default_factory=list, max_length=5)
+    style_tags: list[str] = Field(default_factory=list, max_length=4)
+    age_groups: list[str] = Field(default_factory=list, max_length=3)
+    client_types: list[str] = Field(default_factory=list, max_length=3)
+    modality_offering: str = Field(default="", max_length=30)
+    office_locations: list[str] = Field(default_factory=list, max_length=10)
+    # Deep-match free text -- optional but improves the draft quality.
+    t5_lived_experience: Optional[str] = Field(default="", max_length=2000)
+
+
+@router.post("/therapists/draft-bio", response_model=dict)
+async def therapist_draft_bio(payload: _DraftBioRequest, request: Request):
+    # ─── Per-IP rate limit (10 drafts / hour) ─────────────────────
+    fwd = request.headers.get("x-forwarded-for") or ""
+    client_ip = (fwd.split(",")[0].strip() if fwd else None) or (
+        getattr(request.client, "host", None) or ""
+    )
+    if client_ip:
+        cutoff_iso = (
+            datetime.now(timezone.utc) - timedelta(hours=1)
+        ).isoformat()
+        recent = await db.intake_ip_log.count_documents(
+            {"ip": client_ip, "kind": "draft_bio", "ts": {"$gte": cutoff_iso}},
+        )
+        if recent >= 10:
+            raise HTTPException(
+                429,
+                "Too many AI bio drafts from this network in the last hour. "
+                "Please write your bio manually or try again later.",
+            )
+        await db.intake_ip_log.insert_one(
+            {"ip": client_ip, "kind": "draft_bio", "ts": _now_iso()},
+        )
+
+    # Build a structured prompt the LLM can turn into prose.
+    def _bullet(label: str, value: Any) -> Optional[str]:
+        if value is None or value == "" or value == []:
+            return None
+        if isinstance(value, list):
+            value = ", ".join(value)
+        return f"- {label}: {value}"
+
+    facts = [
+        _bullet("Name", payload.name),
+        _bullet("Credential", payload.credential_type),
+        _bullet("Years of experience", payload.years_experience if payload.years_experience else None),
+        _bullet("Primary specialties", payload.primary_specialties),
+        _bullet("Secondary specialties", payload.secondary_specialties),
+        _bullet("Therapy approaches", payload.modalities),
+        _bullet("Style tags", payload.style_tags),
+        _bullet("Age groups served", payload.age_groups),
+        _bullet("Client types", payload.client_types),
+        _bullet("Session format", payload.modality_offering),
+        _bullet("Office locations", payload.office_locations),
+        _bullet("Lived experience the therapist mentioned", payload.t5_lived_experience),
+    ]
+    facts_text = "\n".join(f for f in facts if f)
+
+    if not facts_text.strip():
+        raise HTTPException(
+            400,
+            "Fill in a few profile fields first (credential, specialties, "
+            "modalities) so the AI has something to work with.",
+        )
+
+    system_message = (
+        "You are writing a short, warm, first-person bio for a therapist's "
+        "patient-facing profile on TheraVoca. Write 2-3 sentences total. "
+        "Use first person ('I'). Mention their top specialty + their style. "
+        "AVOID corporate cliches ('passionate about', 'empowering', "
+        "'safe space', 'journey', 'holistic'). AVOID emojis. AVOID hashtags. "
+        "AVOID sales language ('book a session today'). Sound like a real "
+        "person, not marketing copy. The bio appears on a results page "
+        "where patients are choosing a therapist -- it should feel "
+        "trustworthy and grounded, not salesy. Output ONLY the bio text -- "
+        "no preamble, no quotes, no 'Here's a bio:' lead-in."
+    )
+    user_prompt = (
+        "Write a 2-3 sentence bio using these facts:\n\n"
+        f"{facts_text}\n\n"
+        "Bio:"
+    )
+
+    from llm_client import ask_claude
+    bio = await ask_claude(
+        user_prompt,
+        system_message=system_message,
+        model="claude-haiku-4-5-20251001",
+        max_tokens=300,
+        allow_pii=True,  # therapist's own professional fields, no patient PHI
+    )
+    if not bio:
+        raise HTTPException(
+            502,
+            "Couldn't draft a bio right now -- please try again in a moment "
+            "or write one manually.",
+        )
+
+    return {"bio": bio.strip()}
+
+
 @router.post("/therapists/signup", response_model=dict)
 async def therapist_signup(payload: TherapistSignup, request: Request):
     # ─── Bot defenses (run before anything expensive) ──────────────────
