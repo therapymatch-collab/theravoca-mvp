@@ -172,4 +172,27 @@ export function clearSession() {
   // TherapistSignup's on-mount useEffect restores the screen from
   // sessionStorage regardless of whether the session is still valid.)
   sessionStorage.removeItem("tv_signup_pending");
+  // 2026-05-18 (proactive audit pass): per-user UI preferences that
+  // shouldn't leak across accounts on a shared device. The keys are
+  // intentionally enumerated -- using removeItem instead of clear()
+  // so we don't blow away unrelated app state (admin-only prefs that
+  // a non-admin would never touch, third-party widget storage, etc).
+  //
+  // Add a key here if you create a new per-user-account sessionStorage
+  // or localStorage entry whose stale value would confuse a different
+  // logged-in user.
+  const PER_USER_KEYS = [
+    // Therapist portal UI state
+    "tv_referral_tab",          // active "Active / Applied / Past" tab
+    "tv_referral_filter",       // "Deep / Quick" signal filter
+    "tv_deep_backfill_dismissed",  // "you haven't customized T5 yet" banner dismissal
+    // Site-copy admin preview override (admin role; clearing on
+    // patient/therapist logout is a no-op for the actual admin tab,
+    // but cheap insurance for shared devices).
+    "tv_copy_preview",
+  ];
+  for (const k of PER_USER_KEYS) {
+    try { sessionStorage.removeItem(k); } catch (_) { /* private mode */ }
+    try { localStorage.removeItem(k); } catch (_) { /* private mode */ }
+  }
 }

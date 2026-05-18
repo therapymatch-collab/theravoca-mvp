@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { AlertTriangle, Loader2 } from "lucide-react";
-import { sessionClient } from "@/lib/api";
+import { sessionClient, clearSession } from "@/lib/api";
 
 // Self-serve account-deletion panel, shared by therapist + patient
 // portals. Two-step confirmation: (1) type your email exactly,
@@ -40,7 +40,12 @@ export default function DeleteAccountPanel({ sessionEmail, role }) {
         confirm_phrase: confirmPhrase,
       });
       toast.success("Account deleted. You'll be signed out.");
-      try { localStorage.removeItem("tv_session"); } catch { /* ignore */ }
+      // 2026-05-18: was `localStorage.removeItem("tv_session")` which
+      // is a dead key -- the session lives under tv_session_token /
+      // tv_session_role / tv_session_email in sessionStorage. The
+      // shared clearSession() in @/lib/api handles all of them plus
+      // the UI-state keys that shouldn't persist into a new session.
+      clearSession();
       setTimeout(() => navigate("/", { replace: true }), 1000);
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Delete failed.");

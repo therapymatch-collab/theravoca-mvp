@@ -260,7 +260,22 @@ _BG_TASKS: set[asyncio.Task] = set()
 
 def _spawn_bg(coro, *, name: str = "bg_task") -> asyncio.Task:
     """Schedule a coroutine as a background task we'll keep referenced until
-    completion. Logs exceptions so silent failures don't disappear."""
+    completion. Logs exceptions so silent failures don't disappear.
+
+    Observability note (verified 2026-05-18): the `logger.exception` call
+    below feeds into Sentry automatically -- Sentry's default
+    LoggingIntegration captures ERROR-level logs as events. So when a
+    background task fails (e.g. approval email send), the exception
+    lands in Sentry within seconds with a full traceback.
+
+    The caller-facing trade-off is still real: the HTTP request that
+    spawned the task has already returned 200 by the time the failure
+    is detected, so the user/admin sees a misleading success toast.
+    That's intentional for latency (we don't block the admin's
+    "Approve" click on SMTP). The mitigations: Sentry alerting on
+    background-task errors, plus per-channel bounce handling (Resend
+    webhook for email, Telnyx delivery receipts for SMS).
+    """
     task = asyncio.create_task(coro, name=name)
     _BG_TASKS.add(task)
 
