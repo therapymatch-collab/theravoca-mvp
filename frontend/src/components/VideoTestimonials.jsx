@@ -1,113 +1,108 @@
 /**
  * VideoTestimonials -- horizontal carousel of patient testimonials.
  *
- * 2026-05-17: switched from self-hosted mp4s to YouTube embeds with a
- * click-to-load wrapper pattern (a.k.a. "lite-youtube-embed"). The
- * idle state shows OUR poster image + a custom TheraVoca play
- * button -- no YouTube chrome at all until the user clicks. On
- * click, the iframe is mounted with autoplay=1 and the most
- * branding-stripped params YouTube allows.
+ * 2026-05-18: switched from YouTube embeds to Cloudflare Stream.
+ * Why the switch:
+ *   - YouTube's anti-bot challenge ("Sign in to confirm you're not a
+ *     bot") started blocking 2-3 of our 5 embedded Shorts at random,
+ *     leaving black cards with a sign-in wall. Per YouTube's TOS we
+ *     can't override or work around that challenge.
+ *   - Cloudflare Stream gives us a clean iframe player with minimal
+ *     branding, no anti-bot wall, and the auto-generated thumbnail
+ *     replaces the WordPress-hosted poster images that were
+ *     occasionally going black when wp content was slow.
+ *   - One vendor (already using Cloudflare for CDN + Turnstile);
+ *     Stream egress is included in the Cloudflare pricing.
  *
- * Why this pattern:
- *   - Original poster image == fully branded TheraVoca look,
- *     no YouTube default thumbnail or play button.
- *   - Iframe doesn't fetch from YouTube at all until clicked --
- *     so all 5 cards on the landing page don't fire 5 YouTube
- *     requests on mount (faster initial paint, fewer cookies, no
- *     YouTube tracking until consent).
- *   - When playing: YouTube's "watch on YouTube" link, the YT
- *     logo bottom-right, and the kebab menu still appear because
- *     YouTube's TOS doesn't let embedders hide those entirely.
- *     But the relentless related-videos carousel + the channel
- *     name + the title overlay are killed by rel=0 + iv_load_policy=3
- *     + the autoplay flag.
+ * The click-to-load lite-embed pattern is unchanged:
+ *   - Idle state: Stream's auto-generated thumbnail + custom TheraVoca
+ *     play button overlay. Zero Cloudflare chrome on the page.
+ *   - On click: mount the Stream iframe with autoplay=true. Because
+ *     the iframe doesn't load on mount, all 5 cards on the landing
+ *     page don't fire 5 video requests on initial paint.
  *
- * For testimonials where the source video is 16:9 (like DA) vs
- * vertical Shorts (the rest), the player will letterbox the
- * horizontal video inside our 9:16 card during playback. That's a
- * content-format issue, not something an embed param can fix; Josh
- * would need to re-export DA as a vertical Short for it to fill
- * the card.
+ * For the per-video iframe params Stream accepts, see:
+ *   https://developers.cloudflare.com/stream/viewing-videos/using-the-stream-player/#player-parameters
  */
 import { useEffect, useRef, useState } from "react";
 import { Play, ChevronLeft, ChevronRight } from "lucide-react";
 import useSiteCopy from "@/lib/useSiteCopy";
 import GetMatchedCTA from "@/components/GetMatchedCTA";
 
-// Mapping fix 2026-05-17 (Josh caught the swap):
-//   DB <- Syxb4zJdyrI (was on AS slot)
-//   AS <- nDzeVwuwVO0 (was on NN slot)
-//   NN <- kN7mKqGyhMU (was on DB slot)
-// WZ + DA unchanged.
+// Cloudflare Stream customer subdomain -- same prefix for all 5
+// videos in the account. If we ever rotate accounts this is the one
+// thing to change.
+const STREAM_SUBDOMAIN = "customer-ziboiiyelaua3xib.cloudflarestream.com";
+
+// 2026-05-18 mapping (Josh's Cloudflare Stream IDs):
+//   WZ -> 03866c4d063e357c24c02c35b5997fd0
+//   DA -> 597bf8c80ef66d601d2dcda7c7fa17b7
+//   DB -> 0ddf39bf5d745b5c057410321ba751d0
+//   AS -> f46be38d78ef9d695bbd533997f5d2e1
+//   NN -> d4ff1eaa1d9c4c1190584e965410403d
 const TESTIMONIALS = [
   {
     id: "wz",
     name: "W.Z., Age 25",
-    youtubeId: "aXa8uSqMT3U",
-    poster: "https://theravoca.com/wp-content/uploads/W.Z.-age-25.png",
+    streamId: "03866c4d063e357c24c02c35b5997fd0",
   },
   {
     id: "da",
     name: "D.A., Age 43",
-    // Re-uploaded 2026-05-17 as a vertical YouTube Short so DA fills
-    // the 9:16 card the same way the other 4 testimonials do (the
-    // previous regular-format upload iZFO6NRYPOw letterboxed inside
-    // our vertical card).
-    youtubeId: "n2q90Ul7YYE",
-    poster: "https://theravoca.com/wp-content/uploads/photo_2025-05-09_20-35-16.jpg",
+    streamId: "597bf8c80ef66d601d2dcda7c7fa17b7",
   },
   {
     id: "db",
     name: "D.B., Age 52",
-    youtubeId: "Syxb4zJdyrI",
-    poster: "https://theravoca.com/wp-content/uploads/DB-2.png",
+    streamId: "0ddf39bf5d745b5c057410321ba751d0",
   },
   {
     id: "as",
     name: "A.S., Age 32",
-    youtubeId: "nDzeVwuwVO0",
-    poster:
-      "https://theravoca.com/wp-content/uploads/Capture-decran-2025-05-23-014536.png",
+    streamId: "f46be38d78ef9d695bbd533997f5d2e1",
   },
   {
     id: "nn",
     name: "N.N., Age 31",
-    youtubeId: "kN7mKqGyhMU",
-    poster: "https://theravoca.com/wp-content/uploads/N.N.-age-34.png",
+    streamId: "d4ff1eaa1d9c4c1190584e965410403d",
   },
 ];
 
-function buildEmbedUrl(videoId, { autoplay = false } = {}) {
-  // Minimum-branding params YouTube respects:
-  //   modestbranding=1   : reduce YouTube logo in player chrome
-  //   rel=0              : no related-videos carousel from OTHER
-  //                        channels at end of playback (only the
-  //                        same channel's videos can still appear,
-  //                        per YT policy change)
-  //   playsinline=1      : iOS plays inline, not native fullscreen
-  //   iv_load_policy=3   : hide annotations / video cards
-  //   fs=1               : keep fullscreen button (most users expect it)
-  //   controls=1         : keep play/pause/seek controls (UX)
-  //   autoplay=1         : start playing as soon as iframe mounts
-  //                        (only set when user clicked our overlay
-  //                        so it counts as a user-initiated play
-  //                        and browser autoplay-blockers don't fire)
+function buildEmbedUrl(streamId, { autoplay = false } = {}) {
+  // Stream player params -- see Cloudflare docs link in module
+  // header for the full list. We set the same UX defaults we had on
+  // the YouTube embed:
+  //   autoplay=true     : start playing as soon as iframe mounts
+  //                       (only set when user clicked our overlay so
+  //                       browser autoplay blockers don't fire).
+  //   muted=false       : user-initiated play, no need to mute.
+  //   preload=metadata  : only fetch the manifest until the user
+  //                       hits play (lite-embed pattern handles the
+  //                       page-mount case already, this is for
+  //                       in-iframe behavior).
+  //   poster=...        : Stream's own thumbnail URL so the player's
+  //                       loading frame matches the lite-embed's
+  //                       poster (no jarring color change at click).
   const params = new URLSearchParams({
-    modestbranding: "1",
-    rel: "0",
-    playsinline: "1",
-    iv_load_policy: "3",
-    fs: "1",
-    controls: "1",
+    muted: "false",
+    preload: "metadata",
+    poster: thumbnailUrl(streamId),
   });
-  if (autoplay) params.set("autoplay", "1");
-  return `https://www.youtube-nocookie.com/embed/${videoId}?${params.toString()}`;
+  if (autoplay) params.set("autoplay", "true");
+  return `https://${STREAM_SUBDOMAIN}/${streamId}/iframe?${params.toString()}`;
+}
+
+function thumbnailUrl(streamId) {
+  // Stream auto-generates a thumbnail per video; this URL is stable
+  // and CDN-cached. ?time=2s nudges past the first frame so a video
+  // that opens on a black-frame intro doesn't show a black poster.
+  return `https://${STREAM_SUBDOMAIN}/${streamId}/thumbnails/thumbnail.jpg?time=2s`;
 }
 
 function TestimonialCard({ tt }) {
   // Local state per card: only mount the iframe once the user clicks
-  // play. Until then, render OUR poster + OUR play button -- no
-  // YouTube chrome on the page at all.
+  // play. Until then, render Stream's auto-thumbnail + our custom
+  // play button -- no third-party chrome on the page at all.
   const [active, setActive] = useState(false);
   return (
     <article
@@ -117,7 +112,7 @@ function TestimonialCard({ tt }) {
       <div className="aspect-[9/16] bg-[#0F1714] relative">
         {active ? (
           <iframe
-            src={buildEmbedUrl(tt.youtubeId, { autoplay: true })}
+            src={buildEmbedUrl(tt.streamId, { autoplay: true })}
             title={`Testimonial: ${tt.name}`}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
@@ -132,15 +127,13 @@ function TestimonialCard({ tt }) {
             className="absolute inset-0 w-full h-full group"
             data-testid={`testimonial-play-${tt.id}`}
           >
-            {tt.poster && (
-              <img
-                src={tt.poster}
-                alt=""
-                aria-hidden="true"
-                loading="lazy"
-                className="w-full h-full object-cover"
-              />
-            )}
+            <img
+              src={thumbnailUrl(tt.streamId)}
+              alt=""
+              aria-hidden="true"
+              loading="lazy"
+              className="w-full h-full object-cover"
+            />
             <span
               className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/15 transition"
             >

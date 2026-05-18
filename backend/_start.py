@@ -263,7 +263,10 @@ def _spa_security_headers() -> dict:
         "https://challenges.cloudflare.com "
         "https://us.i.posthog.com https://us-assets.i.posthog.com; "
         "frame-src https://js.stripe.com https://challenges.cloudflare.com "
-        "https://www.youtube-nocookie.com https://www.youtube.com; "
+        "https://www.youtube-nocookie.com https://www.youtube.com "
+        "https://customer-ziboiiyelaua3xib.cloudflarestream.com; "
+        "media-src 'self' https://customer-ziboiiyelaua3xib.cloudflarestream.com "
+        "https://videodelivery.net https://*.cloudflarestream.com; "
         "frame-ancestors 'none'; "
         "base-uri 'self'; "
         "form-action 'self'",
