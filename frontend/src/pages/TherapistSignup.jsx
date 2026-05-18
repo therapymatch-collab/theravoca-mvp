@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { CheckCircle2, ArrowRight, Sparkles, Loader2 } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
@@ -80,6 +80,7 @@ const THERAPIST_FAQS = [
 
 export default function TherapistSignup() {
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const inviteRequestId = searchParams.get("invite_request_id");
   const inviteCode = searchParams.get("ref");
   const recruitCode = searchParams.get("recruit_code");
@@ -648,6 +649,46 @@ export default function TherapistSignup() {
       }
     }
   }, []);
+
+  // 2026-05-18 fix (Josh: after a therapist submits, clicking the "For
+  // therapists" nav link keeps bringing them back to the "Profile
+  // received" screen instead of the landing page). Root cause: the
+  // submit handler writes `tv_signup_pending` to sessionStorage, and
+  // the on-mount useEffect above restores `submitted=true` from it.
+  // The restoration is intentional for the Stripe-back round-trip (the
+  // user hit Add Payment, then bailed and came back), but it shouldn't
+  // fire when the user CLICKS A NAV LINK to /therapists/join while
+  // already mounted on the post-submit screen -- React Router doesn't
+  // re-mount on same-route nav, so the existing useEffect can't catch
+  // this.
+  //
+  // Distinguishing rule:
+  //   - Stripe success return:  ?subscribed=X&session_id=Y     -> preserve
+  //   - Stripe cancel return:   ?canceled=X                    -> preserve
+  //   - Plain /therapists/join AFTER a nav event               -> reset
+  //
+  // We anchor on `location.key`: it equals the same value on the very
+  // first render (initial mount / page refresh), and changes on every
+  // router-driven navigation thereafter. Holding the initial key in a
+  // ref lets us skip the first-mount run without racing the existing
+  // useEffect.
+  const initialLocationKey = useRef(location.key);
+  useEffect(() => {
+    if (location.key === initialLocationKey.current) return;
+    const params = new URLSearchParams(location.search);
+    const isStripeReturn = params.has("subscribed") || params.has("canceled");
+    if (!isStripeReturn && submitted) {
+      setSubmitted(false);
+      setSkippedPayment(false);
+      setTherapistId(null);
+      try {
+        sessionStorage.removeItem("tv_signup_pending");
+      } catch (_) {
+        /* private mode -- noop */
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key]);
 
   const submit = async () => {
     // Preflight: don't hit the backend if Turnstile hasn't issued a
