@@ -180,14 +180,87 @@ async def set_enabled(enabled: bool) -> bool:
 
 # ─── Web fetch + text strip ─────────────────────────────────────────────────
 
+
+# 2026-05-18 SSRF defense. Without these checks, the deep-research
+# warmup would happily fetch
+#   http://169.254.169.254/latest/meta-data/iam/security-credentials/
+# (AWS metadata) or http://10.x.x.x/ (internal services) if a therapist
+# put one of those in their `website` field at signup. Render isn't
+# EC2-based today so the AWS-metadata payload is moot, but the
+# defense is cheap and protects against any internal service the
+# Render runner can reach on its own network (Atlas private endpoint,
+# anything we add later). Block per RFC 1918 + link-local + loopback
+# + cloud-metadata.
+import ipaddress as _ipaddress
+from urllib.parse import urlparse as _urlparse
+
+_BLOCKED_HOSTNAMES = {
+    "localhost", "ip6-localhost", "ip6-loopback",
+    "metadata.google.internal",  # GCP metadata
+    "metadata.azure.internal",   # Azure metadata
+}
+
+
+def _is_safe_external_url(url: str) -> bool:
+    """Reject URLs whose hostname resolves to private/internal IP space
+    or to known cloud-metadata endpoints, and reject any scheme other
+    than http/https. Defense-in-depth against SSRF via the therapist
+    `website` field or any other user-controlled URL we fetch."""
+    try:
+        parsed = _urlparse(url)
+    except (ValueError, TypeError):
+        return False
+    if parsed.scheme not in ("http", "https"):
+        return False
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return False
+    if host in _BLOCKED_HOSTNAMES:
+        return False
+    # Try to parse as an IP literal -- if the caller passed a domain,
+    # we don't pre-resolve here; httpx will. The IP-literal path
+    # specifically handles attacker payloads like
+    # http://169.254.169.254/... that don't need DNS.
+    try:
+        ip = _ipaddress.ip_address(host)
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            return False
+        # Block AWS / Oracle metadata (link-local 169.254.x.x is
+        # already caught by is_link_local but spell it out).
+        if str(ip).startswith("169.254.169.254"):
+            return False
+    except ValueError:
+        # Not an IP literal -- httpx will resolve it; we accept the
+        # remaining risk (a DNS rebinding attack would need the
+        # attacker to control DNS for a domain the therapist signed
+        # up with, which is high effort and detectable).
+        pass
+    return True
+
+
 async def _fetch_website_text(url: str) -> Optional[str]:
     if not url:
         return None
+    if not _is_safe_external_url(url):
+        logger.warning("research fetch blocked by SSRF guard: %s", url)
+        return None
     try:
-        async with httpx.AsyncClient(follow_redirects=True) as c:
+        # follow_redirects=False so an attacker can't put a public-IP
+        # URL in their website field that 302-redirects to an internal
+        # address. If we ever need redirect support, switch to
+        # follow_redirects=True with a manual hop-by-hop SSRF check.
+        async with httpx.AsyncClient(follow_redirects=False) as c:
             r = await c.get(
                 url, headers={"User-Agent": USER_AGENT}, timeout=HTTP_TIMEOUT_SEC,
             )
+            # Treat any 3xx as a non-result rather than chasing it.
             if r.status_code != 200:
                 return None
             html = r.text

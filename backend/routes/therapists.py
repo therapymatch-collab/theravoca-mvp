@@ -1357,6 +1357,39 @@ async def therapist_upload_license(
             f"File too large ({len(raw) // 1024} KB). Max 5 MB.",
         )
 
+    # 2026-05-18 security: don't trust the client-supplied content_type.
+    # Sniff the magic bytes and verify they match the declared type.
+    # Without this, a therapist could upload an SVG with embedded
+    # <script> while claiming content_type=image/png; when an admin or
+    # the therapist re-downloads the document, the browser uses the
+    # stored content_type to render, executing the script. SVG would
+    # be the obvious vector but plain HTML also renders unprompted if
+    # served as image/* in some browsers, so the strictest fix is
+    # magic-byte verification.
+    def _magic_matches(raw_bytes: bytes, declared_ct: str) -> bool:
+        if not raw_bytes:
+            return False
+        if declared_ct == "application/pdf":
+            return raw_bytes[:4] == b"%PDF"
+        if declared_ct in ("image/jpeg", "image/jpg"):
+            return raw_bytes[:3] == b"\xff\xd8\xff"
+        if declared_ct == "image/png":
+            return raw_bytes[:8] == b"\x89PNG\r\n\x1a\n"
+        if declared_ct == "image/webp":
+            return (
+                len(raw_bytes) >= 12
+                and raw_bytes[:4] == b"RIFF"
+                and raw_bytes[8:12] == b"WEBP"
+            )
+        return False
+
+    if not _magic_matches(raw, content_type):
+        raise HTTPException(
+            400,
+            "File contents don't match the declared type. "
+            "Please re-export the file as a real PDF / JPG / PNG / WEBP.",
+        )
+
     now = _now_iso()
     await db.therapists.update_one(
         {"id": therapist["id"]},
