@@ -165,4 +165,11 @@ export function clearSession() {
   sessionStorage.removeItem("tv_session_token");
   sessionStorage.removeItem("tv_session_role");
   sessionStorage.removeItem("tv_session_email");
+  // 2026-05-18: also clear the therapist-signup "pending Stripe step"
+  // marker so that a user who signs up, logs out, then comes back to
+  // /therapists/join doesn't land on the post-submit "Add payment"
+  // screen for an account they're not signed in to. (Without this,
+  // TherapistSignup's on-mount useEffect restores the screen from
+  // sessionStorage regardless of whether the session is still valid.)
+  sessionStorage.removeItem("tv_signup_pending");
 }

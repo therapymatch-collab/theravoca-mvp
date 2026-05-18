@@ -626,16 +626,31 @@ export default function TherapistSignup() {
     // Restore the post-submission "Add payment" screen if the therapist
     // submitted their profile, hit "Add payment", then hit Back from
     // Stripe Checkout. Without this they'd land on a blank form.
+    //
+    // 2026-05-18: added a 10-minute freshness window. The legit use
+    // case (Stripe back-button round trip) completes in seconds. If
+    // the pending blob is older, the user is probably coming back to
+    // the page much later (closed tab + reopened, logged out + came
+    // back, etc.) and should see the fresh signup form, not be
+    // re-trapped on a screen for an account they're no longer in.
+    const PENDING_TTL_MS = 10 * 60 * 1000;
     try {
       const raw = sessionStorage.getItem("tv_signup_pending");
       if (raw) {
         const pending = JSON.parse(raw);
-        if (pending?.therapist_id && pending?.email) {
+        const tsAge = pending?.ts ? Date.now() - pending.ts : Infinity;
+        const fresh = tsAge >= 0 && tsAge < PENDING_TTL_MS;
+        if (fresh && pending?.therapist_id && pending?.email) {
           setTherapistId(pending.therapist_id);
           setSubmitted(true);
           if (pending.data) {
             setData((d) => ({ ...d, ...pending.data }));
           }
+        } else if (!fresh) {
+          // Stale: drop it so the user gets a clean form.
+          try {
+            sessionStorage.removeItem("tv_signup_pending");
+          } catch (_) { /* private mode -- noop */ }
         }
       }
     } catch (e) {
@@ -766,6 +781,7 @@ export default function TherapistSignup() {
             therapist_id: res.data?.id,
             email: data.email,
             data: { name: data.name, email: data.email },
+            ts: Date.now(),  // 2026-05-18: TTL gate -- see on-mount useEffect.
           }),
         );
       } catch (e) {

@@ -795,7 +795,11 @@ function missingKeySet(completeness) {
 // `required={miss.has(key)}` on each Field below without sprinkling
 // the full backend key list across the JSX.
 const REQUIRED_KEYS = new Set([
-  "name", "email", "phone", "license_number", "license_expires_at",
+  // 2026-05-18: "phone" removed from required set -- phone only
+  // powers SMS alerts (opt-in), it's not a go-live gate. Backend
+  // moved it from REQUIRED_FIELDS to ENHANCING_FIELDS in the same
+  // commit so completeness % still reflects it.
+  "name", "email", "license_number", "license_expires_at",
   "license_document",
   "bio", "profile_picture", "primary_specialties", "age_groups",
   "client_types", "modality_offering", "cash_rate", "office_or_telehealth",

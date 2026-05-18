@@ -72,7 +72,12 @@ def _has_license_document(t: dict) -> bool:
 REQUIRED_FIELDS = [
     ("name", "Full name with credentials", _nonempty_str(2)),
     ("email", "Email", _nonempty_str(3)),
-    ("phone", "Contact phone", _nonempty_str(7)),
+    # 2026-05-18 (Josh): phone was REQUIRED-to-go-live; demoted to
+    # ENHANCING. The phone is only used for SMS referral alerts (opt-in),
+    # NOT for the patient-facing profile or for matching. A therapist who
+    # only wants email alerts shouldn't be blocked from publishing by a
+    # phone-number gate. Backfill seeds a phone for imported therapists
+    # so no existing live profile drops below publishable on this change.
     ("license_number", "License number", _nonempty_str(2)),
     ("license_expires_at", "License expiration date", _truthy),
     # License document upload -- previously enhancing-only, which let
@@ -104,6 +109,9 @@ REQUIRED_FIELDS = [
 ]
 
 ENHANCING_FIELDS = [
+    # Phone moved from REQUIRED to ENHANCING 2026-05-18 -- it powers SMS
+    # alerts (opt-in) only, not publishability.
+    ("phone", "Contact phone (enables SMS alerts)", _nonempty_str(7)),
     ("years_experience", "Years of experience", _truthy),
     ("secondary_specialties", "Secondary specialties (broadens matches)", _nonempty_list(1)),
     ("insurance_accepted", "Insurance plans accepted", _nonempty_list(1)),
