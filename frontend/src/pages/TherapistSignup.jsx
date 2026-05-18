@@ -283,6 +283,25 @@ export default function TherapistSignup() {
     return () => {
       cancelled = true;
       clearTimeout(failTimer);
+      // 2026-05-18 fix (Josh: "if you have to go back to edit and
+      // it won't let you submit b/c of security failed, fix that").
+      // When the user navigates AWAY from step 9 (Back button OR
+      // step-anchor click), tear down the Cloudflare widget AND
+      // clear the ID ref. Without this, the early-return guard
+      // `if (turnstileWidgetIdRef.current != null) return` would
+      // bail next time the user reaches step 9 -- the widget
+      // never re-mounts, the token stays stale/empty, and submit
+      // fails with no way to recover except a full page reload
+      // (which wipes the form). With this cleanup, every visit to
+      // step 9 gets a fresh widget + fresh token.
+      if (turnstileWidgetIdRef.current != null) {
+        try {
+          window.turnstile?.remove(turnstileWidgetIdRef.current);
+        } catch (_) { /* ignore -- widget may already be gone */ }
+        turnstileWidgetIdRef.current = null;
+        setTurnstileToken("");
+        setTurnstileWidgetState("loading");
+      }
     };
   }, [turnstileSiteKey, step, totalSteps]);
   /**
@@ -1215,6 +1234,57 @@ export default function TherapistSignup() {
                     data-testid="signup-progress"
                   />
                 </div>
+                {/* Clickable step jump-nav (2026-05-18, Josh: "it's
+                    annoying that you have to keep hitting back/next
+                    if you want to make edits after you finish, add
+                    anchors for each step at the top"). Lets the
+                    therapist jump to any step they've already seen
+                    -- forward jumps to unvisited steps are
+                    permitted too, but the Next button's
+                    canAdvance()/valid gates still block bad data
+                    from progressing further. The clickable pills
+                    sit just below the progress bar so the wizard
+                    still feels linear but power-users can
+                    teleport. */}
+                <div
+                  className="mt-3 flex flex-wrap gap-1.5"
+                  data-testid="signup-step-nav"
+                >
+                  {[
+                    "Basics",
+                    "License",
+                    "Who you see",
+                    "Specialties",
+                    "Format",
+                    "Insurance",
+                    "Style & bio",
+                    "Deep match",
+                    "Notifications",
+                  ].map((label, i) => {
+                    const stepNum = i + 1;
+                    const isCurrent = step === stepNum;
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => {
+                          setStep(stepNum);
+                          scrollFormIntoView();
+                        }}
+                        title={`Jump to step ${stepNum}: ${label}`}
+                        data-testid={`signup-step-jump-${stepNum}`}
+                        className={`text-[11px] px-2 py-1 rounded-full border transition leading-none ${
+                          isCurrent
+                            ? "bg-[#2D4A3E] border-[#2D4A3E] text-white font-semibold"
+                            : "bg-white border-[#E8E5DF] text-[#6D6A65] hover:border-[#2D4A3E] hover:text-[#2D4A3E]"
+                        }`}
+                      >
+                        <span className="opacity-60 mr-1">{stepNum}.</span>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="mt-8 space-y-7">
@@ -1547,8 +1617,8 @@ export default function TherapistSignup() {
                       className="text-xs text-[#6D6A65] text-center max-w-md"
                       data-testid="signup-turnstile-hint"
                     >
-                      Complete the security check above, then click Preview profile.
-                      On mobile, give it a few seconds to load.
+                      Quick automatic security check. Preview profile activates
+                      as soon as it confirms. On mobile, give it a few seconds.
                     </p>
                   )}
                 </div>
