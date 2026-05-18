@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mockup: research-callout design variants</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background: #FDFBF7; font-family: -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif; color: #2B2A29; }
+    .font-serif-display { font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif; }
+    details > summary { list-style: none; cursor: pointer; }
+    details > summary::-webkit-details-marker { display: none; }
+  </style>
+</head>
+<body class="py-10">
+  <div class="max-w-4xl mx-auto px-4 space-y-10">
+
+    <!-- ─── Header ─── -->
+    <header class="bg-white border border-[#E8E5DF] rounded-2xl p-6">
+      <p class="text-xs uppercase tracking-[0.2em] text-[#C87965] font-semibold">Mockup · design variants</p>
+      <h1 class="font-serif-display text-3xl text-[#2D4A3E] mt-2">Research callouts — 4 visual treatments</h1>
+      <p class="text-sm text-[#6D6A65] mt-3 leading-relaxed">
+        The shipped version (variant A below) is on staging now. Three alternatives shown for
+        comparison — all use the same Step 7 (Style &amp; bio) content + Norcross &amp; Lambert
+        citation so you can A/B them at a glance.
+      </p>
+      <p class="text-sm text-[#2B2A29] mt-3 leading-relaxed">
+        <strong>Purpose of the feature:</strong> motivate therapists to enter honest, detailed,
+        thoughtful information on signup steps 3–8. The framing is "your honest input means better
+        matches FOR YOU" with a peer-reviewed citation to back the claim — not "fill these out to
+        continue." Tone is collaborative, not lecturing.
+      </p>
+    </header>
+
+    <!-- ─── Variant A: shipped (peach gradient) ─── -->
+    <section class="space-y-3">
+      <div class="flex items-baseline gap-3">
+        <span class="text-xs uppercase tracking-wider font-bold text-[#2D4A3E] bg-[#E7F1EC] border border-[#C3DBCF] rounded-full px-2.5 py-1">A · shipped</span>
+        <h2 class="font-serif-display text-2xl text-[#2D4A3E]">Peach gradient with coral border</h2>
+      </div>
+      <p class="text-sm text-[#6D6A65]">Always visible. Stands out clearly from the form. Currently live on staging.</p>
+      <div class="bg-white border border-[#E8E5DF] rounded-xl p-5">
+        <div class="bg-gradient-to-br from-[#FBE9E5] to-[#F8DAD3] border-l-2 border-[#C87965] rounded-xl px-4 py-3 text-sm leading-relaxed mb-5">
+          <p class="text-[#2B2A29]">
+            <strong class="text-[#8B3220]">Why we ask:</strong>
+            Therapeutic alliance — the patient's sense of fit with you — accounts for roughly
+            <strong>30% of treatment outcome variance</strong>. That's more than the specific
+            modality you use. Your bio and style tags are the patient's first signal of alliance
+            fit. Write to your real style, not a marketing voice.
+          </p>
+          <p class="text-xs italic text-[#8B5A1F] mt-2">
+            Source: Norcross &amp; Lambert (2019), Psychotherapy Relationships That Work, 3rd ed.
+          </p>
+        </div>
+        <div class="border-t border-[#E8E5DF] pt-3">
+          <p class="text-xs text-[#6D6A65]">[Form fields below]</p>
+        </div>
+      </div>
+      <p class="text-xs text-[#6D6A65] italic">Pros: high visibility, clear visual hierarchy, citation builds credibility. Cons: takes ~120px of vertical space per step, may feel dense across 6 steps.</p>
+    </section>
+
+    <!-- ─── Variant B: quiet inline note ─── -->
+    <section class="space-y-3">
+      <div class="flex items-baseline gap-3">
+        <span class="text-xs uppercase tracking-wider font-bold text-[#6D6A65] bg-[#FDFBF7] border border-[#E8E5DF] rounded-full px-2.5 py-1">B</span>
+        <h2 class="font-serif-display text-2xl text-[#2D4A3E]">Quiet inline note</h2>
+      </div>
+      <p class="text-sm text-[#6D6A65]">Same content, much less visual weight. Reads more like a sub-caption than a callout.</p>
+      <div class="bg-white border border-[#E8E5DF] rounded-xl p-5">
+        <div class="text-xs text-[#6D6A65] leading-relaxed mb-4 pl-3 border-l-2 border-[#E8E5DF]">
+          <span class="font-semibold text-[#2D4A3E]">Why we ask: </span>
+          Therapeutic alliance — the patient's sense of fit with you — accounts for ~30% of treatment
+          outcome variance, more than the specific modality you use. Your bio + style tags are the
+          patient's first signal of fit; write to your real voice.
+          <span class="italic text-[#A8A39B] ml-1">— Norcross &amp; Lambert (2019)</span>
+        </div>
+        <div class="border-t border-[#E8E5DF] pt-3">
+          <p class="text-xs text-[#6D6A65]">[Form fields below]</p>
+        </div>
+      </div>
+      <p class="text-xs text-[#6D6A65] italic">Pros: ~half the vertical footprint, doesn't dominate. Cons: easy to skip entirely; therapists in a hurry probably won't read it.</p>
+    </section>
+
+    <!-- ─── Variant C: collapsible "Why we ask" ─── -->
+    <section class="space-y-3">
+      <div class="flex items-baseline gap-3">
+        <span class="text-xs uppercase tracking-wider font-bold text-[#6D6A65] bg-[#FDFBF7] border border-[#E8E5DF] rounded-full px-2.5 py-1">C</span>
+        <h2 class="font-serif-display text-2xl text-[#2D4A3E]">Collapsible — click to expand</h2>
+      </div>
+      <p class="text-sm text-[#6D6A65]">Tightest layout by default; therapists who want context click to read.</p>
+      <div class="bg-white border border-[#E8E5DF] rounded-xl p-5">
+        <details class="mb-4 group">
+          <summary class="text-sm font-semibold text-[#8B3220] hover:text-[#6B2415] inline-flex items-center gap-1.5">
+            <span class="transition group-open:rotate-90">▶</span>
+            Why we ask
+            <span class="text-xs font-normal text-[#6D6A65] ml-1">(30 seconds — short research summary)</span>
+          </summary>
+          <div class="mt-3 bg-gradient-to-br from-[#FBE9E5] to-[#F8DAD3] border-l-2 border-[#C87965] rounded-xl px-4 py-3 text-sm leading-relaxed">
+            <p class="text-[#2B2A29]">
+              Therapeutic alliance — the patient's sense of fit with you — accounts for roughly
+              <strong>30% of treatment outcome variance</strong>. That's more than the specific
+              modality you use. Your bio and style tags are the patient's first signal of alliance
+              fit. Write to your real style, not a marketing voice.
+            </p>
+            <p class="text-xs italic text-[#8B5A1F] mt-2">
+              Source: Norcross &amp; Lambert (2019), Psychotherapy Relationships That Work, 3rd ed.
+            </p>
+          </div>
+        </details>
+        <div class="border-t border-[#E8E5DF] pt-3">
+          <p class="text-xs text-[#6D6A65]">[Form fields below]</p>
+        </div>
+      </div>
+      <p class="text-xs text-[#6D6A65] italic">Pros: minimal default footprint (~30px), respects therapist's time. Cons: most won't click; the motivational content lands for ~10% of users instead of 100%.</p>
+    </section>
+
+    <!-- ─── Variant D: research badge with sidebar quote ─── -->
+    <section class="space-y-3">
+      <div class="flex items-baseline gap-3">
+        <span class="text-xs uppercase tracking-wider font-bold text-[#6D6A65] bg-[#FDFBF7] border border-[#E8E5DF] rounded-full px-2.5 py-1">D</span>
+        <h2 class="font-serif-display text-2xl text-[#2D4A3E]">Research badge + pull-quote</h2>
+      </div>
+      <p class="text-sm text-[#6D6A65]">Splits the message: a one-line bold finding (the "hook") + the rationale underneath.</p>
+      <div class="bg-white border border-[#E8E5DF] rounded-xl p-5">
+        <div class="bg-[#FBE9E5] border border-[#F4C7BE] rounded-xl px-5 py-4 mb-5">
+          <div class="flex items-start gap-3">
+            <div class="shrink-0 w-10 h-10 rounded-full bg-white border border-[#F4C7BE] flex items-center justify-center text-[#8B3220] font-bold text-xs">
+              30%
+            </div>
+            <div class="flex-1">
+              <p class="text-[#2B2A29] font-semibold leading-snug">
+                Therapeutic alliance accounts for ~30% of treatment outcome variance.
+              </p>
+              <p class="text-xs text-[#6D6A65] mt-1.5 leading-relaxed">
+                More than the specific modality you use. Your bio + style tags are the patient's
+                first signal of fit — write to your real voice, not a marketing one.
+              </p>
+              <p class="text-[10px] italic text-[#8B5A1F] mt-2">
+                Norcross &amp; Lambert (2019) · Psychotherapy Relationships That Work
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="border-t border-[#E8E5DF] pt-3">
+          <p class="text-xs text-[#6D6A65]">[Form fields below]</p>
+        </div>
+      </div>
+      <p class="text-xs text-[#6D6A65] italic">Pros: the stat does the persuasion work — most scannable variant; therapists who only glance still see "30%". Cons: harder to scale across 6 steps where not every step has a clean single-number hook (e.g., Step 5 operational fit has no headline stat).</p>
+    </section>
+
+    <!-- ─── Side-by-side comparison table ─── -->
+    <section class="bg-[#FDFBF7] border border-[#E8E5DF] rounded-2xl p-6">
+      <h2 class="font-serif-display text-xl text-[#2D4A3E]">Quick compare</h2>
+      <div class="overflow-x-auto mt-3">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left border-b border-[#E8E5DF] text-xs uppercase tracking-wider text-[#6D6A65]">
+              <th class="py-2 pr-3">Variant</th>
+              <th class="py-2 pr-3">Visibility</th>
+              <th class="py-2 pr-3">Vertical space</th>
+              <th class="py-2 pr-3">% who'll read it</th>
+              <th class="py-2 pr-3">Works for all 6 steps</th>
+            </tr>
+          </thead>
+          <tbody class="text-[#2B2A29]">
+            <tr class="border-b border-[#E8E5DF]/60">
+              <td class="py-2.5 pr-3 font-semibold">A — shipped</td>
+              <td class="py-2.5 pr-3">High</td>
+              <td class="py-2.5 pr-3">~120 px</td>
+              <td class="py-2.5 pr-3">~70%</td>
+              <td class="py-2.5 pr-3">✓ Yes</td>
+            </tr>
+            <tr class="border-b border-[#E8E5DF]/60">
+              <td class="py-2.5 pr-3 font-semibold">B — quiet inline</td>
+              <td class="py-2.5 pr-3">Low</td>
+              <td class="py-2.5 pr-3">~60 px</td>
+              <td class="py-2.5 pr-3">~30%</td>
+              <td class="py-2.5 pr-3">✓ Yes</td>
+            </tr>
+            <tr class="border-b border-[#E8E5DF]/60">
+              <td class="py-2.5 pr-3 font-semibold">C — collapsible</td>
+              <td class="py-2.5 pr-3">Minimal (closed) / High (open)</td>
+              <td class="py-2.5 pr-3">~30 px closed / ~130 px open</td>
+              <td class="py-2.5 pr-3">~10% (have to click)</td>
+              <td class="py-2.5 pr-3">✓ Yes</td>
+            </tr>
+            <tr>
+              <td class="py-2.5 pr-3 font-semibold">D — badge + pull-quote</td>
+              <td class="py-2.5 pr-3">High</td>
+              <td class="py-2.5 pr-3">~110 px</td>
+              <td class="py-2.5 pr-3">~85% (the stat hooks even glances)</td>
+              <td class="py-2.5 pr-3">~ Partial (only 2 steps have a clean stat hook)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="text-sm text-[#6D6A65] mt-4 leading-relaxed">
+        Pick one and I'll flip the live signup. My recommendation: <strong>A</strong> (already
+        shipped) if you want max therapist read-through; <strong>D</strong> for the 2 steps with a
+        good headline stat (Step 7 = 30%, Step 4 = "strongest predictor") and <strong>A</strong> for
+        the other 4 steps; <strong>C</strong> if you find the form is getting too dense and want
+        to keep the option but reduce default visual weight.
+      </p>
+    </section>
+
+  </div>
+</body>
+</html>
