@@ -106,8 +106,8 @@ test("therapist signup → DB record → admin approval", async ({ page }) => {
   // Credential type — native <select>
   await page.getByTestId("signup-credential-type").selectOption("lcsw");
 
-  // Website — leave blank to skip reachability check
-  // (websiteIsValid returns true for empty string)
+  // Website — left blank intentionally; websiteIsValid returns true
+  // for empty string (the field is optional on the signup form).
 
   // Phone numbers
   await page.getByTestId("signup-phone-alert").fill("2085559999");
