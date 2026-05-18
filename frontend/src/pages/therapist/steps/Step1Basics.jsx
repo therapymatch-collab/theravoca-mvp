@@ -9,19 +9,19 @@ import { CREDENTIAL_TYPES, GENDERS } from "./signupOptions";
 /**
  * Step 1 -- "Basics"
  *
- * 2026-05-17 layout (revised after Josh caught misaligned columns):
+ * 2026-05-17 layout (settled after Josh caught misaligned columns
+ * and an ugly empty cell next to Website):
  *
  *   [Profile photo (compact, on its own row at top)]
  *   [Full name + degree     | Credential type]
  *   [Email                  | Office phone (public)]
- *   [Website                | (empty)]
- *   [Gender (pill row, full-width)]
+ *   [Website                | Gender]
  *
  * All form fields share one 2-col grid so widths line up vertically.
- * Name vertically aligns with Email below it, both in the LEFT column
- * (the slot the user's eye lands on first). Photo lives on its own
- * row so the photo container's width doesn't steal space from the
- * name input.
+ * Name vertically aligns with Email + Website below it, all in the
+ * LEFT column (the slot the user's eye lands on first). Photo lives
+ * on its own row so the photo container's width doesn't steal space
+ * from the name input.
  *
  * The private SMS-alert phone + CTIA opt-in moved out of Step 1 in
  * the 2026-05-17 reshuffle -- they live on the final Notifications
@@ -96,9 +96,9 @@ export default function Step1Basics({
 
       {/* All form fields in a single 2-col grid so widths line up.
           Reading order top-to-bottom, left-to-right:
-            row 1: Name (LEFT) | Credential (RIGHT)
-            row 2: Email (LEFT) | Office phone (RIGHT)
-            row 3: Website (LEFT) | (empty 2nd col on >= sm)
+            row 1: Name    (LEFT) | Credential   (RIGHT)
+            row 2: Email   (LEFT) | Office phone (RIGHT)
+            row 3: Website (LEFT) | Gender       (RIGHT)
           Name + Email + Website all live in the LEFT column so the
           most-important fields the user fills are vertically stacked
           and visually anchored to the left edge of the form. */}
@@ -184,15 +184,11 @@ export default function Step1Basics({
             </p>
           )}
         </Field>
-        {/* The 2nd column of row 3 is intentionally empty so Website
-            stays in the LEFT column (alignment with Name + Email).
-            An empty placeholder div preserves the grid cell on >= sm
-            so any future addition slots in cleanly. */}
-        {/* Gender moved into row 3's right column 2026-05-17 (per
-            Josh: the empty placeholder cell next to Website looked
-            bad). PillRow's 3 options fit inside a 50% sm column
-            without wrapping; on mobile the grid collapses and
-            Gender stacks below Website. */}
+        {/* Gender sits in row 3's right column next to Website
+            (2026-05-17 -- before this, the right cell was an empty
+            placeholder which looked bad). PillRow's 3 options fit
+            inside a 50% sm column without wrapping; on mobile the
+            grid collapses and Gender stacks below Website. */}
         <Field label={<>Gender{" "}<Req /></>} hint="Used only when patients have a stated preference.">
           <PillRow
             items={GENDERS}
