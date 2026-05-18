@@ -1,0 +1,1063 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>TheraVoca — Patient Waitlist Mockup (3 variants)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --green: #2D4A3E;
+    --green-2: #3A5E50;
+    --coral: #C87965;
+    --coral-tint: #FBE9E5;
+    --coral-tint-2: #F4C7BE;
+    --amber-tint: #FDF7EC;
+    --amber: #C8923A;
+    --ink: #2B2A29;
+    --subtle: #6D6A65;
+    --bg: #FDFBF7;
+    --card: #FFFFFF;
+    --line: #E8E5DF;
+    --pale-green: #F2F7F1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #F4F1E9;
+    color: var(--ink);
+    font-family: "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.55;
+  }
+  .serif { font-family: "Cormorant Garamond", Georgia, serif; }
+
+  /* Page shell */
+  .page-shell {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 32px 24px 96px;
+  }
+  .meta-header {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 24px 28px;
+    margin-bottom: 24px;
+  }
+  .meta-header h1 {
+    margin: 0 0 8px;
+    font-family: "Cormorant Garamond", Georgia, serif;
+    font-size: 32px;
+    color: var(--green);
+    font-weight: 600;
+  }
+  .meta-header p {
+    margin: 0;
+    color: var(--subtle);
+    font-size: 14px;
+    max-width: 80ch;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 4px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .tab {
+    flex: 1;
+    text-align: center;
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--subtle);
+    cursor: pointer;
+    user-select: none;
+    transition: background 120ms, color 120ms;
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    min-width: 200px;
+  }
+  .tab:hover { color: var(--green); }
+  .tab.active {
+    background: var(--green);
+    color: white;
+  }
+
+  /* Variant card */
+  .variant {
+    display: none;
+  }
+  .variant.active { display: block; }
+
+  .variant-meta {
+    background: var(--amber-tint);
+    border: 1px solid #E8DCC1;
+    border-left: 4px solid var(--amber);
+    padding: 14px 18px;
+    border-radius: 10px;
+    margin-bottom: 24px;
+    font-size: 14px;
+  }
+  .variant-meta strong { color: var(--green); }
+
+  /* Two-column layout: hero + waitlist mockup */
+  .frames {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 1100px) {
+    .frames { grid-template-columns: 1fr; }
+  }
+  .frame {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .frame-label {
+    background: var(--green);
+    color: white;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 8px 16px;
+    font-weight: 700;
+  }
+
+  /* --- Site shell (header + page background) inside each frame --- */
+  .site {
+    background: var(--bg);
+    min-height: 480px;
+    padding: 0;
+  }
+  .nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--line);
+    background: white;
+  }
+  .nav-brand {
+    font-family: "Cormorant Garamond", Georgia, serif;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--green);
+  }
+  .nav-links {
+    display: flex;
+    gap: 18px;
+    font-size: 13px;
+    color: var(--subtle);
+  }
+  .nav-links a {
+    color: var(--subtle);
+    text-decoration: none;
+  }
+  .nav-links a.btn {
+    background: var(--green);
+    color: white;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-weight: 600;
+  }
+
+  /* --- HERO --- */
+  .hero {
+    padding: 56px 32px 48px;
+    text-align: center;
+  }
+  .hero .kicker {
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--coral);
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+  .hero h1 {
+    font-family: "Cormorant Garamond", Georgia, serif;
+    font-size: 44px;
+    color: var(--green);
+    margin: 0 0 14px;
+    line-height: 1.1;
+    font-weight: 500;
+  }
+  .hero h1 em {
+    font-style: italic;
+    color: var(--coral);
+  }
+  .hero .sub {
+    color: var(--subtle);
+    font-size: 16px;
+    max-width: 36ch;
+    margin: 0 auto 24px;
+    line-height: 1.55;
+  }
+  .hero .cta-row {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .btn-primary {
+    background: var(--green);
+    color: white;
+    padding: 12px 22px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 14px;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn-primary:hover { background: var(--green-2); }
+  .btn-secondary {
+    background: white;
+    color: var(--green);
+    padding: 12px 22px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 14px;
+    border: 1px solid var(--line);
+    cursor: pointer;
+    font-family: inherit;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn-secondary:hover { border-color: var(--green); }
+
+  .therapist-strip {
+    background: var(--pale-green);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .therapist-strip .copy {
+    font-size: 14px;
+    color: var(--green);
+  }
+  .therapist-strip .copy strong {
+    color: var(--green);
+  }
+
+  /* --- WAITLIST FORM card --- */
+  .waitlist-card {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 32px;
+    max-width: 480px;
+    margin: 40px auto;
+  }
+  .waitlist-card .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--coral-tint);
+    color: #8B3220;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 999px;
+    margin-bottom: 14px;
+  }
+  .waitlist-card h2 {
+    font-family: "Cormorant Garamond", Georgia, serif;
+    font-size: 28px;
+    color: var(--green);
+    margin: 0 0 10px;
+    font-weight: 500;
+    line-height: 1.15;
+  }
+  .waitlist-card .lead {
+    color: var(--subtle);
+    font-size: 14px;
+    line-height: 1.55;
+    margin-bottom: 22px;
+  }
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--subtle);
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .field input,
+  .field select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    font-size: 14px;
+    font-family: inherit;
+    background: var(--bg);
+    color: var(--ink);
+  }
+  .field input:focus,
+  .field select:focus {
+    outline: none;
+    border-color: var(--green);
+  }
+  .field .hint {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--subtle);
+  }
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 110px;
+    gap: 10px;
+  }
+
+  .submit-btn {
+    width: 100%;
+    padding: 13px;
+    background: var(--green);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    font-family: inherit;
+    margin-top: 8px;
+  }
+  .legal-line {
+    margin-top: 12px;
+    font-size: 11px;
+    color: var(--subtle);
+    text-align: center;
+    line-height: 1.45;
+  }
+  .legal-line a { color: var(--green); text-decoration: underline; }
+
+  /* Confirmation state */
+  .confirm-card {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 36px 32px;
+    max-width: 480px;
+    margin: 40px auto;
+    text-align: center;
+  }
+  .confirm-check {
+    width: 48px;
+    height: 48px;
+    border-radius: 999px;
+    background: var(--pale-green);
+    color: var(--green);
+    font-size: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 18px;
+  }
+  .confirm-card h2 {
+    font-family: "Cormorant Garamond", Georgia, serif;
+    font-size: 26px;
+    color: var(--green);
+    margin: 0 0 10px;
+    font-weight: 500;
+  }
+  .confirm-card .body {
+    color: var(--subtle);
+    font-size: 14px;
+    line-height: 1.55;
+    margin-bottom: 18px;
+  }
+  .confirm-card .therapist-prompt {
+    background: var(--coral-tint);
+    border: 1px solid var(--coral-tint-2);
+    border-radius: 12px;
+    padding: 14px 16px;
+    text-align: left;
+    font-size: 13px;
+    color: #8B3220;
+    line-height: 1.5;
+  }
+
+  /* Multi-step indicator (Variant C) */
+  .step-dots {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-bottom: 18px;
+  }
+  .step-dot {
+    width: 22px;
+    height: 4px;
+    background: var(--line);
+    border-radius: 2px;
+  }
+  .step-dot.active { background: var(--green); }
+
+  /* Pill row (Variant C) */
+  .pill-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .pill {
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 12px;
+    background: white;
+    color: var(--ink);
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .pill.selected {
+    background: var(--green);
+    color: white;
+    border-color: var(--green);
+  }
+
+  /* Implementation notes (bottom of page) */
+  .impl-notes {
+    margin-top: 32px;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 24px 28px;
+  }
+  .impl-notes h3 {
+    font-family: "Cormorant Garamond", Georgia, serif;
+    color: var(--green);
+    margin: 0 0 14px;
+    font-size: 22px;
+    font-weight: 600;
+  }
+  .impl-notes h4 {
+    color: var(--green);
+    margin: 18px 0 6px;
+    font-size: 14px;
+  }
+  .impl-notes ul {
+    margin: 0;
+    padding-left: 20px;
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .impl-notes li + li { margin-top: 4px; }
+  .impl-notes .note-block {
+    background: var(--bg);
+    border-left: 3px solid var(--coral);
+    padding: 10px 14px;
+    border-radius: 4px;
+    margin: 12px 0;
+    font-size: 13px;
+    color: var(--ink);
+  }
+</style>
+</head>
+<body>
+<div class="page-shell">
+
+<div class="meta-header">
+  <h1>Patient waitlist — three design variants</h1>
+  <p>
+    Soft-launch scenario: DNS is flipped to theravoca.com, therapist signup is fully live so
+    we can recruit Idaho providers, but the patient intake is replaced with a waitlist signup
+    until we hit our soft-launch supply target (~30-50 active therapists). Switch is admin-
+    toggleable so we can flip patient intake live the moment we're ready, no redeploy needed.
+    Three variants below trade-off how much we ask the patient up front; pick one and I'll
+    implement.
+  </p>
+</div>
+
+<div class="tabs" role="tablist">
+  <button class="tab active" data-target="variant-a" type="button">A · Minimal waitlist</button>
+  <button class="tab" data-target="variant-b" type="button">B · Light intake waitlist</button>
+  <button class="tab" data-target="variant-c" type="button">C · Conversational waitlist</button>
+</div>
+
+<!-- =================================================================== -->
+<!-- VARIANT A: Minimal -->
+<!-- =================================================================== -->
+<section class="variant active" id="variant-a">
+  <div class="variant-meta">
+    <strong>Variant A — Minimal.</strong>
+    Patient gives only email + ZIP. Lowest friction; fastest signup. Trade-off: we have
+    nothing to sort by when matching opens, so the first wave of patients gets matched
+    in arrival order regardless of fit. Best if you expect a small waitlist (<100 entries).
+  </div>
+
+  <div class="frames">
+    <!-- LANDING HERO -->
+    <div class="frame">
+      <div class="frame-label">Landing page hero — what the patient sees first</div>
+      <div class="site">
+        <div class="nav">
+          <div class="nav-brand">TheraVoca</div>
+          <div class="nav-links">
+            <a href="#">How it works</a>
+            <a href="#">FAQs</a>
+            <a href="#" class="btn">For therapists</a>
+          </div>
+        </div>
+        <div class="hero">
+          <div class="kicker">Idaho · Free for patients</div>
+          <h1>The right therapist is <em>almost ready</em>.</h1>
+          <p class="sub">
+            We're building our Idaho therapist network. Join the waitlist and we'll
+            email you the moment we open matches.
+          </p>
+          <div class="cta-row">
+            <a href="#waitlist" class="btn-primary">Join the waitlist →</a>
+            <a href="#how" class="btn-secondary">How TheraVoca works</a>
+          </div>
+        </div>
+        <div class="therapist-strip">
+          <div class="copy">
+            <strong>Therapist?</strong> Build your patient pipeline before we open.
+            Free trial, $45/mo after.
+          </div>
+          <a href="#" class="btn-secondary" style="background:white">For therapists →</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- WAITLIST FORM -->
+    <div class="frame">
+      <div class="frame-label">Waitlist signup — replaces /#start intake</div>
+      <div class="site">
+        <div class="nav">
+          <div class="nav-brand">TheraVoca</div>
+          <div class="nav-links">
+            <a href="#">How it works</a>
+            <a href="#">FAQs</a>
+          </div>
+        </div>
+        <div class="waitlist-card">
+          <div class="badge">● Opening soon · Idaho</div>
+          <h2>Get matched the day we open</h2>
+          <p class="lead">
+            We'll only email you twice: once to confirm you're on the list,
+            and once to let you know matches are open. Nothing else.
+          </p>
+          <div class="field">
+            <label>Email</label>
+            <input type="email" placeholder="you@example.com" />
+          </div>
+          <div class="field">
+            <label>Idaho ZIP code</label>
+            <input type="text" placeholder="83702" maxlength="5" />
+            <div class="hint">We use this to estimate when we'll have therapists in your area.</div>
+          </div>
+          <button class="submit-btn">Join the waitlist</button>
+          <p class="legal-line">
+            By joining you agree to our <a href="#">Privacy Notice</a>. No spam.
+            Unsubscribe with one click.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="frames" style="margin-top: 24px;">
+    <div class="frame">
+      <div class="frame-label">Confirmation state — what they see after submitting</div>
+      <div class="site">
+        <div class="nav">
+          <div class="nav-brand">TheraVoca</div>
+          <div class="nav-links">
+            <a href="#">How it works</a>
+            <a href="#">FAQs</a>
+          </div>
+        </div>
+        <div class="confirm-card">
+          <div class="confirm-check">✓</div>
+          <h2>You're on the list</h2>
+          <p class="body">
+            We'll email <strong style="color: var(--green)">you@example.com</strong>
+            the moment matches open in your area. Estimated soft launch: <strong style="color: var(--green)">June-July 2026</strong>.
+          </p>
+          <div class="therapist-prompt">
+            <strong>Know a therapist in Idaho?</strong> The faster we recruit
+            providers, the sooner everyone on the waitlist gets matched.
+            <a href="#" style="color: #8B3220; text-decoration: underline;">Share TheraVoca with a therapist →</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div></div>
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- VARIANT B: Light Intake -->
+<!-- =================================================================== -->
+<section class="variant" id="variant-b">
+  <div class="variant-meta">
+    <strong>Variant B — Light intake.</strong>
+    Adds one presenting-issue dropdown + format preference (virtual / in-person / both).
+    Lets admin sort the waitlist so that when therapist supply hits 30+, the patients
+    whose needs match the available specialties get notified first. Slightly more
+    friction than A; meaningfully better matching when we open.
+  </div>
+
+  <div class="frames">
+    <!-- LANDING HERO -->
+    <div class="frame">
+      <div class="frame-label">Landing page hero — same as Variant A</div>
+      <div class="site">
+        <div class="nav">
+          <div class="nav-brand">TheraVoca</div>
+          <div class="nav-links">
+            <a href="#">How it works</a>
+            <a href="#">FAQs</a>
+            <a href="#" class="btn">For therapists</a>
+          </div>
+        </div>
+        <div class="hero">
+          <div class="kicker">Idaho · Free for patients</div>
+          <h1>The right therapist is <em>almost ready</em>.</h1>
+          <p class="sub">
+            We're building our Idaho therapist network. Tell us a bit about what you're
+            looking for and we'll match you the moment we open.
+          </p>
+          <div class="cta-row">
+            <a href="#waitlist" class="btn-primary">Join the waitlist →</a>
+            <a href="#how" class="btn-secondary">How TheraVoca works</a>
+          </div>
+        </div>
+        <div class="therapist-strip">
+          <div class="copy">
+            <strong>Therapist?</strong> Build your patient pipeline before we open.
+            Free trial, $45/mo after.
+          </div>
+          <a href="#" class="btn-secondary" style="background:white">For therapists →</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- WAITLIST FORM -->
+    <div class="frame">
+      <div class="frame-label">Waitlist form — same fields + presenting issue + format</div>
+      <div class="site">
+        <div class="nav">
+          <div class="nav-brand">TheraVoca</div>
+          <div class="nav-links">
+            <a href="#">How it works</a>
+            <a href="#">FAQs</a>
+          </div>
+        </div>
+        <div class="waitlist-card">
+          <div class="badge">● Opening soon · Idaho</div>
+          <h2>Get prioritized when we open</h2>
+          <p class="lead">
+            Two extra questions so we can match you to a therapist who fits as soon as
+            one's available. We'll only email you twice: confirm + go-live.
+          </p>
+          <div class="field">
+            <label>Email</label>
+            <input type="email" placeholder="you@example.com" />
+          </div>
+          <div class="field">
+            <label>Idaho ZIP code</label>
+            <input type="text" placeholder="83702" maxlength="5" />
+          </div>
+          <div class="field">
+            <label>What brings you in (you can change this later)</label>
+            <select>
+              <option value="">Choose what fits best...</option>
+              <option>Anxiety</option>
+              <option>Depression</option>
+              <option>Trauma / PTSD</option>
+              <option>Relationship issues</option>
+              <option>Life transitions</option>
+              <option>ADHD</option>
+              <option>Parenting / family</option>
+              <option>Not sure yet — open to talking it through</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Session format</label>
+            <select>
+              <option value="">Pick one...</option>
+              <option>Virtual only</option>
+              <option>In-person only</option>
+              <option>Either works</option>
+            </select>
+          </div>
+          <button class="submit-btn">Join the waitlist</button>
+          <p class="legal-line">
+            By joining you agree to our <a href="#">Privacy Notice</a>. No spam.
+            Unsubscribe with one click.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="frames" style="margin-top: 24px;">
+    <div class="frame">
+      <div class="frame-label">Confirmation — confirms the fit info we'll use to prioritize</div>
+      <div class="site">
+        <div class="nav">
+          <div class="nav-brand">TheraVoca</div>
+          <div class="nav-links">
+            <a href="#">How it works</a>
+            <a href="#">FAQs</a>
+          </div>
+        </div>
+        <div class="confirm-card">
+          <div class="confirm-check">✓</div>
+          <h2>You're on the list</h2>
+          <p class="body">
+            We'll match you to a therapist who specializes in <strong style="color: var(--green)">anxiety</strong>
+            and offers <strong style="color: var(--green)">virtual sessions</strong> the moment one opens up
+            in your area. Estimated soft launch: <strong style="color: var(--green)">June-July 2026</strong>.
+          </p>
+          <div class="therapist-prompt">
+            <strong>Know a therapist in Idaho?</strong> The faster we recruit
+            providers, the sooner everyone on the waitlist gets matched.
+            <a href="#" style="color: #8B3220; text-decoration: underline;">Share TheraVoca with a therapist →</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div></div>
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- VARIANT C: Conversational -->
+<!-- =================================================================== -->
+<section class="variant" id="variant-c">
+  <div class="variant-meta">
+    <strong>Variant C — Conversational.</strong>
+    Three-step mini-flow (ZIP → presenting issue → email) with progress dots, written in
+    a warmer "this is the start of finding your match, not just a form" tone. Highest
+    perceived effort but also the highest commitment + best emotional handoff — patients
+    who finish this feel like they've started something, not just dropped an email.
+    Carries the most data into the day-1 matching queue.
+  </div>
+
+  <div class="frames">
+    <!-- LANDING HERO -->
+    <div class="frame">
+      <div class="frame-label">Landing page hero — softer, warmer copy</div>
+      <div class="site">
+        <div class="nav">
+          <div class="nav-brand">TheraVoca</div>
+          <div class="nav-links">
+            <a href="#">How it works</a>
+            <a href="#">FAQs</a>
+            <a href="#" class="btn">For therapists</a>
+          </div>
+        </div>
+        <div class="hero">
+          <div class="kicker">Idaho · Free for patients</div>
+          <h1>Let's get started <em>now</em>, so we can match you the moment we open.</h1>
+          <p class="sub">
+            Three short questions. We'll save your spot and reach out the day a
+            therapist who fits you is ready.
+          </p>
+          <div class="cta-row">
+            <a href="#waitlist" class="btn-primary">Start in 90 seconds →</a>
+            <a href="#how" class="btn-secondary">How TheraVoca works</a>
+          </div>
+        </div>
+        <div class="therapist-strip">
+          <div class="copy">
+            <strong>Therapist?</strong> Build your patient pipeline before we open.
+            Free trial, $45/mo after.
+          </div>
+          <a href="#" class="btn-secondary" style="background:white">For therapists →</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- WAITLIST FORM (step 1 of 3) -->
+    <div class="frame">
+      <div class="frame-label">Step 1 of 3 — "Where are you in Idaho?"</div>
+      <div class="site">
+        <div class="nav">
+          <div class="nav-brand">TheraVoca</div>
+          <div class="nav-links">
+            <a href="#">How it works</a>
+            <a href="#">FAQs</a>
+          </div>
+        </div>
+        <div class="waitlist-card">
+          <div class="step-dots">
+            <div class="step-dot active"></div>
+            <div class="step-dot"></div>
+            <div class="step-dot"></div>
+          </div>
+          <h2>Where in Idaho are you?</h2>
+          <p class="lead">
+            ZIP is enough — we use it to know which therapists in our network
+            are reachable for you, both in-person and virtual.
+          </p>
+          <div class="field">
+            <label>Idaho ZIP code</label>
+            <input type="text" placeholder="83702" maxlength="5" />
+            <div class="hint">We only match you with therapists licensed in Idaho.</div>
+          </div>
+          <button class="submit-btn">Continue →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="frames" style="margin-top: 24px;">
+    <!-- STEP 2 -->
+    <div class="frame">
+      <div class="frame-label">Step 2 of 3 — "What brings you in?"</div>
+      <div class="site">
+        <div class="nav">
+          <div class="nav-brand">TheraVoca</div>
+          <div class="nav-links">
+            <a href="#">How it works</a>
+            <a href="#">FAQs</a>
+          </div>
+        </div>
+        <div class="waitlist-card">
+          <div class="step-dots">
+            <div class="step-dot active"></div>
+            <div class="step-dot active"></div>
+            <div class="step-dot"></div>
+          </div>
+          <h2>What's bringing you in?</h2>
+          <p class="lead">
+            Pick whatever feels closest. You can change this later — we just use
+            it to prioritize you when a therapist who works with this comes online.
+          </p>
+          <div class="field">
+            <label>I'm working through...</label>
+            <div class="pill-row">
+              <button class="pill selected">Anxiety</button>
+              <button class="pill">Depression</button>
+              <button class="pill">Trauma / PTSD</button>
+              <button class="pill">Relationships</button>
+              <button class="pill">Life transitions</button>
+              <button class="pill">ADHD</button>
+              <button class="pill">Parenting / family</button>
+              <button class="pill">Substance use</button>
+              <button class="pill">Not sure yet</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>How do you want to meet?</label>
+            <div class="pill-row">
+              <button class="pill selected">Virtual</button>
+              <button class="pill">In-person</button>
+              <button class="pill">Either</button>
+            </div>
+          </div>
+          <button class="submit-btn">Continue →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3 -->
+    <div class="frame">
+      <div class="frame-label">Step 3 of 3 — "Where do we reach you?"</div>
+      <div class="site">
+        <div class="nav">
+          <div class="nav-brand">TheraVoca</div>
+          <div class="nav-links">
+            <a href="#">How it works</a>
+            <a href="#">FAQs</a>
+          </div>
+        </div>
+        <div class="waitlist-card">
+          <div class="step-dots">
+            <div class="step-dot active"></div>
+            <div class="step-dot active"></div>
+            <div class="step-dot active"></div>
+          </div>
+          <h2>Last thing — where should we reach you?</h2>
+          <p class="lead">
+            We'll send your match the moment a therapist who fits comes online.
+            Two emails total: one to confirm, one when matches open.
+          </p>
+          <div class="field">
+            <label>Email</label>
+            <input type="email" placeholder="you@example.com" />
+            <div class="hint">We'll never share this or use it for anything else.</div>
+          </div>
+          <div class="field">
+            <label>Your first name (optional)</label>
+            <input type="text" placeholder="So our email doesn't start with 'Hello there'" />
+          </div>
+          <button class="submit-btn">Save my spot →</button>
+          <p class="legal-line">
+            By joining you agree to our <a href="#">Privacy Notice</a>.
+            Unsubscribe with one click.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="frames" style="margin-top: 24px;">
+    <div class="frame">
+      <div class="frame-label">Confirmation — feels like the start of the real match flow</div>
+      <div class="site">
+        <div class="nav">
+          <div class="nav-brand">TheraVoca</div>
+          <div class="nav-links">
+            <a href="#">How it works</a>
+            <a href="#">FAQs</a>
+          </div>
+        </div>
+        <div class="confirm-card">
+          <div class="confirm-check">✓</div>
+          <h2>You're on the list, Alex</h2>
+          <p class="body">
+            We're matching you with a therapist who specializes in
+            <strong style="color: var(--green)">anxiety</strong> and offers
+            <strong style="color: var(--green)">virtual sessions</strong>
+            near <strong style="color: var(--green)">Boise (83702)</strong>.
+            <br /><br />
+            Estimated soft launch: <strong style="color: var(--green)">June-July 2026</strong>.
+            You'll be one of the first patients we match — typically within the first 48 hours.
+          </p>
+          <div class="therapist-prompt">
+            <strong>Know a therapist in Idaho?</strong> The faster we recruit
+            providers, the sooner everyone on the waitlist gets matched.
+            <a href="#" style="color: #8B3220; text-decoration: underline;">Share TheraVoca with a therapist →</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div></div>
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- IMPLEMENTATION NOTES -->
+<!-- =================================================================== -->
+<div class="impl-notes">
+  <h3>Implementation notes (read before picking)</h3>
+
+  <h4>How the waitlist toggles on/off</h4>
+  <ul>
+    <li>
+      Admin setting: <code>patient_intake_mode</code> = <code>"waitlist"</code> | <code>"open"</code>
+      (lives in <code>app_config</code> alongside the existing intake flags).
+    </li>
+    <li>
+      Frontend reads the mode from <code>/api/config/patient-intake-mode</code> on mount; routes to
+      the waitlist screen or the full intake form accordingly. No redeploy required to flip.
+    </li>
+    <li>
+      Backend hard-rejects the existing <code>POST /api/requests</code> with a 503 when mode is
+      <code>waitlist</code>, so a curl'd submission can't sneak past the UI gate.
+    </li>
+  </ul>
+
+  <h4>Where waitlist signups land</h4>
+  <ul>
+    <li>
+      New Mongo collection: <code>patient_waitlist</code> with fields <code>email, zip, primary_issue,
+      format_pref, first_name, created_at, source_ref</code>.
+    </li>
+    <li>
+      Admin gets a new "Patient waitlist" panel under Testing with: count, recent signups,
+      CSV export, and a "Convert N from waitlist → notify them" button that fires the
+      go-live email when intake opens.
+    </li>
+    <li>
+      Per-IP + per-email rate limit (5/hour) to prevent spam signups.
+      Cloudflare Turnstile gate same as the current intake.
+    </li>
+  </ul>
+
+  <h4>Therapist signup pathway stays unchanged</h4>
+  <ul>
+    <li>
+      <code>/therapists/join</code> remains fully functional regardless of patient mode. The
+      landing's "For therapists" CTA is the same as today.
+    </li>
+    <li>
+      We add a small "Therapist? Join now and reach our growing patient waitlist" strip
+      under the landing hero (shown in all 3 mockups) so therapists feel the supply-side
+      pull while the patient side is in waitlist mode.
+    </li>
+  </ul>
+
+  <h4>Day-of-launch flip</h4>
+  <ul>
+    <li>
+      Admin clicks "Open patient intake" in the new panel. Mode flips to <code>open</code>.
+    </li>
+    <li>
+      Cron fires the "we're open" email to every waitlist signup. The email links
+      them straight into <code>/?ref=waitlist&amp;email=&lt;their email&gt;</code> with the
+      intake form pre-filled from whatever we collected during waitlist signup
+      (Variant B / C have more data to seed the form than A).
+    </li>
+    <li>
+      Once converted, the waitlist row is marked <code>converted_at: &lt;iso&gt;</code>; we
+      keep the record for analytics (waitlist-to-conversion rate is a useful metric).
+    </li>
+  </ul>
+
+  <div class="note-block">
+    <strong>My recommendation:</strong> Variant B. Lowest cost to build (one screen, no
+    multi-step state), gives admin enough signal to prioritize the first wave of
+    matches by fit (not just arrival order), and the friction is barely higher than A
+    (two extra dropdowns). Variant C feels great but is real engineering work for a
+    soft-launch holding page. Variant A leaves you blind to who's on the list.
+  </div>
+
+  <h4>Scope estimate to ship the picked variant</h4>
+  <ul>
+    <li><strong>A or B:</strong> ~half a day. One new React route, one new Mongo collection, one new admin panel card, one new cron, one new email template.</li>
+    <li><strong>C:</strong> ~1-1.5 days. Same backend as B + the 3-step state machine + step navigation + the per-step animations to feel intentional.</li>
+  </ul>
+</div>
+
+</div>
+
+<script>
+  document.querySelectorAll('.tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const target = tab.getAttribute('data-target');
+      document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
+      document.querySelectorAll('.variant').forEach((v) => v.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(target).classList.add('active');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+</script>
+
+</body>
+</html>
