@@ -8665,3 +8665,289 @@ async def admin_email_cron_schedules(_: bool = Depends(require_admin)):
     from email_schedule_catalog import build_schedule_response
     return build_schedule_response()
 
+
+# ── User Content Flagging (Content > User Content Flagging) ─────
+# 2026-05-17 (Josh, after p3_resonance miss): "what's the rule for
+# bad content flagging? add it under 'content' in admin as 'User
+# Content Flagging' -- how does it show up in requests and
+# therapist signups?"
+#
+# Combines:
+#   1. The static moderation rules (what triggers a rejection)
+#   2. A log of recent rejections from db.moderation_rejections
+#      (populated by text_moderation.validate_or_raise on every
+#      400-out-with-validation-error)
+#
+# Read-only. Auto-paginates the rejection log (most recent first,
+# capped at the supplied limit; default 100). Admin can group by
+# `category` (profanity_or_sexualized, gibberish_repeated_chars,
+# all_caps_shouting, url_spam, too_short, too_long, missing_required)
+# to see abuse patterns at a glance.
+@router.get("/admin/content-moderation")
+async def admin_content_moderation(
+    limit: int = 100,
+    _: bool = Depends(require_admin),
+):
+    from text_moderation import _PROFANITY  # noqa: PLC0415
+
+    limit = max(1, min(int(limit or 100), 500))
+
+    # Pull the most recent rejection rows.
+    rejections = await db.moderation_rejections.find(
+        {}, {"_id": 0},
+    ).sort("rejected_at", -1).to_list(limit)
+
+    # Aggregate counts by category over the last 30 days for the
+    # summary chips. (Cheap -- moderation_rejections is small.)
+    from datetime import datetime, timedelta, timezone
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    agg = db.moderation_rejections.aggregate([
+        {"$match": {"rejected_at": {"$gte": cutoff}}},
+        {"$group": {"_id": "$category", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+    ])
+    by_category = {row["_id"]: row["count"] async for row in agg}
+    total_30d = sum(by_category.values())
+
+    # Aggregate counts by route over the last 30 days so admin can
+    # see WHERE the abuse is concentrated (patient intake vs
+    # therapist signup vs apply etc.).
+    agg2 = db.moderation_rejections.aggregate([
+        {"$match": {"rejected_at": {"$gte": cutoff}}},
+        {"$group": {"_id": "$route", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+    ])
+    by_route = [
+        {"route": (row["_id"] or "<unknown>"), "count": row["count"]}
+        async for row in agg2
+    ]
+
+    return {
+        "rules": _MODERATION_RULES_CATALOG,
+        "fields_protected": _MODERATION_FIELDS_CATALOG,
+        "wordlist_size": len(_PROFANITY),
+        "summary": {
+            "total_last_30_days": total_30d,
+            "by_category": by_category,
+            "by_route": by_route,
+        },
+        "recent_rejections": rejections,
+        "limit": limit,
+    }
+
+
+# Static catalog of the rules the validator enforces. Lives here
+# (route file) instead of text_moderation.py because the admin-
+# facing copy is owned by the route, not the validator.
+_MODERATION_RULES_CATALOG = [
+    {
+        "category": "profanity_or_sexualized",
+        "title": "Profanity & sexualized garbage",
+        "description": (
+            "Case-insensitive word-boundary match against a curated "
+            "wordlist (~55 entries). Covers common profanity "
+            "(fuck/shit/bitch/asshole), slurs, and sexualized garbage "
+            "(porn, masturbate, naked, tits, etc.). The wordlist "
+            "INTENTIONALLY OMITS trauma-disclosure terms (rape, "
+            "molest, abuse) and the words 'sex' / 'sexy' so a "
+            "patient describing sexual abuse trauma when seeking a "
+            "trauma-informed therapist is NOT blocked."
+        ),
+        "user_facing_message": (
+            "{field} contains language we can't accept. Please "
+            "rephrase respectfully so your match has the context "
+            "they need."
+        ),
+    },
+    {
+        "category": "gibberish_repeated_chars",
+        "title": "Gibberish / mashed keyboard",
+        "description": (
+            "9 or more identical consecutive characters "
+            "('aaaaaaaaa', '............', '!!!!!!!!!!'). Up to 8 "
+            "repeats allowed for legitimate emphasis ('great!!' or "
+            "'wait...')."
+        ),
+        "user_facing_message": (
+            "{field} looks like repeated characters or padding. "
+            "Please describe in your own words."
+        ),
+    },
+    {
+        "category": "all_caps_shouting",
+        "title": "ALL-CAPS SHOUTING",
+        "description": (
+            "More than 70% uppercase letters AND more than 20 "
+            "letters of total content. Threshold tuned so domain "
+            "acronyms (CBT, EMDR, ADHD, LGBTQ+, PTSD) don't false-"
+            "trip a short normal sentence."
+        ),
+        "user_facing_message": (
+            "{field} reads as all-caps. Please use sentence case "
+            "so it's easier to read."
+        ),
+    },
+    {
+        "category": "url_spam",
+        "title": "URL / link spam",
+        "description": (
+            "Rejects 'https?://', 'www.something', and bare domains "
+            "ending in .com/.net/.org/.io/.co/.app/.gov/.edu/.info/"
+            ".biz. The therapist website field gets an 'allow_urls' "
+            "escape hatch since it legitimately takes a URL."
+        ),
+        "user_facing_message": (
+            "{field} can't include website links. Please describe "
+            "in plain text -- you can share links later in your "
+            "conversation with the therapist."
+        ),
+    },
+    {
+        "category": "too_short",
+        "title": "Too short",
+        "description": (
+            "Per-field minimum length. Currently enforced only on "
+            "therapist bio (>=20 chars) and feedback widget (>=5 "
+            "chars). All other fields accept any non-empty content."
+        ),
+        "user_facing_message": (
+            "{field} needs at least {min} characters. Please write "
+            "a bit more so we can help."
+        ),
+    },
+    {
+        "category": "too_long",
+        "title": "Too long",
+        "description": (
+            "Per-field maximum length. Mostly enforced by pydantic "
+            "at the schema layer; this catches edge cases where the "
+            "schema is permissive but the route has a tighter cap."
+        ),
+        "user_facing_message": (
+            "{field} can't exceed {max} characters. Please shorten it."
+        ),
+    },
+]
+
+
+# Snapshot of every field protected by the moderation layer + the
+# rule set applied. Keep in sync with the validate_or_raise() calls
+# in routes/. Adding a new field here without wiring it is a
+# documentation lie -- the User Content Flagging panel will claim
+# the field is protected when it isn't.
+_MODERATION_FIELDS_CATALOG = [
+    {
+        "field": "other_issue",
+        "route": "POST /api/requests",
+        "actor": "Patient (intake form)",
+        "max_length": 200,
+        "description": (
+            "Free text below the presenting-issues picklist when "
+            "the patient chooses 'Other'."
+        ),
+    },
+    {
+        "field": "prior_therapy_notes",
+        "route": "POST /api/requests",
+        "actor": "Patient (intake form)",
+        "max_length": 250,
+        "description": (
+            "Optional context the patient shares about their prior "
+            "therapy experience (gated by an explicit consent toggle)."
+        ),
+    },
+    {
+        "field": "p3_resonance",
+        "route": "POST /api/requests",
+        "actor": "Patient (intake form, deep match)",
+        "max_length": 250,
+        "description": (
+            "Deep-match 'what your therapist should already get about "
+            "you' free text. PATCHED 2026-05-17 after Josh's test "
+            "request slipped profanity past this gap."
+        ),
+    },
+    {
+        "field": "bio",
+        "route": "POST /api/therapists/signup",
+        "actor": "Therapist (signup)",
+        "max_length": 3000,
+        "min_length": 20,
+        "description": (
+            "Therapist bio shown on patient-facing profile. "
+            "Minimum 20 chars to discourage 'asdf' placeholder bios."
+        ),
+    },
+    {
+        "field": "t2_progress_story",
+        "route": "POST /api/therapists/signup",
+        "actor": "Therapist (signup, deep match)",
+        "max_length": 2000,
+        "description": "Deep-match T2 progress-story free text.",
+    },
+    {
+        "field": "t5_lived_experience",
+        "route": "POST /api/therapists/signup",
+        "actor": "Therapist (signup, deep match)",
+        "max_length": 2000,
+        "description": "Deep-match T5 lived-experience free text.",
+    },
+    {
+        "field": "t6_early_sessions_description",
+        "route": "POST /api/therapists/signup",
+        "actor": "Therapist (signup, deep match)",
+        "max_length": 2000,
+        "description": "Deep-match T6 early-sessions free text.",
+    },
+    {
+        "field": "message (apply)",
+        "route": "POST /api/therapist/apply/{request_id}/{therapist_id}",
+        "actor": "Therapist (applying to a referral)",
+        "max_length": 1500,
+        "description": (
+            "Free-text message the therapist sends with their "
+            "interest in a referral. Visible to the patient."
+        ),
+    },
+    {
+        "field": "message (bulk apply)",
+        "route": "POST /api/portal/therapist/bulk-apply",
+        "actor": "Therapist (bulk-applying to N referrals)",
+        "max_length": 1500,
+        "description": (
+            "Same as apply message but applied to up to 50 referrals "
+            "in one call."
+        ),
+    },
+    {
+        "field": "notes (decline)",
+        "route": "POST /api/therapist/decline/{request_id}/{therapist_id}",
+        "actor": "Therapist (declining a referral)",
+        "max_length": 500,
+        "description": (
+            "Optional free-text reason the therapist supplies when "
+            "declining a referral. Admin reads in the Outcomes tab."
+        ),
+    },
+    {
+        "field": "notes (follow-up)",
+        "route": "POST /api/followup/{request_id}/{milestone}",
+        "actor": "Patient (follow-up survey)",
+        "max_length": 1500,
+        "description": (
+            "Patient feedback in the post-match follow-up survey."
+        ),
+    },
+    {
+        "field": "message (feedback widget)",
+        "route": "POST /api/feedback/widget",
+        "actor": "Anyone (public footer feedback button)",
+        "min_length": 5,
+        "max_length": 2000,
+        "description": (
+            "Public floating feedback widget. Highest abuse risk "
+            "because it's unauthenticated (Turnstile-gated only)."
+        ),
+    },
+]
+

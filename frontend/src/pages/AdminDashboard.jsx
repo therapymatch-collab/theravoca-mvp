@@ -57,6 +57,7 @@ import TeamPanel from "@/pages/admin/panels/TeamPanel";
 import MasterQueryPanel from "@/pages/admin/panels/MasterQueryPanel";
 import BlogAdminPanel from "@/pages/admin/panels/BlogAdminPanel";
 import EmailCronSchedulesPanel from "@/pages/admin/panels/EmailCronSchedulesPanel";
+import UserContentFlaggingPanel from "@/pages/admin/panels/UserContentFlaggingPanel";
 import SettingsPanel from "@/pages/admin/panels/SettingsPanel";
 import ScrapeSourcesPanel from "@/pages/admin/panels/ScrapeSourcesPanel";
 import SmsStatusPanel from "@/pages/admin/panels/SmsStatusPanel";
@@ -1892,6 +1893,8 @@ export default function AdminDashboard() {
               {tab === "site_copy" && <SiteCopyAdminPanel client={client} />}
 
               {tab === "email_cron_schedules" && <EmailCronSchedulesPanel />}
+
+              {tab === "user_content_flagging" && <UserContentFlaggingPanel />}
 
               {tab === "faqs" && <FaqAdminPanel client={client} />}
 
@@ -4062,6 +4065,12 @@ function AdminTabsBar({
         // cron-driven and real-time email send + its trigger +
         // quiet-hours timing.
         { id: "email_cron_schedules", label: "Email cron schedules" },
+        // 2026-05-17 (Josh, after p3_resonance miss): "what's the
+        // rule for bad content flagging? add it under 'content' in
+        // admin as 'User Content Flagging' -- how does it show up
+        // in requests and therapist signups?" Shows the rules, the
+        // protected fields, and the recent-rejections audit log.
+        { id: "user_content_flagging", label: "User content flagging" },
       ],
     },
     {

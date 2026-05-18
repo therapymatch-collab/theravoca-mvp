@@ -213,6 +213,73 @@ def validate_open_text(
     return True, None
 
 
+def _classify_rejection(text: str, err: str) -> str:
+    """Best-guess category for the rejection so the admin "User
+    Content Flagging" panel can group similar incidents. Looks at
+    the error message string (which is generated deterministically
+    by validate_open_text) rather than re-running the checks.
+    """
+    if "all-caps" in err:
+        return "all_caps_shouting"
+    if "repeated characters" in err:
+        return "gibberish_repeated_chars"
+    if "language we can't accept" in err:
+        return "profanity_or_sexualized"
+    if "website links" in err:
+        return "url_spam"
+    if "at least" in err:
+        return "too_short"
+    if "can't exceed" in err:
+        return "too_long"
+    if "is required" in err:
+        return "missing_required"
+    return "other"
+
+
+async def _log_rejection(
+    *,
+    text: str,
+    field_name: str,
+    err: str,
+    route: Optional[str],
+    actor_email: Optional[str],
+) -> None:
+    """Persist one rejection to db.moderation_rejections for the
+    User Content Flagging admin panel. Best-effort: failures are
+    swallowed so a logging hiccup never blocks the rejection
+    response. We truncate the offending text to 500 chars so a
+    pathological 2 MB paste can't blow up the audit row.
+    """
+    try:
+        from datetime import datetime, timezone
+        from deps import db
+        snippet = (text or "")[:500]
+        await db.moderation_rejections.insert_one({
+            "rejected_at": datetime.now(timezone.utc).isoformat(),
+            "field_name": field_name,
+            "route": route or "",
+            # Hash + lowercase the actor email for grouping but keep
+            # the original visible to admin -- this collection IS
+            # admin-only and the actor is the user who tried to
+            # submit, not a third party.
+            "actor_email": (actor_email or "").lower().strip() or None,
+            "category": _classify_rejection(snippet, err),
+            "error_message": err,
+            "text_snippet": snippet,
+            "text_length": len(text or ""),
+        })
+    except Exception:
+        # Log to logger if available, but never raise -- the
+        # rejection response is more important than the audit row.
+        try:
+            import logging
+            logging.getLogger(__name__).warning(
+                "moderation_rejections insert failed", exc_info=True,
+            )
+        except Exception:
+            pass
+
+
 def validate_or_raise(
     text: Optional[str],
     *,
@@ -221,10 +288,19 @@ def validate_or_raise(
     max_length: Optional[int] = None,
     required: bool = False,
     allow_urls: bool = False,
+    route: Optional[str] = None,
+    actor_email: Optional[str] = None,
 ) -> None:
     """Convenience wrapper -- runs validate_open_text and raises
     HTTPException(400, message) on rejection. Import HTTPException
     lazily to keep this module free of FastAPI for unit tests.
+
+    `route` and `actor_email` (optional) are logged to the
+    moderation_rejections collection on reject so the User Content
+    Flagging admin panel can show what got blocked, where, and by
+    whom. Pass them when calling from a route handler that knows
+    the user identity. They are fire-and-forget metadata only --
+    the validation logic itself doesn't read them.
     """
     ok, err = validate_open_text(
         text,
@@ -235,5 +311,24 @@ def validate_or_raise(
         allow_urls=allow_urls,
     )
     if not ok:
+        # Audit the rejection BEFORE we raise. Schedule the log as a
+        # background task so the validation error returns quickly to
+        # the client; if the task is dropped (shutdown / cancellation)
+        # the rejection still surfaces -- only the audit row would be
+        # lost, which is acceptable.
+        try:
+            import asyncio
+            asyncio.create_task(
+                _log_rejection(
+                    text=text or "",
+                    field_name=field_name,
+                    err=err or "",
+                    route=route,
+                    actor_email=actor_email,
+                )
+            )
+        except RuntimeError:
+            # Called from outside an event loop -- skip logging.
+            pass
         from fastapi import HTTPException
         raise HTTPException(400, err)

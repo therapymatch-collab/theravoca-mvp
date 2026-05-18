@@ -255,24 +255,43 @@ async def create_request(payload: RequestCreate, request: Request):
         raise HTTPException(400, "You must confirm this is not an emergency")
 
     # ─── Open-text moderation (2026-05-17, Josh) ──────────────────────
-    # Validate the two patient-facing free-text fields against
+    # Validate every patient-facing free-text field against
     # gibberish, profanity, all-caps shouting, and link spam BEFORE
     # any DB writes. Pydantic already enforces the max_length cap;
     # this layer adds the content checks. Empty strings pass through
     # (these fields are optional) -- only non-empty content is
     # validated.
+    #
+    # 2026-05-17 fix: the initial 594ed48 wiring missed `p3_resonance`
+    # (the deep-match "what they should already get" free-text). Josh
+    # caught it with a test patient submission containing profanity --
+    # the wordlist would have rejected it but the validator wasn't
+    # being called. Audit revealed similar gaps in therapist apply /
+    # decline / patient followup -- patched in the same pass.
     from text_moderation import validate_or_raise as _validate_text
     if (payload.other_issue or "").strip():
         _validate_text(
             payload.other_issue,
             field_name="Other issue description",
             max_length=200,
+            route="/api/requests",
+            actor_email=payload.email,
         )
     if (payload.prior_therapy_notes or "").strip():
         _validate_text(
             payload.prior_therapy_notes,
             field_name="Prior therapy notes",
             max_length=250,
+            route="/api/requests",
+            actor_email=payload.email,
+        )
+    if (payload.p3_resonance or "").strip():
+        _validate_text(
+            payload.p3_resonance,
+            field_name="What your therapist should already get",
+            max_length=250,
+            route="/api/requests",
+            actor_email=payload.email,
         )
 
     # ─── Geographic eligibility gate (scope-out posture) ───────────────
@@ -661,6 +680,19 @@ async def followup_submit(
     req = await db.requests.find_one({"id": request_id}, {"_id": 0, "id": 1, "email": 1})
     if not req:
         raise HTTPException(404)
+    # 2026-05-17 (Josh's audit miss) -- validate patient follow-up
+    # survey free-text notes. These get aggregated for matching
+    # quality improvements; abusive content shouldn't taint the
+    # admin dashboard or any future LLM fine-tuning on this data.
+    if (payload.notes or "").strip():
+        from text_moderation import validate_or_raise as _validate_text
+        _validate_text(
+            payload.notes,
+            field_name="Follow-up notes",
+            max_length=1500,
+            route=f"/api/followup/{request_id}/{milestone}",
+            actor_email=req.get("email"),
+        )
     doc = {
         "request_id": request_id,
         "patient_email_anon": (req.get("email", "")[:3] + "***") if req.get("email") else "",

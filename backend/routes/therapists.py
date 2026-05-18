@@ -242,6 +242,8 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
     #    validated; empty fields pass through (pydantic schema
     #    already enforces the optional/required contract).
     from text_moderation import validate_or_raise as _validate_text
+    _mod_route = "/api/therapists/signup"
+    _mod_actor = payload.email
     if (payload.bio or "").strip():
         # Bio has no max_length in the schema today (oversight); cap
         # it here at 3000 chars -- generous for a full bio but
@@ -251,24 +253,28 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
             field_name="Bio",
             max_length=3000,
             min_length=20,  # a 5-character bio is clearly low-effort
+            route=_mod_route, actor_email=_mod_actor,
         )
     if (getattr(payload, "t2_progress_story", "") or "").strip():
         _validate_text(
             payload.t2_progress_story,
             field_name="Progress story",
             max_length=2000,
+            route=_mod_route, actor_email=_mod_actor,
         )
     if (getattr(payload, "t5_lived_experience", "") or "").strip():
         _validate_text(
             payload.t5_lived_experience,
             field_name="Lived experience",
             max_length=2000,
+            route=_mod_route, actor_email=_mod_actor,
         )
     if (getattr(payload, "t6_early_sessions_description", "") or "").strip():
         _validate_text(
             payload.t6_early_sessions_description,
             field_name="Early sessions description",
             max_length=2000,
+            route=_mod_route, actor_email=_mod_actor,
         )
     # Normalise email to lowercase BEFORE the dup-check + insert so we
     # can't end up with `Joe@x.com` and `joe@x.com` as two separate
@@ -657,6 +663,19 @@ async def therapist_bulk_apply(
     if not therapist:
         raise HTTPException(404, "Therapist profile not found")
     tid = therapist["id"]
+    # 2026-05-17 (Josh's p3_resonance audit miss) -- validate the
+    # bulk-apply message body against gibberish / profanity / link
+    # spam BEFORE looping. Same wordlist as patient + therapist
+    # signup; one rejection short-circuits the whole batch.
+    if (payload.message or "").strip():
+        from text_moderation import validate_or_raise as _validate_text
+        _validate_text(
+            payload.message,
+            field_name="Bulk-apply message",
+            max_length=1500,
+            route="/api/portal/therapist/bulk-apply",
+            actor_email=session.get("email"),
+        )
     out: list[dict] = []
     for rid in payload.request_ids[:50]:
         req = await db.requests.find_one({"id": rid}, {"_id": 0, "id": 1, "notified_scores": 1})
@@ -800,6 +819,20 @@ async def therapist_apply(
     if score is None:
         raise HTTPException(403, "Not notified for this request")
 
+    # 2026-05-17 (Josh's audit miss) -- validate the apply message
+    # body. This text gets seen by the patient + indexed for
+    # apply-fit scoring + persisted to db.applications, so it must
+    # not contain gibberish / profanity / link spam.
+    if (payload.message or "").strip():
+        from text_moderation import validate_or_raise as _validate_text
+        _validate_text(
+            payload.message,
+            field_name="Apply message",
+            max_length=1500,
+            route=f"/api/therapist/apply/{request_id}/{therapist_id}",
+            actor_email=therapist.get("email"),
+        )
+
     existing = await db.applications.find_one(
         {"request_id": request_id, "therapist_id": therapist_id}, {"_id": 0}
     )
@@ -901,6 +934,17 @@ async def therapist_decline_action(
         ip=request.headers.get("x-forwarded-for", ""),
         user_agent=request.headers.get("user-agent", ""),
     )
+    # 2026-05-17 (Josh's audit miss) -- validate the decline notes
+    # field. Admin reads these in the Outcomes tab to improve
+    # matching; they shouldn't contain abusive language.
+    if (payload.notes or "").strip():
+        from text_moderation import validate_or_raise as _validate_text
+        _validate_text(
+            payload.notes,
+            field_name="Decline notes",
+            max_length=500,
+            route=f"/api/therapist/decline/{request_id}/{therapist_id}",
+        )
     req = await db.requests.find_one(
         {"id": request_id},
         {"_id": 0, "id": 1, "notified_scores": 1, "notified_breakdowns": 1,

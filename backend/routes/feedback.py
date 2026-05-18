@@ -1030,6 +1030,8 @@ async def submit_widget_feedback(payload: WidgetFeedback, request: Request):
         min_length=5,
         max_length=2000,
         required=True,
+        route="/api/feedback/widget",
+        actor_email=payload.email,
     )
 
     import html as _html
