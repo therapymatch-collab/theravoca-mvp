@@ -335,23 +335,32 @@ export default function TherapistSignup() {
     }
   };
   const verifyWebsiteReachable = async (raw) => {
-    const url = normalizeWebsite(raw);
-    if (!url) return true;
-    setWebsiteChecking(true);
-    try {
-      // No-cors so cross-origin doesn't error; we just want a successful round-trip.
-      // Most sites respond to HEAD/GET; if the fetch resolves at all, we count it as reachable.
-      await fetch(url, { method: "GET", mode: "no-cors", redirect: "follow" });
-      setWebsiteError("");
-      return true;
-    } catch {
-      setWebsiteError(
-        "We couldn't reach that website — double-check the URL or leave it blank.",
-      );
-      return false;
-    } finally {
-      setWebsiteChecking(false);
-    }
+    // 2026-05-18 (Josh: "getting wrong errors when inputting
+    // website, these should work from a copypaste -
+    // https://manhattanpsychologygroup.com/, https://theravoca.com/").
+    //
+    // The browser-side fetch(no-cors) check was UNRELIABLE -- many
+    // legitimate sites can't be fetched cross-origin from the browser
+    // regardless of whether they're actually live, because of CORS /
+    // CORB / mixed-content / TLS handshake quirks the network layer
+    // throws BEFORE our try/catch sees a response. Result: real
+    // therapists got "couldn't reach that website" on real, working
+    // URLs and had to leave the field blank.
+    //
+    // Replacement strategy:
+    //   - websiteIsValid() already URL-constructor-validates the
+    //     string (catches typos like "googcom" or "htps://foo").
+    //   - normalizeWebsite() prefixes https:// when missing.
+    //   - Admin manually reviews every therapist signup for license
+    //     verification anyway, so bad URLs get caught there.
+    //   - A future server-side reachability check (no CORS in the
+    //     backend) could be layered on if we see abuse, but for v1
+    //     trust the admin review gate.
+    //
+    // Function kept on the signature so any call site that still
+    // awaits it keeps working; always resolves true.
+    if (!normalizeWebsite(raw)) return true;
+    return true;
   };
 
   // Scroll to top of the form card (NOT the page) on Next/Back so users
