@@ -15,6 +15,7 @@ export default function TestActionsPanel({
   adminEmail,
   refresh,
   runBackfill,
+  runEmbeddingsBackfill,
   stripBackfill,
   openWipeDialog,
   sendTestSms,
@@ -226,6 +227,23 @@ export default function TestActionsPanel({
         description="Drop a known set of fake data into every therapist profile (idempotent; only fills missing fields). Pre-launch only."
         button={{ label: "Run backfill", icon: <Sparkles size={14} />, onClick: runBackfill }}
         testid="card-backfill"
+      />
+
+      <ActionCard
+        kicker="Match-realism"
+        title="Generate deep-match embeddings"
+        description={
+          "Embed each therapist's t5_lived_experience + t2_progress_story so the matcher's " +
+          "Deep-Match axis (15 of 100 pts) actually scores instead of silently no-op-ing. " +
+          "Run this AFTER 'Run backfill' so the stubbed t5/t2 text becomes searchable. " +
+          "Hits OpenAI; ~0.3s per therapist with missing vectors."
+        }
+        button={{
+          label: "Generate embeddings",
+          icon: <Sparkles size={14} />,
+          onClick: runEmbeddingsBackfill,
+        }}
+        testid="card-backfill-embeddings"
       />
 
       <ActionCard

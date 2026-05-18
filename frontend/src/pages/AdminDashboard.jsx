@@ -758,6 +758,26 @@ export default function AdminDashboard() {
     }
   };
 
+  const runEmbeddingsBackfill = async () => {
+    if (!confirm(
+      "Generate t5/t2 OpenAI embeddings for every therapist that has the source text but not the cached vector?\n\n" +
+      "Without these, the matcher's Deep-Match axis (15 of 100 pts) silently scores 0 for backfilled therapists -- " +
+      "test matches look about 15% weaker than they really should.\n\n" +
+      "Idempotent. Hits the OpenAI API once per therapist with missing vectors (~0.3s each)."
+    )) return;
+    try {
+      const res = await client.post("/admin/backfill-embeddings", {});
+      toast.success(
+        `Embeddings done -- t5: ${res.data.t5_embedded}, t2: ${res.data.t2_embedded} ` +
+        `(scanned ${res.data.scanned}, skipped ${res.data.skipped_already_embedded}, errors ${res.data.errors})`,
+        { duration: 10000 },
+      );
+      refresh();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Embeddings backfill failed");
+    }
+  };
+
   const stripBackfill = async () => {
     // Two-step confirmation since this is destructive: first fetch status
     // so the admin sees how many will actually restore, then prompt with
@@ -1932,6 +1952,7 @@ export default function AdminDashboard() {
                   adminEmail={adminEmail}
                   refresh={refresh}
                   runBackfill={runBackfill}
+                  runEmbeddingsBackfill={runEmbeddingsBackfill}
                   stripBackfill={stripBackfill}
                   openWipeDialog={openWipeDialog}
                   sendTestSms={sendTestSms}

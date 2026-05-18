@@ -2439,6 +2439,87 @@ async def admin_backfill_therapists(_: bool = Depends(require_admin)):
     return {"ok": True, "scanned": len(therapists), "updated": updated}
 
 
+@router.post("/admin/backfill-embeddings")
+async def admin_backfill_embeddings(_: bool = Depends(require_admin)):
+    """Generate the t5_lived_experience + t2_progress_story OpenAI
+    embeddings for every active therapist that has the text but not
+    the cached vector. Without these vectors, the matcher's
+    Contextual Resonance / Deep-Match axis (15 pts of 100) silently
+    no-ops -- it falls through `cosine_similarity(None, vec) == 0`.
+
+    Idempotent: skips therapists whose embeddings already exist.
+
+    Why this isn't folded into /admin/backfill-therapists: that
+    endpoint runs synchronously and only writes static fields. Each
+    embed_text() call hits the OpenAI API, so this loop is slow
+    (~0.3s per therapist with text, ~30s for 100 therapists). Kept
+    separate so the static-fields backfill stays fast.
+
+    Pre-launch posture: backfilled t5/t2 TEXT gets cleared by
+    strip-backfill, but the embeddings are derived data -- we leave
+    the embedding fields alone; they'll get rewritten the next time
+    the therapist edits the underlying text. If you need to wipe
+    them too, use the `/admin/wipe-therapist-embeddings` script
+    (not yet built; ask if you want one)."""
+    from embeddings import embed_text
+    cur = db.therapists.find(
+        {
+            "is_active": {"$ne": False},
+            "$or": [
+                {"t5_lived_experience": {"$exists": True, "$ne": ""}},
+                {"t2_progress_story": {"$exists": True, "$ne": ""}},
+            ],
+        },
+        {
+            "_id": 0, "id": 1, "name": 1,
+            "t5_lived_experience": 1, "t5_embedding": 1,
+            "t2_progress_story": 1, "t2_embedding": 1,
+        },
+    )
+    therapists = await cur.to_list(length=2000)
+    n_t5 = 0
+    n_t2 = 0
+    n_skip = 0
+    n_error = 0
+    for t in therapists:
+        update: dict[str, Any] = {}
+        t5_text = (t.get("t5_lived_experience") or "").strip()
+        t2_text = (t.get("t2_progress_story") or "").strip()
+        try:
+            if t5_text and not t.get("t5_embedding"):
+                vec = await embed_text(t5_text)
+                if vec:
+                    update["t5_embedding"] = vec
+                    update["t5_embedding_text"] = t5_text[:6000]
+                    n_t5 += 1
+            if t2_text and not t.get("t2_embedding"):
+                vec = await embed_text(t2_text)
+                if vec:
+                    update["t2_embedding"] = vec
+                    update["t2_embedding_text"] = t2_text[:6000]
+                    n_t2 += 1
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "embedding backfill failed for %s: %s", t.get("name"), e,
+            )
+            n_error += 1
+            continue
+        if update:
+            await db.therapists.update_one(
+                {"id": t["id"]}, {"$set": update},
+            )
+        else:
+            n_skip += 1
+    return {
+        "ok": True,
+        "scanned": len(therapists),
+        "t5_embedded": n_t5,
+        "t2_embedded": n_t2,
+        "skipped_already_embedded": n_skip,
+        "errors": n_error,
+    }
+
+
 @router.post("/admin/strip-backfill")
 async def admin_strip_backfill(_: bool = Depends(require_admin)):
     """Reverse the most-recent backfill: restore each therapist's original
