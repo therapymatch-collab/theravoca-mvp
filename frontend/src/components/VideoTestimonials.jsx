@@ -102,8 +102,15 @@ function buildEmbedUrl(streamId, { autoplay = false } = {}) {
   //   poster=...        : Stream's own thumbnail URL so the player's
   //                       loading frame matches the lite-embed's
   //                       poster (no jarring color change at click).
+  // 2026-05-18 followup (Josh: "sound is still auto-mute when start
+  // videos, even on computer") -- removed explicit `muted=false`.
+  // Some accounts saw Cloudflare's player UI render in a muted
+  // state despite the URL param, then ignore the URL on the
+  // user's play tap (likely the player respects the previous
+  // session's local-storage volume preference rather than the
+  // URL). Letting the player use its true default (unmuted when
+  // autoplay is also unset) avoids that conflict path.
   const params = new URLSearchParams({
-    muted: "false",
     preload: "metadata",
     poster: thumbnailUrl(streamId),
   });
@@ -112,6 +119,7 @@ function buildEmbedUrl(streamId, { autoplay = false } = {}) {
     // so callers should leave autoplay false unless they're prepared
     // to layer on the autoplay-muted + tap-to-unmute UI path.
     params.set("autoplay", "true");
+    params.set("muted", "true");
   }
   return `https://${STREAM_SUBDOMAIN}/${streamId}/iframe?${params.toString()}`;
 }
