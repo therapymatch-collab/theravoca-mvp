@@ -713,10 +713,19 @@ export default function TherapistSignup() {
     }
     setSubmitting(true);
     try {
+      // CTIA + UX: notify_sms can only be true if a real phone is on
+      // file. The render-side checkbox is gated on the same predicate,
+      // but we re-derive here so a stale `notify_sms=true` from an
+      // earlier render (user opted in, then cleared the phone) doesn't
+      // leak through to the backend.
+      const submitPhoneDigits = (data.phone_alert || data.phone || "")
+        .replace(/\D/g, "").length;
+      const submitNotifySms = submitPhoneDigits >= 10 && !!data.notify_sms;
       const payload = {
         ...data,
         // Keep `phone` mirroring the alert phone for legacy SMS routing
         phone: data.phone_alert?.trim() || data.phone || "",
+        notify_sms: submitNotifySms,
         referred_by_code: inviteCode || data.referred_by_code || null,
         recruit_code: recruitCode || null,
         turnstile_token: turnstileToken,
@@ -1440,16 +1449,31 @@ export default function TherapistSignup() {
                   {/* SMS opt-in checkbox with full CTIA disclosure --
                       Telnyx + carrier compliance review requires the
                       consent language be visible AT the point of opt-in.
-                      Checkbox is always interactive; if the phone above
-                      is empty when the user submits, the send path
-                      silently drops (and they can fix in the portal
-                      later). Backend cron filters out empty phones at
-                      send time. */}
+                      2026-05-18 (Josh): the checkbox is GATED on a valid
+                      phone above. A user can't legitimately consent to
+                      SMS at a number they haven't given us, and the
+                      previous "silently drop at send time" fallback led
+                      to a confusing UX where users thought they were
+                      opted in but never received alerts. */}
+                  {(() => {
+                    const phoneDigits = (data.phone_alert || data.phone || "")
+                      .replace(/\D/g, "").length;
+                    const hasValidPhone = phoneDigits >= 10;
+                    // Display state: even if the user previously checked
+                    // the box and then cleared the phone, the visible
+                    // state reflects what will actually happen.
+                    const effectiveOptIn = hasValidPhone && !!data.notify_sms;
+                    return (
+                  <>
                   <label
-                    className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 mt-2 cursor-pointer"
+                    className={
+                      "flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 mt-2 " +
+                      (hasValidPhone ? "cursor-pointer" : "cursor-not-allowed opacity-60")
+                    }
                   >
                     <Checkbox
-                      checked={!!data.notify_sms}
+                      checked={effectiveOptIn}
+                      disabled={!hasValidPhone}
                       onCheckedChange={(v) => set("notify_sms", !!v)}
                       data-testid="signup-notify-sms"
                       className="border-[#2D4A3E] data-[state=checked]:bg-[#2D4A3E] mt-0.5"
@@ -1486,6 +1510,18 @@ export default function TherapistSignup() {
                       </span>
                     </span>
                   </label>
+                  {!hasValidPhone && (
+                    <p
+                      className="mt-2 text-[11px] text-[#8B5A1F] italic leading-snug px-1"
+                      data-testid="signup-notify-sms-hint"
+                    >
+                      Enter a contact phone above to opt in to SMS referral
+                      alerts. (We can't text a number we don't have.)
+                    </p>
+                  )}
+                  </>
+                    );
+                  })()}
                 </Group>
                 <Group title="Agreement">
                   <label className="flex items-start gap-3 bg-[#FDFBF7] border border-[#E8E5DF] rounded-xl px-4 py-3 cursor-pointer">
