@@ -9,9 +9,10 @@ import os
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 
 from deps import db, logger, require_admin, require_session, _create_session_token, JWT_SECRET, _decode_session_from_authorization
 import stripe_service
