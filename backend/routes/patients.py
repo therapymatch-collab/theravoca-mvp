@@ -11,7 +11,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
-from deps import db, DEFAULT_THRESHOLD, _decode_session_from_authorization, require_admin, logger
+from deps import db, DEFAULT_THRESHOLD, _decode_session_from_authorization, require_admin, require_session, logger
 from email_service import send_verification_email
 from geocoding import geocode_city, geocode_zip
 from helpers import _now_iso, _parse_iso, _trigger_matching, _spawn_bg, compute_patient_rank_score
@@ -143,11 +143,20 @@ async def prefill_from_prior_request(email: str, request: Request):
         sort=[("created_at", -1)],
     )
     if not prior:
-        return {"returning": False, "has_password_account": False}
-    has_account = await db.patient_accounts.find_one(
-        {"email": email_norm, "password_hash": {"$exists": True, "$ne": None}},
-        {"_id": 0, "email": 1},
-    )
+        return {"returning": False}
+    # 2026-05-18: `has_password_account` was previously returned on
+    # this unauthenticated endpoint, leaking whether an arbitrary
+    # email had a password-set account. Moved to the authenticated
+    # endpoint `/portal/patient/has-password` below; VerifyEmail.jsx
+    # calls it via sessionClient() after the patient verifies their
+    # email (which is when the session is minted).
+    #
+    # The `returning: true` + `prior_request_count` + prefill fields
+    # still leak whether this email has used TheraVoca before. That's
+    # a known broader enumeration surface -- the right fix is to gate
+    # this endpoint on email-verification proof (a recent request-id
+    # the caller can echo back) rather than open lookup. Tracked in
+    # follow-up.
     return {
         "returning": True,
         "prefill": {
@@ -160,8 +169,28 @@ async def prefill_from_prior_request(email: str, request: Request):
         "prior_request_count": await db.requests.count_documents(
             {"email": {"$regex": f"^{re.escape(email_norm)}$", "$options": "i"}},
         ),
-        "has_password_account": bool(has_account),
     }
+
+
+@router.get("/portal/patient/has-password")
+async def portal_patient_has_password(
+    session: dict = Depends(require_session(("patient",))),
+):
+    """Authenticated check: does THIS patient (the one whose JWT we're
+    holding) have a password-set account? Used by VerifyEmail.jsx to
+    decide whether to offer the "Create my account" CTA.
+
+    Lives behind require_session so an attacker can't enumerate which
+    arbitrary emails have password accounts -- the previous unauth
+    /requests/prefill endpoint returned this and leaked the signal."""
+    email = (session.get("email") or "").strip().lower()
+    if not email:
+        return {"has_password_account": False}
+    has_account = await db.patient_accounts.find_one(
+        {"email": email, "password_hash": {"$exists": True, "$ne": None}},
+        {"_id": 0, "email": 1},
+    )
+    return {"has_password_account": bool(has_account)}
 
 
 @router.post("/requests", response_model=dict)

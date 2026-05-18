@@ -190,7 +190,14 @@ else:
         logger.warning("RESEND_API_KEY not set -- emails will be skipped")
     if not _public_url:
         logger.warning("PUBLIC_APP_URL not set -- email links will have no domain")
-SESSION_TTL_DAYS = int(os.environ.get("SESSION_TTL_DAYS", "30"))
+# Patient sessions. 2026-05-18: reduced default from 30d to 7d. Without
+# a server-side token blocklist, a stolen JWT stays valid until expiry
+# even after the user clicks "Log out" -- shorter TTL is the cheapest
+# defense in depth until we build the blocklist. 7d still spans a
+# typical "check matches over the weekend, click email link Monday"
+# cadence without forcing constant re-auth. Bump back to 30d via
+# SESSION_TTL_DAYS env var if friction becomes a complaint.
+SESSION_TTL_DAYS = int(os.environ.get("SESSION_TTL_DAYS", "7"))
 # Admin sessions get a much tighter TTL (HIPAA hygiene): an attacker who
 # steals an admin token has at most this many hours of access. Default
 # 8 hours mirrors a typical workday. Override via ADMIN_SESSION_TTL_HOURS.

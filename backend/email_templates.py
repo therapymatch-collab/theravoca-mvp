@@ -438,10 +438,67 @@ async def list_templates(db: AsyncIOMotorDatabase) -> list[dict[str, Any]]:
     return out
 
 
+# 2026-05-18 security: sanitize template fields on save. The admin
+# UI is trusted-but-not-perfectly-trustworthy -- a compromised admin
+# session could put <script> or onclick= handlers into a template,
+# which then render in every recipient's email client. Most modern
+# clients strip JS automatically, but legacy clients (and especially
+# webmail surfaces that render content in a same-origin frame) may not.
+# Strip dangerous patterns at save-time so the bad value can't even
+# get into the DB. Pattern-based scrub (no DOM library on the backend)
+# covers the realistic attacker payloads.
+
+import re as _re
+
+# Scripts, event handlers, javascript: URLs in href/src, and the
+# rarely-needed <iframe>/<object>/<embed> elements.
+_TPL_SCRIPT_TAG = _re.compile(
+    r"<\s*script\b[^>]*>.*?<\s*/\s*script\s*>", _re.DOTALL | _re.IGNORECASE,
+)
+_TPL_STYLE_TAG = _re.compile(
+    r"<\s*style\b[^>]*>.*?<\s*/\s*style\s*>", _re.DOTALL | _re.IGNORECASE,
+)
+_TPL_FRAME_TAG = _re.compile(
+    r"<\s*(iframe|object|embed|form|meta|link)\b[^>]*>",
+    _re.IGNORECASE,
+)
+_TPL_EVENT_HANDLER = _re.compile(
+    r"\son[a-z]+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)",
+    _re.IGNORECASE,
+)
+_TPL_JS_URL = _re.compile(
+    r"(href|src|action|formaction|background|poster)\s*=\s*"
+    r"(\"\s*(?:javascript|vbscript|data|file)\s*:[^\"]*\""
+    r"|'\s*(?:javascript|vbscript|data|file)\s*:[^']*'"
+    r"|\s*(?:javascript|vbscript|data|file)\s*:[^\s>]+)",
+    _re.IGNORECASE,
+)
+
+
+def _scrub_template_field(value: str) -> str:
+    """Strip script/style/iframe tags, on*= event handlers, and
+    javascript: URLs from a template field. Keeps benign HTML
+    (<a>, <strong>, <em>, etc.) intact so existing template formatting
+    survives the scrub."""
+    if not value:
+        return value
+    out = _TPL_SCRIPT_TAG.sub("", value)
+    out = _TPL_STYLE_TAG.sub("", out)
+    out = _TPL_FRAME_TAG.sub("", out)
+    out = _TPL_EVENT_HANDLER.sub("", out)
+    out = _TPL_JS_URL.sub(r"\1=\"#\"", out)
+    return out
+
+
 async def upsert_template(
     db: AsyncIOMotorDatabase, key: str, fields: dict[str, Any]
 ) -> dict[str, Any]:
-    """Persist editable fields for a template. Whitelisted fields only."""
+    """Persist editable fields for a template. Whitelisted fields only.
+    Every saved string runs through _scrub_template_field first so a
+    compromised admin session can't inject <script>/onclick=/javascript:
+    URLs into the outbound email body. The scrub keeps benign HTML
+    intact (<a>, <strong>, <em>) so existing template formatting still
+    renders -- only the dangerous patterns are stripped."""
     if key not in DEFAULTS:
         raise ValueError(f"Unknown template key: {key}")
     allowed = {
@@ -450,7 +507,11 @@ async def upsert_template(
         # therapist_approved-specific editable fields (2026-05-17)
         "next_steps_heading", "next_steps", "cta_primary", "cta_secondary",
     }
-    update = {k: v for k, v in fields.items() if k in allowed and isinstance(v, str)}
+    update = {
+        k: _scrub_template_field(v)
+        for k, v in fields.items()
+        if k in allowed and isinstance(v, str)
+    }
     update["key"] = key
     await db.email_templates.update_one(
         {"key": key}, {"$set": update}, upsert=True

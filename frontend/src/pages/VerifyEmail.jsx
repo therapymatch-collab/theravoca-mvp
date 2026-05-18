@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
 import { CheckCircle2, Loader2, Mail } from "lucide-react";
 import { Header, Footer } from "@/components/SiteShell";
-import { api, setSession } from "@/lib/api";
+import { api, sessionClient, setSession } from "@/lib/api";
 import { ICON_SIZE_LG } from "@/lib/constants";
 import useSiteCopy from "@/lib/useSiteCopy";
 
@@ -47,14 +47,26 @@ export default function VerifyEmail() {
         }
         const emailFromResponse = res.data.email;
         if (emailFromResponse) {
-          api
-            .get(`/requests/prefill?email=${encodeURIComponent(emailFromResponse)}`)
-            .then((p) => {
+          // 2026-05-18: was reading `has_password_account` off the
+          // unauthenticated /requests/prefill response. That field
+          // leaked whether arbitrary emails had password accounts;
+          // moved to the authenticated /portal/patient/has-password
+          // endpoint (we just minted a session above so this call is
+          // authorized for this patient only). Falling back to no
+          // offer-account prompt on error keeps the page functional.
+          Promise.all([
+            api.get(`/requests/prefill?email=${encodeURIComponent(emailFromResponse)}`),
+            sessionClient().get("/portal/patient/has-password"),
+          ])
+            .then(([p, h]) => {
               const count = p.data?.prior_request_count || 0;
-              const hasAcct = !!p.data?.has_password_account;
+              const hasAcct = !!h.data?.has_password_account;
               if (count >= 2 && !hasAcct) setOfferAccount(true);
             })
-            .catch(() => {});
+            .catch((e) => {
+              // eslint-disable-next-line no-console
+              console.warn("prefill / has-password lookup failed:", e?.message);
+            });
         }
       })
       .catch(() => setState("error"));
