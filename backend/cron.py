@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -785,44 +786,165 @@ async def _run_decline_pattern_flags() -> dict[str, Any]:
 
 async def _run_purge_soft_deleted_accounts() -> dict[str, int]:
     """Hard-delete therapist + patient_account rows whose `deleted_at`
-    is older than the 24-hour reversibility window.
+    is older than the 24-hour reversibility window, AND cascade through
+    every other collection that holds raw PII keyed off the deleted
+    account's email or id.
 
-    SECURITY/CORRECTNESS (2026-05-16 audit, HIGH from prior round):
-    the portal.py:1061 comment claims "A nightly cron purges anything
-    with deleted_at < now - 24h" but that cron didn't exist. Result:
-    soft-deleted accounts (and their PHI-adjacent fields -- declines,
-    feedback, match metadata) lived forever in violation of the
-    promised "permanent after 24h" semantic. This task makes the
-    comment true.
+    HISTORY:
+    - 2026-05-16 audit: portal.py:1061 comment claimed "A nightly cron
+      purges anything with deleted_at < now - 24h" but that cron didn't
+      exist. First version of this cron (2026-05-17) made the comment
+      true for the therapists + patient_accounts collections only.
+    - 2026-05-18 PII-completeness audit caught the cascade gap:
+      `feedback`, `declines`, `login_events`, `magic_codes`, and
+      `requests` all store raw email (and in some cases free-text
+      intake content) referencing accounts that get deleted. Without
+      cascade, a patient who deleted their account 24h+ ago still has
+      raw email survived in 50+ collateral rows.
 
-    Conservative scope: removes the therapists / patient_accounts
-    documents only. Audit logs (audit collection) reference these by
-    id and are intentionally NOT removed -- audit trail outlives the
-    account. Request rows owned by a deleted patient already have
-    deleted_at + is_active=False set by the admin / portal delete
-    handlers; their PHI fields are kept for audit but the request
-    won't appear in any user-facing surface.
+    AUDIT-LOG EXCEPTION:
+    `audit_log` is intentionally NOT cascaded -- it hashes patient/
+    therapist emails via HMAC-SHA256 (see backend/audit.py) so the
+    stored values are non-reversible identifiers, not raw PII. Keep
+    the audit trail across deletion for the 7-year retention window.
     """
     cutoff_iso = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
     try:
+        # ─── Therapist purge + cascade ────────────────────────────────
+        # Read the soft-deleted therapists BEFORE we delete them so we
+        # have their email + id for the cascade.
+        soft_t = await db.therapists.find(
+            {"deleted_at": {"$lt": cutoff_iso, "$ne": None}},
+            {"_id": 0, "id": 1, "email": 1, "real_email": 1},
+        ).to_list(length=5000)
+
+        cascade_decline = 0
+        cascade_feedback_t = 0
+        cascade_login_t = 0
+        cascade_magic_t = 0
+        cascade_application_t = 0
+
+        for t in soft_t:
+            tid = t.get("id")
+            t_emails = [
+                e.strip().lower()
+                for e in (t.get("email"), t.get("real_email"))
+                if e and isinstance(e, str)
+            ]
+            t_email_re = [
+                {"$regex": f"^{re.escape(e)}$", "$options": "i"}
+                for e in t_emails
+            ]
+            # declines: identified by therapist_id (primary) + therapist_email
+            if tid:
+                dec_res = await db.declines.delete_many({"therapist_id": tid})
+                cascade_decline += int(dec_res.deleted_count or 0)
+                # Some legacy rows may reference by email only -- catch those too.
+                if t_email_re:
+                    dec_email_res = await db.declines.delete_many(
+                        {"therapist_email": {"$in": t_email_re}},
+                    )
+                    cascade_decline += int(dec_email_res.deleted_count or 0)
+            # feedback ABOUT this therapist (responses where therapist is the
+            # subject; patient_email residue handled in the patient pass below).
+            if tid:
+                fb_res = await db.feedback.delete_many({"therapist_id": tid})
+                cascade_feedback_t += int(fb_res.deleted_count or 0)
+            # applications written by this therapist (apply messages).
+            if tid:
+                ap_res = await db.applications.delete_many({"therapist_id": tid})
+                cascade_application_t += int(ap_res.deleted_count or 0)
+            # login_events keyed by email.
+            if t_email_re:
+                le_res = await db.login_events.delete_many(
+                    {"email": {"$in": t_email_re}},
+                )
+                cascade_login_t += int(le_res.deleted_count or 0)
+                mc_res = await db.magic_codes.delete_many(
+                    {"email": {"$in": t_email_re}},
+                )
+                cascade_magic_t += int(mc_res.deleted_count or 0)
+
         t_res = await db.therapists.delete_many(
             {"deleted_at": {"$lt": cutoff_iso, "$ne": None}},
         )
+        n_t = int(getattr(t_res, "deleted_count", 0) or 0)
+
+        # ─── Patient purge + cascade ──────────────────────────────────
+        soft_p = await db.patient_accounts.find(
+            {"deleted_at": {"$lt": cutoff_iso, "$ne": None}},
+            {"_id": 0, "email": 1},
+        ).to_list(length=5000)
+
+        cascade_request = 0
+        cascade_feedback_p = 0
+        cascade_login_p = 0
+        cascade_magic_p = 0
+        cascade_application_p = 0
+
+        for p in soft_p:
+            email = (p.get("email") or "").strip().lower()
+            if not email:
+                continue
+            email_re = {"$regex": f"^{re.escape(email)}$", "$options": "i"}
+            # requests: raw email + phone + intake free-text. The portal
+            # delete handler already marks deleted_at on these; we now
+            # hard-delete after the 24h window.
+            req_res = await db.requests.delete_many({"email": email_re})
+            cascade_request += int(req_res.deleted_count or 0)
+            # feedback rows ABOUT this patient.
+            fb_res = await db.feedback.delete_many({"patient_email": email_re})
+            cascade_feedback_p += int(fb_res.deleted_count or 0)
+            # applications keyed off the patient's request_ids that we
+            # just deleted? Most are caught by the therapist pass; the
+            # ones for non-deleted therapists need a direct sweep. Skip
+            # for now -- those applications are anchored to a request
+            # that no longer exists; the patient is unreachable, so the
+            # therapist's apply message is dead data that doesn't leak.
+            # (Worth a future cleanup pass but not a PII leak.)
+            le_res = await db.login_events.delete_many({"email": email_re})
+            cascade_login_p += int(le_res.deleted_count or 0)
+            mc_res = await db.magic_codes.delete_many({"email": email_re})
+            cascade_magic_p += int(mc_res.deleted_count or 0)
+
         pa_res = await db.patient_accounts.delete_many(
             {"deleted_at": {"$lt": cutoff_iso, "$ne": None}},
         )
-        n_t = int(getattr(t_res, "deleted_count", 0) or 0)
         n_p = int(getattr(pa_res, "deleted_count", 0) or 0)
-        if n_t or n_p:
-            logger.info(
-                "Soft-delete purge: therapists=%d patient_accounts=%d (cutoff=%s)",
-                n_t, n_p, cutoff_iso,
-            )
-        return {
+
+        # Also purge any orphaned soft-deleted requests that don't have
+        # a matching patient_account (legacy data, admin-deleted
+        # requests). Catches the residue where the request was marked
+        # deleted_at directly without an account-level soft-delete.
+        orphan_req_res = await db.requests.delete_many(
+            {"deleted_at": {"$lt": cutoff_iso, "$ne": None}},
+        )
+        n_orphan_req = int(getattr(orphan_req_res, "deleted_count", 0) or 0)
+
+        summary = {
             "purged_therapists": n_t,
             "purged_patient_accounts": n_p,
+            "purged_orphan_requests": n_orphan_req,
+            "cascade_declines": cascade_decline,
+            "cascade_feedback_about_therapist": cascade_feedback_t,
+            "cascade_applications_from_therapist": cascade_application_t,
+            "cascade_login_events_therapist": cascade_login_t,
+            "cascade_magic_codes_therapist": cascade_magic_t,
+            "cascade_requests_patient": cascade_request,
+            "cascade_feedback_about_patient": cascade_feedback_p,
+            "cascade_applications_patient": cascade_application_p,
+            "cascade_login_events_patient": cascade_login_p,
+            "cascade_magic_codes_patient": cascade_magic_p,
             "cutoff": cutoff_iso,
         }
+        # Log only when there's actual work to surface so we don't
+        # spam the daily run.
+        if any(
+            v for k, v in summary.items()
+            if k != "cutoff" and isinstance(v, int) and v > 0
+        ):
+            logger.info("Soft-delete purge + cascade: %s", summary)
+        return summary
     except Exception as e:
         logger.warning("Soft-delete purge failed: %s", e)
         return {"error": str(e)[:300]}
