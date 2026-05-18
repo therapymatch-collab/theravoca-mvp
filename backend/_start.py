@@ -262,8 +262,11 @@ def _spa_security_headers() -> dict:
         "connect-src 'self' https://api.stripe.com "
         "https://challenges.cloudflare.com "
         "https://us.i.posthog.com https://us-assets.i.posthog.com; "
+        # 2026-05-18: dropped youtube-nocookie.com + youtube.com from
+        # frame-src. Testimonials switched from YouTube embeds to
+        # Cloudflare Stream in 36883e4 -- no surface still iframes
+        # YouTube, so the allowlist entries were just attack surface.
         "frame-src https://js.stripe.com https://challenges.cloudflare.com "
-        "https://www.youtube-nocookie.com https://www.youtube.com "
         "https://customer-ziboiiyelaua3xib.cloudflarestream.com; "
         "media-src 'self' https://customer-ziboiiyelaua3xib.cloudflarestream.com "
         "https://videodelivery.net https://*.cloudflarestream.com; "
