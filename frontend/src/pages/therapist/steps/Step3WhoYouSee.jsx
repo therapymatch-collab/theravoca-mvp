@@ -14,11 +14,19 @@ export default function Step3WhoYouSee({ data, toggleArr }) {
       title="Who do you see?"
       hint="Required — patients are pre-filtered by these"
     >
-      <Field label={<>Client types<Req /></>}>
+      <Field
+        label={
+          <>
+            Client types{" "}
+            <span className="text-xs text-[#6D6A65] font-normal">(pick up to 3)</span>{" "}
+            <Req />
+          </>
+        }
+      >
         <PillRow
           items={CLIENT_TYPES}
           selected={data.client_types}
-          onSelect={(v) => toggleArr("client_types", v)}
+          onSelect={(v) => toggleArr("client_types", v, 3)}
           testid="signup-client-type"
         />
       </Field>

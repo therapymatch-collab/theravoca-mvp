@@ -60,7 +60,7 @@ class TherapistSignup(BaseModel):
     license_picture: Optional[str] = None  # base64 data URL
     website: Optional[str] = ""  # public — patients can click through
     office_addresses: list[str] = Field(default_factory=list)  # full street addresses
-    client_types: list[ClientType] = Field(default_factory=lambda: ["individual"])
+    client_types: list[ClientType] = Field(default_factory=lambda: ["individual"], max_length=3)
     age_groups: list[AgeGroup] = Field(default_factory=list, max_length=3)
     primary_specialties: list[str] = Field(default_factory=list, max_length=2)
     secondary_specialties: list[str] = Field(default_factory=list, max_length=3)
@@ -79,7 +79,7 @@ class TherapistSignup(BaseModel):
     years_experience: int = Field(ge=0, le=70, default=1)
     availability_windows: list[str] = Field(default_factory=list)
     urgency_capacity: UrgencyCapacity = "within_month"
-    style_tags: list[str] = Field(default_factory=list)
+    style_tags: list[str] = Field(default_factory=list, max_length=4)
     free_consult: bool = False
     bio: Optional[str] = ""
     profile_picture: Optional[str] = None

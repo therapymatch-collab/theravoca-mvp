@@ -288,6 +288,45 @@ async def therapist_signup(payload: TherapistSignup, request: Request):
     )
     if existing:
         raise HTTPException(409, "A therapist with this email already exists.")
+
+    # ─── Idaho-only address gate (2026-05-18, Josh) ───────────────────
+    # Josh's bug report: "i put my home address in NY but it added ID. i
+    # know we're doing 30 mile radius checks, but what about address
+    # verifications?"
+    #
+    # The old flow let any string through office_addresses and silently
+    # geocoded office_locations as if they were Idaho cities, so a NY
+    # address would be accepted and tagged as Idaho. Now we require an
+    # Idaho ZIP (8XXXX where the first two digits are 83 -- 83000-83999
+    # is exclusively Idaho per USPS) in EACH office_address. This is a
+    # cheap regex gate; the office_locations cities still get geocoded
+    # against Idaho but the per-address ZIP check is what prevents
+    # cross-state leakage.
+    #
+    # If the therapist legitimately practices in multiple states, they
+    # can list non-Idaho addresses on their profile AFTER admin
+    # approves them and the licensed_states list reflects that. For
+    # signup-time validation, restrict to Idaho per scope-out policy
+    # (HIPAA-SCOPE-OUT-2026-05-13.md).
+    import re as _re
+    IDAHO_ZIP_RE = _re.compile(r"\b83\d{3}\b")
+    bad_addresses = [
+        a for a in (payload.office_addresses or [])
+        if a and a.strip() and not IDAHO_ZIP_RE.search(a)
+    ]
+    if bad_addresses:
+        # Show the first one in the error so the user knows which to fix.
+        first_bad = bad_addresses[0][:120]
+        raise HTTPException(
+            400,
+            "Each office address must include an Idaho ZIP code "
+            f"(83000-83999). Got: '{first_bad}'. We're licensed to "
+            "match therapists in Idaho only -- if you practice in "
+            "another state too, add the Idaho address here and you "
+            "can list other office locations on your profile after "
+            "approval.",
+        )
+
     tid = str(uuid.uuid4())
     office_geos = await geocode_offices(db, payload.office_locations or [], "ID")
     data = payload.model_dump()
