@@ -10,6 +10,16 @@ services:
       pip install -r backend/requirements.txt
       cd frontend && npm install --legacy-peer-deps
       REACT_APP_BACKEND_URL= CI=false npx craco build
+      # 2026-05-18 fix: rm -rf the target before copying. Render
+      # reuses the container's filesystem between deploys -- if
+      # static_build/ already exists, `cp -r build ../backend/static_build`
+      # copies the build dir INTO static_build (creates
+      # static_build/build/...) instead of overwriting at the root.
+      # Result: new files land at the wrong path while stale files
+      # from the first deploy keep serving. Reproduced when a new
+      # mockup file (waitlist-mockup-variants.html) 404'd while old
+      # mockups (admin-mockup-v1.html, etc) kept working.
+      rm -rf ../backend/static_build
       cp -r build ../backend/static_build
     startCommand: cd backend && uvicorn _start:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/version
@@ -70,6 +80,16 @@ services:
       pip install -r backend/requirements.txt
       cd frontend && npm install --legacy-peer-deps
       REACT_APP_BACKEND_URL= CI=false npx craco build
+      # 2026-05-18 fix: rm -rf the target before copying. Render
+      # reuses the container's filesystem between deploys -- if
+      # static_build/ already exists, `cp -r build ../backend/static_build`
+      # copies the build dir INTO static_build (creates
+      # static_build/build/...) instead of overwriting at the root.
+      # Result: new files land at the wrong path while stale files
+      # from the first deploy keep serving. Reproduced when a new
+      # mockup file (waitlist-mockup-variants.html) 404'd while old
+      # mockups (admin-mockup-v1.html, etc) kept working.
+      rm -rf ../backend/static_build
       cp -r build ../backend/static_build
     startCommand: cd backend && uvicorn _start:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/version
